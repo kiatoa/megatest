@@ -1,0 +1,27 @@
+#!/usr/bin/perl -w
+
+$starthr=`date +%k`;
+$hrsper = 1;
+$nexthr=$starthr + $hrsper;
+
+$ltr='a';
+
+while (1) {
+  $runname = `date +%GWW%V.%u`;
+  chomp $runname;
+  $runname = $runname . $ltr;
+  $cmd = "megatest -runall :datapath testing :fsname local :sysname ubuntu :runname $runname";
+  print "Running $cmd\n";
+  system $cmd;
+  $currhr = `date +%k`;
+  if ($currhr > $nexthr) {
+    $ltr = chr(ord($ltr)+1);
+    $nexthr=$nexthr + $hrsper;
+  }
+  if ($nexthr > 23) {
+    $nexthr = 0;
+  }
+  sleep 10;
+}
+
+    

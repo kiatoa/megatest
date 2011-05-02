@@ -1,0 +1,14 @@
+[setup]
+runscript runscript.rb
+
+[requirements]
+diskspace 1M
+memory    1G
+waiton    runfirst
+
+[env-override]
+# Test specific environment overrides go here
+SPECIAL_ENV_VAR override with everything after the space.
+
+[items]
+MANYITEMS a b c d e f g h i j k l m

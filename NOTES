@@ -1,0 +1,7 @@
+1. All run control access to db is direct.
+2. All test machines must have megatest available
+3. Tests may or may not have file system access to the originating
+   run area. rsync is used to pull the test area to the home host
+   if and only if the originating area can not be seen via file 
+   system. NO LONGER TRUE. Rsync is used but file system must be visible.
+4. All db access is done via the home host. NOT IMPLEMENTED YET.
