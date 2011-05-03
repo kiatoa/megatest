@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.0)
+(define megatest-version 1.0.1)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/opensrc
