@@ -23,7 +23,7 @@ Process and test running
   -runtests tst1,tst2 ... : run tests
 
 Run status updates (these require that you are in a test directory
-                    and you have sourced the \"megatest.csh\" or
+                    and you have sourced the \"megatest.csh\"
                     \"megatest.sh\" file.)
   -step stepname
   -test-status            : set the state and status of a test (use :state and :status)
@@ -41,8 +41,7 @@ Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -showkeys               : show the keys used in this megatest setup
 
-Misc (note: there is a bug in argument processing, put these at the beginning
-            of the command line or it may fail)
+Misc 
   -force                  : override some checks
   -xterm                  : start an xterm instead of launching the test
 
@@ -274,10 +273,13 @@ Called as " (string-intersperse (argv) " ")))
 		 (db-host   (assoc/default 'db-host   cmdinfo))
 		 (run-id    (assoc/default 'run-id    cmdinfo))
 		 (itemdat   (assoc/default 'itemdat   cmdinfo))
+		 (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 		 (fullrunscript (conc testpath "/" runscript))
 		 (db        #f))
 	    (print "Exectuing " test-name " on " (get-host-name))
 	    (change-directory testpath)
+	    (setenv "MT_TEST_RUN_DIR" testpath)
+	    (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path))
 	    (if (not (setup-for-run))
 		(begin
 		  (print "Failed to setup, exiting") 
@@ -443,13 +445,19 @@ Called as " (string-intersperse (argv) " ")))
 		    (sqlite3:finalize! db)
 		    ;; run the test step
 		    (set! exitstat (process-run cmd params))
+		    ;; re-open the db
+		    (set! db (open-db)) 
 		    ;; run logpro if applicable
 		    (if logpro
-			(set! exitstat (process-run "logpro" logpro (conc test-name ".html"))))
-		    (test-set-status! db run-id test-name "end" FINISH MEEEEE!!!!!!
+			(let ((logfile (conc test-name ".html")))
+			  (set! exitstat (process-run "logpro" logpro logfile))
+			  (test-set-log! db run-id test-name itemdat logfile)))
+		    (test-set-status! db run-id test-name "end" exitstat itemdat (args:get-arg "-m"))
+		    (sqlite3:finalize! db)
+		    (exit exitstat)
 		    ;; open the db
 		;; mark the end of the test
-		))
+		)))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 

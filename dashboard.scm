@@ -18,7 +18,7 @@
 
 (import (prefix sqlite3 sqlite3:))
 
-(include "../margs/margs.scm")
+(include "margs.scm")
 (include "keys.scm")
 (include "items.scm")
 (include "db.scm")

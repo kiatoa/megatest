@@ -152,7 +152,10 @@
      run-id)
     (vector header res)))
 
-;; Tests
+;;======================================================================
+;;  T E S T S
+;;======================================================================
+
 (define (make-db:test)(make-vector 6))
 (define-inline (db:test-get-id           vec) (vector-ref vec 0))
 (define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
@@ -178,6 +181,18 @@
      db 
      "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? ORDER BY id DESC;"
      run-id)
+    res))
+
+(define (db:delete-test-step-records db run-id test-name)
+  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=?);" run-id test-name))
+
+(define (db:get-count-tests-running db)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
     res))
 
 ;; NB// Sync this with runs:get-test-info

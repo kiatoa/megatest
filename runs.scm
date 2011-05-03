@@ -187,7 +187,16 @@
 (define (run-tests db test-names)
   (for-each 
    (lambda (test-name)
-     (run-one-test db test-name))
+     (let ((num-running (db:get-count-tests-running db))
+	   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+       (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+       (if (or (not max-concurrent-jobs)
+	       (and max-concurrent-jobs
+		    (string->number max-concurrent-jobs)
+		    (not (> num-running (string->number max-concurrent-jobs)))))
+	   (run-one-test db test-name)
+	   (print "WARNING: Max running jobs exceeded, current number running: " num-running 
+		  ", max_concurrent_jobs: " max-concurrent-jobs))))
    test-names))
 
 (define (run-one-test db test-name)
@@ -217,54 +226,65 @@
 	    (let* ((item-path     (item-list->path itemdat)) ;; (string-intersperse (map cadr itemdat) "/"))
 		   (new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 		   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-		   (test-status   #f))
-	      (let loop2 ((ts #f)
-			 (ct 0))
-		(if (and (not ts)
-			 (< ct 10))
-		    (begin
-		      (register-test db run-id test-name item-path)
-		      (loop2 (runs:get-test-info db run-id test-name item-path)
-			     (+ ct 1)))
-		    (if ts
-			(set! test-status ts)
-			(begin
-			  (print "WARNING: Couldn't register test " test-name " with item path " item-path ", skipping")
-			  (if (not (null? tal))
-			      (loop (car tal)(cdr tal)))))))
-	      (change-directory test-path)
-	      ;; this block is here only to inform the user early on
-	      (if (file-exists? runconfigf)
-		  (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
-		  (print "WARNING: You do not have a run config file: " runconfigf))
-	      ;; (print "run-id: " run-id " test-name: " test-name " item-path: " item-path " test-status: " (test:get-status test-status) " test-state: " (test:get-state test-status))
-	      (case (if (args:get-arg "-force")
-			'NOT_STARTED
-			(if test-status
-			    (string->symbol (test:get-state test-status))
-			    'failed-to-insert))
-		((failed-to-insert)
-		 (print "ERROR: Failed to insert the record into the db"))
-		((NOT_STARTED COMPLETED) ;; (cadr status is the row id for the run record)
-		 (if (and (equal? (test:get-state test-status) "COMPLETED")
-			  (equal? (test:get-status test-status) "PASS")
-			  (not (args:get-arg "-force")))
-		     (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"PASS\", use -force to override")
-		     (let* ((get-prereqs-cmd (lambda ()
-					       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
-			    (launch-cmd      (lambda ()
-					       (launch-test db run-id test-conf keyvallst test-name test-path itemdat)))
-			    (testrundat      (list get-prereqs-cmd launch-cmd)))
-		       (if (or (args:get-arg "-force")
-			       (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
-			   ((cadr testrundat)) ;; this is the line that launches the test to the remote host
-			   (hash-table-set! *waiting-queue* new-test-name testrundat)))))
-		((LAUNCHED REMOTEHOSTSTART KILLED) 
-		 (print "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
-		((RUNNING)  (print "NOTE: " test-name " is already running"))
-		(else       (print "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state test-status)))))
-	    (if (not (null? tal))
-		(loop (car tal)(cdr tal))))))))
+		   (test-status   #f)
+		   (num-running (db:get-count-tests-running db))
+		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+	      (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+	      (if (not (or (not max-concurrent-jobs)
+			   (and max-concurrent-jobs
+				(string->number max-concurrent-jobs)
+				(not (> num-running (string->number max-concurrent-jobs))))))
+		  (print "WARNING: Max running jobs exceeded, current number running: " num-running 
+			 ", max_concurrent_jobs: " max-concurrent-jobs)
+		  (begin
+		    (let loop2 ((ts #f)
+				(ct 0))
+		      (if (and (not ts)
+			       (< ct 10))
+			  (begin
+			    (register-test db run-id test-name item-path)
+			    (db:delete-test-step-records db run-id test-name) ;; clean out if this is a re-run
+			    (loop2 (runs:get-test-info db run-id test-name item-path)
+				   (+ ct 1)))
+			  (if ts
+			      (set! test-status ts)
+			      (begin
+				(print "WARNING: Couldn't register test " test-name " with item path " item-path ", skipping")
+				(if (not (null? tal))
+				    (loop (car tal)(cdr tal)))))))
+		    (change-directory test-path)
+		    ;; this block is here only to inform the user early on
+		    (if (file-exists? runconfigf)
+			(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+			(print "WARNING: You do not have a run config file: " runconfigf))
+		    ;; (print "run-id: " run-id " test-name: " test-name " item-path: " item-path " test-status: " (test:get-status test-status) " test-state: " (test:get-state test-status))
+		    (case (if (args:get-arg "-force")
+			      'NOT_STARTED
+			      (if test-status
+				  (string->symbol (test:get-state test-status))
+				  'failed-to-insert))
+		      ((failed-to-insert)
+		       (print "ERROR: Failed to insert the record into the db"))
+		      ((NOT_STARTED COMPLETED) ;; (cadr status is the row id for the run record)
+		       (if (and (equal? (test:get-state test-status) "COMPLETED")
+				(equal? (test:get-status test-status) "PASS")
+				(not (args:get-arg "-force")))
+			   (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"PASS\", use -force to override")
+			   (let* ((get-prereqs-cmd (lambda ()
+						     (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
+				  (launch-cmd      (lambda ()
+						     (launch-test db run-id test-conf keyvallst test-name test-path itemdat)))
+				  (testrundat      (list get-prereqs-cmd launch-cmd)))
+			     (if (or (args:get-arg "-force")
+				     (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
+				 ((cadr testrundat)) ;; this is the line that launches the test to the remote host
+				 (hash-table-set! *waiting-queue* new-test-name testrundat)))))
+		      ((LAUNCHED REMOTEHOSTSTART KILLED) 
+		       (print "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
+		      ((RUNNING)  (print "NOTE: " test-name " is already running"))
+		      (else       (print "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state test-status))))))
+	      (if (not (null? tal))
+		  (loop (car tal)(cdr tal)))))))))
 
 (define (run-waiting-tests db)
   (let ((numtries           0)

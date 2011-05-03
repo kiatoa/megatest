@@ -18,7 +18,7 @@
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*
-      (setenv "MT_RUN_AREA_HOME" *toppath*)
+      (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
       (print "ERROR: failed to find the top path to your run setup."))
   *toppath*)
 
@@ -115,9 +115,11 @@
 	(work-area  #f)
 	(diskpath   #f)
 	(cmdparms   #f)
-	(fullcmd    #f));; (define a (with-output-to-string (lambda ()(write x))))
+	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
+	(mt-bindir-path #f))
     (if hosts (set! hosts (string-split hosts)))
-    (if (not remote-megatest)(set! remote-megatest "megatest"))
+    (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
+    (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
@@ -133,7 +135,8 @@
 						   (list 'test-name test-name) 
 						   (list 'runscript runscript) 
 						   (list 'run-id    run-id   )
-						   (list 'itemdat   itemdat))))))) ;; (string-intersperse keyvallst " "))))
+						   (list 'itemdat   itemdat)
+						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
@@ -145,13 +148,17 @@
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (print "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat) ;; (if launch-results launch-results "FAILED"))
-    ;; set "pre-launch-env-vars
-    (let* ((prevvals       (alist->env-vars
+    ;; set 
+    ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
+    (let* ((commonprevvals (alist->env-vars
+			    (hash-table-ref/default *configdat* "env-override" '())))
+	   (testprevvals   (alist->env-vars
 			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
 	   (launch-results (apply cmd-run-proc-each-line
 				  (car fullcmd)
 				  print
 				  (cdr fullcmd)))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (print "Launching completed, updating db")
-      (alist->env-vars prevvals))))
+      (alist->env-vars testprevvals)
+      (alist->env-vars commonprevvals))))
 
