@@ -268,6 +268,7 @@
 		      ((NOT_STARTED COMPLETED) ;; (cadr status is the row id for the run record)
 		       (if (and (equal? (test:get-state test-status) "COMPLETED")
 				(equal? (test:get-status test-status) "PASS")
+				(equal? (test:get-status test-status) "CHECK")
 				(not (args:get-arg "-force")))
 			   (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"PASS\", use -force to override")
 			   (let* ((get-prereqs-cmd (lambda ()
