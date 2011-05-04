@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.0.1)
+(define megatest-version 1.01)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/opensrc
@@ -19,11 +19,12 @@ Usage: megatest [options]
   -h                      : this help
 
 Process and test running
-  -runall                 : run all tests that are not state COMPLETED and status PASS
+  -runall                 : run all tests that are not state COMPLETED and status PASS, 
+                            CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
 
 Run status updates (these require that you are in a test directory
-                    and you have sourced the \"megatest.csh\"
+                    and you have sourced the \"megatest.csh\" or
                     \"megatest.sh\" file.)
   -step stepname
   -test-status            : set the state and status of a test (use :state and :status)
@@ -31,8 +32,7 @@ Run status updates (these require that you are in a test directory
                             directory. may be used with -test-status
   -m comment              : insert a comment for this test
 
-Run data:
-
+Run data
   :runname                : required, name for this particular test run
   :state                  : required if updating step state; e.g. start, end, completed
   :status                 : required if updating step status; e.g. pass, fail, n/a
@@ -46,7 +46,6 @@ Misc
   -xterm                  : start an xterm instead of launching the test
 
 Helpers
-
   -runstep stepname  ...  : take leftover params as comand and execute as stepname
                             log will be in stepname.log
   -logpro file            : with -exec apply logpro file to stepname.log, creates
@@ -73,6 +72,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-setlog"
 			"-runstep"
 			"-logpro"
+			"-remove-run"
 			) 
 		 (list  "-h"
 		        "-force"
@@ -245,6 +245,36 @@ Called as " (string-intersperse (argv) " ")))
 	      (exit 1))
 	    ;; put test parameters into convenient variables
 	    (let* ((test-names   (string-split (args:get-arg "-runtests") ",")))
+	      (run-tests db test-names)))
+	;; run-waiting-tests db)
+	(sqlite3:finalize! db)
+	(run-waiting-tests #f)
+	(set! *didsomething* #t))))
+	  
+(if (args:get-arg "-runtests")
+    (runtests))
+
+;;======================================================================
+;; Remove old run(s)
+;;======================================================================
+
+(define (remove-runs)
+  (if (not (args:get-arg ":runname"))
+      (begin
+	(print "ERROR: Missing required parameter for -remove-run, you must specify the run name with :runname runname")
+	(exit 2))
+      (let ((db #f))
+	(if (not (setup-for-run))
+	    (begin 
+	      (print "Failed to setup, exiting")
+	      (exit 1)))
+	(set! db (open-db))
+	(if (not (car *configinfo*))
+	    (begin
+	      (print "ERROR: Attempted to remove a test but run area config file not found")
+	      (exit 1))
+	    ;; put test parameters into convenient variables
+	    (let* ((test-names   (string-split (args:get-arg "-remove-tests") ",")))
 	      (run-tests db test-names)))
 	;; run-waiting-tests db)
 	(sqlite3:finalize! db)
