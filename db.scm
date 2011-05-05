@@ -173,14 +173,16 @@
 (define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
 
-(define (db-get-tests-for-run db run-id)
-  (let ((res '()))
+(define (db-get-tests-for-run db run-id . params)
+  (let ((res '())
+	(testpatt (if (or (null? params)(not (car params))) "%" (car params)))
+	(itempatt (if (> (length params) 1)(cadr params) "%")))
     (sqlite3:for-each-row 
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? ORDER BY id DESC;"
-     run-id)
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
+     run-id testpatt (if itempatt itempatt "%"))
     res))
 
 (define (db:delete-test-step-records db run-id test-name)

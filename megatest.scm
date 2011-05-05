@@ -11,7 +11,7 @@
 (define megatest-version 1.01)
 
 (define help (conc "
-Megatest, documentation at http://www.kiatoa.com/fossils/opensrc
+Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
   license GPL, Copyright Matt Welland 2006-2011
 
@@ -39,6 +39,8 @@ Run data
 
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
+  -testpatt patt          : in list-runs show only these tests, % is the wildcard
+  -itempatt patt          : in list-runs show only tests with items that match patt
   -showkeys               : show the keys used in this megatest setup
 
 Misc 
@@ -69,6 +71,8 @@ Called as " (string-intersperse (argv) " ")))
 			":state"  
 			":status"
 			"-list-runs"
+			"-testpatt" 
+			"-itempatt"
 			"-setlog"
 			"-runstep"
 			"-logpro"
@@ -111,6 +115,8 @@ Called as " (string-intersperse (argv) " ")))
 		       (setup-for-run)
 		       (open-db)))
 	   (runpatt  (args:get-arg "-list-runs"))
+	   (testpatt (args:get-arg "-testpatt"))
+	   (itempatt (args:get-arg "-itempatt"))
 	   (runsdat  (db-get-runs db runpatt))
 	   (runs     (db:get-rows runsdat))
 	   (header   (db:get-header runsdat))
@@ -126,7 +132,7 @@ Called as " (string-intersperse (argv) " ")))
 		"/"
 		(db-get-value-by-header run header "runname"))
 	 (let ((run-id (db-get-value-by-header run header "id")))
-	   (let ((tests (db-get-tests-for-run db run-id)))
+	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt)))
 	     ;; Each test
 	     (for-each 
 	      (lambda (test)
