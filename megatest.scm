@@ -426,7 +426,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (and state status)
-	      (teststep-set-status! db run-id test-name step state status itemdat)
+	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m"))
 	      (begin
 		(print "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))

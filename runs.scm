@@ -96,7 +96,7 @@
 	    item #f)
 	item)))
 
-(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat)
+(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment)
   ;; (print "run-id: " run-id " test-name: " test-name)
   (let* ((state     (check-valid-items "state" state-in))
 	 (status    (check-valid-items "status" status-in))
@@ -110,8 +110,8 @@
     (if testdat
 	(let ((test-id (test:get-id testdat)))
 	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time) VALUES(?,?,?,?,strftime('%s','now'));"
-			test-id teststep-name state status))
+			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment) VALUES(?,?,?,?,strftime('%s','now'),?);"
+			test-id teststep-name state status (if comment comment "")))
 	(print "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
 
 (define (test-get-kill-request db run-id test-name itemdat)
