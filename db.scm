@@ -108,6 +108,10 @@
 	    (vector-ref row n)
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
 	    
+;;======================================================================
+;;  R U N S
+;;======================================================================
+
 (define (db-get-runs db runpatt . count)
   (let* ((res      '())
 	 (keys      (db-get-keys db))
@@ -151,6 +155,9 @@
      (conc "SELECT " keystr " FROM runs WHERE id=?;")
      run-id)
     (vector header res)))
+
+(define (db:set-comment-for-run db run-id comment)
+  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
 ;;======================================================================
 ;;  T E S T S

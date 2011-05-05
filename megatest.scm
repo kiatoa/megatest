@@ -77,6 +77,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-runstep"
 			"-logpro"
 			"-remove-run"
+			"-m"
 			) 
 		 (list  "-h"
 		        "-force"

@@ -220,6 +220,8 @@
 	       (run-id      (register-run db keys)) ;;  test-name)))
 	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
 	  ;; (print "items: ")(pp allitems)
+	  (if (args:get-arg "-m")
+	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 	  (let loop ((itemdat (car allitems))
 		     (tal     (cdr allitems)))
 	    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
