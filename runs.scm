@@ -60,15 +60,15 @@
     (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
 		     logf run-id test-name item-path)))
 
-;; TODO: Converge this with db:get-test-info
-(define (runs:get-test-info db run-id test-name item-path)
-  (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
-    (sqlite3:for-each-row 
-     (lambda (id run-id test-name state status)
-       (set! res (vector id run-id test-name state status item-path)))
-     db "SELECT id,run_id,testname,state,status FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
-     run-id test-name item-path)
-    res))
+;; ;; TODO: Converge this with db:get-test-info
+;; (define (runs:get-test-info db run-id test-name item-path)
+;;   (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
+;;     (sqlite3:for-each-row 
+;;      (lambda (id run-id test-name state status)
+;;        (set! res (vector id run-id test-name state status item-path)))
+;;      db "SELECT id,run_id,testname,state,status FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+;;      run-id test-name item-path)
+;;     res))
 
 (define-inline (test:get-id vec)       (vector-ref vec 0))
 (define-inline (test:get-run_id vec)   (vector-ref vec 1))
@@ -246,7 +246,7 @@
 			  (begin
 			    (register-test db run-id test-name item-path)
 			    (db:delete-test-step-records db run-id test-name) ;; clean out if this is a re-run
-			    (loop2 (runs:get-test-info db run-id test-name item-path)
+			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))
 			  (if ts
 			      (set! test-status ts)
@@ -272,7 +272,7 @@
 				(equal? (test:get-status test-status) "PASS")
 				(equal? (test:get-status test-status) "CHECK")
 				(not (args:get-arg "-force")))
-			   (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"PASS\", use -force to override")
+			   (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status test-status) "\", use -force to override")
 			   (let* ((get-prereqs-cmd (lambda ()
 						     (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
 				  (launch-cmd      (lambda ()
@@ -282,9 +282,16 @@
 				     (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
 				 ((cadr testrundat)) ;; this is the line that launches the test to the remote host
 				 (hash-table-set! *waiting-queue* new-test-name testrundat)))))
-		      ((LAUNCHED REMOTEHOSTSTART KILLED) 
+		      ((KILLED) 
 		       (print "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
-		      ((RUNNING)  (print "NOTE: " test-name " is already running"))
+		      ((LAUNCHED REMOTEHOSTSTART RUNNING)  
+		       (if (> (- (current-seconds)(+ (db:test-get-event_time test-status)
+						     (db:test-get-run_duration test-status)))
+			      100) ;; i.e. no update for more than 100 seconds
+			   (begin
+			     (print "WARNING: Test " test-name " appears to be dead.")
+			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead"))
+			   (print "NOTE: " test-name " is already running")))
 		      (else       (print "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state test-status))))))
 	      (if (not (null? tal))
 		  (loop (car tal)(cdr tal)))))))))

@@ -97,6 +97,9 @@
 	       (currstatus   (db:test-get-status test))
 	       (currstate    (db:test-get-state  test))
 	       (currcomment  (db:test-get-comment test))
+	       (host         (db:test-get-host test))
+	       (cpuload      (db:test-get-cpuload test))
+	       (runtime      (db:test-get-run)duration test)
 	       (logfile      (conc (db:test-get-rundir test) "/" (db:test-get-final_logf test)))
 	       (viewlog      (lambda (x)
 			       (if (file-exists? logfile)
@@ -132,7 +135,7 @@
 						       #:editbox "YES"
 						       #:expand "YES")))
 				  (iuplistbox-fill-list lb
-							(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
+							(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ" "CHECK")
 							currstate)
 				  lb))
 			       (iup:vbox ;; the status
@@ -261,12 +264,15 @@
 			   (testfullname (test:test-get-fullname test))
 			   (teststatus (db:test-get-status   test))
 			   (teststate  (db:test-get-state    test))
+			   (teststart  (db:test-get-event_time test))
+			   (runtime    (db:test-get-run_duration test))
 			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			   (button     (vector-ref columndat rown))
 			   (color      (case (string->symbol teststate)
 					 ((COMPLETED)
 					  (if (equal? teststatus "PASS") "70 249 73" "223 33 49")) ;; greenish redish
 					 ((LAUNCHED)         "101 123 142")
+					 ((CHECK)            "255 100 50")
 					 ((REMOTEHOSTSTART)  "50 130 195")
 					 ((RUNNING)          "9 131 232")
 					 ((KILLREQ)          "39 82 206")
@@ -274,6 +280,9 @@
 					 (else "192 192 192")))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
 			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
+		;;       (if (and (equal? teststate "RUNNING")
+		;; 	       (> (- (current-seconds) (+ teststart runtime)) 100)) ;; if test has been dead for more than 100 seconds, call it dead
+			  
 		      (if (not (equal? curr-color color))
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
