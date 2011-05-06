@@ -52,6 +52,7 @@ Helpers
                             log will be in stepname.log
   -logpro file            : with -exec apply logpro file to stepname.log, creates
                             stepname.html and sets log to same
+                            If using make use stepname_logpro.log as your target
 
 Called as " (string-intersperse (argv) " ")))
 
@@ -466,28 +467,39 @@ Called as " (string-intersperse (argv) " ")))
 			(print "ERROR: You must specify :state and :status with every call to -test-status\n" help)
 			(sqlite3:finalize! db)
 			(exit 6)))))
-	  (if (args:get-arg "-run-step")
+	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
 		    (print "ERROR: nothing specified to run!")
 		    (sqlite3:finalize! db)
 		    (exit 6))
 		  (let* ((logprofile (args:get-arg "-logpro"))
+			 (logfile    (conc test-name ".log"))
 			 (cmd        (if (null? remargs) #f (car remargs)))
-			 (params     (if cmd (cdr remargs) #f))
-			 (exitstat   #f))
+			 (params     (if cmd (cdr remargs) '()))
+			 (exitstat   #f)
+			 (shell      (last (string-split (get-environment-variable "SHELL") "/")))
+			 (redir      (case (string->symbol shell)
+				       ((tcsh csh ksh)    ">&")
+				       ((zsh bash sh ash) "2>&1")))
+			 (fullcmd    (string-intersperse 
+				      (cons cmd (list params redir logfile))
+				      " ")))
 		    ;; mark the start of the test
 		    (test-set-status! db run-id test-name "start" "n/a" itemdat (args:get-arg "-m"))
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step
-		    (set! exitstat (process-run cmd params))
+		    (print "INFO: Running " fullcmd)
+		    (set! exitstat (process-run fullcmd)) ;; cmd params))
 		    ;; re-open the db
 		    (set! db (open-db)) 
-		    ;; run logpro if applicable
+		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logpro
-			(let ((logfile (conc test-name ".html")))
-			  (set! exitstat (process-run "logpro" logpro logfile))
+			(let ((htmllogfile (conc test-name ".html"))
+			      (cmd         (string-intersperse (list "logpro" logpro logfile "<" logfile ">" (conc test-name "_logpro.log")) " ")))
+			  (print "INFO: running " cmd)
+			  (set! exitstat (process-run cmd))
 			  (test-set-log! db run-id test-name itemdat logfile)))
 		    (test-set-status! db run-id test-name "end" exitstat itemdat (args:get-arg "-m"))
 		    (sqlite3:finalize! db)
