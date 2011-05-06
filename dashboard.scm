@@ -99,7 +99,7 @@
 	       (currcomment  (db:test-get-comment test))
 	       (host         (db:test-get-host test))
 	       (cpuload      (db:test-get-cpuload test))
-	       (runtime      (db:test-get-run)duration test)
+	       (runtime      (db:test-get-run_duration test))
 	       (logfile      (conc (db:test-get-rundir test) "/" (db:test-get-final_logf test)))
 	       (viewlog      (lambda (x)
 			       (if (file-exists? logfile)
