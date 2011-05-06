@@ -101,7 +101,7 @@
   (let* ((state     (check-valid-items "state" state-in))
 	 (status    (check-valid-items "status" status-in))
 	 (item-path (item-list->path itemdat))
-	 (testdat   (runs:get-test-info db run-id test-name item-path)))
+	 (testdat   (db:get-test-info db run-id test-name item-path)))
     ;; (print "testdat: " testdat)
     (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
 	     (or (not state)(not status)))
@@ -116,7 +116,7 @@
 
 (define (test-get-kill-request db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
-	 (testdat   (runs:get-test-info db run-id test-name item-path)))
+	 (testdat   (db:get-test-info db run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
 (define (test-set-meta-info db run-id testname itemdat)

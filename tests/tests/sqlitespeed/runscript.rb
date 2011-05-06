@@ -1,4 +1,4 @@
-#! /usr/bin/ruby
+#! /usr/bin/env ruby
 
 require "#{ENV['MT_RUN_AREA_HOME']}/supportfiles/ruby/librunscript.rb"
 

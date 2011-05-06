@@ -382,7 +382,7 @@ Called as " (string-intersperse (argv) " ")))
 	      (thread-join! th2)
 	      (mutex-lock! m)
 	      (set! db (open-db))
-	      (let* ((testinfo (runs:get-test-info db run-id test-name (item-list->path itemdat))))
+	      (let* ((testinfo (db:get-test-info db run-id test-name (item-list->path itemdat))))
 		(if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		    (begin
 		      (print "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result")
