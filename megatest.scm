@@ -483,7 +483,7 @@ Called as " (string-intersperse (argv) " ")))
 			 (shell      (last (string-split (get-environment-variable "SHELL") "/")))
 			 (redir      (case (string->symbol shell)
 				       ((tcsh csh ksh)    ">&")
-				       ((zsh bash sh ash) "2>&1")))
+				       ((zsh bash sh ash) "2>&1 >")))
 			 (fullcmd    (conc "(" (string-intersperse 
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
