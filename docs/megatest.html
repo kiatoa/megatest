@@ -91,7 +91,15 @@ Table of Contents
 
 <div class="toc">
 <a class="Link" href="#toc-Subsection-0.3.1">Subsection 0.3.1: Environment variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.3.2">Subsection 0.3.2: megatest.config settings</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.2.1">Subsubsection 0.3.2.1: [setup]</a>
 </div></div>
+</div>
 </div>
 </div>
 
@@ -122,13 +130,13 @@ All data to specify the tests and configure the system is stored in plain text f
 <a class="toc" name="toc-Subsubsection-0.2.1.1">0.2.1.1</a> Dependencies
 </h4>
 <div class="Unindented">
-Chicken scheme and a number of eggs are required for building megatest. See the file utils/installall.sh for an automated way to install the dependancies on Linux.
+Chicken scheme and a number of eggs are required for building megatest. See the file utils/installall.sh for an automated way to install the dependencies on Linux.
 </div>
 <h4 class="Subsubsection">
 <a class="toc" name="toc-Subsubsection-0.2.1.2">0.2.1.2</a> Build and install
 </h4>
 <div class="Unindented">
-Run “make test” to create the megatest exectutable. You may wish to copy the executable to a centrally accessible location.
+Run “make test” to create the megatest executable. You may wish to copy the executable to a centrally accessible location.
 </div>
 <h3 class="Subsection">
 <a class="toc" name="toc-Subsection-0.2.2">0.2.2</a> Setup
@@ -140,7 +148,7 @@ Run “make test” to create the megatest exectutable. You may wish to copy the
 Create the file megatest.config using the megatest.config template from the tests directory. At a minimum you need the following:
 </div>
 <div class="Code">
-# Fields are the keys under which your test runs are organised
+# Fields are the keys under which your test runs are organized
 </div>
 <div class="Code">
 [fields]
@@ -370,8 +378,137 @@ Planning ahead your field names is important so as to avoid collisions with othe
 </tr>
 </table>
 </div>
-<div class="Code">
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.3.2">0.3.2</a> megatest.config settings
+</h3>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.2.1">0.3.2.1</a> [setup]
+</h4>
+<div class="Unindented">
 
+<table>
+
+<tr>
+
+<td align="left" valign="top">
+section
+</td>
+<td align="left" valign="top">
+variable
+</td>
+<td align="left" valign="top">
+value
+</td>
+<td align="left" valign="top">
+comment
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[setup]
+</td>
+<td align="left" valign="top">
+max_concurrent_jobs
+</td>
+<td align="left" valign="top">
+if variable is not defined no limit on jobs
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+
+</td>
+<td align="left" valign="top">
+executable
+</td>
+<td align="left" valign="top">
+full path to megatest binary
+</td>
+<td align="left" valign="top">
+Use only if necessary, megatest will extract the location from where it used to launch and add append that to the PATH for test runs.
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[fields]
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[jobtools]
+</td>
+<td align="left" valign="top">
+launcher
+</td>
+<td align="left" valign="top">
+command line used to launch jobs - the job command (megatest -execute) will be appended to this
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+
+</td>
+<td align="left" valign="top">
+workhosts
+</td>
+<td align="left" valign="top">
+list of hostnames to run jobs on NOT SUPPORTED RIGHT NOW
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[env-override]
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+any string
+</td>
+<td align="left" valign="top">
+These are set on the test launching machine, not the test running machine. Typical usage is to control the host or run queue for launching tests. These values will not be seen by the test when it runs.
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[disks]
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+a valid path writable by the test launching process and by the test process
+</td>
+<td align="left" valign="top">
+The disk usage balancing algorithm is to choose the disk with the least space for each test run. 
+</td>
+</tr>
+</table>
 </div>
 
 <hr/>
