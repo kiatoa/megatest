@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <meta name="generator" content="http://www.nongnu.org/elyxer/"/>
-<meta name="create-date" content="2011-05-07"/>
+<meta name="create-date" content="2011-05-08"/>
 <link rel="stylesheet" href="http://www.nongnu.org/elyxer/lyx.css" type="text/css" media="screen"/>
 <title>Megatest</title>
 </head>
@@ -93,11 +93,22 @@ Table of Contents
 <a class="Link" href="#toc-Subsection-0.3.1">Subsection 0.3.1: Environment variables</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-0.3.2">Subsection 0.3.2: megatest.config settings</a>
+<a class="Link" href="#toc-Subsection-0.3.2">Subsection 0.3.2: Configuration files</a>
 </div><div class="tocindent">
 
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-0.3.2.1">Subsubsection 0.3.2.1: [setup]</a>
+<a class="Link" href="#toc-Subsubsection-0.3.2.1">Subsubsection 0.3.2.1: megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.2.2">Subsubsection 0.3.2.2: runconfigs.config file</a>
+</div></div>
+
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.3.3">Subsection 0.3.3: Writing tests</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.3.1">Subsubsection 0.3.3.1: testconfig file</a>
 </div></div>
 </div>
 </div>
@@ -379,10 +390,10 @@ Planning ahead your field names is important so as to avoid collisions with othe
 </table>
 </div>
 <h3 class="Subsection">
-<a class="toc" name="toc-Subsection-0.3.2">0.3.2</a> megatest.config settings
+<a class="toc" name="toc-Subsection-0.3.2">0.3.2</a> Configuration files
 </h3>
 <h4 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-0.3.2.1">0.3.2.1</a> [setup]
+<a class="toc" name="toc-Subsubsection-0.3.2.1">0.3.2.1</a> megatest.config
 </h4>
 <div class="Unindented">
 
@@ -400,6 +411,9 @@ variable
 value
 </td>
 <td align="left" valign="top">
+required
+</td>
+<td align="left" valign="top">
 comment
 </td>
 </tr>
@@ -413,6 +427,9 @@ max_concurrent_jobs
 </td>
 <td align="left" valign="top">
 if variable is not defined no limit on jobs
+</td>
+<td align="left" valign="top">
+no
 </td>
 <td align="left" valign="top">
 
@@ -430,7 +447,28 @@ executable
 full path to megatest binary
 </td>
 <td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
 Use only if necessary, megatest will extract the location from where it used to launch and add append that to the PATH for test runs.
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+
+</td>
+<td align="left" valign="top">
+runsdir
+</td>
+<td align="left" valign="top">
+full path to where the link tree to all runs will be created
+</td>
+<td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
+Because your runs may be spread out over several disk partitions a central link tree is created to make finding all the runs easy.
 </td>
 </tr>
 <tr>
@@ -443,6 +481,9 @@ string of letters, numbers and underscore
 </td>
 <td align="left" valign="top">
 string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+at least one
 </td>
 <td align="left" valign="top">
 
@@ -460,6 +501,9 @@ launcher
 command line used to launch jobs - the job command (megatest -execute) will be appended to this
 </td>
 <td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
 
 </td>
 </tr>
@@ -473,6 +517,9 @@ workhosts
 </td>
 <td align="left" valign="top">
 list of hostnames to run jobs on NOT SUPPORTED RIGHT NOW
+</td>
+<td align="left" valign="top">
+n/a
 </td>
 <td align="left" valign="top">
 
@@ -490,6 +537,9 @@ string of letters, numbers and underscore
 any string
 </td>
 <td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
 These are set on the test launching machine, not the test running machine. Typical usage is to control the host or run queue for launching tests. These values will not be seen by the test when it runs.
 </td>
 </tr>
@@ -505,7 +555,211 @@ string of letters, numbers and underscore
 a valid path writable by the test launching process and by the test process
 </td>
 <td align="left" valign="top">
+yes
+</td>
+<td align="left" valign="top">
 The disk usage balancing algorithm is to choose the disk with the least space for each test run. 
+</td>
+</tr>
+</table>
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.2.2">0.3.2.2</a> runconfigs.config file
+</h4>
+<div class="Unindented">
+
+<table>
+
+<tr>
+
+<td align="left" valign="top">
+section
+</td>
+<td align="left" valign="top">
+variable
+</td>
+<td align="left" valign="top">
+value
+</td>
+<td align="left" valign="top">
+required?
+</td>
+<td align="left" valign="top">
+comment
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[default]
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+any
+</td>
+<td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
+variables set in this section will be available for all runs, defining the same variable in another section will override the value from the default section
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[field1value/field2value...]
+</td>
+<td align="left" valign="top">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top">
+any
+</td>
+<td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
+the values in this section will be set for any run where field1 is field1value, field2 is field2value and fieldN is fieldNvalue. 
+</td>
+</tr>
+</table>
+</div>
+<div class="Indented">
+Example: a test suite that checks that a piece of software works correctly for different customer configurations and locations each of which is done as a separate release regression run. The fields, CUSTOMER and LOCATION were chosen. The following runconfigs.config file would set some variables specific to runs for megacorp in India and femtocorp in the Cook Islands and New Zealand:
+</div>
+<div class="Code">
+# runconfigs.config
+</div>
+<div class="Code">
+[default]
+</div>
+<div class="Code">
+ENCRYTION true
+</div>
+<div class="Code">
+[megacorp/india]
+</div>
+<div class="Code">
+TESTPATH /nfs/testing/megacorp_runs
+</div>
+<div class="Code">
+[femtocorp/cook_islands]
+</div>
+<div class="Code">
+ENCRYTION false
+</div>
+<div class="Code">
+TESTPATH /afs/kiatoa/testing/cook_islands
+</div>
+<div class="Code">
+[femtocorp/new_zealand]
+</div>
+<div class="Code">
+TESTPATH /afs/kiatao/testing/new_zealand
+</div>
+<div class="Code">
+[megacorp/new_zealand]
+</div>
+<div class="Code">
+TESTPATH /nfs/testing/megacorp_runs
+</div>
+<div class="Paragraph-">
+<a class="toc" name="toc-Paragraph*-1"></a>Running megatest like this:
+</div>
+<div class="Code">
+megatest :CUSTOMER megacorp :LOCATION new_zealand :runname week12_2011_run1 -runall
+</div>
+<div class="Paragraph-">
+<a class="toc" name="toc-Paragraph*-2"></a>Would set:
+</div>
+<div class="Code">
+ENCRYPTION true
+</div>
+<div class="Code">
+TESTPATH /nfs/testing/megacorp_runs
+</div>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.3.3">0.3.3</a> Writing tests
+</h3>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.3.1">0.3.3.1</a> testconfig file
+</h4>
+<div class="Unindented">
+
+<table>
+
+<tr>
+
+<td align="left" valign="top">
+section
+</td>
+<td align="left" valign="top">
+variable
+</td>
+<td align="left" valign="top">
+value
+</td>
+<td align="left" valign="top">
+required?
+</td>
+<td align="left" valign="top">
+comments
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[setup]
+</td>
+<td align="left" valign="top">
+runscript
+</td>
+<td align="left" valign="top">
+name of script to execute for this test
+</td>
+<td align="left" valign="top">
+yes
+</td>
+<td align="left" valign="top">
+The script must be executable and either provide the full path or put a copy at the top of your test directory
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[requirements]
+</td>
+<td align="left" valign="top">
+waiton
+</td>
+<td align="left" valign="top">
+list of valid test names
+</td>
+<td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
+This test will not run until the named tests are state completed and status PASS
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+[items]
+</td>
+<td align="left" valign="top">
+any valid
+</td>
+<td align="left" valign="top">
+list of values
+</td>
+<td align="left" valign="top">
+no
+</td>
+<td align="left" valign="top">
+The test will be repeated once for each item with the variable name set to the value. If there is more than one variable then the test will be run against all unique combinations of the values
 </td>
 </tr>
 </table>

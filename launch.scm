@@ -81,7 +81,9 @@
 	 (key-str  (string-intersperse key-vals "/"))
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))
-	 (lnkpath  (conc *toppath* "/runs/" key-str "/" runname item-path)))
+	 (runsdir  (config-lookup *configdat* "setup" "runsdir"))
+	 (lnkpath  (conc (if runsdir runsdir (conc *toppath* "/runs"))
+			 "/" key-str "/" runname item-path)))
     (print "Setting up test run area")
     (print " - creating run area in " dfullp)
     (system  (conc "mkdir -p " dfullp))
