@@ -136,6 +136,7 @@
 						   (list 'runscript runscript) 
 						   (list 'run-id    run-id   )
 						   (list 'itemdat   itemdat)
+						   (list 'runname   (args:get-arg ":runname"))
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
