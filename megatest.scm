@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.02)
+(define megatest-version 1.03)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -311,12 +311,16 @@ Called as " (string-intersperse (argv) " ")))
 		 (db-host   (assoc/default 'db-host   cmdinfo))
 		 (run-id    (assoc/default 'run-id    cmdinfo))
 		 (itemdat   (assoc/default 'itemdat   cmdinfo))
+		 (runname   (assoc/default 'runname   cmdinfo))
 		 (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 		 (fullrunscript (conc testpath "/" runscript))
 		 (db        #f))
 	    (print "Exectuing " test-name " on " (get-host-name))
 	    (change-directory testpath)
 	    (setenv "MT_TEST_RUN_DIR" testpath)
+	    (setenv "MT_TEST_NAME" test-name)
+	    (setenv "MT_ITEM_INFO" (conc itemdat))
+	    (setenv "MT_RUNNAME"   runname)
 	    (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path))
 	    (if (not (setup-for-run))
 		(begin
@@ -506,7 +510,7 @@ Called as " (string-intersperse (argv) " ")))
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (change-directory testpath)
-			  (test-set-log! db run-id test-name itemdat logfile)))
+			  (test-set-log! db run-id test-name itemdat htmllogfile)))
 		    (test-set-status! db run-id test-name "end" exitstat itemdat (args:get-arg "-m"))
 		    (sqlite3:finalize! db)
 		    (exit exitstat)

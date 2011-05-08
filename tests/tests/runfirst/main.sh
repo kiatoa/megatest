@@ -6,4 +6,4 @@
 
 megatest -runstep wasting_time -logpro wasting_time.logpro "sleep 20;echo all done eh?" -m "This is a test step comment"
 
-megatest -test-status :state COMPLETED :status PASS -setlog thelogfile.log -m "This is a test level comment"
+megatest -test-status :state COMPLETED :status PASS -m "This is a test level comment"

@@ -1,0 +1,602 @@
+#LyX 1.6.5 created this file. For more info see http://www.lyx.org/
+\lyxformat 345
+\begin_document
+\begin_header
+\textclass docbook
+\use_default_options false
+\language english
+\inputencoding auto
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 0
+\use_esint 0
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\author "" 
+\author "" 
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Megatest
+\end_layout
+
+\begin_layout Date
+5/5/2011 
+\end_layout
+
+\begin_layout Author
+Matt Welland
+\end_layout
+
+\begin_layout Abstract
+Megatest is a minimalistic tool to help automate and manage the running
+ of a suite of regression tests or other processes and to roll up the results
+ for display on a web page or dashboard.
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset toc
+LatexCommand tableofcontents
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+About Megatest
+\end_layout
+
+\begin_layout Subsection
+Megatest design philosophy
+\end_layout
+
+\begin_layout Standard
+Megatest is intended to provide the minimum needed resources to make writing
+ a suite of tests for software, design engineering or process control (via
+ owlfs for example) without being specialized for any specific problem space.
+ Megatest in of itself does not know what constitutes a PASS or FAIL of
+ a test.
+ In most cases megatest is best used in conjunction with logpro or a similar
+ tool to parse, analyze and decide on the test outcome.
+ A call to megatest can then be made to record the result.
+ 
+\end_layout
+
+\begin_layout Subsection
+Megatest architecture
+\end_layout
+
+\begin_layout Standard
+All data to specify the tests and configure the system is stored in plain
+ text files.
+ All system state is stored in an sqlite3 database.
+ Tests are launched using the launching system available for the distributed
+ compute platform in use.
+ A template script is provided which can launch jobs on local and remote
+ Linux hosts.
+ Currently megatest uses the network filesystem to 
+\begin_inset Quotes eld
+\end_inset
+
+call home
+\begin_inset Quotes erd
+\end_inset
+
+ to your master sqlite3 database.
+\end_layout
+
+\begin_layout Section
+Installation
+\end_layout
+
+\begin_layout Subsection
+Compilation
+\end_layout
+
+\begin_layout Subsubsection
+Dependencies
+\end_layout
+
+\begin_layout Standard
+Chicken scheme and a number of eggs are required for building megatest.
+ See the file utils/installall.sh for an automated way to install the dependancie
+s on Linux.
+\end_layout
+
+\begin_layout Subsubsection
+Build and install
+\end_layout
+
+\begin_layout Standard
+Run 
+\begin_inset Quotes eld
+\end_inset
+
+make test
+\begin_inset Quotes erd
+\end_inset
+
+ to create the megatest exectutable.
+ You may wish to copy the executable to a centrally accessible location.
+\end_layout
+
+\begin_layout Subsection
+Setup
+\end_layout
+
+\begin_layout Subsubsection
+Create megatest.config
+\end_layout
+
+\begin_layout Standard
+Create the file megatest.config using the megatest.config template from the
+ tests directory.
+ At a minimum you need the following:
+\end_layout
+
+\begin_layout Code
+# Fields are the keys under which your test runs are organised
+\end_layout
+
+\begin_layout Code
+[fields]
+\end_layout
+
+\begin_layout Code
+field1 TEXT
+\end_layout
+
+\begin_layout Code
+field2 TEXT
+\end_layout
+
+\begin_layout Code
+
+\end_layout
+
+\begin_layout Code
+[jobtools]
+\end_layout
+
+\begin_layout Code
+# The launcher launches jobs to the local or remote hosts,
+\end_layout
+
+\begin_layout Code
+# the job is managed on the target host by megatest,
+\end_layout
+
+\begin_layout Code
+# comment out launcher to run local only.
+ An example launcher
+\end_layout
+
+\begin_layout Code
+# "nbfake" can be found in the utils directory.
+ 
+\end_layout
+
+\begin_layout Code
+launcher nbfake
+\end_layout
+
+\begin_layout Code
+
+\end_layout
+
+\begin_layout Code
+# The disks section specifies where the tests will be run.
+ As you
+\end_layout
+
+\begin_layout Code
+# run out of space in a partition you can add additional disks
+\end_layout
+
+\begin_layout Code
+# entries.
+\end_layout
+
+\begin_layout Code
+# Format is:
+\end_layout
+
+\begin_layout Code
+# name /path/to/area 
+\end_layout
+
+\begin_layout Code
+[disks]
+\end_layout
+
+\begin_layout Code
+1 /tmp 
+\end_layout
+
+\begin_layout Subsubsection
+Create runconfigs.config
+\end_layout
+
+\begin_layout Standard
+This file is used to set environment variables that are run specific.
+ You can simply create an empty file to start.
+\end_layout
+
+\begin_layout Subsubsection
+Create the tests directory and your first test
+\end_layout
+
+\begin_layout Standard
+The structure should look like this:
+\end_layout
+
+\begin_layout Code
+../tests
+\end_layout
+
+\begin_layout Code
+├── megatest.config
+\end_layout
+
+\begin_layout Code
+├── runconfigs.config 
+\end_layout
+
+\begin_layout Code
+└── tests 
+\end_layout
+
+\begin_layout Code
+    └── mytest 
+\end_layout
+
+\begin_layout Code
+       ├── main.sh
+\end_layout
+
+\begin_layout Code
+       └── testconfig 
+\end_layout
+
+\begin_layout Subsubsection
+Create the testconfig file for your test
+\end_layout
+
+\begin_layout Code
+[setup]
+\end_layout
+
+\begin_layout Code
+runscript main.sh
+\end_layout
+
+\begin_layout Subsubsection
+Create your test running script, main.sh
+\end_layout
+
+\begin_layout Code
+#!/bin/bash
+\end_layout
+
+\begin_layout Code
+
+\end_layout
+
+\begin_layout Code
+megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
+\end_layout
+
+\begin_layout Code
+megatest -test-status :state COMPLETED :status PASS -m "This is a test level
+ comment"
+\end_layout
+
+\begin_layout Subsubsection
+Run megatest and watch your run progress
+\end_layout
+
+\begin_layout Code
+megatest :field1 abc :field2 def :runname 2011week08.4a -runall
+\end_layout
+
+\begin_layout Code
+watch megatest -list-runs %
+\end_layout
+
+\begin_layout Section
+Reference
+\end_layout
+
+\begin_layout Subsection
+Environment variables
+\end_layout
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="8" columns="3">
+<features>
+<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="0">
+<row>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Variable
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Purpose
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Default value/Comment
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_CMDINFO
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Conveys test variables to the megatest test runner.
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Not for use by the end user
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_TEST_RUN_DIR
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Directory assigned by megatest for the test to run.
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Tests can consider this their 
+\begin_inset Quotes eld
+\end_inset
+
+home
+\begin_inset Quotes erd
+\end_inset
+
+ directory
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_TEST_NAME
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Name of the test, corrosponds to the directory name under tests.
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_ITEM_INFO
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Iterated tests will set this to a sequence of key/values ((KEY val) ...) 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_RUN_AREA_HOME
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Directory where megatest was launched from and where the tests code can
+ be found
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+MT_RUNNAME
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Name of this run as set by the :runname parameter
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+<field1> ....
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+The field values as set on the megatest -runall command line (e.g.
+ :field1 abc)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Planning ahead your field names is important so as to avoid collisions with
+ other environment variables
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Code
+
+\end_layout
+
+\end_body
+\end_document

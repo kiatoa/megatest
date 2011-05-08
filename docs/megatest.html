@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta name="generator" content="http://www.nongnu.org/elyxer/"/>
+<meta name="create-date" content="2011-05-07"/>
+<link rel="stylesheet" href="http://www.nongnu.org/elyxer/lyx.css" type="text/css" media="screen"/>
+<title>Megatest</title>
+</head>
+<body>
+<div id="globalWrapper">
+
+<h1 class="title">
+Megatest
+</h1>
+<h2 class="Date">
+5/5/2011 
+</h2>
+<h2 class="author">
+Matt Welland
+</h2>
+<div class="abstract">
+
+<p class="abstract-message">
+Abstract
+</p>Megatest is a minimalistic tool to help automate and manage the running of a suite of regression tests or other processes and to roll up the results for display on a web page or dashboard.
+</div>
+<div class="Unindented">
+
+<div class="fulltoc">
+
+<div class="tocheader">
+Table of Contents
+</div><div class="tocindent">
+<div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Section-0.1">Section 0.1: About Megatest</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.1.1">Subsection 0.1.1: Megatest design philosophy</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.1.2">Subsection 0.1.2: Megatest architecture</a>
+</div></div>
+
+<div class="toc">
+<a class="Link" href="#toc-Section-0.2">Section 0.2: Installation</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.2.1">Subsection 0.2.1: Compilation</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.1.1">Subsubsection 0.2.1.1: Dependencies</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.1.2">Subsubsection 0.2.1.2: Build and install</a>
+</div></div>
+
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.2.2">Subsection 0.2.2: Setup</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.1">Subsubsection 0.2.2.1: Create megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.2">Subsubsection 0.2.2.2: Create runconfigs.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.3">Subsubsection 0.2.2.3: Create the tests directory and your first test</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.4">Subsubsection 0.2.2.4: Create the testconfig file for your test</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.5">Subsubsection 0.2.2.5: Create your test running script, main.sh</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.2.2.6">Subsubsection 0.2.2.6: Run megatest and watch your run progress</a>
+</div></div>
+</div>
+
+<div class="toc">
+<a class="Link" href="#toc-Section-0.3">Section 0.3: Reference</a>
+</div><div class="tocindent">
+
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.3.1">Subsection 0.3.1: Environment variables</a>
+</div></div>
+</div>
+</div>
+
+</div>
+</div>
+<h2 class="Section">
+<a class="toc" name="toc-Section-0.1">0.1</a> About Megatest
+</h2>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.1.1">0.1.1</a> Megatest design philosophy
+</h3>
+<div class="Unindented">
+Megatest is intended to provide the minimum needed resources to make writing a suite of tests for software, design engineering or process control (via owlfs for example) without being specialized for any specific problem space. Megatest in of itself does not know what constitutes a PASS or FAIL of a test. In most cases megatest is best used in conjunction with logpro or a similar tool to parse, analyze and decide on the test outcome. A call to megatest can then be made to record the result. 
+</div>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.1.2">0.1.2</a> Megatest architecture
+</h3>
+<div class="Unindented">
+All data to specify the tests and configure the system is stored in plain text files. All system state is stored in an sqlite3 database. Tests are launched using the launching system available for the distributed compute platform in use. A template script is provided which can launch jobs on local and remote Linux hosts. Currently megatest uses the network filesystem to “call home” to your master sqlite3 database.
+</div>
+<h2 class="Section">
+<a class="toc" name="toc-Section-0.2">0.2</a> Installation
+</h2>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.2.1">0.2.1</a> Compilation
+</h3>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.1.1">0.2.1.1</a> Dependencies
+</h4>
+<div class="Unindented">
+Chicken scheme and a number of eggs are required for building megatest. See the file utils/installall.sh for an automated way to install the dependancies on Linux.
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.1.2">0.2.1.2</a> Build and install
+</h4>
+<div class="Unindented">
+Run “make test” to create the megatest exectutable. You may wish to copy the executable to a centrally accessible location.
+</div>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.2.2">0.2.2</a> Setup
+</h3>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.1">0.2.2.1</a> Create megatest.config
+</h4>
+<div class="Unindented">
+Create the file megatest.config using the megatest.config template from the tests directory. At a minimum you need the following:
+</div>
+<div class="Code">
+# Fields are the keys under which your test runs are organised
+</div>
+<div class="Code">
+[fields]
+</div>
+<div class="Code">
+field1 TEXT
+</div>
+<div class="Code">
+field2 TEXT
+</div>
+<div class="Code">
+
+</div>
+<div class="Code">
+[jobtools]
+</div>
+<div class="Code">
+# The launcher launches jobs to the local or remote hosts,
+</div>
+<div class="Code">
+# the job is managed on the target host by megatest,
+</div>
+<div class="Code">
+# comment out launcher to run local only. An example launcher
+</div>
+<div class="Code">
+# "nbfake" can be found in the utils directory. 
+</div>
+<div class="Code">
+launcher nbfake
+</div>
+<div class="Code">
+
+</div>
+<div class="Code">
+# The disks section specifies where the tests will be run. As you
+</div>
+<div class="Code">
+# run out of space in a partition you can add additional disks
+</div>
+<div class="Code">
+# entries.
+</div>
+<div class="Code">
+# Format is:
+</div>
+<div class="Code">
+# name /path/to/area 
+</div>
+<div class="Code">
+[disks]
+</div>
+<div class="Code">
+1 /tmp 
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.2">0.2.2.2</a> Create runconfigs.config
+</h4>
+<div class="Unindented">
+This file is used to set environment variables that are run specific. You can simply create an empty file to start.
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.3">0.2.2.3</a> Create the tests directory and your first test
+</h4>
+<div class="Unindented">
+The structure should look like this:
+</div>
+<div class="Code">
+../tests
+</div>
+<div class="Code">
+├── megatest.config
+</div>
+<div class="Code">
+├── runconfigs.config 
+</div>
+<div class="Code">
+└── tests 
+</div>
+<div class="Code">
+    └── mytest 
+</div>
+<div class="Code">
+       ├── main.sh
+</div>
+<div class="Code">
+       └── testconfig 
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.4">0.2.2.4</a> Create the testconfig file for your test
+</h4>
+<div class="Code">
+[setup]
+</div>
+<div class="Code">
+runscript main.sh
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.5">0.2.2.5</a> Create your test running script, main.sh
+</h4>
+<div class="Code">
+#!/bin/bash
+</div>
+<div class="Code">
+
+</div>
+<div class="Code">
+megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
+</div>
+<div class="Code">
+megatest -test-status :state COMPLETED :status PASS -m "This is a test level comment"
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.2.2.6">0.2.2.6</a> Run megatest and watch your run progress
+</h4>
+<div class="Code">
+megatest :field1 abc :field2 def :runname 2011week08.4a -runall
+</div>
+<div class="Code">
+watch megatest -list-runs %
+</div>
+<h2 class="Section">
+<a class="toc" name="toc-Section-0.3">0.3</a> Reference
+</h2>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.3.1">0.3.1</a> Environment variables
+</h3>
+<div class="Unindented">
+
+<table>
+
+<tr>
+
+<td align="left" valign="top">
+Variable
+</td>
+<td align="left" valign="top">
+Purpose
+</td>
+<td align="left" valign="top">
+Default value/Comment
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_CMDINFO
+</td>
+<td align="left" valign="top">
+Conveys test variables to the megatest test runner.
+</td>
+<td align="left" valign="top">
+Not for use by the end user
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_TEST_RUN_DIR
+</td>
+<td align="left" valign="top">
+Directory assigned by megatest for the test to run.
+</td>
+<td align="left" valign="top">
+Tests can consider this their “home” directory
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_TEST_NAME
+</td>
+<td align="left" valign="top">
+Name of the test, corrosponds to the directory name under tests.
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_ITEM_INFO
+</td>
+<td align="left" valign="top">
+Iterated tests will set this to a sequence of key/values ((KEY val) ...) 
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_RUN_AREA_HOME
+</td>
+<td align="left" valign="top">
+Directory where megatest was launched from and where the tests code can be found
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+MT_RUNNAME
+</td>
+<td align="left" valign="top">
+Name of this run as set by the :runname parameter
+</td>
+<td align="left" valign="top">
+
+</td>
+</tr>
+<tr>
+
+<td align="left" valign="top">
+&lt;field1&gt; ....
+</td>
+<td align="left" valign="top">
+The field values as set on the megatest -runall command line (e.g. :field1 abc)
+</td>
+<td align="left" valign="top">
+Planning ahead your field names is important so as to avoid collisions with other environment variables
+</td>
+</tr>
+</table>
+</div>
+<div class="Code">
+
+</div>
+
+<hr/>
+<p>Copyright (C) 2011 Matt Welland</p>
+</div>
+</body>
+</html>
