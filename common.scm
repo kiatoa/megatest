@@ -28,6 +28,7 @@
 (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
 (define *waiting-queue* (make-hash-table))
+(define *globalexitstatus* 0) ;; attempt to work around possible thread issues
 
 (define-inline (get-with-default val default)
   (let ((val (args:get-arg val)))

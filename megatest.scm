@@ -499,24 +499,28 @@ Called as " (string-intersperse (argv) " ")))
 		    (print "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
+		    (set! *globalexitstatus* exitstat)
 		    (change-directory testpath)
 		    ;; re-open the db
 		    (set! db (open-db)) 
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
+			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
 			  (print "INFO: running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
+			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  (test-set-log! db run-id test-name itemdat htmllogfile)))
-		    (test-set-status! db run-id test-name "end" exitstat itemdat (args:get-arg "-m"))
+		    (teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m"))
 		    (sqlite3:finalize! db)
-		    (exit exitstat)
-		    ;; open the db
-		;; mark the end of the test
-		)))
+		    (if (not (eq? exitstat 0))
+			(exit 254)) ;; (exit exitstat) doesn't work?!?
+		  ;; open the db
+		  ;; mark the end of the test
+		  )))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 
@@ -541,3 +545,6 @@ Called as " (string-intersperse (argv) " ")))
 
 (if (not *didsomething*)
     (print help))
+
+(if (not (eq? *globalexitstatus* 0))
+    (exit *globalexitstatus*))
