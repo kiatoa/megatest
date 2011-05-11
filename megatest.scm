@@ -46,10 +46,13 @@ Queries
 Misc 
   -force                  : override some checks
   -xterm                  : start an xterm instead of launching the test
+  -remove-runs            : remove the data for a run, requires fields, :runname 
+                            and -testpatt
+  -testpatt patt          : remove tests matching patt (requires -remove-runs)
 
 Helpers
-  -runstep stepname  ...  : take leftover params as comand and execute as stepname
-                            log will be in stepname.log
+  -runstep stepname  ...  : take remaining params as comand and execute as stepname
+                            log will be in stepname.log. Best to put command in quotes
   -logpro file            : with -exec apply logpro file to stepname.log, creates
                             stepname.html and sets log to same
                             If using make use stepname_logpro.log as your target
@@ -77,7 +80,6 @@ Called as " (string-intersperse (argv) " ")))
 			"-setlog"
 			"-runstep"
 			"-logpro"
-			"-remove-run"
 			"-m"
 			) 
 		 (list  "-h"
@@ -87,7 +89,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-test-status"
 		        "-gui"
 			"-runall"    ;; run all tests
-                        
+			"-remove-runs"
 		       )
 		 args:arg-hash
 		 0))
@@ -267,30 +269,36 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 
 (define (remove-runs)
-  (if (not (args:get-arg ":runname"))
-      (begin
-	(print "ERROR: Missing required parameter for -remove-run, you must specify the run name with :runname runname")
-	(exit 2))
-      (let ((db #f))
-	(if (not (setup-for-run))
-	    (begin 
-	      (print "Failed to setup, exiting")
-	      (exit 1)))
-	(set! db (open-db))
-	(if (not (car *configinfo*))
-	    (begin
-	      (print "ERROR: Attempted to remove a test but run area config file not found")
-	      (exit 1))
-	    ;; put test parameters into convenient variables
-	    (let* ((test-names   (string-split (args:get-arg "-remove-tests") ",")))
-	      (run-tests db test-names)))
-	;; run-waiting-tests db)
-	(sqlite3:finalize! db)
-	(run-waiting-tests #f)
-	(set! *didsomething* #t))))
+  (cond
+   ((not (args:get-arg ":runname"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
+    (exit 2))
+   ((not (args:get-arg "-testpatt"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
+    (exit 3))
+   ((not (args:get-arg "-itempatt"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the items with -itempatt")
+    (exit 4))
+   ((let ((db #f))
+      (if (not (setup-for-run))
+	  (begin 
+	    (print "Failed to setup, exiting")
+	    (exit 1)))
+      (set! db (open-db))
+      (if (not (car *configinfo*))
+	  (begin
+	    (print "ERROR: Attempted to remove test(s) but run area config file not found")
+	    (exit 1))
+	  ;; put test parameters into convenient variables
+	  (runs:remove-runs db
+			    (args:get-arg ":runname")
+			    (args:get-arg "-testpatt")
+			    (args:get-arg "-itempatt")))
+      (sqlite3:finalize! db)
+      (set! *didsomething* #t)))))
 	  
-(if (args:get-arg "-runtests")
-    (runtests))
+(if (args:get-arg "-remove-runs")
+    (remove-runs))
 
 ;;======================================================================
 ;; execute the test

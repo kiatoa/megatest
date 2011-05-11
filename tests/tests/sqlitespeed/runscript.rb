@@ -15,7 +15,7 @@ status=false
   randstring="a;lskdfja;sdfj;alsdfj;aslfdj;alsfja;lsfdj;alsfja;lsjfd;lasfjl;asdfja;slfj;alsjf;asljf;alsjf;lasdjf;lasjf;lasjf;alsjf;lashflkashflkerhflkdsvnlasldhlfaldf"
   # status=system "sqlite3 testing.db \"insert into blah (name) values ('#{randstring}');\""
   system "megatest -step testing :state wrote_junk :status #{num_records}"
-  sleep(1)
+  sleep(5)
   puts "i=#{i}"
 end
 if status==0

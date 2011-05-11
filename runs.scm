@@ -16,7 +16,7 @@
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvallst (keys->vallist keys))
+	 (keyvallst (keys->vallist keys)) ;; extracts the values from remainder of (argv)
 	 (runname   (get-with-default ":runname" #f))
 	 (state     (get-with-default ":state" "no"))
 	 (status    (get-with-default ":status" "n/a"))
@@ -42,6 +42,38 @@
 	(begin
 	  (print "ERROR: Called without all necessary keys")
 	  #f))))
+
+;; runs:get-runs-by-patt
+;; get runs by list of criteria
+;; register a test run with the db
+;;
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;;  to extract info from the structure returned
+;;
+(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
+  (let* ((keyvallst (keys->vallist keys))
+	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+	 (keystr   (car tmp))
+	 (header   (cadr tmp))
+	 (res     '())
+	 (key-patt ""))
+    (for-each (lambda (keyval)
+		(let* ((key    (vector-ref keyval 0))
+		       (fulkey (conc ":" key))
+		       (patt   (args:get-arg fulkey)))
+		  (if patt
+		      (set! key-patt (conc key-patt " AND " key " like '" patt "'"))
+		      (begin
+			(print "ERROR: searching for runs with no pattern set for " fulkey)
+			(exit 6)))))
+	      keys)
+    (sqlite3:for-each-row 
+     (lambda (a . r)
+       (set! res (cons (list->vector (cons a r)) res)))
+     db 
+     (conc "SELECT " keystr " FROM runs WHERE runname like ? " key-patt ";")
+     runnamepatt)
+    (vector header res)))
 
 (define (register-test db run-id test-name item-path)
   (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path) VALUES (?,?,strftime('%s','now'),?);" run-id test-name item-path))
@@ -326,4 +358,38 @@
 		  waiting-test-names)
 	(sleep 10) ;; no point in rushing things at this stage?
 	(loop (hash-table-keys *waiting-queue*)))))))
+
   
+;; Remove runs
+;; fields are passing in through 
+(define (runs:remove-runs db runnamepatt testpatt itempatt)
+  (let* ((keys        (db-get-keys db))
+	 (rundat      (runs:get-runs-by-patt db keys runnamepatt))
+	 (header      (vector-ref rundat 0))
+	 (runs        (vector-ref rundat 1)))
+    (print "Header: " header)
+    (for-each
+     (lambda (run)
+       (let ((runkey (string-intersperse (map (lambda (k)
+						(db-get-value-by-header run header (vector-ref k 0))) keys) "/")))
+	 (let* ((run-id (db-get-value-by-header run header "id") )
+		(tests  (db-get-tests-for-run db (db-get-value-by-header run header "id") testpatt itempatt)))
+	   (if (not (null? tests))
+	       (begin
+		 (print "Removing tests for run: " runkey " " (db-get-value-by-header run header "runname"))
+		 (for-each
+		  (lambda (test)
+		    (print "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " (db:test-get-item-path test))
+		    (db:delete-test-records db (db:test-get-id test))
+		    (if (> (string-length (db:test-get-rundir test)) 5) ;; bad heuristic but should prevent /tmp /home etc.
+			(let ((fullpath (db:test-get-rundir test))) ;; "/" (db:test-get-item-path test))))
+			  (print "rm -rf " fullpath)
+			  (system (conc "rm -rf " fullpath)))))
+		  tests)
+		 (let ((remtests (db-get-tests-for-run db (db-get-value-by-header run header "id"))))
+		   (if (null? remtests) ;; no more tests remaining
+		       (begin
+			 (print "Removing run: " runkey " " (db-get-value-by-header run header "runname"))
+			 (db:delete-run db run-id))))
+		 )))))
+     runs)))

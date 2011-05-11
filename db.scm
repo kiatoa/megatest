@@ -112,6 +112,14 @@
 ;;  R U N S
 ;;======================================================================
 
+(define (runs:get-std-run-fields keys remfields)
+  (let* ((header    (append (map key:get-fieldname keys)
+			    remfields))
+	 (keystr    (conc (keys->keystr keys) ","
+			  (string-intersperse remfields ","))))
+    (list keystr header)))
+
+;; replace header and keystr with a call to runs:get-std-run-fields
 (define (db-get-runs db runpatt . count)
   (let* ((res      '())
 	 (keys      (db-get-keys db))
@@ -159,6 +167,9 @@
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
+(define (db:delete-run db run-id)
+  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
@@ -192,8 +203,14 @@
      run-id testpatt (if itempatt itempatt "%"))
     res))
 
+;; this one is a bit broken BUG FIXME
 (define (db:delete-test-step-records db run-id test-name)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=?);" run-id test-name))
+
+;; 
+(define (db:delete-test-records db test-id)
+  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
+  (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
