@@ -232,6 +232,13 @@
      run-id testname item-path)
     res))
 
+;;
+(define (db:test-set-comment db run-id testname item-path comment)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
+     comment run-id testname item-path))
+
 ;; Steps
 ;; Run steps
 ;; make-vector-record "Run steps" db step id test_id stepname step_complete step_pass event_time    

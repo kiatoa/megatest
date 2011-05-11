@@ -111,6 +111,42 @@ Called as " (string-intersperse (argv) " ")))
 (define *didsomething* #f)
 
 ;;======================================================================
+;; Remove old run(s)
+;;======================================================================
+
+(define (remove-runs)
+  (cond
+   ((not (args:get-arg ":runname"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
+    (exit 2))
+   ((not (args:get-arg "-testpatt"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
+    (exit 3))
+   ((not (args:get-arg "-itempatt"))
+    (print "ERROR: Missing required parameter for -remove-runs, you must specify the items with -itempatt")
+    (exit 4))
+   ((let ((db #f))
+      (if (not (setup-for-run))
+	  (begin 
+	    (print "Failed to setup, exiting")
+	    (exit 1)))
+      (set! db (open-db))
+      (if (not (car *configinfo*))
+	  (begin
+	    (print "ERROR: Attempted to remove test(s) but run area config file not found")
+	    (exit 1))
+	  ;; put test parameters into convenient variables
+	  (runs:remove-runs db
+			    (args:get-arg ":runname")
+			    (args:get-arg "-testpatt")
+			    (args:get-arg "-itempatt")))
+      (sqlite3:finalize! db)
+      (set! *didsomething* #t)))))
+	  
+(if (args:get-arg "-remove-runs")
+    (remove-runs))
+
+;;======================================================================
 ;; Query runs
 ;;======================================================================
 
@@ -263,42 +299,6 @@ Called as " (string-intersperse (argv) " ")))
 	  
 (if (args:get-arg "-runtests")
     (runtests))
-
-;;======================================================================
-;; Remove old run(s)
-;;======================================================================
-
-(define (remove-runs)
-  (cond
-   ((not (args:get-arg ":runname"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
-    (exit 2))
-   ((not (args:get-arg "-testpatt"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
-    (exit 3))
-   ((not (args:get-arg "-itempatt"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the items with -itempatt")
-    (exit 4))
-   ((let ((db #f))
-      (if (not (setup-for-run))
-	  (begin 
-	    (print "Failed to setup, exiting")
-	    (exit 1)))
-      (set! db (open-db))
-      (if (not (car *configinfo*))
-	  (begin
-	    (print "ERROR: Attempted to remove test(s) but run area config file not found")
-	    (exit 1))
-	  ;; put test parameters into convenient variables
-	  (runs:remove-runs db
-			    (args:get-arg ":runname")
-			    (args:get-arg "-testpatt")
-			    (args:get-arg "-itempatt")))
-      (sqlite3:finalize! db)
-      (set! *didsomething* #t)))))
-	  
-(if (args:get-arg "-remove-runs")
-    (remove-runs))
 
 ;;======================================================================
 ;; execute the test

@@ -50,7 +50,7 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
+(define (runs:get-runs-by-patt db keys runnamepatt . params) ;; test-name)
   (let* ((keyvallst (keys->vallist keys))
 	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
@@ -277,6 +277,9 @@
 			       (< ct 10))
 			  (begin
 			    (register-test db run-id test-name item-path)
+			    (db:test-set-comment db run-id test-name item-path "")
+			    ;; (test-set-status! db run-id test-name "NOT_STARTED" "n/a" itemdat "")
+			    ;; (db:set-comment-for-test db run-id test-name item-path "")
 			    (db:delete-test-step-records db run-id test-name) ;; clean out if this is a re-run
 			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))
@@ -378,7 +381,7 @@
 						(db-get-value-by-header run header (vector-ref k 0))) keys) "/")))
 	 (let* ((run-id (db-get-value-by-header run header "id") )
 		(tests  (db-get-tests-for-run db (db-get-value-by-header run header "id") testpatt itempatt))
-		(lasttpath #f))
+		(lasttpath "/does/not/exist/I/hope"))
 	   (if (not (null? tests))
 	       (begin
 		 (print "Removing tests for run: " runkey " " (db-get-value-by-header run header "runname"))
