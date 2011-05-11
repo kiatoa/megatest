@@ -359,7 +359,11 @@
 	(sleep 10) ;; no point in rushing things at this stage?
 	(loop (hash-table-keys *waiting-queue*)))))))
 
-  
+(define (get-dir-up-one dir) 
+  (let ((dparts  (string-split dir "/")))
+    (conc "/" (string-intersperse 
+	       (take dparts (- (length dparts) 1))
+	       "/"))))
 ;; Remove runs
 ;; fields are passing in through 
 (define (runs:remove-runs db runnamepatt testpatt itempatt)
@@ -373,7 +377,8 @@
        (let ((runkey (string-intersperse (map (lambda (k)
 						(db-get-value-by-header run header (vector-ref k 0))) keys) "/")))
 	 (let* ((run-id (db-get-value-by-header run header "id") )
-		(tests  (db-get-tests-for-run db (db-get-value-by-header run header "id") testpatt itempatt)))
+		(tests  (db-get-tests-for-run db (db-get-value-by-header run header "id") testpatt itempatt))
+		(lasttpath #f))
 	   (if (not (null? tests))
 	       (begin
 		 (print "Removing tests for run: " runkey " " (db-get-value-by-header run header "runname"))
@@ -383,13 +388,28 @@
 		    (db:delete-test-records db (db:test-get-id test))
 		    (if (> (string-length (db:test-get-rundir test)) 5) ;; bad heuristic but should prevent /tmp /home etc.
 			(let ((fullpath (db:test-get-rundir test))) ;; "/" (db:test-get-item-path test))))
+			  (set! lasttpath fullpath)
 			  (print "rm -rf " fullpath)
-			  (system (conc "rm -rf " fullpath)))))
-		  tests)
-		 (let ((remtests (db-get-tests-for-run db (db-get-value-by-header run header "id"))))
-		   (if (null? remtests) ;; no more tests remaining
-		       (begin
-			 (print "Removing run: " runkey " " (db-get-value-by-header run header "runname"))
-			 (db:delete-run db run-id))))
-		 )))))
+			  (system (conc "rm -rf " fullpath))
+			  (let ((cmd (conc "rmdir -p " (get-dir-up-one fullpath))))
+			    (print cmd)
+			    (system cmd))
+			  )))
+		  tests)))
+	   (let ((remtests (db-get-tests-for-run db (db-get-value-by-header run header "id"))))
+	     (if (null? remtests) ;; no more tests remaining
+		 (let* ((dparts  (string-split lasttpath "/"))
+			(runpath (conc "/" (string-intersperse 
+					    (take dparts (- (length dparts) 1))
+					    "/"))))
+		   (print "Removing run: " runkey " " (db-get-value-by-header run header "runname"))
+		   (db:delete-run db run-id)
+		   ;; need to figure out the path to the run dir and remove it if empty
+		;;    (if (null? (glob (conc runpath "/*")))
+		;;        (begin
+		;; 	 (print "Removing run dir " runpath)
+		;; 	 (system (conc "rmdir -p " runpath))))
+		   )))
+		 )))
      runs)))
+
