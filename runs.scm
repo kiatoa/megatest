@@ -76,12 +76,39 @@
     (vector header res)))
 
 (define (register-test db run-id test-name item-path)
-  (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path) VALUES (?,?,strftime('%s','now'),?);" run-id test-name item-path))
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (for-each 
+     (lambda (pth)
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path) VALUES (?,?,strftime('%s','now'),?);" run-id test-name pth))
+     item-paths)))
+
+;;  (define db (open-db))
+;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path . comment)
   (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path))))
     (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
 		     state status run-id test-name item-path)
+    (if (and (not (equal? item-path "")) ;; need to update the top test record if PASS or FAIL and this is a subtest
+	     (or (equal? status "PASS")
+		 (equal? status "FAIL")))
+	(begin
+	  (sqlite3:execute 
+	   db
+	   "UPDATE tests 
+             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='PASS')
+             WHERE run_id=? AND testname=? AND item_path='';"
+	   run-id test-name run-id test-name run-id test-name)
+	  (sqlite3:execute
+	   db
+	   "UPDATE tests
+             SET state='COMPLETED',
+                status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
+             WHERE run_id=? AND testname=? AND item_path='';"
+	   run-id test-name)))
     (if (and (not (null? comment))
 	     (car comment))
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
