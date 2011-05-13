@@ -40,6 +40,7 @@
 	    (include-rx (regexp "^\\[include\\s+(.*)\\]\\s*$"))
 	    (section-rx (regexp "^\\[(.*)\\]\\s*$"))
 	    (blank-l-rx (regexp "^\\s*$"))
+	    (key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
 	    (key-val-pr (regexp "^(\\S+)\\s+(.*)$"))
 	    (comment-rx (regexp "^\\s*#.*")))
 	(let loop ((inl               (read-line inp))
@@ -53,6 +54,15 @@
 						(read-config include-file res)
 						(loop (read-line inp) curr-section-name)))
 	       (section-rx ( x section-name ) (loop (read-line inp) section-name))
+	       (key-sys-pr ( x key cmd      ) (let ((alist (hash-table-ref/default res curr-section-name '()))
+						    (val   (let ((res (car (cmd-run->list cmd))))
+							     (if (null? res)
+								 ""
+								 (string-intersperse res " ")))))
+						(hash-table-set! res curr-section-name 
+								 (config:assoc-safe-add alist key val))
+								 ;; (append alist (list (list key val))))
+						(loop (read-line inp) curr-section-name)))
 	       (key-val-pr ( x key val      ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key val))
