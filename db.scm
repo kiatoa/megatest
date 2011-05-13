@@ -242,7 +242,16 @@
    "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
      comment run-id testname item-path))
 
+;;
+(define (db:test-set-rundir! db run-id testname item-path rundir)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
+     rundir run-id testname item-path))
+
+;;======================================================================
 ;; Steps
+;;======================================================================
 ;; Run steps
 ;; make-vector-record "Run steps" db step id test_id stepname step_complete step_pass event_time    
 (define (make-db:step)(make-vector 6))

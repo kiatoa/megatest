@@ -119,6 +119,10 @@
     (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
 		     logf run-id test-name item-path)))
 
+(define (test-set-toplog! db run-id test-name logf) 
+  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
+		   logf run-id test-name))
+
 ;; ;; TODO: Converge this with db:get-test-info
 ;; (define (runs:get-test-info db run-id test-name item-path)
 ;;   (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
