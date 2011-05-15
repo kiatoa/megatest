@@ -5,4 +5,7 @@ runscript runscript.rb
 waiton    runfirst
 
 [items]
-MANYITEMS a b c d e f g h i j k l m
+MANYITEMS [system ls]
+# a b c d e f g h i j k l m
+# LSJUNK [system ls]
+

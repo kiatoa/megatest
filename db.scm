@@ -39,6 +39,8 @@
 			    "owner TEXT DEFAULT '',"
 			    "event_time TIMESTAMP,"
 			    "comment TEXT DEFAULT '',"
+			    "fail_count INTEGER DEFAULT 0,"
+			    "pass_count INTEGER DEFAULT 0,"
 			    "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
 	  (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
 	  (sqlite3:execute db 
@@ -46,7 +48,6 @@
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
-                     itempath   TEXT,
                      host       TEXT DEFAULT 'n/a',
                      cpuload    REAL DEFAULT -1,
                      diskfree   INTEGER DEFAULT -1,
@@ -54,13 +55,15 @@
                      rundir     TEXT DEFAULT 'n/a',
                      item_path  TEXT DEFAULT '',
                      state      TEXT DEFAULT 'NOT_STARTED',
-                     status     TEXT DEFAULT 'n/a',
+                     status     TEXT DEFAULT 'FAIL',
                      attemptnum INTEGER DEFAULT 0,
                      final_logf TEXT DEFAULT 'logs/final.log',
                      logdat     BLOB, 
                      run_duration INTEGER DEFAULT 0,
                      comment    TEXT DEFAULT '',
                      event_time TIMESTAMP,
+                     fail_count INTEGER DEFAULT 0,
+                     pass_count INTEGER DEFAULT 0,
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -239,7 +242,16 @@
    "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
      comment run-id testname item-path))
 
+;;
+(define (db:test-set-rundir! db run-id testname item-path rundir)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
+     rundir run-id testname item-path))
+
+;;======================================================================
 ;; Steps
+;;======================================================================
 ;; Run steps
 ;; make-vector-record "Run steps" db step id test_id stepname step_complete step_pass event_time    
 (define (make-db:step)(make-vector 6))

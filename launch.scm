@@ -81,9 +81,14 @@
 	 (key-str  (string-intersperse key-vals "/"))
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))
+	 (toptest-path (conc disk-path "/" key-str "/" runname "/" testname))
 	 (runsdir  (config-lookup *configdat* "setup" "runsdir"))
 	 (lnkpath  (conc (if runsdir runsdir (conc *toppath* "/runs"))
 			 "/" key-str "/" runname item-path)))
+    ;; since this is an iterated test this is as good a place as any to
+    ;; update the toptest record with its location rundir
+    (if (not (equal? item-path ""))
+	(db:test-set-rundir! db run-id testname "" toptest-path))
     (print "Setting up test run area")
     (print " - creating run area in " dfullp)
     (system  (conc "mkdir -p " dfullp))
@@ -95,8 +100,8 @@
     (if (directory? dfullp)
 	(begin
 	  (system  (conc "rsync -av " test-path "/ " dfullp "/"))
-	  dfullp)
-	#f)))
+	  (list dfullp toptest-path))
+	(list #f #f))))
 
 ;; 1. look though disks list for disk with most space
 ;; 2. create run dir on disk, path name is meaningful
@@ -115,6 +120,7 @@
 	(local-megatest  (car (argv)))
 	;; (item-path  (item-list->path itemdat)) test-path is the full path including the item-path
 	(work-area  #f)
+	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	(diskpath   #f)
 	(cmdparms   #f)
 	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
@@ -126,7 +132,9 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(set! work-area (create-work-area db run-id test-path diskpath test-name itemdat))
+	(let ((dat  (create-work-area db run-id test-path diskpath test-name itemdat)))
+	  (set! work-area (car dat))
+	  (set! toptest-work-area (cadr dat)))
 	(begin
 	  (set! work-area test-path)
 	  (print "WARNING: No disk work area specified - running in the test directory")))
@@ -137,7 +145,8 @@
 						   (list 'test-name test-name) 
 						   (list 'runscript runscript) 
 						   (list 'run-id    run-id   )
-						   (list 'itemdat   itemdat)
+						   (list 'itemdat   itemdat  )
+						   (list 'megatest  remote-megatest)
 						   (list 'runname   (args:get-arg ":runname"))
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir

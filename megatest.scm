@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.04)
+(define megatest-version 1.06)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -30,6 +30,7 @@ Run status updates (these require that you are in a test directory
   -test-status            : set the state and status of a test (use :state and :status)
   -setlog logfname        : set the path/filename to the final log relative to the test
                             directory. may be used with -test-status
+  -set-toplog logfname    : set the overall log for a suite of sub-tests
   -m comment              : insert a comment for this test
 
 Run data
@@ -78,6 +79,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-testpatt" 
 			"-itempatt"
 			"-setlog"
+			"-set-toplog"
 			"-runstep"
 			"-logpro"
 			"-m"
@@ -320,6 +322,7 @@ Called as " (string-intersperse (argv) " ")))
 		 (run-id    (assoc/default 'run-id    cmdinfo))
 		 (itemdat   (assoc/default 'itemdat   cmdinfo))
 		 (runname   (assoc/default 'runname   cmdinfo))
+		 (megatest  (assoc/default 'megatest  cmdinfo))
 		 (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 		 (fullrunscript (conc testpath "/" runscript))
 		 (db        #f))
@@ -329,7 +332,9 @@ Called as " (string-intersperse (argv) " ")))
 	    (setenv "MT_TEST_NAME" test-name)
 	    (setenv "MT_ITEM_INFO" (conc itemdat))
 	    (setenv "MT_RUNNAME"   runname)
+	    (setenv "MT_MEGATEST"  megatest)
 	    (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path))
+	    
 	    (if (not (setup-for-run))
 		(begin
 		  (print "Failed to setup, exiting") 
@@ -447,6 +452,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (set! *didsomething* #t))))
 
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-runstep"))
     (if (not (getenv "MT_CMDINFO"))
@@ -472,6 +478,8 @@ Called as " (string-intersperse (argv) " ")))
 	  (set! db (open-db))
 	  (if (args:get-arg "-setlog")
 	      (test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
+	  (if (args:get-arg "-set-toplog")
+	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-test-status")
 	      (test-set-status! db run-id test-name state status itemdat (args:get-arg "-m"))
 	      (if (and state status)
