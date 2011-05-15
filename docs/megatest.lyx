@@ -353,6 +353,129 @@ Reference
 \end_layout
 
 \begin_layout Subsection
+Configuration files
+\end_layout
+
+\begin_layout Subsubsection
+Sections
+\end_layout
+
+\begin_layout Standard
+[section name]
+\end_layout
+
+\begin_layout Standard
+This creates a section named 
+\begin_inset Quotes eld
+\end_inset
+
+section name
+\begin_inset Quotes erd
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Variables
+\end_layout
+
+\begin_layout Standard
+VARX has this value
+\end_layout
+
+\begin_layout Standard
+The variable 
+\begin_inset Quotes eld
+\end_inset
+
+VARX
+\begin_inset Quotes erd
+\end_inset
+
+ will have the value 
+\begin_inset Quotes eld
+\end_inset
+
+has this value
+\begin_inset Quotes erd
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Includes
+\end_layout
+
+\begin_layout Standard
+[include filename]
+\end_layout
+
+\begin_layout Standard
+The file named 
+\begin_inset Quotes eld
+\end_inset
+
+filename
+\begin_inset Quotes erd
+\end_inset
+
+ will be included as if part of the calling file.
+ NOTE: This means no section can be named 
+\begin_inset Quotes eld
+\end_inset
+
+include 
+\begin_inset Quotes eld
+\end_inset
+
+ (with the whitespace).
+\end_layout
+
+\begin_layout Subsubsection
+Setting a variable by running a command
+\end_layout
+
+\begin_layout Standard
+VARNAME [system ls /tmp]
+\end_layout
+
+\begin_layout Standard
+The variable 
+\begin_inset Quotes eld
+\end_inset
+
+VARNAME
+\begin_inset Quotes erd
+\end_inset
+
+ will get a value created by the Unix command 
+\begin_inset Quotes eld
+\end_inset
+
+ls /tmp
+\begin_inset Quotes erd
+\end_inset
+
+.
+ All lines of output from the command will be joined with a space.
+\end_layout
+
+\begin_layout Subsubsection
+Notes
+\end_layout
+
+\begin_layout Itemize
+Some variables are infered as lists.
+ Each token on the line separated by whitespace will be member of the list.
+\end_layout
+
+\begin_layout Itemize
+Comments (lines starting with #) and blank lines are ignored.
+\end_layout
+
+\begin_layout Subsection
 Environment variables
 \end_layout
 
@@ -1292,11 +1415,19 @@ ENCRYTION true
 \end_layout
 
 \begin_layout Code
+#
+\end_layout
+
+\begin_layout Code
 [megacorp/india]
 \end_layout
 
 \begin_layout Code
 TESTPATH /nfs/testing/megacorp_runs
+\end_layout
+
+\begin_layout Code
+#
 \end_layout
 
 \begin_layout Code
@@ -1312,11 +1443,19 @@ TESTPATH /afs/kiatoa/testing/cook_islands
 \end_layout
 
 \begin_layout Code
+#
+\end_layout
+
+\begin_layout Code
 [femtocorp/new_zealand]
 \end_layout
 
 \begin_layout Code
 TESTPATH /afs/kiatao/testing/new_zealand
+\end_layout
+
+\begin_layout Code
+#
 \end_layout
 
 \begin_layout Code

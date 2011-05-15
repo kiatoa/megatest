@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <meta name="generator" content="http://www.nongnu.org/elyxer/"/>
-<meta name="create-date" content="2011-05-12"/>
+<meta name="create-date" content="2011-05-14"/>
 <link rel="stylesheet" href="http://www.nongnu.org/elyxer/lyx.css" type="text/css" media="screen"/>
 <title>Megatest</title>
 </head>
@@ -86,29 +86,49 @@ Table of Contents
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-0.3.1">Subsection 0.3.1: Environment variables</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-0.3.2">Subsection 0.3.2: Configuration files</a>
+<a class="Link" href="#toc-Subsection-0.3.1">Subsection 0.3.1: Configuration files</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-0.3.2.1">Subsubsection 0.3.2.1: megatest.config</a>
+<a class="Link" href="#toc-Subsubsection-0.3.1.1">Subsubsection 0.3.1.1: Sections</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-0.3.2.2">Subsubsection 0.3.2.2: runconfigs.config file</a>
+<a class="Link" href="#toc-Subsubsection-0.3.1.2">Subsubsection 0.3.1.2: Variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.1.3">Subsubsection 0.3.1.3: Includes</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.1.4">Subsubsection 0.3.1.4: Setting a variable by running a command</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.1.5">Subsubsection 0.3.1.5: Notes</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-0.3.3">Subsection 0.3.3: Writing tests</a>
+<a class="Link" href="#toc-Subsection-0.3.2">Subsection 0.3.2: Environment variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.3.3">Subsection 0.3.3: Configuration files</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-0.3.3.1">Subsubsection 0.3.3.1: testconfig file</a>
+<a class="Link" href="#toc-Subsubsection-0.3.3.1">Subsubsection 0.3.3.1: megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.3.2">Subsubsection 0.3.3.2: runconfigs.config file</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-0.3.4">Subsection 0.3.4: Command line</a>
+<a class="Link" href="#toc-Subsection-0.3.4">Subsection 0.3.4: Writing tests</a>
+</div>
+<div class="tocindent">
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-0.3.4.1">Subsubsection 0.3.4.1: testconfig file</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-0.3.5">Subsection 0.3.5: Command line</a>
 </div>
 </div>
 </div>
@@ -284,7 +304,58 @@ watch megatest -list-runs %
 <a class="toc" name="toc-Section-0.3">0.3</a> Reference
 </h2>
 <h3 class="Subsection">
-<a class="toc" name="toc-Subsection-0.3.1">0.3.1</a> Environment variables
+<a class="toc" name="toc-Subsection-0.3.1">0.3.1</a> Configuration files
+</h3>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.1.1">0.3.1.1</a> Sections
+</h4>
+<div class="Unindented">
+[section name]
+</div>
+<div class="Indented">
+This creates a section named “section name”
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.1.2">0.3.1.2</a> Variables
+</h4>
+<div class="Unindented">
+VARX has this value
+</div>
+<div class="Indented">
+The variable “VARX” will have the value “has this value”
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.1.3">0.3.1.3</a> Includes
+</h4>
+<div class="Unindented">
+[include filename]
+</div>
+<div class="Indented">
+The file named “filename” will be included as if part of the calling file. NOTE: This means no section can be named “include “ (with the whitespace).
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.1.4">0.3.1.4</a> Setting a variable by running a command
+</h4>
+<div class="Unindented">
+VARNAME [system ls /tmp]
+</div>
+<div class="Indented">
+The variable “VARNAME” will get a value created by the Unix command “ls /tmp”. All lines of output from the command will be joined with a space.
+</div>
+<h4 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-0.3.1.5">0.3.1.5</a> Notes
+</h4>
+<ul>
+<li>
+Some variables are infered as lists. Each token on the line separated by whitespace will be member of the list.
+</li>
+<li>
+Comments (lines starting with #) and blank lines are ignored.
+</li>
+
+</ul>
+<h3 class="Subsection">
+<a class="toc" name="toc-Subsection-0.3.2">0.3.2</a> Environment variables
 </h3>
 <div class="Unindented">
 <table>
@@ -401,10 +472,10 @@ Planning ahead your field names is important so as to avoid collisions with othe
 
 </div>
 <h3 class="Subsection">
-<a class="toc" name="toc-Subsection-0.3.2">0.3.2</a> Configuration files
+<a class="toc" name="toc-Subsection-0.3.3">0.3.3</a> Configuration files
 </h3>
 <h4 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-0.3.2.1">0.3.2.1</a> megatest.config
+<a class="toc" name="toc-Subsubsection-0.3.3.1">0.3.3.1</a> megatest.config
 </h4>
 <div class="Unindented">
 <table>
@@ -575,7 +646,7 @@ The disk usage balancing algorithm is to choose the disk with the least space fo
 
 </div>
 <h4 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-0.3.2.2">0.3.2.2</a> runconfigs.config file
+<a class="toc" name="toc-Subsubsection-0.3.3.2">0.3.3.2</a> runconfigs.config file
 </h4>
 <div class="Unindented">
 <table>
@@ -650,10 +721,16 @@ Example: a test suite that checks that a piece of software works correctly for d
 ENCRYTION true
 </div>
 <div class="Code">
+#
+</div>
+<div class="Code">
 [megacorp/india]
 </div>
 <div class="Code">
 TESTPATH /nfs/testing/megacorp_runs
+</div>
+<div class="Code">
+#
 </div>
 <div class="Code">
 [femtocorp/cook_islands]
@@ -665,10 +742,16 @@ ENCRYTION false
 TESTPATH /afs/kiatoa/testing/cook_islands
 </div>
 <div class="Code">
+#
+</div>
+<div class="Code">
 [femtocorp/new_zealand]
 </div>
 <div class="Code">
 TESTPATH /afs/kiatao/testing/new_zealand
+</div>
+<div class="Code">
+#
 </div>
 <div class="Code">
 [megacorp/new_zealand]
@@ -692,10 +775,10 @@ ENCRYPTION true
 TESTPATH /nfs/testing/megacorp_runs
 </div>
 <h3 class="Subsection">
-<a class="toc" name="toc-Subsection-0.3.3">0.3.3</a> Writing tests
+<a class="toc" name="toc-Subsection-0.3.4">0.3.4</a> Writing tests
 </h3>
 <h4 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-0.3.3.1">0.3.3.1</a> testconfig file
+<a class="toc" name="toc-Subsubsection-0.3.4.1">0.3.4.1</a> testconfig file
 </h4>
 <div class="Unindented">
 <table>
@@ -776,7 +859,7 @@ The test will be repeated once for each item with the variable name set to the v
 
 </div>
 <h3 class="Subsection">
-<a class="toc" name="toc-Subsection-0.3.4">0.3.4</a> Command line
+<a class="toc" name="toc-Subsection-0.3.5">0.3.5</a> Command line
 </h3>
 <div class="Unindented">
 <table>
@@ -1117,7 +1200,7 @@ sets a comment for the step, test or run
 
 <hr class="footer"/>
 <div class="footer" id="generated-by">
-Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-05-12T22:59:47.948657</span>
+Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-05-14T17:06:23.587385</span>
 </div>
 </div>
 </body>
