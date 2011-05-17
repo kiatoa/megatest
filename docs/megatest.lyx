@@ -753,7 +753,7 @@ info make
  at the Linux command prompt.
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
