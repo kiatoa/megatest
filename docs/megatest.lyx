@@ -597,6 +597,36 @@ status open
 $MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
 \end_layout
 
+\begin_layout Plain Layout
+
+if ($? == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = PASS
+\end_layout
+
+\begin_layout Plain Layout
+
+else
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = FAIL
+\end_layout
+
+\begin_layout Plain Layout
+
+end
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -test-status :state COMPLETED :status $status
+\end_layout
+
 \end_inset
 
 
@@ -701,11 +731,44 @@ status open
 \begin_layout Plain Layout
 
 $MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
+ && 
+\backslash
+
 \end_layout
 
 \begin_layout Plain Layout
 
 $MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
+\end_layout
+
+\begin_layout Plain Layout
+
+if ($? == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = PASS
+\end_layout
+
+\begin_layout Plain Layout
+
+else
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = FAIL
+\end_layout
+
+\begin_layout Plain Layout
+
+end
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
@@ -835,6 +898,36 @@ status open
 make -j 2 
 \end_layout
 
+\begin_layout Plain Layout
+
+if ($? == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = PASS
+\end_layout
+
+\begin_layout Plain Layout
+
+else
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = FAIL
+\end_layout
+
+\begin_layout Plain Layout
+
+end
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -test-status :state COMPLETED :status $status
+\end_layout
+
 \end_inset
 
 
@@ -922,6 +1015,36 @@ status open
 \begin_layout Plain Layout
 
 $MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
+\end_layout
+
+\begin_layout Plain Layout
+
+if ($? == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = PASS
+\end_layout
+
+\begin_layout Plain Layout
+
+else
+\end_layout
+
+\begin_layout Plain Layout
+
+  set status = FAIL
+\end_layout
+
+\begin_layout Plain Layout
+
+end
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
