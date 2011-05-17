@@ -177,6 +177,9 @@ Create megatest.config
 Create the file megatest.config using the megatest.config template from the
  tests directory.
  At a minimum you need the following:
+\end_layout
+
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -274,7 +277,7 @@ launcher nbfake
 
 \begin_layout Plain Layout
 
-1 /tmp 
+disk1 /tmp 
 \end_layout
 
 \end_inset
@@ -315,7 +318,7 @@ Create the tests directory and your first test
 The structure should look like this:
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -364,7 +367,7 @@ status open
 Create the testconfig file for your test
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -388,7 +391,7 @@ runscript main.sh
 Create your test running script, main.sh
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -425,7 +428,7 @@ megatest -test-status :state COMPLETED :status PASS -m "This is a comment"
 Run megatest and watch your run progress
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -484,7 +487,7 @@ Create your test directory.
  The directory name will be the name of the test
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -511,7 +514,7 @@ Create your testconfig file.
  scripting.
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -545,6 +548,13 @@ Create your main.csh script
 \end_layout
 
 \begin_layout Standard
+Note: Using csh is NOT recommended.
+ Use bash, perl, ruby, zsh or anything other than csh.
+ We use csh here because it is popular in some industries.
+ 
+\end_layout
+
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -704,7 +714,7 @@ $MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
 \end_layout
 
 \begin_layout Section
-Simple Test, Multiple Steps, Some in Parallel 
+Simple Test with Multiple Steps, Some in Parallel 
 \end_layout
 
 \begin_layout Subsection
@@ -825,10 +835,6 @@ status open
 make -j 2 
 \end_layout
 
-\begin_layout Plain Layout
-
-\end_layout
-
 \end_inset
 
 
@@ -839,15 +845,15 @@ Simple Test with Iteration
 \end_layout
 
 \begin_layout Standard
-Since no jobs run after the cpu1 and cpu2 simulations inside the test there
- it is possible to run this test in iterated mode.
+Since no jobs run after the cpu1 and cpu2 simulations in this test it is
+ possible to use iterated mode.
 \end_layout
 
 \begin_layout Subsection
 Update you testconfig file for iteration
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -885,7 +891,7 @@ CPU cpu1 cpu2
 Rewrite your main.csh for iteration
 \end_layout
 
-\begin_layout Standard
+\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -1078,7 +1084,7 @@ Includes
 [include filename]
 \end_layout
 
-\begin_layout Standard
+\begin_layout Quotation
 The file named 
 \begin_inset Quotes eld
 \end_inset
