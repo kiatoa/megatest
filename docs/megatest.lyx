@@ -177,85 +177,109 @@ Create megatest.config
 Create the file megatest.config using the megatest.config template from the
  tests directory.
  At a minimum you need the following:
-\end_layout
+\begin_inset listings
+inline false
+status open
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # Fields are the keys under which your test runs are organized
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [fields]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 field1 TEXT
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 field2 TEXT
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
 
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [jobtools]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # The launcher launches jobs to the local or remote hosts,
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # the job is managed on the target host by megatest,
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # comment out launcher to run local only.
  An example launcher
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # "nbfake" can be found in the utils directory.
  
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 launcher nbfake
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
 
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # The disks section specifies where the tests will be run.
  As you
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # run out of space in a partition you can add additional disks
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # entries.
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # Format is:
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 # name /path/to/area 
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [disks]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 1 /tmp 
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Subsection
