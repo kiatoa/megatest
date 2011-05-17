@@ -407,7 +407,7 @@ status open
 
 \begin_layout Plain Layout
 
-megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
+$MT_MEGATEST -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
 \end_layout
 
 \begin_layout Plain Layout
@@ -416,7 +416,7 @@ megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
 
 \begin_layout Plain Layout
 
-megatest -test-status :state COMPLETED :status PASS -m "This is a comment"
+$MT_MEGATEST -test-status :state COMPLETED :status PASS -m "This is a comment"
 \end_layout
 
 \end_inset
@@ -594,7 +594,7 @@ status open
 
 \begin_layout Plain Layout
 
-$MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
+$MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
 \end_layout
 
 \begin_layout Plain Layout
@@ -624,7 +624,7 @@ end
 
 \begin_layout Plain Layout
 
-$MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
@@ -730,7 +730,7 @@ status open
 
 \begin_layout Plain Layout
 
-$MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
+$MT_MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
  && 
 \backslash
 
@@ -738,7 +738,7 @@ $MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
 
 \begin_layout Plain Layout
 
-$MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
+$MT_MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
 \end_layout
 
 \begin_layout Plain Layout
@@ -768,7 +768,7 @@ end
 
 \begin_layout Plain Layout
 
-$MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
@@ -851,7 +851,7 @@ run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
 
 \begin_layout Plain Layout
 
-	$(MEGATEST) -runstep run_simulation_$(CPUS) -logpro runsim.logpro "runsim
+	$(MT_MEGATEST) -runstep run_simulation_$(CPUS) -logpro runsim.logpro "runsim
  $(CPUS)
 \end_layout
 
@@ -925,7 +925,7 @@ end
 
 \begin_layout Plain Layout
 
-$MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
@@ -1014,7 +1014,7 @@ status open
 
 \begin_layout Plain Layout
 
-$MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
+$MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
 \end_layout
 
 \begin_layout Plain Layout
@@ -1044,7 +1044,7 @@ end
 
 \begin_layout Plain Layout
 
-$MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $status
 \end_layout
 
 \end_inset
