@@ -21,7 +21,7 @@
 
 \graphics default
 \default_output_format default
-\output_sync 0
+\output_sync 1
 \bibtex_command default
 \index_command default
 \paperfontsize default
@@ -87,11 +87,11 @@ LatexCommand tableofcontents
 
 \end_layout
 
-\begin_layout Section
+\begin_layout Chapter
 About Megatest
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Megatest design philosophy
 \end_layout
 
@@ -107,7 +107,7 @@ Megatest is intended to provide the minimum needed resources to make writing
  
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Megatest architecture
 \end_layout
 
@@ -130,15 +130,15 @@ call home
  to your master sqlite3 database.
 \end_layout
 
-\begin_layout Section
+\begin_layout Chapter
 Installation
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Compilation
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Dependencies
 \end_layout
 
@@ -148,7 +148,7 @@ Chicken scheme and a number of eggs are required for building megatest.
 s on Linux.
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Build and install
 \end_layout
 
@@ -165,11 +165,11 @@ make test
  You may wish to copy the executable to a centrally accessible location.
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Setup
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Create megatest.config
 \end_layout
 
@@ -258,16 +258,32 @@ launcher nbfake
 1 /tmp 
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Create runconfigs.config
 \end_layout
 
 \begin_layout Standard
 This file is used to set environment variables that are run specific.
  You can simply create an empty file to start.
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# runconfigs.config
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
 Create the tests directory and your first test
 \end_layout
 
@@ -275,88 +291,714 @@ Create the tests directory and your first test
 The structure should look like this:
 \end_layout
 
-\begin_layout Code
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 ../tests
 \end_layout
 
-\begin_layout Code
-├── megatest.config
+\begin_layout Plain Layout
+
+  ├── megatest.config
 \end_layout
 
-\begin_layout Code
-├── runconfigs.config 
+\begin_layout Plain Layout
+
+  ├── runconfigs.config
 \end_layout
 
-\begin_layout Code
-└── tests 
+\begin_layout Plain Layout
+
+  └── tests
 \end_layout
 
-\begin_layout Code
-    └── mytest 
+\begin_layout Plain Layout
+
+     └── mytest
 \end_layout
 
-\begin_layout Code
-       ├── main.sh
+\begin_layout Plain Layout
+
+           ├── main.sh
 \end_layout
 
-\begin_layout Code
-       └── testconfig 
+\begin_layout Plain Layout
+
+           └── testconfig
 \end_layout
 
-\begin_layout Subsubsection
-Create the testconfig file for your test
-\end_layout
+\end_inset
 
-\begin_layout Code
-[setup]
-\end_layout
 
-\begin_layout Code
-runscript main.sh
-\end_layout
-
-\begin_layout Subsubsection
-Create your test running script, main.sh
-\end_layout
-
-\begin_layout Code
-#!/bin/bash
-\end_layout
-
-\begin_layout Code
-
-\end_layout
-
-\begin_layout Code
-megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
-\end_layout
-
-\begin_layout Code
-megatest -test-status :state COMPLETED :status PASS -m "This is a test level
- comment"
-\end_layout
-
-\begin_layout Subsubsection
-Run megatest and watch your run progress
-\end_layout
-
-\begin_layout Code
-megatest :field1 abc :field2 def :runname 2011week08.4a -runall
-\end_layout
-
-\begin_layout Code
-watch megatest -list-runs %
-\end_layout
-
-\begin_layout Section
-Reference
 \end_layout
 
 \begin_layout Subsection
-Configuration files
+Create the testconfig file for your test
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.sh
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create your test running script, main.sh
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/bash
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+megatest -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+megatest -test-status :state COMPLETED :status PASS -m "This is a comment"
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Run megatest and watch your run progress
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest :field1 abc :field2 def :runname 2011week08.4a -runall
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+watch megatest -list-runs %
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# OR use the dashboard
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+dashboard &
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Code
+
+\end_layout
+
+\begin_layout Chapter
+How to Write Tests
+\end_layout
+
+\begin_layout Section
+A Simple Test with one Step
+\end_layout
+
+\begin_layout Subsection
+Create your test directory.
+ The directory name will be the name of the test
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+mkdir simpletest
+\end_layout
+
+\begin_layout Plain Layout
+
+cd simpletest
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create your testconfig file.
+ This file contains various specifications for your test.
+ For our example the test author has chosen to write the test using csh
+ scripting.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# testconfig
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create your main.csh script
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 simulation.
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The step name is "run_simulation"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The commandline being run for this step is "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The logpro file to validate the output from the run is "runsim.logpro"
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+You can now run megatest and the created test directory will contain the
+ new files 
+\begin_inset Quotes eld
+\end_inset
+
+run_simulation.html
+\begin_inset Quotes erd
+\end_inset
+
+ and 
+\begin_inset Quotes eld
+\end_inset
+
+run_simulation.log
+\begin_inset Quotes erd
+\end_inset
+
+.
+ If you are using the dashboard you can click on the run and then push the
+ 
+\begin_inset Quotes eld
+\end_inset
+
+View log
+\begin_inset Quotes erd
+\end_inset
+
+ button to view the log file in firefox.
+\end_layout
+
+\begin_layout Section
+Simple Test with Multiple Steps 
+\end_layout
+
+\begin_layout Standard
+To run multiple steps simply add them to the main.csh file.
+ Here we add a step to test 
+\begin_inset Quotes eld
+\end_inset
+
+cpu2
+\begin_inset Quotes erd
+\end_inset
+
+.
+ The second step that tests cpu2 will only run after the step that tested
+ 
+\begin_inset Quotes eld
+\end_inset
+
+cpu1
+\begin_inset Quotes erd
+\end_inset
+
+ completes.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 simulation.
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The step name is "run_simulation"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The commandline being run for this step is "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The logpro file to validate the output from the run is "runsim.logpro"
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Simple Test, Multiple Steps, Some in Parallel 
+\end_layout
+
+\begin_layout Subsection
+The Makefile
+\end_layout
+
+\begin_layout Standard
+A good way to run steps in parallel within a single test, especially when
+ there are following steps, is to use the Unix Make utility.
+ Writing Makefiles is beyond the scope of this document but here is a minimal
+ example that will run 
+\begin_inset Quotes eld
+\end_inset
+
+runsim cpu1
+\begin_inset Quotes erd
+\end_inset
+
+ and 
+\begin_inset Quotes eld
+\end_inset
+
+runsim cpu2
+\begin_inset Quotes erd
+\end_inset
+
+ in parallel.
+ For more information on make try 
+\begin_inset Quotes eld
+\end_inset
+
+info make
+\begin_inset Quotes erd
+\end_inset
+
+ at the Linux command prompt.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Example Makefile to run two steps in parallel
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+RTLDIR=/path/to/rtl
+\end_layout
+
+\begin_layout Plain Layout
+
+CPUS = cpu1 cpu2
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
+\end_layout
+
+\begin_layout Plain Layout
+
+	$(MEGATEST) -runstep run_simulation_$(CPUS) -logpro runsim.logpro "runsim
+ $(CPUS)
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+The main.csh file
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 and cpu2 simulations in parallel.
+ 
+\end_layout
+
+\begin_layout Plain Layout
+
+# The -j parameter tells make how many jobs it may run in parallel
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+make -j 2 
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Simple Test with Iteration
+\end_layout
+
+\begin_layout Standard
+Since no jobs run after the cpu1 and cpu2 simulations inside the test there
+ it is possible to run this test in iterated mode.
+\end_layout
+
+\begin_layout Subsection
+Update you testconfig file for iteration
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[items]
+\end_layout
+
+\begin_layout Plain Layout
+
+CPU cpu1 cpu2
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Rewrite your main.csh for iteration
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu simulation but now use the environment variable $CPU
+\end_layout
+
+\begin_layout Plain Layout
+
+# to select what cpu to run the simulation against
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Tests with Inter-test dependencies
+\end_layout
+
+\begin_layout Standard
+Sometimes a test depends on the output from a previous test or it may not
+ make sense to run a test is another test does not complete with status
+ 
+\begin_inset Quotes eld
+\end_inset
+
+PASS
+\begin_inset Quotes erd
+\end_inset
+
+.
+ In either of these scenarios you can use the 
+\begin_inset Quotes eld
+\end_inset
+
+waiton
+\begin_inset Quotes erd
+\end_inset
+
+ keyword in your testconfig file to indicate that this test must wait on
+ one or more tests to complete before being launched.
+ In this example there is no point in running the 
+\begin_inset Quotes eld
+\end_inset
+
+system
+\begin_inset Quotes erd
+\end_inset
+
+ test if the 
+\begin_inset Quotes eld
+\end_inset
+
+cpu
+\begin_inset Quotes erd
+\end_inset
+
+ and 
+\begin_inset Quotes eld
+\end_inset
+
+mem
+\begin_inset Quotes erd
+\end_inset
+
+ tests either do not complete or complete but with status 
+\begin_inset Quotes eld
+\end_inset
+
+FAIL
+\begin_inset Quotes erd
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# testconfig for the "system" test
+\end_layout
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\begin_layout Plain Layout
+
+waiton cpu mem
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Chapter
+Reference
+\end_layout
+
+\begin_layout Section
+Configuration file Syntax
+\end_layout
+
+\begin_layout Subsection
 Sections
 \end_layout
 
@@ -364,7 +1006,7 @@ Sections
 [section name]
 \end_layout
 
-\begin_layout Standard
+\begin_layout Quotation
 This creates a section named 
 \begin_inset Quotes eld
 \end_inset
@@ -376,7 +1018,7 @@ section name
 
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Variables
 \end_layout
 
@@ -384,7 +1026,7 @@ Variables
 VARX has this value
 \end_layout
 
-\begin_layout Standard
+\begin_layout Quotation
 The variable 
 \begin_inset Quotes eld
 \end_inset
@@ -404,7 +1046,7 @@ has this value
 
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Includes
 \end_layout
 
@@ -433,7 +1075,7 @@ include
  (with the whitespace).
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Setting a variable by running a command
 \end_layout
 
@@ -441,7 +1083,7 @@ Setting a variable by running a command
 VARNAME [system ls /tmp]
 \end_layout
 
-\begin_layout Standard
+\begin_layout Quotation
 The variable 
 \begin_inset Quotes eld
 \end_inset
@@ -462,7 +1104,7 @@ ls /tmp
  All lines of output from the command will be joined with a space.
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 Notes
 \end_layout
 
@@ -475,7 +1117,7 @@ Some variables are infered as lists.
 Comments (lines starting with #) and blank lines are ignored.
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Environment variables
 \end_layout
 
@@ -774,11 +1416,11 @@ Planning ahead your field names is important so as to avoid collisions with
 
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Configuration files
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 megatest.config
 \end_layout
 
@@ -1228,7 +1870,7 @@ The disk usage balancing algorithm is to choose the disk with the least
 
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 runconfigs.config file
 \end_layout
 
@@ -1487,11 +2129,11 @@ ENCRYPTION true
 TESTPATH /nfs/testing/megacorp_runs
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Section
 Writing tests
 \end_layout
 
-\begin_layout Subsubsection
+\begin_layout Subsection
 testconfig file
 \end_layout
 
