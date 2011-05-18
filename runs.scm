@@ -262,6 +262,7 @@
 		  ", max_concurrent_jobs: " max-concurrent-jobs))))
    test-names))
 
+;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
 (define (run-one-test db test-name)
   (print "Launching test " test-name)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
@@ -283,6 +284,7 @@
 	       (run-id      (register-run db keys)) ;;  test-name)))
 	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
 	  ;; (print "items: ")(pp allitems)
+	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 	  (let loop ((itemdat (car allitems))

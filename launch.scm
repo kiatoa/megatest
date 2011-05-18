@@ -166,11 +166,17 @@
 			    (hash-table-ref/default *configdat* "env-override" '())))
 	   (testprevvals   (alist->env-vars
 			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
+	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
+			    (append (list (list "MT_TEST_NAME" test-name)
+					  (list "MT_ITEM_INFO" (conc itemdat)) 
+					  (list "MT_RUNNAME"   (args:get-arg ":runname")))
+				    itemdat)))
 	   (launch-results (apply cmd-run-proc-each-line
 				  (car fullcmd)
 				  print
 				  (cdr fullcmd)))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (print "Launching completed, updating db")
+      (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals))))
 
