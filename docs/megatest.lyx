@@ -599,32 +599,7 @@ $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
 
 \begin_layout Plain Layout
 
-if ($? == 0)
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = PASS
-\end_layout
-
-\begin_layout Plain Layout
-
-else
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = FAIL
-\end_layout
-
-\begin_layout Plain Layout
-
-end
-\end_layout
-
-\begin_layout Plain Layout
-
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
 
 \end_inset
@@ -743,32 +718,7 @@ $MT_MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
 
 \begin_layout Plain Layout
 
-if ($? == 0)
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = PASS
-\end_layout
-
-\begin_layout Plain Layout
-
-else
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = FAIL
-\end_layout
-
-\begin_layout Plain Layout
-
-end
-\end_layout
-
-\begin_layout Plain Layout
-
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
 
 \end_inset
@@ -900,32 +850,7 @@ make -j 2
 
 \begin_layout Plain Layout
 
-if ($? == 0)
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = PASS
-\end_layout
-
-\begin_layout Plain Layout
-
-else
-\end_layout
-
-\begin_layout Plain Layout
-
-  set status = FAIL
-\end_layout
-
-\begin_layout Plain Layout
-
-end
-\end_layout
-
-\begin_layout Plain Layout
-
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
 
 \end_inset
@@ -1019,32 +944,22 @@ $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
 
 \begin_layout Plain Layout
 
-if ($? == 0)
+# As of version 1.07 Megatest automatically converts a status of "0"
 \end_layout
 
 \begin_layout Plain Layout
 
-  set status = PASS
+# to "PASS", any other number to "FAIL" and directly uses the value of
 \end_layout
 
 \begin_layout Plain Layout
 
-else
+# a string passed in.
 \end_layout
 
 \begin_layout Plain Layout
 
-  set status = FAIL
-\end_layout
-
-\begin_layout Plain Layout
-
-end
-\end_layout
-
-\begin_layout Plain Layout
-
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
 
 \end_inset
@@ -2197,68 +2112,90 @@ Example: a test suite that checks that a piece of software works correctly
  runs for megacorp in India and femtocorp in the Cook Islands and New Zealand:
 \end_layout
 
-\begin_layout Code
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 # runconfigs.config
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [default]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 ENCRYTION true
 \end_layout
 
-\begin_layout Code
-#
+\begin_layout Plain Layout
+
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [megacorp/india]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 TESTPATH /nfs/testing/megacorp_runs
 \end_layout
 
-\begin_layout Code
-#
+\begin_layout Plain Layout
+
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [femtocorp/cook_islands]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 ENCRYTION false
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 TESTPATH /afs/kiatoa/testing/cook_islands
 \end_layout
 
-\begin_layout Code
-#
+\begin_layout Plain Layout
+
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [femtocorp/new_zealand]
 \end_layout
 
-\begin_layout Code
-TESTPATH /afs/kiatao/testing/new_zealand
+\begin_layout Plain Layout
+
+TESTPATH /afs/kiatoa/testing/new_zealand
 \end_layout
 
-\begin_layout Code
-#
+\begin_layout Plain Layout
+
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 [megacorp/new_zealand]
 \end_layout
 
-\begin_layout Code
+\begin_layout Plain Layout
+
 TESTPATH /nfs/testing/megacorp_runs
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Paragraph*
@@ -2874,7 +2811,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+[a-zA-Z0-9_-]+
 \end_layout
 
 \end_inset
@@ -2883,7 +2820,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+directory in which this run will be stored in the test run area 
 \end_layout
 
 \end_inset
@@ -2912,7 +2849,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+any value
 \end_layout
 
 \end_inset
@@ -2921,7 +2858,8 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Set the step or test state, this is stored in the state field in the steps
+ or tests table respectively
 \end_layout
 
 \end_inset
@@ -2930,6 +2868,22 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
+For tests Megatest recognises 
+\begin_inset Quotes eld
+\end_inset
+
+INCOMPLETE
+\begin_inset Quotes erd
+\end_inset
+
+, 
+\begin_inset Quotes eld
+\end_inset
+
+COMPLETE
+\begin_inset Quotes erd
+\end_inset
+
 
 \end_layout
 
@@ -2950,7 +2904,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+any value
 \end_layout
 
 \end_inset
@@ -2959,7 +2913,8 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Set the step or test status, this is stored in the status field in the steps
+ or tests table respectively
 \end_layout
 
 \end_inset
@@ -2968,6 +2923,30 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
+For tests Megatest recognises 
+\begin_inset Quotes eld
+\end_inset
+
+PASS
+\begin_inset Quotes erd
+\end_inset
+
+, 
+\begin_inset Quotes eld
+\end_inset
+
+FAIL
+\begin_inset Quotes erd
+\end_inset
+
+, and 
+\begin_inset Quotes eld
+\end_inset
+
+CHECK
+\begin_inset Quotes erd
+\end_inset
+
 
 \end_layout
 
@@ -2988,7 +2967,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+any value, % is wildcard
 \end_layout
 
 \end_inset
@@ -2997,7 +2976,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Respects -itempatt and -testpatt for filters
 \end_layout
 
 \end_inset
@@ -3026,7 +3005,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+any value, % is wildcard
 \end_layout
 
 \end_inset
@@ -3064,7 +3043,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+any value, % is wildcard
 \end_layout
 
 \end_inset
@@ -3111,7 +3090,7 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Print the keys being used for this database
 \end_layout
 
 \end_inset
@@ -3149,7 +3128,31 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
+Test will not re-run if in the 
+\begin_inset Quotes eld
+\end_inset
 
+PASS
+\begin_inset Quotes erd
+\end_inset
+
+, 
+\begin_inset Quotes eld
+\end_inset
+
+CHECK
+\begin_inset Quotes erd
+\end_inset
+
+ or 
+\begin_inset Quotes eld
+\end_inset
+
+KILLED
+\begin_inset Quotes erd
+\end_inset
+
+, using -force will force the run to be launched.
 \end_layout
 
 \end_inset
@@ -3158,7 +3161,15 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
+WARNING: The -force switch will bypass any 
+\begin_inset Quotes eld
+\end_inset
 
+waiton
+\begin_inset Quotes erd
+\end_inset
+
+ dependencies.
 \end_layout
 
 \end_inset
@@ -3187,7 +3198,8 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Launch an xterm instead of run the test.
+ The xterm will have the environment that the test would see.
 \end_layout
 
 \end_inset
@@ -3225,7 +3237,9 @@ sets a comment for the step, test or run
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Remove a run, test or subtest from the database and the disk.
+ Cannot be undone.
+ Requires -testpatt, -itempatt, :runname and all keys be specified.
 \end_layout
 
 \end_inset
@@ -3303,7 +3317,8 @@ Test helpers
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+Used inside a test to run a step, record the start and end of the step and
+ optionally analyze the output using logpro.
 \end_layout
 
 \end_inset
@@ -3341,7 +3356,8 @@ Test helpers
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+If using logpro to asses the PASS/FAIL status of the step you specify the
+ logpro file with this parameter.
 \end_layout
 
 \end_inset

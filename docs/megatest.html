@@ -367,12 +367,7 @@ Note: Using csh is NOT recommended. Use bash, perl, ruby, zsh or anything other 
 #   The logpro file to validate the output from the run is "runsim.logpro"
 ​
 $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
-if ($? == 0)
-  set status = PASS
-else
-  set status = FAIL
-end
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 </pre>
 </div>
 
@@ -397,12 +392,7 @@ To run multiple steps simply add them to the main.csh file. Here we add a step t
 ​
 $MT_MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1" &amp;&amp; \
 $MT_MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
-if ($? == 0)
-  set status = PASS
-else
-  set status = FAIL
-end
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 </pre>
 </div>
 
@@ -440,12 +430,7 @@ run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
 # The -j parameter tells make how many jobs it may run in parallel
 ​
 make -j 2 
-if ($? == 0)
-  set status = PASS
-else
-  set status = FAIL
-end
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 </pre>
 </div>
 
@@ -481,12 +466,10 @@ CPU cpu1 cpu2
 # to select what cpu to run the simulation against
 ​
 $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
-if ($? == 0)
-  set status = PASS
-else
-  set status = FAIL
-end
-$MT_MEGATEST -test-status :state COMPLETED :status $status
+# As of version 1.07 Megatest automatically converts a status of "0"
+# to "PASS", any other number to "FAIL" and directly uses the value of
+# a string passed in.
+$MT_MEGATEST -test-status :state COMPLETED :status $?
 </pre>
 </div>
 
@@ -918,53 +901,27 @@ the values in this section will be set for any run where field1 is field1value, 
 <div class="Indented">
 Example: a test suite that checks that a piece of software works correctly for different customer configurations and locations each of which is done as a separate release regression run. The fields, CUSTOMER and LOCATION were chosen. The following runconfigs.config file would set some variables specific to runs for megacorp in India and femtocorp in the Cook Islands and New Zealand:
 </div>
-<div class="Code">
-# runconfigs.config
-</div>
-<div class="Code">
+<div class="Indented">
+<div class="listing">
+<pre class="listing"># runconfigs.config
 [default]
-</div>
-<div class="Code">
 ENCRYTION true
-</div>
-<div class="Code">
-#
-</div>
-<div class="Code">
+​
 [megacorp/india]
-</div>
-<div class="Code">
 TESTPATH /nfs/testing/megacorp_runs
-</div>
-<div class="Code">
-#
-</div>
-<div class="Code">
+​
 [femtocorp/cook_islands]
-</div>
-<div class="Code">
 ENCRYTION false
-</div>
-<div class="Code">
 TESTPATH /afs/kiatoa/testing/cook_islands
-</div>
-<div class="Code">
-#
-</div>
-<div class="Code">
+​
 [femtocorp/new_zealand]
-</div>
-<div class="Code">
-TESTPATH /afs/kiatao/testing/new_zealand
-</div>
-<div class="Code">
-#
-</div>
-<div class="Code">
+TESTPATH /afs/kiatoa/testing/new_zealand
+​
 [megacorp/new_zealand]
-</div>
-<div class="Code">
 TESTPATH /nfs/testing/megacorp_runs
+</pre>
+</div>
+
 </div>
 <div class="Paragraph-">
 <a class="toc" name="toc-Paragraph--1"></a>Running megatest like this:
@@ -1210,10 +1167,10 @@ sets a comment for the step, test or run
 :runname
 </td>
 <td align="left" valign="top">
-
+[a-zA-Z0-9_-]+
 </td>
 <td align="left" valign="top">
-
+directory in which this run will be stored in the test run area 
 </td>
 <td align="left" valign="top">
 
@@ -1225,13 +1182,13 @@ sets a comment for the step, test or run
 :state
 </td>
 <td align="left" valign="top">
-
+any value
 </td>
 <td align="left" valign="top">
-
+Set the step or test state, this is stored in the state field in the steps or tests table respectively
 </td>
 <td align="left" valign="top">
-
+For tests Megatest recognises “INCOMPLETE”, “COMPLETE”
 </td>
 
 </tr>
@@ -1240,13 +1197,13 @@ sets a comment for the step, test or run
 :status
 </td>
 <td align="left" valign="top">
-
+any value
 </td>
 <td align="left" valign="top">
-
+Set the step or test status, this is stored in the status field in the steps or tests table respectively
 </td>
 <td align="left" valign="top">
-
+For tests Megatest recognises “PASS”, “FAIL”, and “CHECK”
 </td>
 
 </tr>
@@ -1255,10 +1212,10 @@ sets a comment for the step, test or run
 -list-runs
 </td>
 <td align="left" valign="top">
-
+any value, % is wildcard
 </td>
 <td align="left" valign="top">
-
+Respects -itempatt and -testpatt for filters
 </td>
 <td align="left" valign="top">
 
@@ -1270,7 +1227,7 @@ sets a comment for the step, test or run
 -testpatt
 </td>
 <td align="left" valign="top">
-
+any value, % is wildcard
 </td>
 <td align="left" valign="top">
 
@@ -1285,7 +1242,7 @@ sets a comment for the step, test or run
 -itempatt
 </td>
 <td align="left" valign="top">
-
+any value, % is wildcard
 </td>
 <td align="left" valign="top">
 
@@ -1303,7 +1260,7 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+Print the keys being used for this database
 </td>
 <td align="left" valign="top">
 
@@ -1318,10 +1275,10 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+Test will not re-run if in the “PASS”, “CHECK” or “KILLED”, using -force will force the run to be launched.
 </td>
 <td align="left" valign="top">
-
+WARNING: The -force switch will bypass any “waiton” dependencies.
 </td>
 
 </tr>
@@ -1333,7 +1290,7 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+Launch an xterm instead of run the test. The xterm will have the environment that the test would see.
 </td>
 <td align="left" valign="top">
 
@@ -1348,7 +1305,7 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+Remove a run, test or subtest from the database and the disk. Cannot be undone. Requires -testpatt, -itempatt, :runname and all keys be specified.
 </td>
 <td align="left" valign="top">
 
@@ -1378,7 +1335,7 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+Used inside a test to run a step, record the start and end of the step and optionally analyze the output using logpro.
 </td>
 <td align="left" valign="top">
 
@@ -1393,7 +1350,7 @@ sets a comment for the step, test or run
 
 </td>
 <td align="left" valign="top">
-
+If using logpro to asses the PASS/FAIL status of the step you specify the logpro file with this parameter.
 </td>
 <td align="left" valign="top">
 
@@ -1407,7 +1364,7 @@ sets a comment for the step, test or run
 
 <hr class="footer"/>
 <div class="footer" id="generated-by">
-Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-05-17T17:16:38.918258</span>
+Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-05-17T20:49:50.586755</span>
 </div>
 </div>
 </body>

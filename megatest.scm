@@ -481,7 +481,11 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (args:get-arg "-set-toplog")
 	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-test-status")
-	      (test-set-status! db run-id test-name state status itemdat (args:get-arg "-m"))
+	      (let ((newstat (cond
+			      ((number? status)       (if (equal? status 0) "PASS" "FAIL"))
+			      ((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
+			      (else status))))
+		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m")))
 	      (if (and state status)
 		  (if (not (args:get-arg "-setlog"))
 		      (begin
