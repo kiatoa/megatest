@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.06)
+(define megatest-version 1.07)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -481,10 +481,10 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (args:get-arg "-set-toplog")
 	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-test-status")
-	      (let ((newstat (cond
-			      ((number? status)       (if (equal? status 0) "PASS" "FAIL"))
-			      ((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
-			      (else status))))
+	      (let ((newstatus (cond
+				((number? status)       (if (equal? status 0) "PASS" "FAIL"))
+				((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
+				(else status))))
 		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m")))
 	      (if (and state status)
 		  (if (not (args:get-arg "-setlog"))
