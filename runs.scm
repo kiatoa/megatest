@@ -248,23 +248,31 @@
     res))
 
 (define (run-tests db test-names)
-  (for-each 
-   (lambda (test-name)
-     (let ((num-running (db:get-count-tests-running db))
-	   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
-       (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-       (if (or (not max-concurrent-jobs)
-	       (and max-concurrent-jobs
-		    (string->number max-concurrent-jobs)
-		    (not (> num-running (string->number max-concurrent-jobs)))))
-	   (run-one-test db test-name)
-	   (print "WARNING: Max running jobs exceeded, current number running: " num-running 
-		  ", max_concurrent_jobs: " max-concurrent-jobs))))
-   test-names))
+  (let* ((keys        (db-get-keys db))
+	 (keyvallst   (keys->vallist keys #t))
+	 (run-id      (register-run db keys))) ;;  test-name)))
+    (for-each 
+     (lambda (test-name)
+       (let ((num-running (db:get-count-tests-running db))
+	     (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+	 (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+	 (if (or (not max-concurrent-jobs)
+		 (and max-concurrent-jobs
+		      (string->number max-concurrent-jobs)
+		      (not (> num-running (string->number max-concurrent-jobs)))))
+	     (run-one-test db run-id test-name keyvallst)
+	     (print "WARNING: Max running jobs exceeded, current number running: " num-running 
+		    ", max_concurrent_jobs: " max-concurrent-jobs))))
+     test-names)))
 
 ;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
-(define (run-one-test db test-name)
+(define (run-one-test db run-id test-name keyvallst)
   (print "Launching test " test-name)
+  ;; All these vars might be referenced by the testconfig file reader
+  (setenv "MT_TEST_NAME" test-name) ;; 
+  (setenv "MT_RUNNAME"   (args:get-arg ":runname"))
+  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+  (change-directory *toppath*)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
@@ -277,14 +285,10 @@
 	  (exit 2))
 	;; put top vars into convenient variables and open the db
 	(let* (;; db is always at *toppath*/db/megatest.db
-	       (keys        (db-get-keys db))
-	       (keyvallst   (keys->vallist keys #t))
 	       (items       (hash-table-ref/default test-conf "items" #f))
 	       (allitems    (item-assoc->item-list items))
-	       (run-id      (register-run db keys)) ;;  test-name)))
 	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
 	  ;; (print "items: ")(pp allitems)
-	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 	  (let loop ((itemdat (car allitems))

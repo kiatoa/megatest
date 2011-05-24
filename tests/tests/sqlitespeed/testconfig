@@ -5,7 +5,7 @@ runscript runscript.rb
 waiton    runfirst
 
 [items]
-MANYITEMS [system ls]
+MANYITEMS [system (env > envfile.txt;ls)]
 # a b c d e f g h i j k l m
 # LSJUNK [system ls]
 
