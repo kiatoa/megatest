@@ -111,6 +111,7 @@
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test db run-id test-conf keyvallst test-name test-path itemdat)
+  (change-directory *toppath*)
   (let ((launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	(runscript  (config-lookup test-conf   "setup"        "runscript"))
 	(diskspace  (config-lookup test-conf   "requirements" "diskspace"))
@@ -147,6 +148,7 @@
 						   (list 'run-id    run-id   )
 						   (list 'itemdat   itemdat  )
 						   (list 'megatest  remote-megatest)
+						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '()))
 						   (list 'runname   (args:get-arg ":runname"))
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir

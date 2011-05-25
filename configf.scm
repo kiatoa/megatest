@@ -72,11 +72,14 @@
 		     (loop (read-line inp) curr-section-name))))))))
   
 (define (find-and-read-config fname)
-  (let* ((configinfo (find-config fname))
+  (let* ((curr-dir   (current-directory))
+         (configinfo (find-config fname))
 	 (toppath    (car configinfo))
-	 (configfile (cadr configinfo))
-	 (configdat  (if configfile (read-config configfile) #f))) ;; (make-hash-table))))
-    (list configdat toppath configfile fname)))
+	 (configfile (cadr configinfo)))
+    (if toppath (change-directory toppath)) 
+    (let ((configdat  (if configfile (read-config configfile) #f))) ;; (make-hash-table))))
+      (if toppath (change-directory curr-dir))
+      (list configdat toppath configfile fname))))
 
 (define (config-lookup cfgdat section var)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
