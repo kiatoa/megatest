@@ -483,18 +483,6 @@ Called as " (string-intersperse (argv) " ")))
 	      (test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")
 	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
-	  (if (args:get-arg "-test-status")
-	      (let ((newstatus (cond
-				((number? status)       (if (equal? status 0) "PASS" "FAIL"))
-				((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
-				(else status))))
-		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m")))
-	      (if (and state status)
-		  (if (not (args:get-arg "-setlog"))
-		      (begin
-			(print "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-			(sqlite3:finalize! db)
-			(exit 6)))))
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
@@ -544,6 +532,18 @@ Called as " (string-intersperse (argv) " ")))
 		  ;; open the db
 		  ;; mark the end of the test
 		  )))
+	  (if (args:get-arg "-test-status")
+	      (let ((newstatus (cond
+				((number? status)       (if (equal? status 0) "PASS" "FAIL"))
+				((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
+				(else status))))
+		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m")))
+	      (if (and state status)
+		  (if (not (args:get-arg "-setlog"))
+		      (begin
+			(print "ERROR: You must specify :state and :status with every call to -test-status\n" help)
+			(sqlite3:finalize! db)
+			(exit 6)))))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 
