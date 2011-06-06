@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.09)
+(define megatest-version 1.10)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -190,7 +190,8 @@ Called as " (string-intersperse (argv) " ")))
 			(db:test-get-event_time test)
 			(db:test-get-host test))
  		(if (not (or (equal? (db:test-get-status test) "PASS")
-			     (equal? (db:test-get-state test) "NOT_STARTED")))
+			     (equal? (db:test-get-status test) "WARN")
+			     (equal? (db:test-get-state test)  "NOT_STARTED")))
 		    (begin
 		      (print "         cpuload:  " (db:test-get-cpuload test)
 			     "\n         diskfree: " (db:test-get-diskfree test)

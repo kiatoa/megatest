@@ -93,13 +93,14 @@
 		     state status run-id test-name item-path)
     (if (and (not (equal? item-path "")) ;; need to update the top test record if PASS or FAIL and this is a subtest
 	     (or (equal? status "PASS")
+		 (equal? status "WARN")
 		 (equal? status "FAIL")))
 	(begin
 	  (sqlite3:execute 
 	   db
 	   "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='PASS')
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name run-id test-name)
 	  (sqlite3:execute
@@ -342,6 +343,7 @@
 		      ((NOT_STARTED COMPLETED) ;; (cadr status is the row id for the run record)
 		       (if (and (equal? (test:get-state test-status)  "COMPLETED")
 				(or (equal? (test:get-status test-status) "PASS")
+				    (equal? (test:get-status test-status) "WARN")
 				    (equal? (test:get-status test-status) "CHECK"))
 				(not (args:get-arg "-force")))
 			   (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status test-status) "\", use -force to override")

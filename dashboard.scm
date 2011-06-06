@@ -146,7 +146,7 @@
 						       #:value currstatus
 						       #:expand "YES")))
 				  (iuplistbox-fill-list lb
-							(list "PASS" "FAIL" "n/a")
+							(list "PASS" "WARN" "FAIL" "CHECK" "n/a")
 							currstatus)
 				  lb)))
 			      (iup:hbox (iup:label "Comment:")
@@ -270,7 +270,11 @@
 			   (button     (vector-ref columndat rown))
 			   (color      (case (string->symbol teststate)
 					 ((COMPLETED)
-					  (if (equal? teststatus "PASS") "70 249 73" "223 33 49")) ;; greenish redish
+					  (if (equal? teststatus "PASS")
+					      "70 249 73"
+					      (if (equal? teststatus "WARN")
+						  "255 172 13"
+						  "223 33 49"))) ;; greenish orangeish redish
 					 ((LAUNCHED)         "101 123 142")
 					 ((CHECK)            "255 100 50")
 					 ((REMOTEHOSTSTART)  "50 130 195")
