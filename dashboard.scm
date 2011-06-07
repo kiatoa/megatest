@@ -116,6 +116,7 @@
 	  ;;  (test-set-status! db run-id test-name state status itemdat)
 	  (set! self 
 		(iup:dialog
+		 #:title testfullname
 		 (iup:vbox
 		  (iup:hbox 
 		   (iup:frame (iup:label run-key))
