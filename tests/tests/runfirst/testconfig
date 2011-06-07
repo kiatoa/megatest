@@ -14,3 +14,7 @@ SPECIAL_ENV_VAR override with everything after the first space.
 [items]
 SEASON summer winter fall spring
 
+[itemstable]
+BLOCK a  b
+TOCK  1  2
+

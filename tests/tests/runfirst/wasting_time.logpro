@@ -4,12 +4,12 @@
 
 ;; Test for 0=PASS, 1=WARN, >2 = FAIL
 
-(define season (get-environment-variable "SEASON"))
-
-(exit 
- (case (string->symbol season)
-   ((summer) 0)
-   ((winter) 1)
-   ((fall)   2)
-   (else     0)))
+;; (define season (get-environment-variable "SEASON"))
+;; 
+;; (exit 
+;;  (case (string->symbol season)
+;;    ((summer) 0)
+;;    ((winter) 1)
+;;    ((fall)   2)
+;;    (else     0)))
 

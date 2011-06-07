@@ -286,10 +286,14 @@
 	  (exit 2))
 	;; put top vars into convenient variables and open the db
 	(let* (;; db is always at *toppath*/db/megatest.db
-	       (items       (hash-table-ref/default test-conf "items" #f))
-	       (allitems    (item-assoc->item-list items))
+	       (items       (hash-table-ref/default test-conf "items" '()))
+	       (itemstable  (hash-table-ref/default test-conf "itemstable" '()))
+	       (allitems    (if (or (not (null? items))(not (null? itemstable)))
+				(append (item-assoc->item-list items)
+					(item-table->item-list itemstable))
+				'(()))) ;; a list with one null list is a test with no items
 	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
-	  ;; (print "items: ")(pp allitems)
+	  (print "items: ")(pp allitems)
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 	  (let loop ((itemdat (car allitems))
