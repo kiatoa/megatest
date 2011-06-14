@@ -107,7 +107,11 @@
 				   (message-window (conc "File " logfile " not found")))))
 	       (xterm        (lambda (x)
 			       (if (directory-exists? rundir)
-				   (system (conc "cd " rundir ";xterm -T " (string-translate testfullname "()" "  ") "&"))
+				   (let ((shell (if (get-environment-variable "SHELL") 
+						    (conc "-e " (get-environment-variable "SHELL"))
+						    "")))
+				     (system (conc "cd " rundir 
+						   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				   (message-window  (conc "Directory " rundir " not found")))))
 	       (newstatus    currstatus)
 	       (newstate     currstate)

@@ -55,7 +55,13 @@
 						(loop (read-line inp) curr-section-name)))
 	       (section-rx ( x section-name ) (loop (read-line inp) section-name))
 	       (key-sys-pr ( x key cmd      ) (let ((alist (hash-table-ref/default res curr-section-name '()))
-						    (val   (let ((res (car (cmd-run->list cmd))))
+						    (val   (let* ((cmdres  (cmd-run->list cmd))
+								  (status  (cadr cmdres))
+								  (res     (car  cmdres)))
+							     (if (not (eq? status 0))
+								 (begin
+								   (print "ERROR: problem with " inl ", return code not 0")
+								   (exit 1)))
 							     (if (null? res)
 								 ""
 								 (string-intersperse res " ")))))
@@ -68,7 +74,7 @@
 								 (config:assoc-safe-add alist key val))
 								 ;; (append alist (list (list key val))))
 						(loop (read-line inp) curr-section-name)))
-	       (else (print "ERROR: Should not get here,\n   \"" inl "\"")
+	       (else (print "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (loop (read-line inp) curr-section-name))))))))
   
 (define (find-and-read-config fname)
