@@ -9,6 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
+(use format)
 (require-library iup)
 (import (prefix iup iup:))
 
@@ -51,7 +52,7 @@
 (define *num-tests*     15)
 (define *start-run-offset*  0)
 (define *start-test-offset* 0)
-
+(define *examine-test-dat* (make-hash-table))
 
 (define (message-window msg)
   (iup:show
@@ -91,9 +92,12 @@
 					       (db:test-get-testname  origtest)
 					       (db:test-get-item-path origtest)))
 	       (rundir       (db:test-get-rundir test))
+	       (test-id      (db:test-get-id     test))
 	       (testname     (db:test-get-testname   test))
 	       (itempath     (db:test-get-item-path test))
 	       (testfullname (runs:test-get-full-path test))
+	       (testkey      (list test-id testname itempath testfullname))
+	       (widgets      (make-hash-table)) ;; put the widgets to update in this hashtable
 	       (currstatus   (db:test-get-status test))
 	       (currstate    (db:test-get-state  test))
 	       (currcomment  (db:test-get-comment test))
@@ -116,63 +120,73 @@
 	       (newstatus    currstatus)
 	       (newstate     currstate)
 	       (self         #f))
+
+	  (hash-table-set! *examine-test-dat* testkey widgets)
 	  
 	  ;;  (test-set-status! db run-id test-name state status itemdat)
 	  (set! self 
 		(iup:dialog
 		 #:title testfullname
-		 (iup:vbox
-		  (iup:hbox 
-		   (iup:frame (iup:label run-key))
-		   (iup:frame (iup:label (conc "TESTNAME:\n" testfullname) #:expand "YES")))
-		  (iup:frame #:title "Actions" #:expand "YES"
-			     (iup:hbox ;; the actions box
-			      (iup:button "View Log"    #:action viewlog  #:expand "YES")
-			      (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
-		  (iup:frame #:title "Set fields"
-			     (iup:vbox
-			      (iup:hbox 
-			       (iup:vbox ;; the state
-				(iup:label "STATE:" #:size "30x")
-				(let ((lb (iup:listbox #:action (lambda (val a b c)
-								  ;; (print val " a: " a " b: " b " c: " c)
-								  (set! newstate a))
-						       #:editbox "YES"
-						       #:expand "YES")))
-				  (iuplistbox-fill-list lb
-							(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ" "CHECK")
-							currstate)
-				  lb))
-			       (iup:vbox ;; the status
-				(iup:label "STATUS:" #:size "30x")
-				(let ((lb (iup:listbox #:action (lambda (val a b c)
-								  (set! newstatus a))
-						       #:editbox "YES"
-						       #:value currstatus
-						       #:expand "YES")))
-				  (iuplistbox-fill-list lb
-							(list "PASS" "WARN" "FAIL" "CHECK" "n/a")
-							currstatus)
-				  lb)))
-			      (iup:hbox (iup:label "Comment:")
-					(iup:textbox #:action (lambda (val a b)
-								(set! currcomment b))
-						     #:value currcomment 
-						     #:expand "YES"))
-			      (iup:button "Apply"
-					  #:expand "YES"
-					  #:action (lambda (x)
-						     (test-set-status! *db* run-id testname newstate newstatus itempath currcomment)))
-			      (iup:hbox (iup:button "Apply and close"
-						    #:expand "YES"
-						    #:action (lambda (x)
-							       (test-set-status! *db* run-id testname newstate newstatus itempath currcomment)
-							       (iup:destroy! self)))
-					(iup:button "Cancel and close"
-						    #:expand "YES"
-						    #:action (lambda (x)
-							       (iup:destroy! self))))
-			      )))))
+		 (iup:hbox ;; Need a full height box for all the test steps
+		  (iup:vbox
+		   (iup:hbox 
+		    (iup:frame (iup:label run-key))
+		    (iup:frame (iup:label (conc "TESTNAME:\n" testfullname) #:expand "YES")))
+		   (iup:frame #:title "Actions" #:expand "YES"
+			      (iup:hbox ;; the actions box
+			       (iup:button "View Log"    #:action viewlog  #:expand "YES")
+			       (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
+		   (iup:frame #:title "Set fields"
+			      (iup:vbox
+			       (iup:hbox 
+				(iup:vbox ;; the state
+				 (iup:label "STATE:" #:size "30x")
+				 (let ((lb (iup:listbox #:action (lambda (val a b c)
+								   ;; (print val " a: " a " b: " b " c: " c)
+								   (set! newstate a))
+							#:editbox "YES"
+							#:expand "YES")))
+				   (iuplistbox-fill-list lb
+							 (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ" "CHECK")
+							 currstate)
+				   lb))
+				(iup:vbox ;; the status
+				 (iup:label "STATUS:" #:size "30x")
+				 (let ((lb (iup:listbox #:action (lambda (val a b c)
+								   (set! newstatus a))
+							#:editbox "YES"
+							#:value currstatus
+							#:expand "YES")))
+				   (iuplistbox-fill-list lb
+							 (list "PASS" "WARN" "FAIL" "CHECK" "n/a")
+							 currstatus)
+				   lb)))
+			       (iup:hbox (iup:label "Comment:")
+					 (iup:textbox #:action (lambda (val a b)
+								 (set! currcomment b))
+						      #:value currcomment 
+						      #:expand "YES"))
+			       (iup:button "Apply"
+					   #:expand "YES"
+					   #:action (lambda (x)
+						      (test-set-status! *db* run-id testname newstate newstatus itempath currcomment)))
+			       (iup:hbox (iup:button "Apply and close"
+						     #:expand "YES"
+						     #:action (lambda (x)
+								(hash-table-delete! *examine-test-dat* testkey)
+								(test-set-status! *db* run-id testname newstate newstatus itempath currcomment)
+								(iup:destroy! self)))
+					 (iup:button "Cancel and close"
+						     #:expand "YES"
+						     #:action (lambda (x)
+								(hash-table-delete! *examine-test-dat* testkey)
+								(iup:destroy! self))))
+			       )))
+		  (iup:hbox ;; the test steps are tracked here
+		   (let ((stepsdat (iup:label "Test steps ......................................" #:expand "YES")))
+		     (hash-table-set! widgets "Test Steps" stepsdat)
+		     stepsdat)
+		   ))))
 	  (iup:show self)
 	  ))))
 
@@ -182,15 +196,15 @@
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
-(define (update-rundat patt numruns)
-  (let* ((allruns     (db-get-runs *db* patt numruns *start-run-offset*))
+(define (update-rundat runnamepatt numruns testnamepatt itemnamepatt)
+  (let* ((allruns     (db-get-runs *db* runnamepatt numruns *start-run-offset*))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
 	 (maxtests    0))
     (for-each (lambda (run)
 		(let* ((run-id   (db-get-value-by-header run header "id"))
-		       (tests    (db-get-tests-for-run *db* run-id))
+		       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt))
 		       (key-vals (get-key-vals *db* run-id)))
 		  (if (> (length tests) maxtests)
 		      (set! maxtests (length tests)))
@@ -206,7 +220,7 @@
 	 (maxn   (- (vector-length lftcol) 1)))
     (let loop ((i 0))
       (iup:attribute-set! (vector-ref lftcol i) "TITLE" "")
-      (if (<= i rown)
+      (if (< i maxn)
 	  (loop (+ i 1))))
     (for-each (lambda (name)
 		(if (<= rown maxn)
@@ -224,10 +238,36 @@
 	 (table       (vector-ref uidat 2))
 	 (coln        0))
     (update-labels uidat)
+    (for-each 
+     (lambda (popup)
+       (let* ((test-id  (car popup))
+	      (widgets  (hash-table-ref *examine-test-dat* popup))
+	      (stepslbl (hash-table-ref/default widgets "Test Steps" #f)))
+	 (if stepslbl
+	     (let* ((fmtstr  "~15a~8a~8a~17a")
+		    (newtxt  (string-intersperse 
+			      (append
+			       (list 
+				(format #f fmtstr "Stepname" "State" "Status" "Event Time")
+				(format #f fmtstr "========" "=====" "======" "=========="))
+			       (map (lambda (x)
+				      ;; take advantage of the \n on time->string
+				      (format #f fmtstr
+					      (db:step-get-stepname x)
+					      (db:step-get-state    x)
+					      (db:step-get-status   x)
+					      (time->string 
+					       (seconds->local-time 
+						(db:step-get-event_time x)))))
+				    (db-get-test-steps-for-run *db* test-id)))
+			     "\n")))
+	       (iup:attribute-set! stepslbl "TITLE" newtxt)))))
+     (hash-table-keys *examine-test-dat*))
+    (set! *alltestnamelst* '())
     (for-each
      (lambda (rundat)
        (if (not rundat) ;; handle padded runs
-	   ;;                ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
+	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
 	   (set! rundat (vector (make-vector 20 #f) '() (map (lambda (x) "") *keys*))));; 3)))
        (let* ((run      (vector-ref rundat 0))
 	      (testsdat (vector-ref rundat 1))
@@ -241,6 +281,7 @@
 	      (run-key  (string-intersperse key-vals "\n")))
 	 ;; (run-ht  (hash-table-ref/default alldat run-key #f)))
 	 ;; fill in the run header key values
+	 (set! *alltestnamelst* testnames)
 	 (let ((rown      0)
 	       (headercol (vector-ref tableheader coln)))
 	   (for-each (lambda (kval)
@@ -307,7 +348,10 @@
 			    (set! *alltestnamelst* (append *alltestnamelst* (list testfullname))))))
 		    )
 		(set! rown (+ rown 1))))
-	    (drop testnames *start-test-offset*)))
+	    (let ((xl (if (> (length testnames) *start-test-offset*)
+			  (drop testnames *start-test-offset*)
+			  testnames)))
+	      (append xl (make-list (- *num-tests* (length xl)) "")))))
 	 (set! coln (+ coln 1))))
      runs)))
 
@@ -315,7 +359,7 @@
   (string-intersperse (map conc x) ","))
 
 (define (update-search x val)
-  (print "Setting search for " x " to " val)
+  ;; (print "Setting search for " x " to " val)
   (hash-table-set! *searchpatts* x val))
 
 (define (make-dashboard-buttons nruns ntests keynames)
@@ -332,6 +376,12 @@
     ;; controls (along bottom)
     (set! controls
 	  (iup:hbox
+	   (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			#:action (lambda (obj unk val)
+				   (update-search "test-name" val)))
+	   (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			#:action (lambda (obj unk val)
+				   (update-search "item-name" val)))
 	   (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
 	   (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
@@ -412,7 +462,7 @@
        controls)))
     (vector lftcol header runsvec)))
 
-(set! *num-tests* (max (update-rundat "%" *num-runs*) 8))
+(set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20))
 
 (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
 ;; (megatest-dashboard)
@@ -421,8 +471,10 @@
   (let loop ((i 0))
     (thread-sleep! 0.1)
     (thread-suspend! other-thread)
-    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*)
     (update-buttons uidat *num-runs* *num-tests*)
+    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		   (hash-table-ref/default *searchpatts* "test-name" "%")
+		   (hash-table-ref/default *searchpatts* "item-name" "%"))
     (thread-resume! other-thread)
     (loop (+ i 1))))
 
