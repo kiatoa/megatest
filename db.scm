@@ -224,6 +224,17 @@
      "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
     res))
 
+;; done with run when:
+;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
+(define (db:estimated-tests-remaining db run-id)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING') AND run_id=?;" run-id)
+    res))
+
 ;; NB// Sync this with runs:get-test-info
 (define (db:get-test-info db run-id testname item-path)
   (let ((res '()))
@@ -274,9 +285,9 @@
      (lambda (id test-id stepname state status event-time)
        (set! res (cons (vector id test-id stepname state status event-time) res)))
      db
-     "SELECT id,test_id,stepname,state,status,event_time FROM test_steps WHERE test_id=? ORDER BY event_time DESC;"
+     "SELECT id,test_id,stepname,state,status,event_time FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
-    res))
+    (reverse res)))
 
 ;; check that *all* the prereqs are "COMPLETED"
 (define (db-get-prereqs-met db run-id waiton)

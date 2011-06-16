@@ -183,7 +183,7 @@
 								(iup:destroy! self))))
 			       )))
 		  (iup:hbox ;; the test steps are tracked here
-		   (let ((stepsdat (iup:label "Test steps ......................................" #:expand "YES")))
+		   (let ((stepsdat (iup:label "Test steps ........................................." #:expand "YES")))
 		     (hash-table-set! widgets "Test Steps" stepsdat)
 		     stepsdat)
 		   ))))
@@ -211,7 +211,7 @@
 		  (set! result (cons (vector run tests key-vals) result))))
 	      runs)
     (set! *header*  header)
-    (set! *allruns* (reverse result))
+    (set! *allruns* result)
     maxtests))
 
 (define (update-labels uidat)
@@ -244,7 +244,7 @@
 	      (widgets  (hash-table-ref *examine-test-dat* popup))
 	      (stepslbl (hash-table-ref/default widgets "Test Steps" #f)))
 	 (if stepslbl
-	     (let* ((fmtstr  "~15a~8a~8a~17a")
+	     (let* ((fmtstr  "~15a~8a~8a~20a")
 		    (newtxt  (string-intersperse 
 			      (append
 			       (list 

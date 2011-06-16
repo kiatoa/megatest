@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.11)
+(define megatest-version 1.12)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -50,6 +50,8 @@ Misc
   -remove-runs            : remove the data for a run, requires fields, :runname 
                             and -testpatt
   -testpatt patt          : remove tests matching patt (requires -remove-runs)
+  -keepgoing              : continue running until no jobs are \"LAUNCHED\" or
+                            \"NOT_STARTED\"
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -92,6 +94,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-gui"
 			"-runall"    ;; run all tests
 			"-remove-runs"
+			"-keepgoing"
 		       )
 		 args:arg-hash
 		 0))
@@ -256,7 +259,7 @@ Called as " (string-intersperse (argv) " ")))
 		(print "INFO: Attempting to start the following tests...")
 		(print "     " (string-intersperse test-names ","))
 		(run-tests db test-names)))
-	  (run-waiting-tests db)
+	  ;; (run-waiting-tests db)
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 
@@ -297,7 +300,7 @@ Called as " (string-intersperse (argv) " ")))
 	      (run-tests db test-names)))
 	;; run-waiting-tests db)
 	(sqlite3:finalize! db)
-	(run-waiting-tests #f)
+	;; (run-waiting-tests #f)
 	(set! *didsomething* #t))))
 	  
 (if (args:get-arg "-runtests")
@@ -393,7 +396,14 @@ Called as " (string-intersperse (argv) " ")))
 				       (let ((db    (open-db)))
 					 (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
 					 (test-update-meta-info db run-id test-name itemdat minutes)
-					 (if kill-job? (process-signal (vector-ref exit-info 0) signal/term))
+					 (if kill-job? 
+					     (begin 
+					       (process-signal (vector-ref exit-info 0) signal/term)
+					       (sleep 2)
+					       (handle-exceptions
+						exn
+						(print "ERROR: Problem killing process " (vector-ref exit-info 0))
+						(process-signal (vector-ref exit-info 0) signal/kill))))
 					 (sqlite3:finalize! db)
 					 (thread-sleep! (+ 8 (random 4))) ;; add some jitter to the call home time to spread out the db accesses
 					 (loop (calc-minutes)))))))
@@ -504,7 +514,7 @@ Called as " (string-intersperse (argv) " ")))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (test-set-status! db run-id test-name "start" "n/a" itemdat (args:get-arg "-m"))
+		    (teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m"))
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step

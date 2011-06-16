@@ -252,20 +252,28 @@
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys->vallist keys #t))
 	 (run-id      (register-run db keys))) ;;  test-name)))
-    (for-each 
-     (lambda (test-name)
-       (let ((num-running (db:get-count-tests-running db))
-	     (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
-	 (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	 (if (or (not max-concurrent-jobs)
-		 (and max-concurrent-jobs
-		      (string->number max-concurrent-jobs)
-		      (not (> num-running (string->number max-concurrent-jobs)))))
-	     (run-one-test db run-id test-name keyvallst)
-	     (print "WARNING: Max running jobs exceeded, current number running: " num-running 
-		    ", max_concurrent_jobs: " max-concurrent-jobs))))
-     test-names)))
-
+    (let loop ((numtimes 0))
+      (for-each 
+       (lambda (test-name)
+	 (let ((num-running (db:get-count-tests-running db))
+	       (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+	   (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+	   (if (or (not max-concurrent-jobs)
+		   (and max-concurrent-jobs
+			(string->number max-concurrent-jobs)
+			(not (>= num-running (string->number max-concurrent-jobs)))))
+	       (run-one-test db run-id test-name keyvallst)
+	       (print "WARNING: Max running jobs exceeded, current number running: " num-running 
+		      ", max_concurrent_jobs: " max-concurrent-jobs))))
+       test-names)
+      (if (args:get-arg "-keepgoing")
+	  (let ((estrem (db:estimated-tests-remaining db run-id)))
+	    (if (> estrem 0)
+		(begin
+		  (print "Keep going, estimated " estrem " tests remaining to run, will continue in 10 seconds ...")
+		  (sleep 10)
+		  (loop (+ numtimes 1)))))))))
+	   
 ;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
 (define (run-one-test db run-id test-name keyvallst)
   (print "Launching test " test-name)
@@ -309,7 +317,7 @@
 	      (if (not (or (not max-concurrent-jobs)
 			   (and max-concurrent-jobs
 				(string->number max-concurrent-jobs)
-				(not (> num-running (string->number max-concurrent-jobs))))))
+				(not (>= num-running (string->number max-concurrent-jobs))))))
 		  (print "WARNING: Max running jobs exceeded, current number running: " num-running 
 			 ", max_concurrent_jobs: " max-concurrent-jobs)
 		  (begin
