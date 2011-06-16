@@ -151,6 +151,8 @@
 						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '()))
 						   (list 'runname   (args:get-arg ":runname"))
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
+    ;; clean out step records from previous run if they exist
+    (db:delete-test-step-records db run-id test-name itemdat)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname

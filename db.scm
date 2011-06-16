@@ -207,9 +207,9 @@
     res))
 
 ;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db run-id test-name)
-  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=?);" run-id test-name))
-
+(define (db:delete-test-step-records db run-id test-name itemdat)
+  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
+		   run-id test-name (item-list->path itemdat)))
 ;; 
 (define (db:delete-test-records db test-id)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
@@ -237,7 +237,7 @@
 
 ;; NB// Sync this with runs:get-test-info
 (define (db:get-test-info db run-id testname item-path)
-  (let ((res '()))
+  (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
        (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))

@@ -321,7 +321,7 @@
 		  (print "WARNING: Max running jobs exceeded, current number running: " num-running 
 			 ", max_concurrent_jobs: " max-concurrent-jobs)
 		  (begin
-		    (let loop2 ((ts #f)
+		    (let loop2 ((ts (db:get-test-info db run-id test-name item-path)) ;; #f)
 				(ct 0))
 		      (if (and (not ts)
 			       (< ct 10))
@@ -330,7 +330,10 @@
 			    (db:test-set-comment db run-id test-name item-path "")
 			    ;; (test-set-status! db run-id test-name "NOT_STARTED" "n/a" itemdat "")
 			    ;; (db:set-comment-for-test db run-id test-name item-path "")
-			    (db:delete-test-step-records db run-id test-name) ;; clean out if this is a re-run
+
+			    ;; Move the next line into the test exectute code
+			    ;; (db:delete-test-step-records db run-id test-name) ;; clean out if this is a re-run
+
 			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))
 			  (if ts
