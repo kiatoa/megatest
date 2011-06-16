@@ -375,15 +375,25 @@ Called as " (string-intersperse (argv) " ")))
 	    (let* ((m            (make-mutex))
 		   (kill-job?    #f)
 		   (exit-info    (make-vector 3))
+		   (job-thread   #f)
 		   (runit        (lambda ()
-				   (let-values
-				    (((pid exit-status exit-code)
-				      (run-n-wait fullrunscript)))
-				    (mutex-lock! m)
-				    (vector-set! exit-info 0 pid)
-				    (vector-set! exit-info 1 exit-status)
-				    (vector-set! exit-info 2 exit-code)
-				    (mutex-unlock! m))))
+				   ;; (let-values
+				   ;;  (((pid exit-status exit-code)
+				   ;;    (run-n-wait fullrunscript)))
+				   (let ((pid (process-run fullrunscript)))
+				     (let loop ((i 0))
+				       (let-values
+					(((pid-val exit-status exit-code) (process-wait pid #t)))
+					(mutex-lock! m)
+					(vector-set! exit-info 0 pid)
+					(vector-set! exit-info 1 exit-status)
+					(vector-set! exit-info 2 exit-code)
+					(mutex-unlock! m)
+					(if (eq? pid-val 0)
+					    (begin
+					      (thread-sleep! 2)
+					      (loop (+ i 1)))
+					    ))))))
 		   (monitorjob   (lambda ()
 				   (let* ((start-seconds (current-seconds))
 					  (calc-minutes  (lambda ()
@@ -391,24 +401,77 @@ Called as " (string-intersperse (argv) " ")))
 							    (round 
 							     (- 
 							      (current-seconds) 
-							      start-seconds))))))
+							      start-seconds)))))
+					  (kill-tries 0))
 				     (let loop ((minutes   (calc-minutes)))
 				       (let ((db    (open-db)))
 					 (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
 					 (test-update-meta-info db run-id test-name itemdat minutes)
 					 (if kill-job? 
-					     (begin 
-					       (process-signal (vector-ref exit-info 0) signal/term)
-					       (sleep 2)
-					       (handle-exceptions
-						exn
-						(print "ERROR: Problem killing process " (vector-ref exit-info 0))
-						(process-signal (vector-ref exit-info 0) signal/kill))))
+					     (begin
+					       (mutex-lock! m)
+					       (let* ((pid (vector-ref exit-info 0)))
+						 (if (number? pid)
+						     (begin
+						       (print "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						       ;;(cond
+						       ;;((>   kill-tries 0) ; 2)
+						       (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
+							 (for-each 
+							  (lambda (p)
+							    (let* ((parts  (string-split p))
+								   (p-id   (if (> (length parts) 0)
+									       (string->number (car parts))
+									       #f)))
+							      (if p-id
+								  (begin
+								    (print "Killing " (cadr parts) "; kill -9  " p-id)
+								    (system (conc "kill -9 " p-id))))))
+							  (car processes))
+							 (system (conc "kill -9 " pid))))
+						     ;;(let* ((ppid (process-group-id pid))
+						     ;;       (kcmd (conc "pkill -9 -g " ppid)))
+						     ;;  ;; (process-signal pid signal/term)
+						     ;;  ;; (process-signal pid signal/kill)
+						     ;;  (print "Attempting to kill pid " pid " and children in process group " ppid " with command:\n    " kcmd)
+						     ;;  (print "Children:")
+						     ;;  (system (conc "pgrep -g -l " ppid))
+						     ;;  (system kcmd)
+						     ;;  (sleep 1) ;; give it a rest
+						     ;;  (test-set-status! db run-id test-name "KILLED"  "FAIL"
+						     ;;       	     itemdat (args:get-arg "-m"))
+						     ;;  (sqlite3:finalize! db)
+						     ;;  (exit 1)))))
+						     (begin
+						       (print "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
+						       (test-set-status! db run-id test-name "KILLED"  "FAIL"
+									 itemdat (args:get-arg "-m"))
+						       (sqlite3:finalize! db)
+						       (exit 1))))
+					       ;;     (thread-terminate! job-thread)))
+					       (set! kill-tries (+ 1 kill-tries))
+					       (mutex-unlock! m)))
+					 ;; (handle-exceptions
+					       ;;  exn
+					       ;;  (begin
+					       ;;    (print "ERROR: Problem killing process " (vector-ref exit-info 0))
+					       ;;    (abort exn))
+					       ;;  (let* ((pid   (vector-ref exit-info 0))
+					       ;;         ;; (pgid  (process-group-id pid))
+					       ;;         ;; (cmd  (conc "pkill -9 -P " pgid))
+					       ;;         )
+					       ;;    ;; (print "Running \"" cmd "\"")
+					       ;;    ;; (system cmd)
+					       ;;    (print "Running \"kill -9 " pid "\"")
+					       ;;    (system (conc "kill -9 " pid))
+					       ;;    ;; (process-signal (vector-ref exit-info 0) signal/kill)
+					       ;;    ))))
 					 (sqlite3:finalize! db)
 					 (thread-sleep! (+ 8 (random 4))) ;; add some jitter to the call home time to spread out the db accesses
 					 (loop (calc-minutes)))))))
 		   (th1          (make-thread monitorjob))
 		   (th2          (make-thread runit)))
+	      (set! job-thread th2)
 	      (thread-start! th1)
 	      (thread-start! th2)
 	      (thread-join! th2)
