@@ -9,4 +9,4 @@ fi
 # Can't always trust $PWD
 CURRWD=`pwd`
 
-ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""

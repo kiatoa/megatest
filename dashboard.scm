@@ -29,6 +29,33 @@
 (include "runs.scm")
 (include "gui.scm")
 
+(define help "
+Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
+  version 0.1
+  license GPL, Copyright Matt Welland 2011
+
+Usage: dashboard [options]
+  -h              : this help
+
+Misc
+  -rows N         : set number of rows
+")
+
+;; process args
+(define remargs (args:get-args 
+		 (argv)
+		 (list  "-rows"
+			) 
+		 (list  "-h"
+		       )
+		 args:arg-hash
+		 0))
+
+(if (args:get-arg "-h")
+    (begin
+      (print help)
+      (exit)))
+
 (if (not (setup-for-run))
     (begin
       (print "Failed to find megatest.config, exiting") 
@@ -462,7 +489,13 @@
        controls)))
     (vector lftcol header runsvec)))
 
-(set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20))
+(if (or (args:get-arg "-rows")
+	(get-environment-variable "DASHBOARDROWS" ))
+    (begin
+        (set! *num-tests* (string->number (or (args:get-arg "-rows")
+					      (get-environment-variable "DASHBOARDROWS"))))
+	(update-rundat "%" *num-runs* "%" "%"))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20)))
 
 (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
 ;; (megatest-dashboard)
