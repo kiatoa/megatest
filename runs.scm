@@ -264,7 +264,7 @@
 			(not (>= num-running (string->number max-concurrent-jobs)))))
 	       (run-one-test db run-id test-name keyvallst)
 	       (print "WARNING: Max running jobs exceeded, current number running: " num-running 
-		      ", max_concurrent_jobs: " max-concurrent-jobs))))
+		      ", max_concurrent_jobs: \"" max-concurrent-jobs "\""))))
        test-names)
       (if (args:get-arg "-keepgoing")
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))
