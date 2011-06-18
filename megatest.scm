@@ -47,11 +47,12 @@ Queries
 Misc 
   -force                  : override some checks
   -xterm                  : start an xterm instead of launching the test
-  -remove-runs            : remove the data for a run, requires fields, :runname 
+  -remove-runs            : remove the data for a run, requires all fields be specified
+                            and :runname ,-testpatt and -itempatt
                             and -testpatt
-  -testpatt patt          : remove tests matching patt (requires -remove-runs)
   -keepgoing              : continue running until no jobs are \"LAUNCHED\" or
                             \"NOT_STARTED\"
+  -rerun FAIL,WARN...     : re-run if called on a test that previously ran
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -85,6 +86,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-runstep"
 			"-logpro"
 			"-m"
+			"-rerun"
 			) 
 		 (list  "-h"
 		        "-force"
@@ -119,6 +121,8 @@ Called as " (string-intersperse (argv) " ")))
 ;; Remove old run(s)
 ;;======================================================================
 
+;; since several actions can be specified on the command line the removal
+;; is done first
 (define (remove-runs)
   (cond
    ((not (args:get-arg ":runname"))
@@ -484,7 +488,8 @@ Called as " (string-intersperse (argv) " ")))
 		      (test-set-status! db run-id test-name
 					(if kill-job? "KILLED" "COMPLETED")
 					(if (vector-ref exit-info 1) ;; look at the exit-status
-					    (if (eq? (vector-ref exit-info 2) 0)
+					    (if (and (not kill-job?) 
+						     (eq? (vector-ref exit-info 2) 0))
 						"PASS"
 						"FAIL")
 					    "FAIL") itemdat (args:get-arg "-m")))))
