@@ -218,13 +218,16 @@
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
 ;; WARNING: SQL injection risk
-(define (db:set-tests-state-status db run-id tests currstate currstatus newstate newstatus)
-  (sqlite3:execute db (conc "UPDATE tests SET state=?,status=? WHERE "
-			    (if currstate  (conc "state='" currstate "' AND ") "")
-			    (if currstatus (conc "status='" currstatus "' AND ") "")
-			    " testname in "
-			    "('" (string-intersperse tests "','") "')")
-		   newstate newstatus))
+(define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
+  (for-each (lambda (testname)
+	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
+					(if currstate  (conc "state='" currstate "' AND ") "")
+					(if currstatus (conc "status='" currstatus "' AND ") "")
+					" testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+		;;(print "QRY: " qry)
+		(sqlite3:execute db qry newstate newstatus testname testname)))
+	    testnames))
+	      ;; "('" (string-intersperse tests "','") "')")
 
 (define (db:get-count-tests-running db)
   (let ((res 0))

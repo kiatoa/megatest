@@ -315,12 +315,14 @@
 	  (let loop ((itemdat (car allitems))
 		     (tal     (cdr allitems)))
 	    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
+	    ;; Handle lists of items
 	    (let* ((item-path     (item-list->path itemdat)) ;; (string-intersperse (map cadr itemdat) "/"))
 		   (new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 		   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
 		   (testdat   #f)
 		   (num-running (db:get-count-tests-running db))
-		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs"))
+		   (parent-test (and (null? items)(equal? item-path ""))))
 	      ;; (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
 	      (if (not (or (not max-concurrent-jobs)
 			   (and max-concurrent-jobs
@@ -358,9 +360,11 @@
 		      ((failed-to-insert)
 		       (print "ERROR: Failed to insert the record into the db"))
 		      ((NOT_STARTED COMPLETED)
-		       (print "Got here, " (test:get-state testdat))
+		       ;; (print "Got here, " (test:get-state testdat))
 		       (let ((runflag #f))
 			 (cond
+			  (parent-test ;; i.e. this is the parent test to a suite of items
+			   (set! runflag #f))
 			  ;; -force, run no matter what
 			  ((args:get-arg "-force")(set! runflag #t))
 			  ;; NOT_STARTED, run no matter what
@@ -385,7 +389,8 @@
 			  (else (set! runflag #f)))
 			 ;; (print "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
 			 (if (not runflag)
-			     (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status testdat) "\", use -force to override")
+			     (if (not parent-test)
+				 (print "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status testdat) "\", use -force to override"))
 			     (let* ((get-prereqs-cmd (lambda ()
 						       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
 				    (launch-cmd      (lambda ()
@@ -437,7 +442,7 @@
 		      (if (not db)
 			  (sqlite3:finalize! ldb))))
 		  waiting-test-names)
-	(sleep 10) ;; no point in rushing things at this stage?
+	;; (sleep 10) ;; no point in rushing things at this stage?
 	(loop (hash-table-keys *waiting-queue*)))))))
 
 (define (get-dir-up-one dir) 

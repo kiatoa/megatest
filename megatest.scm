@@ -52,7 +52,8 @@ Misc
                             and -testpatt
   -keepgoing              : continue running until no jobs are \"LAUNCHED\" or
                             \"NOT_STARTED\"
-  -rerun FAIL,WARN...     : re-run if called on a test that previously ran
+  -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
+                            if -keepgoing is also specified)
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
