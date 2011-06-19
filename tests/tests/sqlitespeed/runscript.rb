@@ -8,7 +8,7 @@ run_and_record('create db',"sqlite3 testing.db << EOF\ncreate table if not exist
 # file_size_checker(stepname, filename, minsize, maxsize) - negative means ignore
 # file_size_checker('create db','testing.db',100,-1)
 
-num_records=rand(60) # 0000
+num_records=rand(5) # 0000
 record_step("add #{num_records}","start","n/a")
 status=false
 (0..num_records).each do |i|
