@@ -268,10 +268,11 @@
 		   (and max-concurrent-jobs
 			(string->number max-concurrent-jobs)
 			(not (>= num-running (string->number max-concurrent-jobs)))))
-	       (run-one-test db run-id test-name keyvallst)
+		 (run-one-test db run-id test-name keyvallst)
 	       (print "WARNING: Max running jobs exceeded, current number running: " num-running 
 		      ", max_concurrent_jobs: \"" max-concurrent-jobs "\""))))
        test-names)
+      (run-waiting-tests db)
       (if (args:get-arg "-keepgoing")
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))
 	    (if (> estrem 0)
@@ -283,7 +284,6 @@
 	   
 ;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
 (define (run-one-test db run-id test-name keyvallst)
-  (run-waiting-tests db)
   (print "Launching test " test-name)
   ;; All these vars might be referenced by the testconfig file reader
   (setenv "MT_TEST_NAME" test-name) ;; 
@@ -322,7 +322,9 @@
 		   (testdat   #f)
 		   (num-running (db:get-count-tests-running db))
 		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs"))
-		   (parent-test (and (null? items)(equal? item-path ""))))
+		   (parent-test (and (not (null? items))(equal? item-path "")))
+		   (single-test (and (null? items) (equal? item-path "")))
+		   (item-test   (not (equal? item-path ""))))
 	      ;; (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
 	      (if (not (or (not max-concurrent-jobs)
 			   (and max-concurrent-jobs
@@ -363,7 +365,8 @@
 		       ;; (print "Got here, " (test:get-state testdat))
 		       (let ((runflag #f))
 			 (cond
-			  (parent-test ;; i.e. this is the parent test to a suite of items
+			  ;; i.e. this is the parent test to a suite of items, never "run" it
+			  (parent-test
 			   (set! runflag #f))
 			  ;; -force, run no matter what
 			  ((args:get-arg "-force")(set! runflag #t))
