@@ -650,4 +650,12 @@ Called as " (string-intersperse (argv) " ")))
     (print help))
 
 (if (not (eq? *globalexitstatus* 0))
-    (exit *globalexitstatus*))
+    (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
+        (begin
+           (print "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
+           (exit 0))
+        (case *globalexitstatus*
+         ((0)(exit 0))
+         ((1)(exit 1))
+         ((2)(exit 2))
+         (else (exit 3)))))

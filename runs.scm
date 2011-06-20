@@ -272,14 +272,14 @@
 	       (print "WARNING: Max running jobs exceeded, current number running: " num-running 
 		      ", max_concurrent_jobs: \"" max-concurrent-jobs "\""))))
        test-names)
-      (run-waiting-tests db)
+      ;; (run-waiting-tests db)
       (if (args:get-arg "-keepgoing")
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))
 	    (if (> estrem 0)
 		(begin
 		  (print "Keep going, estimated " estrem " tests remaining to run, will continue in 10 seconds ...")
 		  (sleep 10)
-		  ;; (run-waiting-tests db)
+		  (run-waiting-tests db)
 		  (loop (+ numtimes 1)))))))))
 	   
 ;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
