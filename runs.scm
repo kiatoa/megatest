@@ -248,6 +248,20 @@
 	      tests)
     res))
 
+(define (runs:can-run-more-tests db)
+  (let ((num-running (db:get-count-tests-running db))
+	(max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+    ;; (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+    (if (or (not max-concurrent-jobs)
+	    (and max-concurrent-jobs
+		 (string->number max-concurrent-jobs)
+		 (not (>= num-running (string->number max-concurrent-jobs)))))
+	#t
+	(begin 
+	  (print "WARNING: Max running jobs exceeded, current number running: " num-running 
+			 ", max_concurrent_jobs: " max-concurrent-jobs)
+	  #f))))
+  
 (define (run-tests db test-names)
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys->vallist keys #t))
@@ -261,16 +275,10 @@
     (let loop ((numtimes 0))
       (for-each 
        (lambda (test-name)
-	 (let ((num-running (db:get-count-tests-running db))
-	       (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
-	   ;; (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	   (if (or (not max-concurrent-jobs)
-		   (and max-concurrent-jobs
-			(string->number max-concurrent-jobs)
-			(not (>= num-running (string->number max-concurrent-jobs)))))
-		 (run-one-test db run-id test-name keyvallst)
-	       (print "WARNING: Max running jobs exceeded, current number running: " num-running 
-		      ", max_concurrent_jobs: \"" max-concurrent-jobs "\""))))
+	 (if (runs:can-run-more-tests db)
+	     (run-one-test db run-id test-name keyvallst)
+	     ;; add some delay 
+	     (sleep 2)))
        test-names)
       ;; (run-waiting-tests db)
       (if (args:get-arg "-keepgoing")
@@ -326,12 +334,7 @@
 		   (single-test (and (null? items) (equal? item-path "")))
 		   (item-test   (not (equal? item-path ""))))
 	      ;; (print "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	      (if (not (or (not max-concurrent-jobs)
-			   (and max-concurrent-jobs
-				(string->number max-concurrent-jobs)
-				(not (>= num-running (string->number max-concurrent-jobs))))))
-		  (print "WARNING: Max running jobs exceeded, current number running: " num-running 
-			 ", max_concurrent_jobs: " max-concurrent-jobs)
+	      (if (runs:can-run-more-tests db)
 		  (begin
 		    (let loop2 ((ts (db:get-test-info db run-id test-name item-path)) ;; #f)
 				(ct 0))
@@ -426,24 +429,26 @@
     ;;     N times or never been started and kick them off again
     (let loop ((waiting-test-names (hash-table-keys *waiting-queue*)))
       (cond
+       ((not (runs:can-run-more-tests db))
+	(sleep 2)
+	(loop waiting-test-names))
        ((null? waiting-test-names)
 	(print "All tests launched"))
-       ((> numtries 4)
-	(print "NOTE: Tried launching four times, perhaps run megatest again in a few minutes"))
        (else
 	(set! numtries (+ numtries 1))
 	(for-each (lambda (testname)
-		    (let* ((testdat (hash-table-ref *waiting-queue* testname))
-			   (prereqs ((car testdat)))
-			   (ldb     (if db db (open-db))))
-		      ;; (print "prereqs remaining: " prereqs)
-		      (if (null? prereqs)
-			  (begin
-			    (print "Prerequisites met, launching " testname)
-			    ((cadr testdat))
-			    (hash-table-delete! *waiting-queue* testname)))
-		      (if (not db)
-			  (sqlite3:finalize! ldb))))
+		    (if (runs:can-run-more-tests db)
+			(let* ((testdat (hash-table-ref *waiting-queue* testname))
+			       (prereqs ((car testdat)))
+			       (ldb     (if db db (open-db))))
+			  ;; (print "prereqs remaining: " prereqs)
+			  (if (null? prereqs)
+			      (begin
+				(print "Prerequisites met, launching " testname)
+				((cadr testdat))
+				(hash-table-delete! *waiting-queue* testname)))
+			  (if (not db)
+			      (sqlite3:finalize! ldb)))))
 		  waiting-test-names)
 	;; (sleep 10) ;; no point in rushing things at this stage?
 	(loop (hash-table-keys *waiting-queue*)))))))
