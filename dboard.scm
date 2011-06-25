@@ -28,7 +28,6 @@
 (include "launch.scm")
 (include "runs.scm")
 (include "gui.scm")
-(include "dashboard-tests.scm")
 
 (define help "
 Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
@@ -37,8 +36,6 @@ Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: dashboard [options]
   -h              : this help
-  -run runid      : control run identified by runid
-  -test testid    : control test identified by testid
 
 Misc
   -rows N         : set number of rows
@@ -48,8 +45,6 @@ Misc
 (define remargs (args:get-args 
 		 (argv)
 		 (list  "-rows"
-			"-run"
-			"-test"
 			) 
 		 (list  "-h"
 		       )
@@ -106,6 +101,121 @@ Misc
     i))
 
 (define (pad-list l n)(append l (make-list (- n (length l)))))
+
+(define (examine-test button-key) ;; run-id run-key origtest)
+  (let ((buttondat     (hash-table-ref/default *buttondat* button-key #f)))
+    ;; (print "buttondat: " buttondat)
+    (if (and buttondat
+	     (vector buttondat)
+	     (vector-ref buttondat 0)
+	     (> (vector-ref buttondat 0) 0)
+	     (vector? (vector-ref buttondat 3))
+	     (> (vector-ref (vector-ref buttondat 3) 0) 0))
+	(let* ((run-id       (vector-ref buttondat 0))
+	       (origtest     (vector-ref buttondat 3))
+	       (run-key      (vector-ref buttondat 4))
+	       (test         (db:get-test-info *db*
+					       run-id
+					       (db:test-get-testname  origtest)
+					       (db:test-get-item-path origtest)))
+	       (rundir       (db:test-get-rundir test))
+	       (test-id      (db:test-get-id     test))
+	       (testname     (db:test-get-testname   test))
+	       (itempath     (db:test-get-item-path test))
+	       (testfullname (runs:test-get-full-path test))
+	       (testkey      (list test-id testname itempath testfullname))
+	       (widgets      (make-hash-table)) ;; put the widgets to update in this hashtable
+	       (currstatus   (db:test-get-status test))
+	       (currstate    (db:test-get-state  test))
+	       (currcomment  (db:test-get-comment test))
+	       (host         (db:test-get-host test))
+	       (cpuload      (db:test-get-cpuload test))
+	       (runtime      (db:test-get-run_duration test))
+	       (logfile      (conc (db:test-get-rundir test) "/" (db:test-get-final_logf test)))
+	       (viewlog      (lambda (x)
+			       (if (file-exists? logfile)
+				   (system (conc "firefox " logfile "&"))
+				   (message-window (conc "File " logfile " not found")))))
+	       (xterm        (lambda (x)
+			       (if (directory-exists? rundir)
+				   (let ((shell (if (get-environment-variable "SHELL") 
+						    (conc "-e " (get-environment-variable "SHELL"))
+						    "")))
+				     (system (conc "cd " rundir 
+						   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+				   (message-window  (conc "Directory " rundir " not found")))))
+	       (newstatus    currstatus)
+	       (newstate     currstate)
+	       (self         #f))
+
+	  (hash-table-set! *examine-test-dat* testkey widgets)
+	  
+	  ;;  (test-set-status! db run-id test-name state status itemdat)
+	  (set! self 
+		(iup:dialog
+		 #:title testfullname
+		 (iup:hbox ;; Need a full height box for all the test steps
+		  (iup:vbox
+		   (iup:hbox 
+		    (iup:frame (iup:label run-key))
+		    (iup:frame (iup:label (conc "TESTNAME:\n" testfullname) #:expand "YES")))
+		   (iup:frame #:title "Actions" #:expand "YES"
+			      (iup:hbox ;; the actions box
+			       (iup:button "View Log"    #:action viewlog  #:expand "YES")
+			       (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
+		   (iup:frame #:title "Set fields"
+			      (iup:vbox
+			       (iup:hbox 
+				(iup:vbox ;; the state
+				 (iup:label "STATE:" #:size "30x")
+				 (let ((lb (iup:listbox #:action (lambda (val a b c)
+								   ;; (print val " a: " a " b: " b " c: " c)
+								   (set! newstate a))
+							#:editbox "YES"
+							#:expand "YES")))
+				   (iuplistbox-fill-list lb
+							 (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
+							 currstate)
+				   lb))
+				(iup:vbox ;; the status
+				 (iup:label "STATUS:" #:size "30x")
+				 (let ((lb (iup:listbox #:action (lambda (val a b c)
+								   (set! newstatus a))
+							#:editbox "YES"
+							#:value currstatus
+							#:expand "YES")))
+				   (iuplistbox-fill-list lb
+							 (list "PASS" "WARN" "FAIL" "CHECK" "n/a")
+							 currstatus)
+				   lb)))
+			       (iup:hbox (iup:label "Comment:")
+					 (iup:textbox #:action (lambda (val a b)
+								 (set! currcomment b))
+						      #:value currcomment 
+						      #:expand "YES"))
+			       (iup:button "Apply"
+					   #:expand "YES"
+					   #:action (lambda (x)
+						      (test-set-status! *db* run-id testname newstate newstatus itempath currcomment)))
+			       (iup:hbox (iup:button "Apply and close"
+						     #:expand "YES"
+						     #:action (lambda (x)
+								(hash-table-delete! *examine-test-dat* testkey)
+								(test-set-status! *db* run-id testname newstate newstatus itempath currcomment)
+								(iup:destroy! self)))
+					 (iup:button "Cancel and close"
+						     #:expand "YES"
+						     #:action (lambda (x)
+								(hash-table-delete! *examine-test-dat* testkey)
+								(iup:destroy! self))))
+			       )))
+		  (iup:hbox ;; the test steps are tracked here
+		   (let ((stepsdat (iup:label "Test steps ........................................." #:expand "YES")))
+		     (hash-table-set! widgets "Test Steps" stepsdat)
+		     stepsdat)
+		   ))))
+	  (iup:show self)
+	  ))))
 
 (define (colors-similar? color1 color2)
   (let* ((c1 (map string->number (string-split color1)))
@@ -362,10 +472,7 @@ Misc
 				       ;; #:expand "HORIZONTAL"
 				       #:fontsize "10" 
 				       #:action (lambda (x)
-						  (let* ((toolpath (car (argv)))
-							 (cmd  (conc toolpath " -test " testnum "&")))
-						    (print "Launching " cmd)
-						    (system cmd))))))
+						  (examine-test button-key)))))
 	  (hash-table-set! *buttondat* button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
 	  (loop runnum (+ testnum 1) testvec (cons butn res))))))
@@ -392,44 +499,26 @@ Misc
 	(update-rundat "%" *num-runs* "%" "%"))
     (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20)))
 
-(define uidat #f)
+(set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
 ;; (megatest-dashboard)
 
-(define (run-update other-thread)
+(define (run-update other-thread mtx)
   (let loop ((i 0))
-    (thread-sleep! 0.1)
-    (thread-suspend! other-thread)
+    (mutex-lock! mtx)   ;; (thread-suspend! other-thread)
     (update-buttons uidat *num-runs* *num-tests*)
+    (mutex-unlock! mtx) ;; (thread-resume! other-thread)
+    ;; (thread-sleep! 0.1)
+    ;; (thread-suspend! other-thread)
     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 		   (hash-table-ref/default *searchpatts* "test-name" "%")
 		   (hash-table-ref/default *searchpatts* "item-name" "%"))
     (thread-resume! other-thread)
+    (thread-sleep! 0.1)
     (loop (+ i 1))))
 
-(define *job* #f)
-
-(cond 
- ((args:get-arg "-run")
-  (let ((runid (string->number (args:get-arg "-run"))))
-    (if runid
-	(set! *job* (lambda (thr)(examine-run *db* runid)))
-	(begin
-	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
-	  (exit 1)))))
- ((args:get-arg "-test")
-    (let ((testid (string->number (args:get-arg "-test"))))
-    (if testid
-	(set! *job* (lambda (thr)(examine-test *db* testid)))
-	(begin
-	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
-	  (exit 1)))))
- (else
-  (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
-  (set! *job* (lambda (thr)(run-update thr)))))
-
-
-(let* ((th2 (make-thread iup:main-loop))
-       (th1 (make-thread (*job* th2))))
-  (thread-start! th1)
-  (thread-start! th2)
-  (thread-join! th2))
+(define mtx (make-mutex))
+(define th2 (make-thread iup:main-loop))
+(define th1 (make-thread (run-update th2 mtx)))
+(thread-start! th1)
+(thread-start! th2)
+(thread-join! th2)

@@ -151,7 +151,7 @@
 (define-inline (db:get-row    vec)(vector-ref vec 1))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
-(define (db-get-run-info db run-id)
+(define (db:get-run-info db run-id)
   (let* ((res      #f)
 	 (keys      (db-get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
@@ -260,7 +260,18 @@
      run-id testname item-path)
     res))
 
-;;
+;; Get test data using test_id
+(define (db:get-test-data-by-id db test-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+     db 
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+     test-id)
+    res))
+
+
 (define (db:test-set-comment db run-id testname item-path comment)
   (sqlite3:execute 
    db 
@@ -293,7 +304,8 @@
 (define-inline (db:step-set-status!         vec val)(vector-set! vec 4 val))
 (define-inline (db:step-set-event_time!     vec val)(vector-set! vec 5 val))
 
-(define (db-get-test-steps-for-run db test-id)
+;; db-get-test-steps-for-run
+(define (db:get-steps-for-test db test-id)
   (let ((res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time)

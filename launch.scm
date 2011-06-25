@@ -71,7 +71,7 @@
     best))
 
 (define (create-work-area db run-id test-path disk-path testname itemdat)
-  (let* ((run-info (db-get-run-info db run-id))
+  (let* ((run-info (db:get-run-info db run-id))
 	 (item-path (let ((ip (item-list->path itemdat)))
 		      (if (equal? ip "") "" (conc "/" ip))))
 	 (runname  (db-get-value-by-header (db:get-row run-info)
