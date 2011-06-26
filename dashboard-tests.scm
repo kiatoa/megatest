@@ -10,6 +10,166 @@
 ;;======================================================================
 
 ;;======================================================================
+;; Test info panel
+;;======================================================================
+(define (test-info-panel testdat store-label widgets)
+  (iup:frame 
+   #:title "Test Info" ; #:expand "YES"
+   (iup:hbox ; #:expand "YES"
+    (apply iup:vbox ; #:expand "YES"
+	   (append (map (lambda (val)
+			  (iup:label val ; #:expand "HORIZONTAL"
+				     ))
+			(list "Testname: "
+			      "Item path: "
+			      "Current state: "
+			      "Current status: "
+			      "Test comment: "
+			      "Test id: "))
+		   (list (iup:label "" #:expand "VERTICAL"))))
+    (apply iup:vbox  ; #:expand "YES"
+	   (list 
+	    (iup:label (db:test-get-testname  testdat) #:expand "HORIZONTAL")
+	    (iup:label (db:test-get-item-path testdat) #:expand "HORIZONTAL")
+	    (store-label "teststate" 
+			 (iup:label (db:test-get-state testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)
+			   (db:test-get-state testdat)))
+	    (let ((lbl   (iup:label (db:test-get-status testdat) #:expand "HORIZONTAL")))
+	      (hash-table-set! widgets "teststatus"
+			       (lambda (testdat)
+				 (let ((newstatus (db:test-get-status testdat))
+				       (oldstatus (iup:attribute lbl "TITLE")))
+				   (if (not (equal? oldstatus newstatus))
+				       (begin
+					 (iup:attribute-set! lbl "FGCOLOR" (get-color-for-state-status (db:test-get-state testdat)
+												       (db:test-get-status testdat)))
+					 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
+	      lbl)
+	    (store-label "testcomment"
+			 (iup:label "TestComment                             "
+				    #:expand "HORIZONTAL")
+			 (lambda (testdat)
+			   (db:test-get-comment testdat)))
+	    (store-label "testid"
+			 (iup:label "TestId                             "
+				    #:expand "HORIZONTAL")
+			 (lambda (testdat)
+			   (db:test-get-id testdat))))))))
+
+;;======================================================================
+;; Run info panel
+;;======================================================================
+(define (run-info-panel keydat testdat runname)
+  (iup:frame 
+   #:title "Megatest Run Info" ; #:expand "YES"
+   (iup:hbox ; #:expand "YES"
+    (apply iup:vbox ; #:expand "YES"
+	   (append (map (lambda (keyval)
+			  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
+				     ))
+			keydat)
+		   (list (iup:label "runname "))))
+    (apply iup:vbox
+	   (append (map (lambda (keyval)
+			  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
+			keydat)
+		   (list (iup:label runname)(iup:label "" #:expand "VERTICAL")))))))
+  
+;;======================================================================
+;; Host info panel
+;;======================================================================
+(define (host-info-panel testdat store-label)
+  (iup:frame
+   #:title "Remote host and Test Run Info" ; #:expand "YES"
+   (iup:hbox ; #:expand "YES"
+    (apply iup:vbox ; #:expand "YES" ;; The heading labels
+	   (append (map (lambda (val)
+			  (iup:label val ; #:expand "HORIZONTAL"
+				     ))
+			(list "Hostname: "
+			      "Uname -a: "
+			      "Disk free: "
+			      "CPU Load: "
+			      "Run duration: "
+			      "Logfile: "))
+		   (iup:label "" #:expand "VERTICAL")))
+    (apply iup:vbox ; #:expand "YES"
+	   (list
+	    ;; NOTE: Yes, the host can change!
+	    (store-label "HostName"
+			 (iup:label (db:test-get-host testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-get-host testdat)))
+	    (store-label "Uname"
+			 (iup:label "                                                   " #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-get-uname testdat)))
+	    (store-label "DiskFree"
+			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))
+	    (store-label "CPULoad"
+			 (iup:label (conc (db:test-get-cpuload testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-get-cpuload testdat))))
+	    (store-label "RunDuration"
+			 (iup:label (conc (db:test-get-run_duration testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-get-run_duration testdat))))
+	    (store-label "CPULoad"
+			 (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-get-final_logf testdat)))))))))
+
+;;======================================================================
+;; Set fields 
+;;======================================================================
+(define (set-fields-panel test-id testdat)
+  (let ((newcomment #f)
+	(newstatus  #f)
+	(newstate   #f))
+    (iup:frame
+     #:title "Set fields"
+     (iup:vbox
+      (iup:hbox (iup:label "Comment:")
+		(iup:textbox #:action (lambda (val a b)
+					(set! newcomment b))
+			     #:value (db:test-get-comment testdat)
+			     #:expand "YES"))
+      (iup:hbox
+       (iup:label "STATE:")
+       (let ((lb (iup:listbox #:action (lambda (val a b c)
+					 (set! newstate a))
+			      #:dropdown "YES"
+			      )))
+	 (iuplistbox-fill-list lb
+			       (list "Set state" "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
+			       "Set state" )
+	 lb))
+      (iup:hbox 
+       (iup:label "STATUS:")
+       (let ((lb (iup:listbox #:action (lambda (val a b c)
+					 (set! newstatus a))
+			      #:dropdown "YES"
+			      )))
+	 (iuplistbox-fill-list lb
+			       (list "Set status" "PASS" "WARN" "FAIL" "CHECK" "n/a")
+			       "Set status" )
+	 lb))
+      ;; The control buttons
+      (iup:vbox
+       (iup:button "Apply"
+		   #:expand "YES"
+		   #:action (lambda (x)
+			      (db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
+			      ))
+       (iup:hbox
+	(iup:vbox
+	 (iup:button "Apply and close"
+		     #:action (lambda (x)
+				(db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
+				(exit))))
+	(iup:vbox
+	 (iup:button "Cancel and close"
+		     #:action (lambda (x)
+				(exit))))))))))
+
+;;======================================================================
 ;;
 ;;======================================================================
 (define (examine-test db test-id mx1) ;; run-id run-key origtest)
@@ -54,22 +214,16 @@
 	 (self         #f)
 	 (store-label  (lambda (name lbl cmd)
 			 (hash-table-set! widgets name 
-					  (lambda ()
-					    (let ((newval (cmd))
+					  (lambda (testdat)
+					    (let ((newval (cmd testdat))
 						  (oldval (iup:attribute lbl "TITLE")))
 					      (if (not (equal? newval oldval))
 						  (begin
 						    (mutex-lock! mx1)
-						    (iup:attribute-set! lbl "TITLE" (cmd))
+						    (iup:attribute-set! lbl "TITLE" newval)
 						    (mutex-unlock! mx1))))))
 			 lbl))
-	 (store-button store-label)
-	 ;; Place for new values from the gui
-	 (newstatus     #f)
-	 (newstate      #f)
-	 (newcomment    #f)
-	 
-	 )
+	 (store-button store-label))
     (cond
      ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
      ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -78,164 +232,18 @@
       (set! self ; 
 	    (iup:dialog #:close_cb (lambda (a)(exit)) ; #:expand "YES"
 	     #:title testfullname
-	     (iup:hbox ; #:expand "YES" ;; Need a full height box for all the test steps
-	      (iup:vbox ; #:expand "YES"
+	     (iup:vbox ; #:expand "YES"
                ;; The run and test info
 	       (iup:hbox  ; #:expand "YES"
-		(iup:frame #:title "Megatest Run Info" ; #:expand "YES"
-			   (iup:hbox ; #:expand "YES"
-			    (apply iup:vbox ; #:expand "YES"
-				   (append (map (lambda (keyval)
-						  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
-							     ))
-						keydat)
-					   (list (iup:label "runname "))))
-			    (apply iup:vbox
-				   (append (map (lambda (keyval)
-						  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
-						keydat)
-					   (list (iup:label runname)(iup:label "" #:expand "VERTICAL"))))))
-		(iup:frame #:title "Test Info" ; #:expand "YES"
-			   (iup:hbox ; #:expand "YES"
-			    (apply iup:vbox ; #:expand "YES"
-				   (append (map (lambda (val)
-						  (iup:label val ; #:expand "HORIZONTAL"
-							     ))
-						(list "Testname: "
-						      "Item path: "
-						      "Current state: "
-						      "Current status: "
-						      "Test comment: "
-						      "Test id: "))
-					   (list (iup:label "" #:expand "VERTICAL"))))
-			    (apply iup:vbox  ; #:expand "YES"
-				   (list 
-				    (iup:label (db:test-get-testname  testdat) #:expand "HORIZONTAL")
-				    (iup:label (db:test-get-item-path testdat) #:expand "HORIZONTAL")
-				    (store-label "teststate" 
-						 (iup:label (db:test-get-state testdat) #:expand "HORIZONTAL")
-						 (lambda ()
-						   (db:test-get-state testdat)))
-				    (let ((lbl   (iup:label (db:test-get-status testdat) #:expand "HORIZONTAL")))
-				      (hash-table-set! widgets "teststatus"
-						       (lambda ()
-							 (let ((newstatus (db:test-get-status testdat))
-							       (oldstatus (iup:attribute lbl "TITLE")))
-							   (if (not (equal? oldstatus newstatus))
-							       (begin
-								 (iup:attribute-set! lbl "FGCOLOR" (get-color-for-state-status (db:test-get-state testdat)
-															       (db:test-get-status testdat)))
-								 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
-				      lbl)
-				    (store-label "testcomment"
-						 (iup:label "TestComment                             "
-							    #:expand "HORIZONTAL")
-						 (lambda ()
-						   (db:test-get-comment testdat)))
-				    (store-label "testid"
-						 (iup:label "TestId                             "
-							    #:expand "HORIZONTAL")
-						 (lambda ()
-						   (db:test-get-id testdat))))))))
-	       ;; The run host info
-	       (iup:frame #:title "Remote host and Test Run Info" ; #:expand "YES"
-	        (iup:hbox ; #:expand "YES"
-                 (apply iup:vbox ; #:expand "YES" ;; The heading labels
-			(append (map (lambda (val)
-				       (iup:label val ; #:expand "HORIZONTAL"
-						  ))
-				     (list "Hostname: "
-					   "Uname -a: "
-					   "Disk free: "
-					   "CPU Load: "
-					   "Run duration: "
-					   "Logfile: "))
-				(iup:label "" #:expand "VERTICAL")))
-		 (apply iup:vbox ; #:expand "YES"
-			(list
-			 ;; NOTE: Yes, the host can change!
-			 (store-label "HostName"
-				      (iup:label (db:test-get-host testdat) #:expand "HORIZONTAL")
-				      (lambda ()(db:test-get-host testdat)))
-			 (store-label "Uname"
-				      (iup:label "                                                   " #:expand "HORIZONTAL")
-				      (lambda ()(db:test-get-uname testdat)))
-			 (store-label "DiskFree"
-				      (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
-				      (lambda ()(conc (db:test-get-diskfree testdat))))
-			 (store-label "CPULoad"
-				      (iup:label (conc (db:test-get-cpuload testdat)) #:expand "HORIZONTAL")
-				      (lambda ()(conc (db:test-get-cpuload testdat))))
-			 (store-label "RunDuration"
-				      (iup:label (conc (db:test-get-run_duration testdat)) #:expand "HORIZONTAL")
-				      (lambda ()(conc (db:test-get-run_duration testdat))))
-			 (store-label "CPULoad"
-				      (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
-				      (lambda ()(conc (db:test-get-final_logf testdat))))))))
+		(run-info-panel keydat testdat runname)
+		(test-info-panel testdat store-label widgets))
+	       (host-info-panel testdat store-label)
 	       ;; The controls
 	       (iup:frame #:title "Actions" ; #:expand "HORIZONTAL"
 			  (iup:hbox ; #:expand "HORIZONTAL" ;; the actions box
-			   (iup:button "View Log"    #:action viewlog #:expand "YES"
-				       )
+			   (iup:button "View Log"    #:action viewlog #:expand "YES")
 			   (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
-	       (iup:frame #:title "Set fields"
-			  (iup:vbox
-			   ;(iup:hbox ; #:expand "HORIZONTAL"
-			   (iup:hbox (iup:label "Comment:")
-				     (iup:textbox #:action (lambda (val a b)
-							     (set! newcomment b))
-						  #:value (db:test-get-comment testdat)
-						  #:expand "YES"
-						  ))
-			   (iup:hbox 
-			    (iup:vbox ; for the state and status controls
-			     (iup:hbox ; #:expand "HORIZONTAL" ;; the state
-			      (iup:label "STATE:" ; #:size "30x" ; #:expand "HORIZONTAL"
-					 )
-			      (let ((lb (iup:listbox #:action (lambda (val a b c)
-								;; (print val " a: " a " b: " b " c: " c)
-								(set! newstate a))
-						     ;; #:editbox "YES"
-						     #:dropdown "YES"
-						     ;#:expand "HORIZONTAL"
-						     )))
-			       (iuplistbox-fill-list lb
-						     (list "Set state" "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
-						     "Set state" ) ; (db:test-get-state testdat))
-			       lb))
-			     (iup:hbox ; #:expand "HORIZONTAL" ;; the status
-			      (iup:label "STATUS:" ; #:size "30x" #:expand "HORIZONTAL"
-					 )
-			      (let ((lb (iup:listbox #:action (lambda (val a b c)
-								(set! newstatus a))
-						     ;; #:editbox "YES"
-						     ;; #:value currstatus
-						     #:dropdown "YES"
-						     ;#:expand "HORIZONTAL"
-						     )))
-				(iuplistbox-fill-list lb
-						      (list "Set status" "PASS" "WARN" "FAIL" "CHECK" "n/a")
-						      "Set status" ) ; (db:test-get-status testdat))
-				lb)))
-			    (iup:vbox
-			     (iup:button "Apply"
-					 #:expand "YES"
-					 #:action (lambda (x)
-						    (db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
-						    ))
-			     (iup:hbox;  #:expand "YES"
-			      (iup:vbox
-			       (iup:button "Apply and close"
-					; #:expand "YES"
-					   #:action (lambda (x)
-						      (db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
-						      (exit))))
-			      (iup:vbox
-			       (iup:button "Cancel and close"
-					; #:expand "YES"
-					   #:action (lambda (x)
-						      (exit)))))))
-			     ))))))
+	       (set-fields-panel test-id testdat))))
       (iup:show self)
       ;; Now start keeping the gui updated from the db
       (let loop ((i 0))
@@ -246,7 +254,7 @@
 	(for-each 
 	 (lambda (key)
 	   ;; (print "Updating " key)
-	   ((hash-table-ref widgets key)))
+	   ((hash-table-ref widgets key) testdat))
 	 (hash-table-keys widgets))
 	;(thread-resume! other-thread)
 	; (iup:refresh self)
