@@ -13,7 +13,7 @@
 (require-library iup)
 (import (prefix iup iup:))
 
-;; (use canvas-draw)
+(use canvas-draw)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 
@@ -148,6 +148,22 @@ Misc
 		  (drop *alltestnamelst* *start-test-offset*)
 		  '())))) ;; *alltestnamelst*))))
 
+(define (get-color-for-state-status state status)
+  (case (string->symbol state)
+    ((COMPLETED)
+     (if (equal? status "PASS")
+	 "70 249 73"
+	 (if (equal? status "WARN")
+	     "255 172 13"
+	     "223 33 49"))) ;; greenish orangeish redish
+    ((LAUNCHED)         "101 123 142")
+    ((CHECK)            "255 100 50")
+    ((REMOTEHOSTSTART)  "50 130 195")
+    ((RUNNING)          "9 131 232")
+    ((KILLREQ)          "39 82 206")
+    ((KILLED)           "234 101 17")
+    (else "192 192 192")))
+
 (define (update-buttons uidat numruns numtests)
   (let* ((runs        (if (> (length *allruns*) numruns)
 			  (take-right *allruns* numruns)
@@ -191,11 +207,11 @@ Misc
        (let* ((run      (vector-ref rundat 0))
 	      (testsdat (vector-ref rundat 1))
 	      (key-val-dat (vector-ref rundat 2))
-	      (run-id   (db-get-value-by-header run *header* "id"))
+	      (run-id   (db:get-value-by-header run *header* "id"))
 	      (testnames (delete-duplicates (append *alltestnamelst* 
 						    (map test:test-get-fullname testsdat)))) ;; (take (pad-list testsdat numtests) numtests))
 	      (key-vals (append key-val-dat
-				(list (let ((x (db-get-value-by-header run *header* "runname")))
+				(list (let ((x (db:get-value-by-header run *header* "runname")))
 					(if x x "")))))
 	      (run-key  (string-intersperse key-vals "\n")))
 	 ;; (run-ht  (hash-table-ref/default alldat run-key #f)))
@@ -233,20 +249,7 @@ Misc
 			   (runtime    (db:test-get-run_duration test))
 			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			   (button     (vector-ref columndat rown))
-			   (color      (case (string->symbol teststate)
-					 ((COMPLETED)
-					  (if (equal? teststatus "PASS")
-					      "70 249 73"
-					      (if (equal? teststatus "WARN")
-						  "255 172 13"
-						  "223 33 49"))) ;; greenish orangeish redish
-					 ((LAUNCHED)         "101 123 142")
-					 ((CHECK)            "255 100 50")
-					 ((REMOTEHOSTSTART)  "50 130 195")
-					 ((RUNNING)          "9 131 232")
-					 ((KILLREQ)          "39 82 206")
-					 ((KILLED)           "234 101 17")
-					 (else "192 192 192")))
+			   (color      (get-color-for-state-status teststate teststatus))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
 			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
 		;;       (if (and (equal? teststate "RUNNING")
