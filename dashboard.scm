@@ -401,15 +401,18 @@ Misc
 (define uidat #f)
 ;; (megatest-dashboard)
 
-(define (run-update other-thread)
+(define (run-update mtx1)
   (let loop ((i 0))
-    (thread-sleep! 0.1)
-    (thread-suspend! other-thread)
+    (thread-sleep! 0.05)
+    (mutex-lock! mtx1)
     (update-buttons uidat *num-runs* *num-tests*)
+    (mutex-unlock! mtx1)
+    (iup:main-loop-flush)
+    (mutex-lock! mtx1)
     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 		   (hash-table-ref/default *searchpatts* "test-name" "%")
 		   (hash-table-ref/default *searchpatts* "item-name" "%"))
-    (thread-resume! other-thread)
+    (mutex-unlock! mtx1)
     (loop i)))
 
 (define *job* #f)
@@ -446,7 +449,7 @@ Misc
 	  (exit 1)))))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
-  (set! *job* (lambda (thr)(run-update thr)))))
+  (set! *job* (lambda (mtx1)(run-update mtx1)))))
 
 
 (let* ((mx1 (make-mutex))

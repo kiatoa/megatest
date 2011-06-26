@@ -196,6 +196,8 @@
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
 
+(define-inline (db:test-set-testname vec val)(vector-set! vec 2 val))
+
 (define (db-get-tests-for-run db run-id . params)
   (let ((res '())
 	(testpatt (if (or (null? params)(not (car params))) "%" (car params)))

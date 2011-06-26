@@ -29,8 +29,12 @@
 		   (list (iup:label "" #:expand "VERTICAL"))))
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
-	    (iup:label (db:test-get-testname  testdat) #:expand "HORIZONTAL")
-	    (iup:label (db:test-get-item-path testdat) #:expand "HORIZONTAL")
+	    (store-label "testname"
+			 (iup:label (db:test-get-testname  testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-get-testname testdat)))
+	    (store-label "item-path"
+			 (iup:label (db:test-get-item-path testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-get-item-path testdat)))
 	    (store-label "teststate" 
 			 (iup:label (db:test-get-state testdat) #:expand "HORIZONTAL")
 			 (lambda (testdat)
@@ -208,8 +212,7 @@
 			       (set! testfullname (db:test-get-fullname testdat))
 			       (mutex-unlock! mx1))
 			     (begin
-			       (sqlite3:finalize! db)
-			       (exit 0))))))
+			       (db:test-set-testname testdat "DEAD OR DELETED TEST"))))))
 	 (widgets      (make-hash-table))
 	 (self         #f)
 	 (store-label  (lambda (name lbl cmd)
