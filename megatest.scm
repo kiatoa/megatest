@@ -177,11 +177,11 @@ Called as " (string-intersperse (argv) " ")))
        (lambda (run)
 	 (print "Run: "
 		(string-intersperse (map (lambda (x)
-					   (db-get-value-by-header run header x))
+					   (db:get-value-by-header run header x))
 					 keynames) "/")
 		"/"
-		(db-get-value-by-header run header "runname"))
-	 (let ((run-id (db-get-value-by-header run header "id")))
+		(db:get-value-by-header run header "runname"))
+	 (let ((run-id (db:get-value-by-header run header "id")))
 	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt)))
 	     ;; Each test
 	     (for-each 

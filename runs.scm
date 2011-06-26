@@ -469,13 +469,13 @@
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
-						(db-get-value-by-header run header (vector-ref k 0))) keys) "/")))
-	 (let* ((run-id (db-get-value-by-header run header "id") )
-		(tests  (db-get-tests-for-run db (db-get-value-by-header run header "id") testpatt itempatt))
+						(db:get-value-by-header run header (vector-ref k 0))) keys) "/")))
+	 (let* ((run-id (db:get-value-by-header run header "id") )
+		(tests  (db-get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt))
 		(lasttpath "/does/not/exist/I/hope"))
 	   (if (not (null? tests))
 	       (begin
-		 (print "Removing tests for run: " runkey " " (db-get-value-by-header run header "runname"))
+		 (print "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
 		 (for-each
 		  (lambda (test)
 		    (print "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " (db:test-get-item-path test))
@@ -490,13 +490,13 @@
 			    (system cmd))
 			  )))
 		  tests)))
-	   (let ((remtests (db-get-tests-for-run db (db-get-value-by-header run header "id"))))
+	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id"))))
 	     (if (null? remtests) ;; no more tests remaining
 		 (let* ((dparts  (string-split lasttpath "/"))
 			(runpath (conc "/" (string-intersperse 
 					    (take dparts (- (length dparts) 1))
 					    "/"))))
-		   (print "Removing run: " runkey " " (db-get-value-by-header run header "runname"))
+		   (print "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
 		   (db:delete-run db run-id)
 		   ;; need to figure out the path to the run dir and remove it if empty
 		;;    (if (null? (glob (conc runpath "/*")))

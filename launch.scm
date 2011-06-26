@@ -74,7 +74,7 @@
   (let* ((run-info (db:get-run-info db run-id))
 	 (item-path (let ((ip (item-list->path itemdat)))
 		      (if (equal? ip "") "" (conc "/" ip))))
-	 (runname  (db-get-value-by-header (db:get-row run-info)
+	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 (key-vals (get-key-vals db run-id))

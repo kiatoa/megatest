@@ -120,7 +120,7 @@ Misc
 	 (result      '())
 	 (maxtests    0))
     (for-each (lambda (run)
-		(let* ((run-id   (db-get-value-by-header run header "id"))
+		(let* ((run-id   (db:get-value-by-header run header "id"))
 		       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt))
 		       (key-vals (get-key-vals *db* run-id)))
 		  (if (> (length tests) maxtests)
@@ -404,7 +404,7 @@ Misc
 		   (hash-table-ref/default *searchpatts* "test-name" "%")
 		   (hash-table-ref/default *searchpatts* "item-name" "%"))
     (thread-resume! other-thread)
-    (loop (+ i 1))))
+    (loop i)))
 
 (define *job* #f)
 
@@ -419,7 +419,7 @@ Misc
  ((args:get-arg "-test")
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
-	(set! *job* (lambda (thr)(examine-test *db* testid)))
+	(set! *job* (lambda (thr)(examine-test *db* testid thr)))
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
