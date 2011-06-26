@@ -242,10 +242,12 @@
 		(test-info-panel testdat store-label widgets))
 	       (host-info-panel testdat store-label)
 	       ;; The controls
-	       (iup:frame #:title "Actions" ; #:expand "HORIZONTAL"
-			  (iup:hbox ; #:expand "HORIZONTAL" ;; the actions box
-			   (iup:button "View Log"    #:action viewlog #:expand "YES")
-			   (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
+	       (iup:frame #:title "Actions"
+			  (iup:hbox
+			   (iup:vbox
+			    (iup:button "View Log"    #:action viewlog #:expand "HORIZONTAL"))
+			   (iup:vbox
+			    (iup:button "Start Xterm" #:action xterm  #:expand "YES"))))
 	       (set-fields-panel test-id testdat))))
       (iup:show self)
       ;; Now start keeping the gui updated from the db
