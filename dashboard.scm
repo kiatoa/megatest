@@ -85,6 +85,7 @@ Misc
 (define *start-run-offset*  0)
 (define *start-test-offset* 0)
 (define *examine-test-dat* (make-hash-table))
+(define *exit-started* #f)
 
 (define (message-window msg)
   (iup:show
@@ -366,7 +367,9 @@ Misc
 				       #:fontsize "10" 
 				       #:action (lambda (x)
 						  (let* ((toolpath (car (argv)))
-							 (cmd  (conc toolpath " -test " testnum "&")))
+							 (buttndat (hash-table-ref *buttondat* button-key))
+							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
+							 (cmd  (conc toolpath " -test " test-id "&")))
 						    (print "Launching " cmd)
 						    (system cmd))))))
 	  (hash-table-set! *buttondat* button-key (vector 0 "100 100 100" button-key #f #f)) 
@@ -415,14 +418,29 @@ Misc
  ((args:get-arg "-run")
   (let ((runid (string->number (args:get-arg "-run"))))
     (if runid
-	(set! *job* (lambda (thr)(examine-run *db* runid)))
+	(set! *job* (lambda (mx1)
+		      (on-exit (lambda ()
+				 (sqlite3:finalize! *db*)))
+		      (examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test")
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
-	(set! *job* (lambda (thr)(examine-test *db* testid thr)))
+	(set! *job* (lambda (mx1)
+		      ; (on-exit (lambda ()
+		      ; ;  	 ;;(iup:main-loop-flush)
+		      ;   	 (set! *exit-started* #t)
+		      ;   	 (let loop ((i 0))
+		      ;   	   (if (and (< i 100)
+		      ;   		    (not (eq? *exit-started* 'ok)))
+		      ;   	       (begin
+		      ;   		 (thread-sleep! 0.1)
+		      ;   		 (loop (+ i 1)))))
+		      ;   	 (sqlite3:finalize! *db*)
+		      ;   	 (exit)))
+		      (examine-test *db* testid mx1)))
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
@@ -431,8 +449,9 @@ Misc
   (set! *job* (lambda (thr)(run-update thr)))))
 
 
-(let* ((th2 (make-thread iup:main-loop))
-       (th1 (make-thread (*job* th2))))
+(let* ((mx1 (make-mutex))
+       (th2 (make-thread iup:main-loop))
+       (th1 (make-thread (*job* mx1))))
   (thread-start! th1)
   (thread-start! th2)
   (thread-join! th2))

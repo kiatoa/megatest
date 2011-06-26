@@ -231,6 +231,11 @@
 	    testnames))
 	      ;; "('" (string-intersperse tests "','") "')")
 
+(define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
+  (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+  (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+  (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
+
 (define (db:get-count-tests-running db)
   (let ((res 0))
     (sqlite3:for-each-row
