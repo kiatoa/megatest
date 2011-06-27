@@ -102,7 +102,7 @@
 (define-inline (db:get-header vec)(vector-ref vec 0))
 (define-inline (db:get-rows   vec)(vector-ref vec 1))
 
-(define (db-get-value-by-header row header field)
+(define (db:get-value-by-header row header field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -151,7 +151,7 @@
 (define-inline (db:get-row    vec)(vector-ref vec 1))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
-(define (db-get-run-info db run-id)
+(define (db:get-run-info db run-id)
   (let* ((res      #f)
 	 (keys      (db-get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
@@ -193,6 +193,12 @@
 (define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
 (define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
+(define-inline (db:test-get-fullname     vec)
+  (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
+
+(define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
+(define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
+(define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
 
 (define (db-get-tests-for-run db run-id . params)
   (let ((res '())
@@ -214,6 +220,25 @@
 (define (db:delete-test-records db test-id)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
   (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+
+;; set tests with state currstate and status currstatus to newstate and newstatus
+;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
+;; WARNING: SQL injection risk
+(define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
+  (for-each (lambda (testname)
+	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
+					(if currstate  (conc "state='" currstate "' AND ") "")
+					(if currstatus (conc "status='" currstatus "' AND ") "")
+					" testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+		;;(print "QRY: " qry)
+		(sqlite3:execute db qry newstate newstatus testname testname)))
+	    testnames))
+	      ;; "('" (string-intersperse tests "','") "')")
+
+(define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
+  (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+  (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+  (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
@@ -246,7 +271,18 @@
      run-id testname item-path)
     res))
 
-;;
+;; Get test data using test_id
+(define (db:get-test-data-by-id db test-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+     db 
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+     test-id)
+    res))
+
+
 (define (db:test-set-comment db run-id testname item-path comment)
   (sqlite3:execute 
    db 
@@ -279,7 +315,8 @@
 (define-inline (db:step-set-status!         vec val)(vector-set! vec 4 val))
 (define-inline (db:step-set-event_time!     vec val)(vector-set! vec 5 val))
 
-(define (db-get-test-steps-for-run db test-id)
+;; db-get-test-steps-for-run
+(define (db:get-steps-for-test db test-id)
   (let ((res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time)

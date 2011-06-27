@@ -23,12 +23,15 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
+;; global gletches
 (define *configinfo* #f)
 (define *configdat*  #f)
 (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
 (define *waiting-queue* (make-hash-table))
 (define *globalexitstatus* 0) ;; attempt to work around possible thread issues
+(define *passnum*     0) ;; when running track calls to run-tests or similar
+
 
 (define-inline (get-with-default val default)
   (let ((val (args:get-arg val)))
