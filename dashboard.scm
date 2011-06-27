@@ -160,7 +160,8 @@ Misc
     ((COMPLETED)
      (if (equal? status "PASS")
 	 "70 249 73"
-	 (if (equal? status "WARN")
+	 (if (or (equal? status "WARN")
+		 (equal? status "WAIVED"))
 	     "255 172 13"
 	     "223 33 49"))) ;; greenish orangeish redish
     ((LAUNCHED)         "101 123 142")
@@ -169,7 +170,8 @@ Misc
     ((RUNNING)          "9 131 232")
     ((KILLREQ)          "39 82 206")
     ((KILLED)           "234 101 17")
-    (else "192 192 192")))
+    ((NOT_STARTED)      "240 240 240")
+    (else               "192 192 192")))
 
 (define (update-buttons uidat numruns numtests)
   (let* ((runs        (if (> (length *allruns*) numruns)
@@ -315,7 +317,11 @@ Misc
 	   (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
 	   (iup:button "Down   v" #:action (lambda (obj)(set! *start-test-offset* (if (>= *start-test-offset* (length *alltestnamelst*))(length *alltestnamelst*)(+ *start-test-offset* 1)))))
-	   (iup:button "Right ->" #:action (lambda (obj)(set! *start-run-offset*  (if (> *start-run-offset* 0)(- *start-run-offset* 1) 0))))))
+	   (iup:button "Right ->" #:action (lambda (obj)(set! *start-run-offset*  (if (> *start-run-offset* 0)(- *start-run-offset* 1) 0))))
+	   ;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
+	   ;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
+	   )
+	  )
     
     ;; create the left most column for the run key names and the test names 
     (set! lftlst (list (apply iup:vbox 
@@ -438,17 +444,6 @@ Misc
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
 	(set! *job* (lambda (mx1)
-		      ; (on-exit (lambda ()
-		      ; ;  	 ;;(iup:main-loop-flush)
-		      ;   	 (set! *exit-started* #t)
-		      ;   	 (let loop ((i 0))
-		      ;   	   (if (and (< i 100)
-		      ;   		    (not (eq? *exit-started* 'ok)))
-		      ;   	       (begin
-		      ;   		 (thread-sleep! 0.1)
-		      ;   		 (loop (+ i 1)))))
-		      ;   	 (sqlite3:finalize! *db*)
-		      ;   	 (exit)))
 		      (examine-test *db* testid mx1)))
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))

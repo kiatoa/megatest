@@ -120,6 +120,16 @@
 			 (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-final_logf testdat)))))))))
 
+;; use a global for setting the buttons colors
+;;                           state status teststeps
+(define *state-status* (vector #f #f #f))
+(define (update-state-status-buttons testdat)
+  (let* ((state  (db:test-get-state  testdat))
+	 (status (db:test-get-status testdat))
+	 (color  (get-color-for-state-status state status)))
+    ((vector-ref *state-status* 0) state color)
+    ((vector-ref *state-status* 1) status color)))
+
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
@@ -132,46 +142,51 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
+					(db:test-set-state-status-by-id *db* test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "YES"))
-      (iup:hbox
-       (iup:label "STATE:")
-       (let ((lb (iup:listbox #:action (lambda (val a b c)
-					 (set! newstate a))
-			      #:dropdown "YES"
-			      )))
-	 (iuplistbox-fill-list lb
-			       (list "Set state" "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
-			       "Set state" )
-	 lb))
-      (iup:hbox 
-       (iup:label "STATUS:")
-       (let ((lb (iup:listbox #:action (lambda (val a b c)
-					 (set! newstatus a))
-			      #:dropdown "YES"
-			      )))
-	 (iuplistbox-fill-list lb
-			       (list "Set status" "PASS" "WARN" "FAIL" "CHECK" "n/a")
-			       "Set status" )
-	 lb))
-      ;; The control buttons
-      (iup:vbox
-       (iup:button "Apply"
-		   #:expand "YES"
-		   #:action (lambda (x)
-			      (db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
-			      ))
-       (iup:hbox
-	(iup:vbox
-	 (iup:button "Apply and close"
-		     #:action (lambda (x)
-				(db:test-set-state-status-by-id *db* test-id newstate newstatus newcomment)
-				(exit))))
-	(iup:vbox
-	 (iup:button "Cancel and close"
-		     #:action (lambda (x)
-				(exit))))))))))
+      (apply iup:hbox
+	     (iup:label "STATE:" #:size "30x")
+	     (let* ((btns  (map (lambda (state)
+				  (let ((btn (iup:button state
+							 #:expand "YES" #:size "70x"
+							 #:action (lambda (x)
+								    (db:test-set-state-status-by-id *db* test-id state #f #f)
+								    (db:test-set-state! testdat state)))))
+				    btn))
+				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
+	       (vector-set! *state-status* 0
+			    (lambda (state color)
+			      (for-each 
+			       (lambda (btn)
+				 (let* ((name     (iup:attribute btn "TITLE"))
+					(newcolor (if (equal? name state) color "192 192 192")))
+				   (if (not (colors-similar? newcolor (iup:attribute btn "BGCOLOR")))
+				       (iup:attribute-set! btn "BGCOLOR" newcolor))))
+			       btns)))
+	       btns))
+      (apply iup:hbox
+	     (iup:label "STATUS:" #:size "30x")
+	     (let* ((btns  (map (lambda (status)
+				  (let ((btn (iup:button status
+							 #:expand "YES" #:size "70x"
+							 #:action (lambda (x)
+								    (db:test-set-state-status-by-id *db* test-id #f status #f)
+								    (db:test-set-status! testdat status)))))
+				    btn))
+				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
+	       (vector-set! *state-status* 1
+			    (lambda (status color)
+			      (for-each 
+			       (lambda (btn)
+				 (let* ((name     (iup:attribute btn "TITLE"))
+					(newcolor (if (equal? name status) color "192 192 192")))
+				   (if (not (colors-similar? newcolor (iup:attribute btn "BGCOLOR")))
+				       (iup:attribute-set! btn "BGCOLOR" newcolor))))
+			       btns)))
+	       btns))))))
+
 
 ;;======================================================================
 ;;
@@ -184,7 +199,7 @@
 	 (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 							    (db:get-header rundat)
 							    "runname") #f))
-	 (teststeps     (if testdat (db:get-steps-for-test db test-id) #f))
+	 ;(teststeps     (if testdat (db:get-steps-for-test db test-id) #f))
 	 (logfile       "/this/dir/better/not/exist")
 	 (rundir        logfile)
 	 (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
@@ -212,7 +227,7 @@
 			       (set! testfullname (db:test-get-fullname testdat))
 			       (mutex-unlock! mx1))
 			     (begin
-			       (db:test-set-testname testdat "DEAD OR DELETED TEST"))))))
+			       (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
 	 (widgets      (make-hash-table))
 	 (self         #f)
 	 (store-label  (lambda (name lbl cmd)
@@ -242,13 +257,40 @@
 		(test-info-panel testdat store-label widgets))
 	       (host-info-panel testdat store-label)
 	       ;; The controls
-	       (iup:frame #:title "Actions"
-			  (iup:hbox
-			   (iup:vbox
-			    (iup:button "View Log"    #:action viewlog #:expand "HORIZONTAL"))
-			   (iup:vbox
-			    (iup:button "Start Xterm" #:action xterm  #:expand "YES"))))
-	       (set-fields-panel test-id testdat))))
+	       (iup:frame #:title "Actions" 
+			  (iup:hbox 
+			   (iup:button "View Log"    #:action viewlog #:size "120x")
+			   (iup:button "Start Xterm" #:action xterm   #:size "120x")
+			   (iup:button "Close"       #:action (lambda (x)(exit)) #:size "120x")))
+	       (set-fields-panel test-id testdat)
+	       (iup:frame 
+		#:title "Test Steps"
+		(let ((stepsdat (iup:label "Test steps ........................................." 
+					   #:expand "YES" 
+					   #:size "200x150"
+					   #:alignment "ALEFT:ATOP")))
+		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
+							  (let* ((currval (iup:attribute stepsdat "TITLE"))
+								 (fmtstr  "~15a~8a~8a~20a")
+								 (newval  (string-intersperse 
+									   (append
+									    (list 
+									     (format #f fmtstr "Stepname" "State" "Status" "Event Time")
+									     (format #f fmtstr "========" "=====" "======" "=========="))
+									    (map (lambda (x)
+										   ;; take advantage of the \n on time->string
+										   (format #f fmtstr
+											   (db:step-get-stepname x)
+											   (db:step-get-state    x)
+											   (db:step-get-status   x)
+											   (time->string 
+											    (seconds->local-time 
+											     (db:step-get-event_time x)))))
+										 (db:get-steps-for-test db test-id)))
+									   "\n")))
+							  (if (not (equal? currval newval))
+								(iup:attribute-set! stepsdat "TITLE" newval)))))
+		  stepsdat)))))
       (iup:show self)
       ;; Now start keeping the gui updated from the db
       (let loop ((i 0))
@@ -261,7 +303,7 @@
 	   ;; (print "Updating " key)
 	   ((hash-table-ref widgets key) testdat))
 	 (hash-table-keys widgets))
-	;(thread-resume! other-thread)
+	(update-state-status-buttons testdat)
 	; (iup:refresh self)
 	(iup:main-loop-flush)
 	(if *exit-started*
