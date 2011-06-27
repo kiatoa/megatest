@@ -415,17 +415,21 @@ Misc
 
 (define (run-update mtx1)
   (let loop ((i 0))
-    (thread-sleep! 0.05)
-    (mutex-lock! mtx1)
-    (update-buttons uidat *num-runs* *num-tests*)
-    (mutex-unlock! mtx1)
+    (thread-sleep! 0.1)
+    ;(mutex-lock! mtx1)
+    (if (eq? 0 (modulo i 3))
+	(update-buttons uidat *num-runs* *num-tests*))
+    ;(mutex-unlock! mtx1)
     (iup:main-loop-flush)
-    (mutex-lock! mtx1)
-    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		   (hash-table-ref/default *searchpatts* "test-name" "%")
-		   (hash-table-ref/default *searchpatts* "item-name" "%"))
-    (mutex-unlock! mtx1)
-    (loop i)))
+    ;(mutex-lock! mtx1)
+    (if (eq? 0 (modulo (+ 1 i) 5))
+	(update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		       (hash-table-ref/default *searchpatts* "test-name" "%")
+		       (hash-table-ref/default *searchpatts* "item-name" "%")))
+    ;(mutex-unlock! mtx1)
+    (if (> i 1000)
+	(loop 0)
+	(loop (+ i 1)))))
 
 (define *job* #f)
 
