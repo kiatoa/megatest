@@ -98,6 +98,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-runall"    ;; run all tests
 			"-remove-runs"
 			"-keepgoing"
+			"-usequeue"
 		       )
 		 args:arg-hash
 		 0))
@@ -117,6 +118,10 @@ Called as " (string-intersperse (argv) " ")))
 ;; (include "gui.scm")
 
 (define *didsomething* #f)
+
+;;======================================================================
+;; Misc setup stuff
+;;======================================================================
 
 ;;======================================================================
 ;; Remove old run(s)

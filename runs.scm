@@ -81,7 +81,7 @@
 			(list item-path ""))))
     (for-each 
      (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path) VALUES (?,?,strftime('%s','now'),?);" run-id test-name pth))
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" run-id test-name pth))
      item-paths)))
 
 ;;  (define db (open-db))
@@ -405,7 +405,8 @@
 			       (if (or (args:get-arg "-force")
 				       (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
 				   ((cadr testrundat)) ;; this is the line that launches the test to the remote host
-				   (hash-table-set! *waiting-queue* new-test-name testrundat))))))
+				   (if (not (args:get-arg "-keepgoing"))
+				       (hash-table-set! *waiting-queue* new-test-name testrundat)))))))
 		      ((KILLED) 
 		       (print "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
 		      ((LAUNCHED REMOTEHOSTSTART RUNNING)  
