@@ -19,7 +19,7 @@
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*
       (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
-      (print "ERROR: failed to find the top path to your run setup."))
+      (debug:print 0 "ERROR: failed to find the top path to your run setup."))
   *toppath*)
 
 (define (setup-env-defaults db fname run-id . already-seen)
@@ -29,7 +29,7 @@
 	 (confdat (read-config fname))
 	 (whatfound (make-hash-table))
 	 (sections (list "default" thekey)))
-    ;; (print "Using key=\"" thekey "\"")
+    (debug:print 4 "Using key=\"" thekey "\"")
     (for-each 
      (lambda (section)
        (let ((section-dat (hash-table-ref/default confdat section #f)))
@@ -43,11 +43,11 @@
     (if (and (not (null? already-seen))
 	     (not (car already-seen)))
 	(begin
-	  (print "Key settings found in runconfig.config:")
+	  (debug:print 2 "Key settings found in runconfig.config:")
 	  (for-each (lambda (fullkey)
-		      (format #t "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0)))
+		      (debug:print 2 (format #f "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0))))
 		    sections)
-	  (print "---")
+	  (debug:print 2 "---")
 	  (set! *already-seen-runconfig-info* #t)))))
 
 (define (get-best-disk confdat)
@@ -61,7 +61,7 @@
 		  (freespc    (if (directory? dirpath)
 				  (get-df dirpath)
 				  (begin
-				    (print "WARNING: path " dirpath " in [disks] section not valid")
+				    (debug:print 0 "WARNING: path " dirpath " in [disks] section not valid")
 				    0))))
 	     (if (> freespc bestsize)
 		 (begin
@@ -89,10 +89,10 @@
     ;; update the toptest record with its location rundir
     (if (not (equal? item-path ""))
 	(db:test-set-rundir! db run-id testname "" toptest-path))
-    (print "Setting up test run area")
-    (print " - creating run area in " dfullp)
+    (debug:print 2 "Setting up test run area")
+    (debug:print 2 " - creating run area in " dfullp)
     (system  (conc "mkdir -p " dfullp))
-    (print " - creating link from " dfullp "/" testname " to " lnkpath)
+    (debug:print 2 " - creating link from " dfullp "/" testname " to " lnkpath)
     (system  (conc "mkdir -p " lnkpath))
     (if (file-exists? (conc lnkpath "/" testname))
 	(system (conc "rm -f " lnkpath "/" testname)))
@@ -138,7 +138,7 @@
 	  (set! toptest-work-area (cadr dat)))
 	(begin
 	  (set! work-area test-path)
-	  (print "WARNING: No disk work area specified - running in the test directory")))
+	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory")))
     (set! cmdparms (base64:base64-encode (with-output-to-string
 				    (lambda () ;; (list 'hosts     hosts)
 				      (write (list (list 'testpath  test-path)
@@ -162,7 +162,7 @@
      (else
       (set! fullcmd (list remote-megatest "-execute" cmdparms))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
-    (print "Launching megatest for test " test-name " in " work-area" ...")
+    (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat) ;; (if launch-results launch-results "FAILED"))
     ;; set 
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
@@ -179,7 +179,7 @@
 				  (car fullcmd)
 				  print
 				  (cdr fullcmd)))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
-      (print "Launching completed, updating db")
+      (debug:print 2 "Launching completed, updating db")
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals))))

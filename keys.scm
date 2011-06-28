@@ -28,11 +28,11 @@
 (define (get-key-vals db run-id)
   (let* ((keys (get-keys db))
 	 (res  '()))
-    ;; (print "keys: " keys " run-id: " run-id)
+    (debug:print 6 "keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (print "qry: " qry)
+	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons key-val res)))
@@ -45,11 +45,11 @@
 (define (keys:get-key-val-pairs db run-id)
   (let* ((keys (get-keys db))
 	 (res  '()))
-    ;; (print "keys: " keys " run-id: " run-id)
+    (debug:print 6 "keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (print "qry: " qry)
+	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
@@ -77,12 +77,12 @@
 	 (argkeys    (map (lambda (k)(conc ":" k)) keynames))
 	 (withkey    (not (null? withkey)))
 	 (newremargs (args:get-args (cons "blah" remargs) argkeys '() args:arg-hash 0))) ;; the cons blah works around a bug in args [args assumes ("calling-prog-name" .... ) ]
-    ;;(print "remargs: " remargs " newremargs: " newremargs)
+    ;;(debug:print 0 "remargs: " remargs " newremargs: " newremargs)
     (apply append (map (lambda (x)
 			 (let ((val (args:get-arg x)))
-			   ;; (print "x: " x " val: " val)
+			   ;; (debug:print 0 "x: " x " val: " val)
 			   (if (not val)
-			       ;; (print "WARNING: missing key " x ". Specified in database but not on command line, using \"unk\"")
+			       ;; (debug:print 0 "WARNING: missing key " x ". Specified in database but not on command line, using \"unk\"")
 			       (set! val "default"))
 			   (if withkey (list x val) (list val))))
 		       argkeys))))
@@ -92,11 +92,11 @@
 ;; 	 (argkeys    (map (lambda (k)(conc ":" k)) keynames))
 ;; 	 (withkey    (not (null? withkey)))
 ;; 	 (newremargs (args:get-args (cons "blah" remargs) argkeys '() args:arg-hash 0))) ;; the cons blah works around a bug in args
-;;     (print "remargs: " remargs " newremargs: " newremargs)
+;;     (debug:print 0 "remargs: " remargs " newremargs: " newremargs)
 ;;     (apply append (map (lambda (x)
 ;; 			 (let ((val (args:get-arg x)))
 ;; 			   (if (not val)
-;; 			       (print "ERROR: Ignoring key " x " found in database but not on command line"))
+;; 			       (debug:print 0 "ERROR: Ignoring key " x " found in database but not on command line"))
 ;; 			   (if withkey (list x val) (list val))))
 ;; 		       argkeys))))
 

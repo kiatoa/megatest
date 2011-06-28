@@ -45,6 +45,10 @@
 ;; Misc utils
 ;;======================================================================
 
+(define-inline (debug:print n . params)
+  (if (<= n *verbosity*)
+      (apply print params)))
+
 (define (get-df path)
   (let* ((df-results (cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
@@ -87,14 +91,14 @@
           (for-each (lambda (key)
                       (let* ((val (cdr key))
                              (sval (if (string-search whitesp val)(conc "'" val "'") val)))
-                        (print "setenv " (car key) " " sval)))
+                        (debug:print 2 "setenv " (car key) " " sval)))
                      envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
           (for-each (lambda (key)
                       (let* ((val (cdr key))
                              (sval (if (string-search whitesp val)(conc "'" val "'") val)))
-                         (print "export " (car key) "=" sval)))
+                         (debug:print 2 "export " (car key) "=" sval)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values

@@ -19,6 +19,7 @@
 
 (import (prefix sqlite3 sqlite3:))
 
+(include "common.scm")
 (include "margs.scm")
 (include "keys.scm")
 (include "items.scm")
@@ -50,8 +51,11 @@ Misc
 		 (list  "-rows"
 			"-run"
 			"-test"
+			"-debug"
 			) 
 		 (list  "-h"
+			"-v"
+			"-q"
 		       )
 		 args:arg-hash
 		 0))
@@ -86,6 +90,12 @@ Misc
 (define *start-test-offset* 0)
 (define *examine-test-dat* (make-hash-table))
 (define *exit-started* #f)
+
+(define *verbosity* (cond
+		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		     ((args:get-arg "-v")    2)
+		     ((args:get-arg "-q")    0)
+		     (else                   1)))
 
 (define (message-window msg)
   (iup:show

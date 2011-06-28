@@ -19,7 +19,7 @@
 	     (tal (cdr itemlist)))
     (if (null? tal)
 	(for-each (lambda (item)
-		    (print "curritemkey: " (append curritemkey (list item))))
+		    (debug:print 6 "curritemkey: " (append curritemkey (list item))))
 		  (cadr hed))
 	(begin
 	  (for-each (lambda (item)
@@ -83,7 +83,7 @@
 				       (list 
 					(if (< indx (length rowdat))
 					    (let ((new (list rowname (list-ref rowdat indx))))
-					      ;; (print "New: " new)
+					      ;; (debug:print 0 "New: " new)
 					      (set! elflag #t)
 					      new
 					      ) ;; i.e. had at least on legit value to use

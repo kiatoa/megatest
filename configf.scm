@@ -60,7 +60,7 @@
 								  (res     (car  cmdres)))
 							     (if (not (eq? status 0))
 								 (begin
-								   (print "ERROR: problem with " inl ", return code not 0")
+								   (debug:print 0 "ERROR: problem with " inl ", return code not 0")
 								   (exit 1)))
 							     (if (null? res)
 								 ""
@@ -74,7 +74,7 @@
 								 (config:assoc-safe-add alist key val))
 								 ;; (append alist (list (list key val))))
 						(loop (read-line inp) curr-section-name)))
-	       (else (print "ERROR: problem parsing " path ",\n   \"" inl "\"")
+	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (loop (read-line inp) curr-section-name))))))))
   
 (define (find-and-read-config fname)
