@@ -317,9 +317,16 @@
 					(item-table->item-list itemstable))
 				'(()))) ;; a list with one null list is a test with no items
 	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
-	  (debug:print 1 "items: ")(pp allitems)
+	  (debug:print 1 "items: ")
+	  (if (>= *verbosity* 1)(pp allitems))
+	  (if (>= *verbosity* 5)
+	      (begin
+		(print "items: ")(pp (item-assoc->item-list items))
+		(print "itestable: ")(pp (item-table->item-list itemstable))))
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
+	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
+	  (if (null? allitems)(set! allitems '(())))
 	  (let loop ((itemdat (car allitems))
 		     (tal     (cdr allitems)))
 	    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))

@@ -99,7 +99,10 @@
     (system  (conc "ln -sf " dfullp " " lnkpath "/" testname))
     (if (directory? dfullp)
 	(begin
-	  (system  (conc "rsync -av " test-path "/ " dfullp "/"))
+	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-path "/ " dfullp "/"))
+		 (status (system cmd)))
+	    (if (not (eq? status 0))
+		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
 	  (list dfullp toptest-path))
 	(list #f #f))))
 

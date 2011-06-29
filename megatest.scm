@@ -126,11 +126,11 @@ Called as " (string-intersperse (argv) " ")))
 ;; Misc setup stuff
 ;;======================================================================
 
-(define *verbosity* (cond
-		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
-		     ((args:get-arg "-v")    2)
-		     ((args:get-arg "-q")    0)
-		     (else                   1)))
+(set! *verbosity* (cond
+		   ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		   ((args:get-arg "-v")    2)
+		   ((args:get-arg "-q")    0)
+		   (else                   1)))
 
 ;;======================================================================
 ;; Remove old run(s)

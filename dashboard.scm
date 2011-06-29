@@ -142,6 +142,12 @@ Misc
     (set! *allruns* result)
     maxtests))
 
+(define *collapsed* (make-hash-table))
+(define (toggle-hide testname)
+  (if (hash-table-ref/default *collapsed* testname #f)
+      (hash-table-delete! *collapsed* testname)
+      (hash-table-set! *collapsed* testname #t)))
+
 (define (update-labels uidat)
   (let* ((rown    0)
 	 (lftcol  (vector-ref uidat 0))
@@ -192,31 +198,6 @@ Misc
 	 (table       (vector-ref uidat 2))
 	 (coln        0))
     (update-labels uidat)
-    (for-each 
-     (lambda (popup)
-       (let* ((test-id  (car popup))
-	      (widgets  (hash-table-ref *examine-test-dat* popup))
-	      (stepslbl (hash-table-ref/default widgets "Test Steps" #f)))
-	 (if stepslbl
-	     (let* ((fmtstr  "~15a~8a~8a~20a")
-		    (newtxt  (string-intersperse 
-			      (append
-			       (list 
-				(format #f fmtstr "Stepname" "State" "Status" "Event Time")
-				(format #f fmtstr "========" "=====" "======" "=========="))
-			       (map (lambda (x)
-				      ;; take advantage of the \n on time->string
-				      (format #f fmtstr
-					      (db:step-get-stepname x)
-					      (db:step-get-state    x)
-					      (db:step-get-status   x)
-					      (time->string 
-					       (seconds->local-time 
-						(db:step-get-event_time x)))))
-				    (db-get-test-steps-for-run *db* test-id)))
-			     "\n")))
-	       (iup:attribute-set! stepslbl "TITLE" newtxt)))))
-     (hash-table-keys *examine-test-dat*))
     (set! *alltestnamelst* '())
     (for-each
      (lambda (rundat)
@@ -352,6 +333,8 @@ Misc
 	(set! lftlst (append lftlst (list (apply iup:vbox (reverse res))))))
        (else
 	(let ((labl  (iup:button "" #:flat "YES" #:size "100x15" #:fontsize "10")))
+	  (iup:attribute-set! labl "ACTION" (lambda (obj)
+					      (toggle-hide (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
     ;; 

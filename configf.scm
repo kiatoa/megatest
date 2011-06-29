@@ -60,7 +60,7 @@
 								  (res     (car  cmdres)))
 							     (if (not (eq? status 0))
 								 (begin
-								   (debug:print 0 "ERROR: problem with " inl ", return code not 0")
+								   (debug:print 0 "ERROR: problem with " inl ", return code " status)
 								   (exit 1)))
 							     (if (null? res)
 								 ""

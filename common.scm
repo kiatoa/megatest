@@ -31,7 +31,7 @@
 (define *waiting-queue* (make-hash-table))
 (define *globalexitstatus* 0) ;; attempt to work around possible thread issues
 (define *passnum*     0) ;; when running track calls to run-tests or similar
-
+(define *verbosity*   1)
 
 (define-inline (get-with-default val default)
   (let ((val (args:get-arg val)))
@@ -91,14 +91,14 @@
           (for-each (lambda (key)
                       (let* ((val (cdr key))
                              (sval (if (string-search whitesp val)(conc "'" val "'") val)))
-                        (debug:print 2 "setenv " (car key) " " sval)))
+                        (print "setenv " (car key) " " sval)))
                      envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
           (for-each (lambda (key)
                       (let* ((val (cdr key))
                              (sval (if (string-search whitesp val)(conc "'" val "'") val)))
-                         (debug:print 2 "export " (car key) "=" sval)))
+                         (print "export " (car key) "=" sval)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values
