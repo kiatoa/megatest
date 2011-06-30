@@ -97,6 +97,9 @@ Misc
 		     ((args:get-arg "-q")    0)
 		     (else                   1)))
 
+(define uidat #f)
+;; (megatest-dashboard)
+
 (define (message-window msg)
   (iup:show
    (iup:dialog
@@ -143,11 +146,46 @@ Misc
     maxtests))
 
 (define *collapsed* (make-hash-table))
-(define (toggle-hide testname)
-  (if (hash-table-ref/default *collapsed* testname #f)
-      (hash-table-delete! *collapsed* testname)
-      (hash-table-set! *collapsed* testname #t)))
+; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
 
+(define (toggle-hide lnum) ; fulltestname)
+  (let* ((btn (vector-ref (vector-ref uidat 0) lnum))
+	 (fulltestname (iup:attribute btn "TITLE"))
+	 (parts        (string-split fulltestname "/"))
+	 (basetestname (if (null? parts) "" (car parts))))
+    ;(print "Toggling " basetestname " currently " (hash-table-ref/default *collapsed* basetestname #f))
+    (if (hash-table-ref/default *collapsed* basetestname #f)
+	(hash-table-delete! *collapsed* basetestname)
+	(hash-table-set! *collapsed* basetestname #t))))
+  
+(define blank-line-rx (regexp "^\\s*$"))
+
+(define (collapse-rows inlst)
+  (let ((newlst (filter (lambda (x)
+			  (let* ((tparts    (string-split x "("))
+				 (basetname (if (null? tparts) x (car tparts))))
+					;(print "x " x " tparts: " tparts " basetname: " basetname)
+			    (cond
+			     ((string-match blank-line-rx x) #f)
+			     ((equal? x basetname) #t)
+			     ((hash-table-ref/default *collapsed* basetname #f) 
+					;(print "Removing " basetname " from items")
+			      #f)
+			     (else #t))))
+			inlst)))
+    ;; special sort to push the test(item) to after test
+    (sort newlst (lambda (a b)
+		   (let* ((partsa (string-split a "("))
+			  (partsb (string-split b "("))
+			  (lena   (length partsa))
+			  (lenb   (length partsb)))
+		     (if (or (and (eq? lena 1)(> lenb 1))
+			     (and (eq? lenb 1)(> lena 1)))
+			 (if (equal? (car partsa)(car partsb)) ;; same test
+			     (> lenb lena)
+			     #t)
+			 #t))))))
+			     
 (define (update-labels uidat)
   (let* ((rown    0)
 	 (lftcol  (vector-ref uidat 0))
@@ -166,8 +204,11 @@ Misc
       (let* ((lbl    (vector-ref lftcol i))
 	     (oldval (iup:attribute lbl "TITLE"))
 	     (newval (vector-ref allvals i)))
+	(set! *alltestnames* (make-hash-table))
 	(if (not (equal? oldval newval))
-	    (iup:attribute-set! lbl "TITLE" newval))
+	    (begin
+	      (hash-table-set! *alltestnames* newval (list i lbl)) 
+	      (iup:attribute-set! lbl "TITLE" newval)))
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
@@ -193,12 +234,40 @@ Misc
   (let* ((runs        (if (> (length *allruns*) numruns)
 			  (take-right *allruns* numruns)
 			  (pad-list *allruns* numruns)))
+	 (testnames   '())
 	 (lftcol      (vector-ref uidat 0))
 	 (tableheader (vector-ref uidat 1))
 	 (table       (vector-ref uidat 2))
 	 (coln        0))
     (update-labels uidat)
     (set! *alltestnamelst* '())
+    (set! *alltestnames* (make-hash-table))
+    ;; create a concise list of test names
+    (for-each (lambda (rundat)
+		(if (vector? rundat)
+		    (let* ((testdat   (vector-ref rundat 1))
+			   (testnames (map test:test-get-fullname testdat)))
+		      (for-each (lambda (testname)
+				  (if (not (hash-table-ref/default *alltestnames* testname #f))
+				      (begin
+					(set! *alltestnamelst* (append *alltestnamelst* (list testname)))
+					(hash-table-set! *alltestnames* testname #t))))
+				testnames))))
+	      runs)
+
+    (set! testnames (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
+    (set! testnames (let ((xl (if (> (length testnames) *start-test-offset*)
+				  (drop testnames *start-test-offset*)
+				  '())))
+		      (append xl (make-list (- *num-tests* (length xl)) ""))))
+
+    ;; redo the hash table. BUG: FIXME 
+    (set! *alltestnames* (make-hash-table))
+    (for-each (lambda (x)
+		(hash-table-set! *alltestnames* x #t))
+	      testnames)
+    (set! *alltestnamelst* testnames)
+
     (for-each
      (lambda (rundat)
        (if (not rundat) ;; handle padded runs
@@ -208,15 +277,12 @@ Misc
 	      (testsdat (vector-ref rundat 1))
 	      (key-val-dat (vector-ref rundat 2))
 	      (run-id   (db:get-value-by-header run *header* "id"))
-	      (testnames (delete-duplicates (append *alltestnamelst* 
-						    (map test:test-get-fullname testsdat)))) ;; (take (pad-list testsdat numtests) numtests))
 	      (key-vals (append key-val-dat
 				(list (let ((x (db:get-value-by-header run *header* "runname")))
 					(if x x "")))))
 	      (run-key  (string-intersperse key-vals "\n")))
-	 ;; (run-ht  (hash-table-ref/default alldat run-key #f)))
+
 	 ;; fill in the run header key values
-	 (set! *alltestnamelst* testnames)
 	 (let ((rown      0)
 	       (headercol (vector-ref tableheader coln)))
 	   (for-each (lambda (kval)
@@ -239,7 +305,6 @@ Misc
 					 (if (null? matching)
 					     (vector -1 -1 "" "" "" 0 "" "" 0 "" "" "" 0 "" "")
 					     (car matching))))
-			   ;; (test       (if real-test real-test
 			   (testname   (db:test-get-testname  test))
 			   (itempath   (db:test-get-item-path test))
 			   (testfullname (test:test-get-fullname test))
@@ -252,9 +317,6 @@ Misc
 			   (color      (get-color-for-state-status teststate teststatus))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
 			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
-		;;       (if (and (equal? teststate "RUNNING")
-		;; 	       (> (- (current-seconds) (+ teststart runtime)) 100)) ;; if test has been dead for more than 100 seconds, call it dead
-			  
 		      (if (not (equal? curr-color color))
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
@@ -263,17 +325,9 @@ Misc
 		      (vector-set! buttondat 1 color)
 		      (vector-set! buttondat 2 buttontxt)
 		      (vector-set! buttondat 3 test)
-		      (vector-set! buttondat 4 run-key)
-		      (if (not (hash-table-ref/default *alltestnames* testfullname #f))
-			  (begin
-			    (hash-table-set! *alltestnames* testfullname #t)
-			    (set! *alltestnamelst* (append *alltestnamelst* (list testfullname))))))
-		    )
+		      (vector-set! buttondat 4 run-key)))
 		(set! rown (+ rown 1))))
-	    (let ((xl (if (> (length testnames) *start-test-offset*)
-			  (drop testnames *start-test-offset*)
-			  '()))) ;; testnames)))
-	      (append xl (make-list (- *num-tests* (length xl)) "")))))
+	    *alltestnamelst*))
 	 (set! coln (+ coln 1))))
      runs)))
 
@@ -332,9 +386,12 @@ Misc
 	;; now lftlst will be an hbox with the test keys and the test name labels
 	(set! lftlst (append lftlst (list (apply iup:vbox (reverse res))))))
        (else
-	(let ((labl  (iup:button "" #:flat "YES" #:size "100x15" #:fontsize "10")))
-	  (iup:attribute-set! labl "ACTION" (lambda (obj)
-					      (toggle-hide (iup:attribute obj "TITLE"))))
+	(let ((labl  (iup:button "" 
+				 #:flat "YES" 
+				 #:size "100x15"
+				 #:fontsize "10"
+				 #:action (lambda (obj)
+					      (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
     ;; 
@@ -349,8 +406,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10" ;; #:expand "HORIZONTAL"
-				)))
+	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10"))) ;; #:expand "HORIZONTAL"
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -375,7 +431,7 @@ Misc
 							 (buttndat (hash-table-ref *buttondat* button-key))
 							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
 							 (cmd  (conc toolpath " -test " test-id "&")))
-						    (print "Launching " cmd)
+						    ;(print "Launching " cmd)
 						    (system cmd))))))
 	  (hash-table-set! *buttondat* button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
@@ -402,9 +458,6 @@ Misc
 					      (get-environment-variable "DASHBOARDROWS"))))
 	(update-rundat "%" *num-runs* "%" "%"))
     (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20)))
-
-(define uidat #f)
-;; (megatest-dashboard)
 
 (define (run-update mtx1)
   (let loop ((i 0))
