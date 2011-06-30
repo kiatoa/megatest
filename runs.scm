@@ -270,7 +270,13 @@
     ;; -keepgoing is specified
     (if (and (eq? *passnum* 0)
 	     (args:get-arg "-keepgoing"))
-	(db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL"))
+	(begin
+	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
+	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
+	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
+	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
+	  (db:delete-tests-in-state db run-id "NOT_STARTED")
+	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
     (set! *passnum* (+ *passnum* 1))
     (let loop ((numtimes 0))
       (for-each 
@@ -461,10 +467,11 @@
 	;; (sleep 10) ;; no point in rushing things at this stage?
 	(loop (hash-table-keys *waiting-queue*)))))))
 
-(define (get-dir-up-one dir) 
-  (let ((dparts  (string-split dir "/")))
+(define (get-dir-up-n dir . params) 
+  (let ((dparts  (string-split dir "/"))
+	(count   (if (null? params) 1 (car params))))
     (conc "/" (string-intersperse 
-	       (take dparts (- (length dparts) 1))
+	       (take dparts (- (length dparts) count))
 	       "/"))))
 ;; Remove runs
 ;; fields are passing in through 
@@ -486,18 +493,27 @@
 		 (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
 		 (for-each
 		  (lambda (test)
-		    (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " (db:test-get-item-path test))
-		    (db:delete-test-records db (db:test-get-id test))
-		    (if (> (string-length (db:test-get-rundir test)) 5) ;; bad heuristic but should prevent /tmp /home etc.
-			(let ((fullpath (db:test-get-rundir test))) ;; "/" (db:test-get-item-path test))))
-			  (set! lasttpath fullpath)
-			  (debug:print 1 "rm -rf " fullpath)
-			  (system (conc "rm -rf " fullpath))
-			  (let ((cmd (conc "rmdir -p " (get-dir-up-one fullpath))))
-			    (debug:print 1 cmd)
-			    (system cmd))
-			  )))
-		  tests)))
+		    (let* ((item-path (db:test-get-item-path test))
+			   (test-name (db:test-get-testname test))
+			   (run-dir   (db:test-get-rundir test)))
+		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path)
+		      (db:delete-test-records db (db:test-get-id test))
+		      (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
+			  (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
+			    (set! lasttpath fullpath)
+			    (debug:print 1 "rm -rf " fullpath)
+			    (system (conc "rm -rf " fullpath))
+			    (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
+				   (dir-to-rem (get-dir-up-n fullpath dirs-count))
+				   (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
+				   (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
+			      (if (file-exists? fullpath)
+				  (begin
+				    (debug:print 1 cmd)
+				    (system cmd)))
+			      ))
+			    )))
+		    tests)))
 	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id"))))
 	     (if (null? remtests) ;; no more tests remaining
 		 (let* ((dparts  (string-split lasttpath "/"))
@@ -507,11 +523,10 @@
 		   (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
 		   (db:delete-run db run-id)
 		   ;; need to figure out the path to the run dir and remove it if empty
-		;;    (if (null? (glob (conc runpath "/*")))
-		;;        (begin
-		;; 	 (debug:print 1 "Removing run dir " runpath)
-		;; 	 (system (conc "rmdir -p " runpath))))
-		   )))
-		 )))
+		   ;;    (if (null? (glob (conc runpath "/*")))
+		   ;;        (begin
+		   ;; 	 (debug:print 1 "Removing run dir " runpath)
+		   ;; 	 (system (conc "rmdir -p " runpath))))
+		   ))))
+	 ))
      runs)))
-

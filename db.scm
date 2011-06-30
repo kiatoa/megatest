@@ -233,7 +233,9 @@
 		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry newstate newstatus testname testname)))
 	    testnames))
-	      ;; "('" (string-intersperse tests "','") "')")
+
+(define (db:delete-tests-in-state db run-id state)
+  (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
