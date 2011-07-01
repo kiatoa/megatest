@@ -81,7 +81,6 @@ Misc
 (define *header*       #f)
 (define *allruns*     '())
 (define *buttondat*    (make-hash-table)) ;; <run-id color text test run-key>
-(define *alltestnames* (make-hash-table)) ;; build a minimalized list of test names
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      10)
@@ -151,7 +150,7 @@ Misc
 (define (toggle-hide lnum) ; fulltestname)
   (let* ((btn (vector-ref (vector-ref uidat 0) lnum))
 	 (fulltestname (iup:attribute btn "TITLE"))
-	 (parts        (string-split fulltestname "/"))
+	 (parts        (string-split fulltestname "("))
 	 (basetestname (if (null? parts) "" (car parts))))
     ;(print "Toggling " basetestname " currently " (hash-table-ref/default *collapsed* basetestname #f))
     (if (hash-table-ref/default *collapsed* basetestname #f)
@@ -197,18 +196,16 @@ Misc
 		    (let ((labl (vector-ref lftcol rown)))
 		      (vector-set! allvals rown name)))
 		(set! rown (+ 1 rown)))
-	      (if (> (length *alltestnamelst*) *start-test-offset*)
-		  (drop *alltestnamelst* *start-test-offset*)
-		  '()))
+	      *alltestnamelst*)
+	;      (if (> (length *alltestnamelst*) *start-test-offset*)
+	;	  (drop *alltestnamelst* *start-test-offset*)
+	;	  '()))
     (let loop ((i 0))
       (let* ((lbl    (vector-ref lftcol i))
 	     (oldval (iup:attribute lbl "TITLE"))
 	     (newval (vector-ref allvals i)))
-	(set! *alltestnames* (make-hash-table))
 	(if (not (equal? oldval newval))
-	    (begin
-	      (hash-table-set! *alltestnames* newval (list i lbl)) 
-	      (iup:attribute-set! lbl "TITLE" newval)))
+	    (iup:attribute-set! lbl "TITLE" newval))
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
@@ -234,40 +231,29 @@ Misc
   (let* ((runs        (if (> (length *allruns*) numruns)
 			  (take-right *allruns* numruns)
 			  (pad-list *allruns* numruns)))
-	 (testnames   '())
 	 (lftcol      (vector-ref uidat 0))
 	 (tableheader (vector-ref uidat 1))
 	 (table       (vector-ref uidat 2))
 	 (coln        0))
-    (update-labels uidat)
     (set! *alltestnamelst* '())
-    (set! *alltestnames* (make-hash-table))
     ;; create a concise list of test names
     (for-each (lambda (rundat)
 		(if (vector? rundat)
 		    (let* ((testdat   (vector-ref rundat 1))
 			   (testnames (map test:test-get-fullname testdat)))
 		      (for-each (lambda (testname)
-				  (if (not (hash-table-ref/default *alltestnames* testname #f))
+				  (if (not (member testname *alltestnamelst*))
 				      (begin
-					(set! *alltestnamelst* (append *alltestnamelst* (list testname)))
-					(hash-table-set! *alltestnames* testname #t))))
+					(set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
 				testnames))))
 	      runs)
 
-    (set! testnames (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
-    (set! testnames (let ((xl (if (> (length testnames) *start-test-offset*)
-				  (drop testnames *start-test-offset*)
-				  '())))
-		      (append xl (make-list (- *num-tests* (length xl)) ""))))
-
-    ;; redo the hash table. BUG: FIXME 
-    (set! *alltestnames* (make-hash-table))
-    (for-each (lambda (x)
-		(hash-table-set! *alltestnames* x #t))
-	      testnames)
-    (set! *alltestnamelst* testnames)
-
+    (set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
+    (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) *start-test-offset*)
+					 (drop *alltestnamelst* *start-test-offset*)
+					 '())))
+			     (append xl (make-list (- *num-tests* (length xl)) ""))))
+    (update-labels uidat)
     (for-each
      (lambda (rundat)
        (if (not rundat) ;; handle padded runs
