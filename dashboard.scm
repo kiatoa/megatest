@@ -99,6 +99,54 @@ Misc
 (define uidat #f)
 ;; (megatest-dashboard)
 
+;(define img1 (iup:image/palette 16 16 (u8vector->blob (u8vector
+;				   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 
+;				   1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 0 2 0 2 2 0 2 2 2 0 0 
+;				   2 2 2 0 2 0 0 2 0 0 2 0 2 0 2 2 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 2 2 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 0 0 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 0 2 1))))
+;
+;(define img2 (iup:image/palette 16 16 (u8vector->blob (u8vector
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 1 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 1 1 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 1 1 1 
+;				   1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 
+;				   1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
+;				   2 2 2 0 2 0 2 0 2 2 0 2 2 2 0 0 
+;				   2 2 2 0 2 0 0 2 0 0 2 0 2 0 2 2 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 2 2 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 0 0 
+;				   2 2 2 0 2 0 2 2 0 2 2 0 2 0 2 1))))
+;
+;(iup:handle-name-set! img1 "img1")
+;(iup:attribute-set! img1 "0" "0 0 0")
+;(iup:attribute-set! img1 "1" "BGCOLOR")
+;(iup:attribute-set! img1 "2" "255 0 0")
+;
+;(iup:handle-name-set! img2 "img2")
+;(iup:attribute-set! img2 "0" "0 0 0")
+;(iup:attribute-set! img2 "1" "BGCOLOR")
+;(iup:attribute-set! img2 "2" "255 0 0")
+
 (define (message-window msg)
   (iup:show
    (iup:dialog
@@ -154,8 +202,12 @@ Misc
 	 (basetestname (if (null? parts) "" (car parts))))
     ;(print "Toggling " basetestname " currently " (hash-table-ref/default *collapsed* basetestname #f))
     (if (hash-table-ref/default *collapsed* basetestname #f)
-	(hash-table-delete! *collapsed* basetestname)
-	(hash-table-set! *collapsed* basetestname #t))))
+	(begin
+	  ;(iup:attribute-set! btn "FGCOLOR" "0 0 0")
+	  (hash-table-delete! *collapsed* basetestname))
+	(begin
+	  ;(iup:attribute-set! btn "FGCOLOR" "0 192 192")
+	  (hash-table-set! *collapsed* basetestname #t)))))
   
 (define blank-line-rx (regexp "^\\s*$"))
 
@@ -206,6 +258,7 @@ Misc
 	     (newval (vector-ref allvals i)))
 	(if (not (equal? oldval newval))
 	    (iup:attribute-set! lbl "TITLE" newval))
+	(iup:attribute-set! lbl "FGCOLOR" (if (hash-table-ref/default *collapsed* newval #f) "0 112 112" "0 0 0"))
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
@@ -374,6 +427,8 @@ Misc
        (else
 	(let ((labl  (iup:button "" 
 				 #:flat "YES" 
+				 ; #:image img1
+				 ; #:impress img2
 				 #:size "100x15"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
