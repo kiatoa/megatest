@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.12)
+(define megatest-version 1.17)
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -88,6 +88,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-logpro"
 			"-m"
 			"-rerun"
+			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
 		        "-force"
@@ -99,6 +100,8 @@ Called as " (string-intersperse (argv) " ")))
 			"-remove-runs"
 			"-keepgoing"
 			"-usequeue"
+			"-v" ;; verbose 2, more than normal (normal is 1)
+			"-q" ;; quiet 0, errors/warnings only
 		       )
 		 args:arg-hash
 		 0))
@@ -123,6 +126,12 @@ Called as " (string-intersperse (argv) " ")))
 ;; Misc setup stuff
 ;;======================================================================
 
+(set! *verbosity* (cond
+		   ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		   ((args:get-arg "-v")    2)
+		   ((args:get-arg "-q")    0)
+		   (else                   1)))
+
 ;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================
@@ -132,10 +141,10 @@ Called as " (string-intersperse (argv) " ")))
 (define (remove-runs)
   (cond
    ((not (args:get-arg ":runname"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
+    (debug:print 0 "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
     (exit 2))
    ((not (args:get-arg "-testpatt"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
+    (debug:print 0 "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
     (exit 3))
    ((not (args:get-arg "-itempatt"))
     (print "ERROR: Missing required parameter for -remove-runs, you must specify the items with -itempatt")
@@ -143,12 +152,12 @@ Called as " (string-intersperse (argv) " ")))
    ((let ((db #f))
       (if (not (setup-for-run))
 	  (begin 
-	    (print "Failed to setup, exiting")
+	    (debug:print 0 print "Failed to setup, exiting")
 	    (exit 1)))
       (set! db (open-db))
       (if (not (car *configinfo*))
 	  (begin
-	    (print "ERROR: Attempted to remove test(s) but run area config file not found")
+	    (debug:print 0 "ERROR: Attempted to remove test(s) but run area config file not found")
 	    (exit 1))
 	  ;; put test parameters into convenient variables
 	  (runs:remove-runs db
@@ -180,7 +189,7 @@ Called as " (string-intersperse (argv) " ")))
       ;; Each run
       (for-each 
        (lambda (run)
-	 (print "Run: "
+	 (debug:print 2 "Run: "
 		(string-intersperse (map (lambda (x)
 					   (db:get-value-by-header run header x))
 					 keynames) "/")
@@ -221,10 +230,6 @@ Called as " (string-intersperse (argv) " ")))
 				   (db:step-get-state step)
 				   (db:step-get-status step)
 				   (db:step-get-event_time step)))
-			;;    (print "    Step: " (db:step-get-stepname step)
-			;; 	  " " (db:step-get-state step)
-			;; 	  " " (db:step-get-status step)
-			;; 	  " " (db:step-get-event_time step)))
 			 steps)))))
 		tests))))
        runs)
@@ -253,21 +258,21 @@ Called as " (string-intersperse (argv) " ")))
 (if (args:get-arg "-runall")
     (if (not (args:get-arg ":runname"))
 	(begin
-	  (print "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
+	  (debug:print 0 "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
 	  (exit 2))
 	(let* ((db      (if (setup-for-run)
 			    (open-db)
 			    (begin
-			      (print "Failed to setup, exiting")
+			      (debug:print 0 "Failed to setup, exiting")
 			      (exit 1)))))
 	  (if (not (car *configinfo*))
 	      (begin
-		(print "ERROR: Attempted to run a test but run area config file not found")
+		(debug:print 0 "ERROR: Attempted to run a test but run area config file not found")
 		(exit 1))
 	      ;; put test parameters into convenient variables
 	      (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
-		(print "INFO: Attempting to start the following tests...")
-		(print "     " (string-intersperse test-names ","))
+		(debug:print 1 "INFO: Attempting to start the following tests...")
+		(debug:print 1 "     " (string-intersperse test-names ","))
 		(run-tests db test-names)))
 	  ;; (run-waiting-tests db)
 	  (sqlite3:finalize! db)
@@ -293,17 +298,17 @@ Called as " (string-intersperse (argv) " ")))
 (define (runtests)
   (if (not (args:get-arg ":runname"))
       (begin
-	(print "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
+	(debug:print 0 "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
 	(exit 2))
       (let ((db #f))
 	(if (not (setup-for-run))
 	    (begin 
-	      (print "Failed to setup, exiting")
+	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(set! db (open-db))
 	(if (not (car *configinfo*))
 	    (begin
-	      (print "ERROR: Attempted to run a test but run area config file not found")
+	      (debug:print 0 "ERROR: Attempted to run a test but run area config file not found")
 	      (exit 1))
 	    ;; put test parameters into convenient variables
 	    (let* ((test-names   (string-split (args:get-arg "-runtests") ",")))
@@ -341,7 +346,7 @@ Called as " (string-intersperse (argv) " ")))
 		 (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 		 (fullrunscript (conc testpath "/" runscript))
 		 (db        #f))
-	    (print "Exectuing " test-name " on " (get-host-name))
+	    (debug:print 2 "Exectuing " test-name " on " (get-host-name))
 	    (change-directory testpath)
 	    (setenv "MT_TEST_RUN_DIR" work-area)
 	    (setenv "MT_TEST_NAME" test-name)
@@ -352,7 +357,7 @@ Called as " (string-intersperse (argv) " ")))
 	    
 	    (if (not (setup-for-run))
 		(begin
-		  (print "Failed to setup, exiting") 
+		  (debug:print 0 "Failed to setup, exiting") 
 		  (exit 1)))
 	    ;; now can find our db
 	    (set! db (open-db))
@@ -360,7 +365,7 @@ Called as " (string-intersperse (argv) " ")))
 	    (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
 	      (if (file-exists? runconfigf)
 		  (setup-env-defaults db runconfigf run-id)
-		  (print "WARNING: You do not have a run config file: " runconfigf)))
+		  (debug:print 0 "WARNING: You do not have a run config file: " runconfigf)))
             ;; environment overrides are done *before* the remaining critical envars.
             (alist->env-vars env-ovrd)
 	    (set-megatest-env-vars db run-id)
@@ -423,7 +428,7 @@ Called as " (string-intersperse (argv) " ")))
 					       (let* ((pid (vector-ref exit-info 0)))
 						 (if (number? pid)
 						     (begin
-						       (print "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						       (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
 						       ;;(cond
 						       ;;((>   kill-tries 0) ; 2)
 						       (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
@@ -435,7 +440,7 @@ Called as " (string-intersperse (argv) " ")))
 									       #f)))
 							      (if p-id
 								  (begin
-								    (print "Killing " (cadr parts) "; kill -9  " p-id)
+								    (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
 								    (system (conc "kill -9 " p-id))))))
 							  (car processes))
 							 (system (conc "kill -9 " pid))))
@@ -443,8 +448,8 @@ Called as " (string-intersperse (argv) " ")))
 						     ;;       (kcmd (conc "pkill -9 -g " ppid)))
 						     ;;  ;; (process-signal pid signal/term)
 						     ;;  ;; (process-signal pid signal/kill)
-						     ;;  (print "Attempting to kill pid " pid " and children in process group " ppid " with command:\n    " kcmd)
-						     ;;  (print "Children:")
+						     ;;  (debug:print 0 "Attempting to kill pid " pid " and children in process group " ppid " with command:\n    " kcmd)
+						     ;;  (debug:print 0 "Children:")
 						     ;;  (system (conc "pgrep -g -l " ppid))
 						     ;;  (system kcmd)
 						     ;;  (sleep 1) ;; give it a rest
@@ -453,7 +458,7 @@ Called as " (string-intersperse (argv) " ")))
 						     ;;  (sqlite3:finalize! db)
 						     ;;  (exit 1)))))
 						     (begin
-						       (print "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
+						       (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						       (test-set-status! db run-id test-name "KILLED"  "FAIL"
 									 itemdat (args:get-arg "-m"))
 						       (sqlite3:finalize! db)
@@ -464,15 +469,15 @@ Called as " (string-intersperse (argv) " ")))
 					 ;; (handle-exceptions
 					       ;;  exn
 					       ;;  (begin
-					       ;;    (print "ERROR: Problem killing process " (vector-ref exit-info 0))
+					       ;;    (debug:print 0 "ERROR: Problem killing process " (vector-ref exit-info 0))
 					       ;;    (abort exn))
 					       ;;  (let* ((pid   (vector-ref exit-info 0))
 					       ;;         ;; (pgid  (process-group-id pid))
 					       ;;         ;; (cmd  (conc "pkill -9 -P " pgid))
 					       ;;         )
-					       ;;    ;; (print "Running \"" cmd "\"")
+					       ;;    ;; (debug:print 0 "Running \"" cmd "\"")
 					       ;;    ;; (system cmd)
-					       ;;    (print "Running \"kill -9 " pid "\"")
+					       ;;    (debug:print 0 "Running \"kill -9 " pid "\"")
 					       ;;    (system (conc "kill -9 " pid))
 					       ;;    ;; (process-signal (vector-ref exit-info 0) signal/kill)
 					       ;;    ))))
@@ -490,7 +495,7 @@ Called as " (string-intersperse (argv) " ")))
 	      (let* ((testinfo (db:get-test-info db run-id test-name (item-list->path itemdat))))
 		(if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		    (begin
-		      (print "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result")
+		      (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result")
 		      (test-set-status! db run-id test-name
 					(if kill-job? "KILLED" "COMPLETED")
 					(if (vector-ref exit-info 1) ;; look at the exit-status
@@ -502,7 +507,7 @@ Called as " (string-intersperse (argv) " ")))
 	      (mutex-unlock! m)
 	      ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
 	      ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
-	      (print "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
+	      (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 		     work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
 	      (sqlite3:finalize! db)
 	      (if (not (vector-ref exit-info 1))
@@ -512,7 +517,7 @@ Called as " (string-intersperse (argv) " ")))
 (if (args:get-arg "-step")
     (if (not (getenv "MT_CMDINFO"))
 	(begin
-	  (print "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
+	  (debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
 	  (exit 5))
 	(let* ((step      (args:get-arg "-step"))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
@@ -528,13 +533,13 @@ Called as " (string-intersperse (argv) " ")))
 	  (change-directory testpath)
 	  (if (not (setup-for-run))
 	      (begin
-		(print "Failed to setup, exiting")
+		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (and state status)
 	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m"))
 	      (begin
-		(print "ERROR: You must specify :state and :status with every call to -step")
+		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
@@ -545,7 +550,7 @@ Called as " (string-intersperse (argv) " ")))
 	(args:get-arg "-runstep"))
     (if (not (getenv "MT_CMDINFO"))
 	(begin
-	  (print "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
+	  (debug:print 0 "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
 	  (exit 5))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
@@ -561,7 +566,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (change-directory testpath)
 	  (if (not (setup-for-run))
 	      (begin
-		(print "Failed to setup, exiting")
+		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (args:get-arg "-setlog")
@@ -571,7 +576,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
-		    (print "ERROR: nothing specified to run!")
+		    (debug:print 0 "ERROR: nothing specified to run!")
 		    (sqlite3:finalize! db)
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
@@ -592,7 +597,7 @@ Called as " (string-intersperse (argv) " ")))
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step
-		    (print "INFO: Running \"" fullcmd "\"")
+		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
@@ -604,7 +609,7 @@ Called as " (string-intersperse (argv) " ")))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (print "INFO: running \"" cmd "\"")
+			  (debug:print 2 "INFO: running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
@@ -626,7 +631,7 @@ Called as " (string-intersperse (argv) " ")))
 	      (if (and state status)
 		  (if (not (args:get-arg "-setlog"))
 		      (begin
-			(print "ERROR: You must specify :state and :status with every call to -test-status\n" help)
+			(debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
 			(sqlite3:finalize! db)
 			(exit 6)))))
 	  (sqlite3:finalize! db)
@@ -637,27 +642,27 @@ Called as " (string-intersperse (argv) " ")))
 	  (keys #f))
       (if (not (setup-for-run))
 	  (begin
-	    (print "Failed to setup, exiting")
+	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
       (set! db (open-db))
       (set! keys (db-get-keys db))
-      (print "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
+      (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
       (sqlite3:finalize! db)
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")
     (begin
-      (print "Look at the dashboard for now")
+      (debug:print 0 "Look at the dashboard for now")
       ;; (megatest-gui)
       (set! *didsomething* #t)))
 
 (if (not *didsomething*)
-    (print help))
+    (debug:print 0 help))
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
-           (print "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
+           (debug:print 0 "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
            (exit 0))
         (case *globalexitstatus*
          ((0)(exit 0))

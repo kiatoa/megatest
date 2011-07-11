@@ -31,7 +31,7 @@
 (define *waiting-queue* (make-hash-table))
 (define *globalexitstatus* 0) ;; attempt to work around possible thread issues
 (define *passnum*     0) ;; when running track calls to run-tests or similar
-
+(define *verbosity*   1)
 
 (define-inline (get-with-default val default)
   (let ((val (args:get-arg val)))
@@ -44,6 +44,10 @@
 ;;======================================================================
 ;; Misc utils
 ;;======================================================================
+
+(define-inline (debug:print n . params)
+  (if (<= n *verbosity*)
+      (apply print params)))
 
 (define (get-df path)
   (let* ((df-results (cmd-run->list (conc "df " path)))

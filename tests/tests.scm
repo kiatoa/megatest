@@ -23,7 +23,7 @@
 ;; db
 (define row    (vector "a" "b" "c" "blah"))
 (define header (list "col1" "col2" "col3" "col4"))
-(test "Get row by header" "blah" (db-get-value-by-header row header "col4"))
+(test "Get row by header" "blah" (db:get-value-by-header row header "col4"))
 
 ;; (define *toppath* "tests")
 (define *db* #f)
@@ -54,12 +54,12 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
-(test "get all legal tests" (list "runfirst" "sqlitespeed") (sort (get-all-legal-tests) string<=?))
+(test "get all legal tests" (list "runfirst" "runwithfirst" "singletest" "singletest2" "sqlitespeed") (sort (get-all-legal-tests) string<=?))
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
 	(register-test *db* 1 "nada" "")
-	(test:get-state (runs:get-test-info *db* 1 "nada" ""))))
+	(test:get-state (db:get-test-info *db* 1 "nada" ""))))
 
 (test "get-keys" "sysname" (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
@@ -82,4 +82,13 @@
 
 (test "env restored" "1234" (get-environment-variable "BLAHFOO"))
 
-				    
+
+(test "Items assoc" "Elephant" (cadar (cadr (item-assoc->item-list '(("ANIMAL" "Elephant Lion")("SEASON" "Spring Fall"))))))
+(set! *verbosity* 6)
+(test "Items assoc" '()(item-assoc->item-list '(("a" "a b c d")("b" "c d e")("c" "")("d"))))
+(set! *verbosity* -1)
+(test "Items assoc empty items" '()   (item-assoc->item-list '(("A"))))
+(set! *verbosity* 1)
+(test "Items table" "SEASON" (caadar (item-table->item-list '(("ANIMAL" "Elephant Lion")("SEASON" "Spring Winter")))))
+(test "Items table empty items I" '() (item-table->item-list '(("A"))))
+(test "Items table empty items II" '() (item-table->item-list '(("A" ""))))

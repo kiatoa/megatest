@@ -19,7 +19,7 @@
 	     (tal (cdr itemlist)))
     (if (null? tal)
 	(for-each (lambda (item)
-		    (print "curritemkey: " (append curritemkey (list item))))
+		    (debug:print 6 "curritemkey: " (append curritemkey (list item))))
 		  (cadr hed))
 	(begin
 	  (for-each (lambda (item)
@@ -53,12 +53,28 @@
 ;;       (("ANIMAL" "Lion")     ("SEASON" "Fall")))
 (define (item-assoc->item-list itemsdat)
   (if (and itemsdat (not (null? itemsdat)))
-      (let ((itemlst (map (lambda (x)
-			    (let ((name (car x))
-				  (items (cadr x)))
-			      (list name (string-split items))))
-			  itemsdat)))
-	(process-itemlist #f '() itemlst))
+      (let ((itemlst (filter (lambda (x)
+			       (list? x))
+			     (map (lambda (x)
+				    (debug:print 6 "item-assoc->item-list x: " x)
+				    (if (< (length x) 2)
+					(begin
+					  (debug:print 0 "ERROR: malformed items spec " (string-intersperse x " "))
+					  (list (car x)'()))
+					(let ((name (car x))
+					      (items (cadr x)))
+					  (list name (string-split items)))))
+				  itemsdat))))
+	(let ((debuglevel 5))
+	  (debug:print 5 "item-assoc->item-list: itemsdat => itemlst ")
+	  (if (>= *verbosity* 5)
+	      (begin
+		(pp itemsdat)
+		(print " => ")
+		(pp itemlst))))
+	(if (> (length itemlst) 0)
+	    (process-itemlist #f '() itemlst)
+	    '()))
       '())) ;; return a list consisting on a single null list for non-item runs
             ;; Nope, not now, return null as of 6/6/2011
 
@@ -70,7 +86,7 @@
 		       (if (> (length x) 1)
 			   (list (car x)
 				 (string-split (cadr x)))
-			   x))
+			   (list x '())))
 		     itemtable))
 	(res     '())) ;; a list of items
     (let loop ((indx    0)
@@ -83,7 +99,7 @@
 				       (list 
 					(if (< indx (length rowdat))
 					    (let ((new (list rowname (list-ref rowdat indx))))
-					      ;; (print "New: " new)
+					      ;; (debug:print 0 "New: " new)
 					      (set! elflag #t)
 					      new
 					      ) ;; i.e. had at least on legit value to use

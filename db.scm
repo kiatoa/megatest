@@ -230,10 +230,12 @@
 					(if currstate  (conc "state='" currstate "' AND ") "")
 					(if currstatus (conc "status='" currstatus "' AND ") "")
 					" testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-		;;(print "QRY: " qry)
+		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry newstate newstatus testname testname)))
 	    testnames))
-	      ;; "('" (string-intersperse tests "','") "')")
+
+(define (db:delete-tests-in-state db run-id state)
+  (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
@@ -380,7 +382,7 @@
 ;;  					    (if (not (and (equal? (db:test-get-state x) "COMPLETED")
 ;;  							  (equal? (db:test-get-status x) "PASS")))
 ;;  						(hash-table-set! non-completed (db:test-get-testname x) x)))
-;;  					    ;; (print "Completed: " (db:test-get-testname x))))
+;;  					    ;; (debug:print 0 "Completed: " (db:test-get-testname x))))
 ;;  					  tests)
 ;;  				(filter (lambda (x)
 ;;  					  (not (hash-table-ref/default non-completed (db:test-get-testname x) #f)))

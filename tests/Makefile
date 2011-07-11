@@ -4,7 +4,7 @@ MEGATEST=$(shell realpath ../megatest)
 
 runall :
 	cd ../;make 
-	$(MEGATEST) -keepgoing -runall :sysname ubuntu :fsname nfs :datapath none :runname `date +%GWW%V.%u` -m "This is a comment specific to a run"
+	$(MEGATEST) -keepgoing -runall :sysname ubuntu :fsname nfs :datapath none :runname `date +%GWW%V.%u` -m "This is a comment specific to a run" -v
 
 test :
 	cd ../;make test
