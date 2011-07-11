@@ -11,7 +11,8 @@
 
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
-echo sudo apt-get install libmotif3
+echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
+echo KTYPE can be 26 or 26g4
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
 echo Hit ^C now to do that
@@ -30,6 +31,13 @@ if [[ $proxy == "" ]]; then
 else
   export http_proxy=http://$proxy
   export PROX="-proxy $proxy"
+fi
+
+if [[ $KTYPE == "" ]]; then
+  echo 'Using KTYPE=26'
+  export KTYPE=26
+else
+  echo Using KTYPE=$KTYPE
 fi
 
 if ! [[ -e chicken-4.6.5.tar.gz ]]; then 
@@ -82,9 +90,9 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
 fi
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
-    export files="cd-5.4.1_Linux26_lib.tar.gz im-3.6.3_Linux26_lib.tar.gz iup-3.4_Linux26_lib.tar.gz"
+    export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
 else
-    export files="cd-5.4.1_Linux26_64_lib.tar.gz im-3.6.3_Linux26_64_lib.tar.gz iup-3.4_Linux26_64_lib.tar.gz"
+    export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.4_Linux${KTYPE}_64_lib.tar.gz"
 fi
 
 mkdir $PREFIX/iuplib
