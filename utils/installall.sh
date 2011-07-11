@@ -40,8 +40,9 @@ else
   echo Using KTYPE=$KTYPE
 fi
 
-if ! [[ -e chicken-4.6.5.tar.gz ]]; then 
-    wget http://code.call-cc.org/dev-snapshots/2011/02/09/chicken-4.6.5.tar.gz
+export CHICKEN_VERSION=4.7.0
+if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
+    wget http://code.call-cc.org/dev-snapshots/2011/05/27/chicken-${CHICKEN_VERSION}.tar.gz
 fi 
 
 BUILDHOME=$PWD
@@ -58,8 +59,8 @@ echo PATH=$PATH
 echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 if ! [[ -e $PREFIX/bin/csi ]]; then
-    tar xfvz chicken-4.6.5.tar.gz
-    cd chicken-4.6.5
+    tar xfvz chicken-${CHICKEN_VERSION}.tar.gz
+    cd chicken-${CHICKEN_VERSION}
     make PLATFORM=linux PREFIX=$PREFIX
     make PLATFORM=linux PREFIX=$PREFIX install
     cd $BUILDHOME

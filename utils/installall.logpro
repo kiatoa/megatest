@@ -1,0 +1,35 @@
+;; (c) 2006,2007,2008,2009 Matthew Welland matt@kiatoa.com
+;;  
+;;   License GPL.
+
+;; first ensure your run at least started
+;;
+
+(trigger "Body"     #/^.*$/) ;; anything starts the body
+;; (trigger "EndBody"  #/This had better never match/)
+(section "Body"     "Body" "EndBody")
+
+(trigger "Chicken Build Start" #/^chicken-/)
+(trigger "Chicken Build End"   #/^make.*Leaving directory.*chicken-4.6.5/)
+(section "Chicken build Start" "Chicken build End" "Chicken Build")
+
+(trigger "Eggs Start" #/alias.*http:..chicken/)
+(trigger "Eggs End"   #/Install sqlite3/)
+(section "Eggs" "Eggs Start" "Eggs End")
+
+(for-each (lambda (egg)
+	    (expect:required in "Eggs" > 0 (conc "Require install of " egg) (regexp (conc "installing " egg))))
+	  '(readline apropos base64 regex-literals format regex-case test coops trace))
+
+(expect:ignore   in "Body"  < 99 "Ignore HAVE_STRERROR" #/define HAVE_STRERROR/)
+(expect:ignore   in "Body"  < 99 "Ignore references to check-errors"  #/check-errors/)
+(expect:ignore   in "Body"  < 99 "Ignore references to type-errors"   #/type-errors/)
+(expect:ignore   in "Body"  < 99 "Ignore references to srfi-4-errors" #/srfi-4-errors/)
+(expect:ignore   in "Body"  < 99 "Ignore redefinition of imported value bindings" #/Warning: redefinition of imported value binding/)
+(expect:ignore   in "Body"  = 1  "Ignore CD native window driver warning" #/Warning: CD native window driver not found, some bindings cannot be compiled/)
+(expect:ignore   in "Body"  < 99 "Ignore (setup-error-handling)" #/\(setup-error-handling\)/)
+(expect:ignore   in "Body"  < 99 "Ignore install-other-files error" #/make.*install-other-files.*Error.*ignored/)
+(expect:ignore   in "Body"  < 99 "Ignore scheme files with error in name" #/error[a-z\.A-Z0-9\-]*\.(scm|so)/)
+
+(expect:error    in "Body"  = 0 "WARNING" #/warning/i)
+(expect:error    in "Body"  = 0 "ERROR"  (list #/ERROR/ #/error/i)) ;; but disallow any other errors
