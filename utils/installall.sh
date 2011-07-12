@@ -93,7 +93,7 @@ fi
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
 else
-    export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.4_Linux${KTYPE}_64_lib.tar.gz"
+    export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.5_Linux${KTYPE}_64_lib.tar.gz"
 fi
 
 mkdir $PREFIX/iuplib
