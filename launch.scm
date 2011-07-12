@@ -183,6 +183,11 @@
 				  print
 				  (cdr fullcmd)))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (debug:print 2 "Launching completed, updating db")
+      (debug:print 4 "Launch results: " launch-results)
+      (if (not launch-results)
+	  (begin
+	    (print "ERROR: Failed to run " fullcmd ", exiting now")
+	    (exit 1)))
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals))))
