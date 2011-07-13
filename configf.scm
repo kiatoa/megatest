@@ -75,7 +75,8 @@
 								 ;; (append alist (list (list key val))))
 						(loop (read-line inp) curr-section-name)))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
-		     (loop (read-line inp) curr-section-name))))))))
+		     (loop (read-line inp) curr-section-name)))))
+	(close-input-port inp))))
   
 (define (find-and-read-config fname)
   (let* ((curr-dir   (current-directory))
