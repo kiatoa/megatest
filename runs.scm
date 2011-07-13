@@ -106,10 +106,12 @@
 	  (sqlite3:execute
 	   db
 	   "UPDATE tests
-             SET state='COMPLETED',
+             SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
+                          'RUNNING'
+                       ELSE 'COMPLETED' END,
                 status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
              WHERE run_id=? AND testname=? AND item_path='';"
-	   run-id test-name)))
+	   run-id test-name run-id test-name)))
     (if (and (not (null? comment))
 	     (car comment))
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"

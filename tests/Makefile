@@ -7,7 +7,7 @@ runall :
 	$(MEGATEST) -keepgoing -runall :sysname ubuntu :fsname nfs :datapath none :runname `date +%GWW%V.%u` -m "This is a comment specific to a run" -v
 
 test :
-	csi -I .. ../megatest.scm -- -runall :sysname ubuntu :fsname afs :datapath tmp :runname blah
+	csi -b -I .. ../megatest.scm -- -runall :sysname ubuntu :fsname afs :datapath tmp :runname blah
 	cd ../;make test
 	make runall
 
