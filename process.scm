@@ -17,15 +17,18 @@
   (handle-exceptions
    exn
    (begin
-     (print "ERROR:  Failed to run command: " cmd (string-intersperse params " "))
+     (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
      #f)
-   (let* ((fh (process cmd params)))
+   (let-values (((fh fho pid) (process cmd params)))
      (let loop ((curr (read-line fh))
 		(result  '()))
        (if (not (eof-object? curr))
 	   (loop (read-line fh)
 		 (append result (list (proc curr))))
-	   result)))))
+	   (begin
+	     (close-input-port fh)
+	     (close-output-port fho)
+	     result))))))
 
 (define (cmd-run-proc-each-line-alt cmd proc)
   (let* ((fh (open-input-pipe cmd))

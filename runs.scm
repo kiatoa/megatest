@@ -252,15 +252,17 @@
   (let ((num-running (db:get-count-tests-running db))
 	(max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
     (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-    (if (or (not max-concurrent-jobs)
-	    (and max-concurrent-jobs
-		 (string->number max-concurrent-jobs)
-		 (not (>= num-running (string->number max-concurrent-jobs)))))
-	#t
-	(begin 
-	  (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
-			 ", max_concurrent_jobs: " max-concurrent-jobs)
-	  #f))))
+    (if (not (eq? 0 *globalexitstatus*))
+	#f
+	(if (or (not max-concurrent-jobs)
+		(and max-concurrent-jobs
+		     (string->number max-concurrent-jobs)
+		     (not (>= num-running (string->number max-concurrent-jobs)))))
+	    #t
+	    (begin 
+	      (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
+			   ", max_concurrent_jobs: " max-concurrent-jobs)
+	      #f)))))
   
 (define (run-tests db test-names)
   (let* ((keys        (db-get-keys db))
@@ -284,12 +286,14 @@
 	 (if (runs:can-run-more-tests db)
 	     (run-one-test db run-id test-name keyvallst)
 	     ;; add some delay 
-	     (sleep 2)))
+	     ;(sleep 2)
+	     ))
        test-names)
       ;; (run-waiting-tests db)
       (if (args:get-arg "-keepgoing")
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))
-	    (if (> estrem 0)
+	    (if (and (> estrem 0)
+		     (eq? *globalexitstatus* 0))
 		(begin
 		  (debug:print 1 "Keep going, estimated " estrem " tests remaining to run, will continue in 3 seconds ...")
 		  (sleep 3)
@@ -417,7 +421,13 @@
 				    (testrundat      (list get-prereqs-cmd launch-cmd)))
 			       (if (or (args:get-arg "-force")
 				       (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
-				   ((cadr testrundat)) ;; this is the line that launches the test to the remote host
+				   (if (not ((cadr testrundat))) ;; this is the line that launches the test to the remote host
+				       (begin
+					 (print "ERROR: Failed to launch the test. Exiting as soon as possible")
+					 (set! *globalexitstatus* 1) ;; 
+					 (process-signal (current-process-id) signal/kill)
+					 ;(exit 1)
+					 ))
 				   (if (not (args:get-arg "-keepgoing"))
 				       (hash-table-set! *waiting-queue* new-test-name testrundat)))))))
 		      ((KILLED) 

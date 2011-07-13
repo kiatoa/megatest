@@ -186,9 +186,15 @@
       (debug:print 4 "Launch results: " launch-results)
       (if (not launch-results)
 	  (begin
-	    (print "ERROR: Failed to run " fullcmd ", exiting now")
-	    (exit 1)))
+	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
+	    (sqlite3:finalize! db)
+	    ;; good ole "exit" seems not to work
+	    ;; (_exit 9)
+	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+	    (process-signal (current-process-id) signal/kill)
+	    ))
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
-      (alist->env-vars commonprevvals))))
+      (alist->env-vars commonprevvals)
+      launch-results)))
 

@@ -229,9 +229,9 @@
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
 					(if currstate  (conc "state='" currstate "' AND ") "")
 					(if currstatus (conc "status='" currstatus "' AND ") "")
-					" testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+					" run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
 		;;(debug:print 0 "QRY: " qry)
-		(sqlite3:execute db qry newstate newstatus testname testname)))
+		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
 (define (db:delete-tests-in-state db run-id state)
