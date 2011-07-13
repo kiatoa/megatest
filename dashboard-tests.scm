@@ -114,8 +114,8 @@
 			 (iup:label (conc (db:test-get-cpuload testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-cpuload testdat))))
 	    (store-label "RunDuration"
-			 (iup:label (conc (db:test-get-run_duration testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-run_duration testdat))))
+			 (iup:label (conc (seconds->hr-min-sec (db:test-get-run_duration testdat))) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (seconds->hr-min-sec (db:test-get-run_duration testdat)))))
 	    (store-label "CPULoad"
 			 (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-final_logf testdat)))))))))

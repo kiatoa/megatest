@@ -118,3 +118,14 @@
 	res)
       '()))
 		  
+;;======================================================================
+;; time and date nice to have stuff
+;;======================================================================
+
+(define (seconds->hr-min-sec secs)
+  (let* ((hrs (quotient secs 3600))
+	 (min (quotient (- secs (* hrs 3600)) 60))
+	 (sec (- secs (* hrs 3600)(* min 60))))
+    (conc (if (> hrs 0)(conc hrs "hr ") "")
+	  (if (> min 0)(conc min "m ")  "")
+	  sec "s")))
