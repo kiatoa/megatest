@@ -45,7 +45,10 @@
 	    (comment-rx (regexp "^\\s*#.*")))
 	(let loop ((inl               (read-line inp))
 		   (curr-section-name "default"))
-	  (if (eof-object? inl) res
+	  (if (eof-object? inl) 
+	      (begin
+		(close-input-port inp)
+		res)
 	      (regex-case 
 	       inl 
 	       (comment-rx _                  (loop (read-line inp) curr-section-name))
@@ -75,8 +78,7 @@
 								 ;; (append alist (list (list key val))))
 						(loop (read-line inp) curr-section-name)))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
-		     (loop (read-line inp) curr-section-name)))))
-	(close-input-port inp))))
+		     (loop (read-line inp) curr-section-name))))))))
   
 (define (find-and-read-config fname)
   (let* ((curr-dir   (current-directory))
