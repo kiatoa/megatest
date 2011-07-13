@@ -425,7 +425,9 @@
 				       (begin
 					 (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 					 (set! *globalexitstatus* 1) ;; 
-					 (exit 1)))
+					 (process-signal (current-process-id) signal/kill)
+					 ;(exit 1)
+					 ))
 				   (if (not (args:get-arg "-keepgoing"))
 				       (hash-table-set! *waiting-queue* new-test-name testrundat)))))))
 		      ((KILLED) 
