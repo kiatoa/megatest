@@ -191,7 +191,7 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test db test-id mx1) ;; run-id run-key origtest)
+(define (examine-test db test-id) ;; run-id run-key origtest)
   (let* ((testdat       (db:get-test-data-by-id db test-id))
 	 (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	 (keydat        (if testdat (keys:get-key-val-pairs db run-id) #f))
@@ -220,13 +220,14 @@
 		       (let ((newtestdat (db:get-test-data-by-id db test-id)))
 			 (if newtestdat 
 			     (begin
-			       (mutex-lock! mx1)
+			       ;(mutex-lock! mx1)
 			       (set! testdat newtestdat)
 			       (set! teststeps    (db:get-steps-for-test db test-id))
 			       (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 			       (set! rundir       (db:test-get-rundir testdat))
 			       (set! testfullname (db:test-get-fullname testdat))
-			       (mutex-unlock! mx1))
+			       ;(mutex-unlock! mx1)
+			       )
 			     (begin
 			       (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
 	 (widgets      (make-hash-table))
@@ -238,9 +239,10 @@
 						  (oldval (iup:attribute lbl "TITLE")))
 					      (if (not (equal? newval oldval))
 						  (begin
-						    (mutex-lock! mx1)
+						    ;(mutex-lock! mx1)
 						    (iup:attribute-set! lbl "TITLE" newval)
-						    (mutex-unlock! mx1))))))
+						    ;(mutex-unlock! mx1)
+						    )))))
 			 lbl))
 	 (store-button store-label))
     (cond
@@ -293,78 +295,18 @@
 								(iup:attribute-set! stepsdat "TITLE" newval)))))
 		  stepsdat)))))
       (iup:show self)
-      ;; Now start keeping the gui updated from the db
-      (let loop ((i 0))
-	(thread-sleep! 0.1)
-	(refreshdat) ;; update from the db here
-	;(thread-suspend! other-thread)
-	;; update the gui elements here
-	(for-each 
-	 (lambda (key)
-	   ;; (print "Updating " key)
-	   ((hash-table-ref widgets key) testdat))
-	 (hash-table-keys widgets))
-	(update-state-status-buttons testdat)
-	; (iup:refresh self)
-	(iup:main-loop-flush)
-	(if *exit-started*
-	    (set! *exit-started* 'ok)
-	    (loop i)))))))
-
-;;
-;;		    (iup:frame (iup:label (conc "TESTNAME:\n" testfullname) #:expand "YES")))
-;;		   (iup:frame #:title "Actions" #:expand "YES"
-;;			      (iup:hbox ;; the actions box
-;;			       (iup:button "View Log"    #:action viewlog  #:expand "YES")
-;;			       (iup:button "Start Xterm" #:action xterm  #:expand "YES")))
-;;		   (iup:frame #:title "Set fields"
-;;			      (iup:vbox
-;;			       (iup:hbox 
-;;				(iup:vbox ;; the state
-;;				 (iup:label "STATE:" #:size "30x")
-;;				 (let ((lb (iup:listbox #:action (lambda (val a b c)
-;;								   ;; (print val " a: " a " b: " b " c: " c)
-;;								   (set! newstate a))
-;;							#:editbox "YES"
-;;							#:expand "YES")))
-;;				   (iuplistbox-fill-list lb
-;;							 (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ")
-;;							 currstate)
-;;				   lb))
-;;				(iup:vbox ;; the status
-;;				 (iup:label "STATUS:" #:size "30x")
-;;				 (let ((lb (iup:listbox #:action (lambda (val a b c)
-;;								   (set! newstatus a))
-;;							#:editbox "YES"
-;;							#:value currstatus
-;;							#:expand "YES")))
-;;				   (iuplistbox-fill-list lb
-;;							 (list "PASS" "WARN" "FAIL" "CHECK" "n/a")
-;;							 currstatus)
-;;				   lb)))
-;;			       (iup:hbox (iup:label "Comment:")
-;;					 (iup:textbox #:action (lambda (val a b)
-;;								 (set! currcomment b))
-;;						      #:value currcomment 
-;;						      #:expand "YES"))
-;;			       (iup:button "Apply"
-;;					   #:expand "YES"
-;;					   #:action (lambda (x)
-;;						      (test-set-status! *db* run-id testname newstate newstatus itempath currcomment)))
-;;			       (iup:hbox (iup:button "Apply and close"
-;;						     #:expand "YES"
-;;						     #:action (lambda (x)
-;;								(hash-table-delete! *examine-test-dat* testkey)
-;;								(test-set-status! *db* run-id testname newstate newstatus itempath currcomment)
-;;								(iup:destroy! self)))
-;;					 (iup:button "Cancel and close"
-;;						     #:expand "YES"
-;;						     #:action (lambda (x)
-;;								(hash-table-delete! *examine-test-dat* testkey)
-;;								(iup:destroy! self))))
-;;			       )))
-;;		  (iup:hbox ;; the test steps are tracked here
-;;		   (let ((stepsdat (iup:label "Test steps ........................................." #:expand "YES")))
-;;		     (hash-table-set! widgets "Test Steps" stepsdat)
-;;		     stepsdat)
-;;		   ))))
+      (iup:callback-set! *tim* "ACTION_CB"
+			 (lambda (x)
+			   ;; Now start keeping the gui updated from the db
+			   (refreshdat) ;; update from the db here
+					;(thread-suspend! other-thread)
+			   ;; update the gui elements here
+			   (for-each 
+			    (lambda (key)
+			      ;; (print "Updating " key)
+			      ((hash-table-ref widgets key) testdat))
+			    (hash-table-keys widgets))
+			   (update-state-status-buttons testdat)
+					; (iup:refresh self)
+			   (if *exit-started*
+			       (set! *exit-started* 'ok))))))))

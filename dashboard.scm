@@ -290,16 +290,17 @@ Misc
 	 (coln        0))
     (set! *alltestnamelst* '())
     ;; create a concise list of test names
-    (for-each (lambda (rundat)
-		(if (vector? rundat)
-		    (let* ((testdat   (vector-ref rundat 1))
-			   (testnames (map test:test-get-fullname testdat)))
-		      (for-each (lambda (testname)
-				  (if (not (member testname *alltestnamelst*))
-				      (begin
-					(set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
-				testnames))))
-	      runs)
+    (for-each
+     (lambda (rundat)
+       (if (vector? rundat)
+	   (let* ((testdat   (vector-ref rundat 1))
+		  (testnames (map test:test-get-fullname testdat)))
+	     (for-each (lambda (testname)
+			 (if (not (member testname *alltestnamelst*))
+			     (begin
+			       (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
+		       testnames))))
+     runs)
 
     (set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
     (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) *start-test-offset*)
@@ -500,49 +501,42 @@ Misc
 	(update-rundat "%" *num-runs* "%" "%"))
     (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20)))
 
-(define (run-update mtx1)
-  (let loop ((i 0))
-    (thread-sleep! 0.05)
-    (mutex-lock! mtx1)
-    (update-buttons uidat *num-runs* *num-tests*)
-    (mutex-unlock! mtx1)
-    (iup:main-loop-flush)
-    (mutex-lock! mtx1)
-    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		   (hash-table-ref/default *searchpatts* "test-name" "%")
-		   (hash-table-ref/default *searchpatts* "item-name" "%"))
-    (mutex-unlock! mtx1)
-    (loop i)))
+(define *tim* (iup:timer))
+(define *ord* #f)
+(iup:attribute-set! *tim* "TIME" 300)
+(iup:attribute-set! *tim* "RUN" "YES")
 
-(define *job* #f)
+(define (run-update x)
+  (update-buttons uidat *num-runs* *num-tests*)
+  (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		 (hash-table-ref/default *searchpatts* "test-name" "%")
+		 (hash-table-ref/default *searchpatts* "item-name" "%")))
 
 (cond 
  ((args:get-arg "-run")
   (let ((runid (string->number (args:get-arg "-run"))))
     (if runid
-	(set! *job* (lambda (mx1)
-		      (on-exit (lambda ()
-				 (sqlite3:finalize! *db*)))
-		      (examine-run *db* runid)))
+	(begin
+	  (lambda (x)
+	    (on-exit (lambda ()
+		       (sqlite3:finalize! *db*)))
+	    (examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test")
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
-	(set! *job* (lambda (mx1)
-		      (examine-test *db* testid mx1)))
+	(examine-test *db* testid)
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
-  (set! *job* (lambda (mtx1)(run-update mtx1)))))
+  (iup:callback-set! *tim*
+		     "ACTION_CB"
+		     (lambda (x)
+		       (run-update x)))))
+		       ;(print x)))))
 
-
-(let* ((mx1 (make-mutex))
-       (th2 (make-thread iup:main-loop))
-       (th1 (make-thread (*job* mx1))))
-  (thread-start! th1)
-  (thread-start! th2)
-  (thread-join! th2))
+(iup:main-loop)
