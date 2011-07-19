@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 (include "common.scm")
-(define megatest-version 1.17)
+(include "megatest-version.scm")
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -54,6 +54,7 @@ Misc
                             \"NOT_STARTED\"
   -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
                             if -keepgoing is also specified)
+  -rebuild-db             : bring the database schema up to date
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -100,6 +101,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-remove-runs"
 			"-keepgoing"
 			"-usequeue"
+			"-rebuild-db"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -654,6 +656,22 @@ Called as " (string-intersperse (argv) " ")))
     (begin
       (debug:print 0 "Look at the dashboard for now")
       ;; (megatest-gui)
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Update the database schema on request
+;;======================================================================
+
+(if (args:get-arg "-rebuild-db")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      ;; now can find our db
+      (set! db (open-db))
+      (patch-db db)
+      (sqlite3:finalize! db)
       (set! *didsomething* #t)))
 
 (if (not *didsomething*)

@@ -52,7 +52,7 @@
                      cpuload    REAL DEFAULT -1,
                      diskfree   INTEGER DEFAULT -1,
                      uname      TEXT DEFAULT 'n/a', 
-                     rundir     TEXT DEFAULT 'n/a',
+                    rundir     TEXT DEFAULT 'n/a',
                      item_path  TEXT DEFAULT '',
                      state      TEXT DEFAULT 'NOT_STARTED',
                      status     TEXT DEFAULT 'FAIL',
@@ -64,6 +64,7 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
+                     tags       TEXT DEFAULT '',
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -77,17 +78,52 @@
                                comment TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
 	  (sqlite3:execute db "CREATE TABLE extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+	  (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (id,var));")
+	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")))
     db))
 
-;; (if (args:get-arg "-db")
-;;     (set! db (open-db (args:get-arg "-db"))))
+(define (patch-db db)
+  (handle-exceptions
+   exn
+   (begin
+     (print "Exception: " exn)
+     (print "ERROR: Possible out of date schema, attempting to add table metadata...")
+     (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (id,var));")
+     (db:set-var db "MEGATEST_VERSION" megatest-version)
+     (print-call-chain))
+   (let ((mver (db:get-var db "MEGATEST_VERSION")))
+     (cond
+      ((not mver)
+       (print "Adding megatest-version to metadata")
+       (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version)))
+      ((< mver 1.18)
+       (print "Adding tags column to tests table")
+       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")
+       ))
+     (db:set-var db "MEGATEST_VERSION" megatest-version)
+     )))
 
-;; TODO
-;; 
-;; 1. Implement basic registering of records
-;; 2. Implement basic querying of records
-;; eh?
+;;======================================================================
+;; meta get and set vars
+;;======================================================================
+
+;; returns number if string->number is successful, string otherwise
+(define (db:get-var db var)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     db "SELECT val FROM metadat WHERE var=?;" var)
+    (if (string? res)
+	(let ((valnum (string->number res)))
+	  (if valnum valnum res))
+	res)))
+
+(define (db:set-var db var val)
+  (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
 (define (db-get-keys db)
   (let ((res '()))

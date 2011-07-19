@@ -9,6 +9,7 @@
 (include "../launch.scm")
 (include "../items.scm")
 (include "../runs.scm")
+(include "../megatest-version.scm")
 
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config")))
@@ -32,6 +33,9 @@
 (test "open-db" #t (begin
 		     (set! *db* (open-db))
 		     (if *db* #t #f)))
+
+;; quit wasting time changing db to *db*
+(define db *db*)
 
 (test "get cpu load" #t (number? (get-cpu-load)))
 (test "get uname"    #t (string? (get-uname)))

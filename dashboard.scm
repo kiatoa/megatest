@@ -30,6 +30,7 @@
 (include "runs.scm")
 (include "gui.scm")
 (include "dashboard-tests.scm")
+(include "megatest-version.scm")
 
 (define help "
 Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
