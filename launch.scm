@@ -40,7 +40,11 @@
 		   (set! best     dirpath)
 		   (set! bestsize freespc)))))
 	 (map car disks)))
-    best))
+    (if best
+	best
+	(begin
+	  (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section")
+	  (exit 1)))))
 
 (define (create-work-area db run-id test-path disk-path testname itemdat)
   (let* ((run-info (db:get-run-info db run-id))

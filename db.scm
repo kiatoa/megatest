@@ -84,7 +84,12 @@
 	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")))
     db))
 
-(define (patch-db db)heh 
+;;======================================================================
+;; TODO:
+;;   put deltas into an assoc list with version numbers
+;;   apply all from last to current
+;;======================================================================
+(define (patch-db db)
   (handle-exceptions
    exn
    (begin
@@ -96,13 +101,14 @@
      (db:set-var db "MEGATEST_VERSION" 1.17)
      )
    (let ((mver (db:get-var db "MEGATEST_VERSION")))
-     (cond
-      ((not mver)
-       (print "Adding megatest-version to metadata")
-       (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version)))
-      ((< mver 1.18)
-       (print "Adding tags column to tests table")
-       ))
+     (if(not mver)
+	(begin
+	  (print "Adding megatest-version to metadata")
+	  (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version))))
+     (if (< mver 1.18)
+	 (begin
+	   (print "Adding tags column to tests table")
+	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
      (db:set-var db "MEGATEST_VERSION" megatest-version)
      )))
 
