@@ -75,14 +75,18 @@
      runnamepatt)
     (vector header res)))
 
-(define (register-test db run-id test-name item-path)
+(define (register-test db run-id test-name item-path tags)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
     (for-each 
      (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" run-id test-name pth))
-     item-paths)))
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status,tags) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a',?);" 
+			run-id 
+			test-name
+			pth 
+			(conc "," (string-intersperse tags ",") ",")))
+     item-paths )))
 
 ;;  (define db (open-db))
 ;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
@@ -315,7 +319,9 @@
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (test-conf    (if testexists (read-config test-configf) (make-hash-table)))
 	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
-			 (if (string? w)(string-split w)'()))))
+			 (if (string? w)(string-split w)'())))
+	 (tags         (let ((t (config-lookup test-conf "setup" "tags")))
+			 (if (string? t)(string-split t ",") '()))))
     (if (not testexists)
 	(begin
 	  (debug:print 0 "ERROR: Can't find config file " test-configf)
@@ -360,7 +366,7 @@
 		      (if (and (not ts)
 			       (< ct 10))
 			  (begin
-			    (register-test db run-id test-name item-path)
+			    (register-test db run-id test-name item-path tags)
 			    (db:test-set-comment db run-id test-name item-path "")
 			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))

@@ -84,7 +84,7 @@
 	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")))
     db))
 
-(define (patch-db db)
+(define (patch-db db)heh 
   (handle-exceptions
    exn
    (begin

@@ -1,5 +1,6 @@
 [setup]
 runscript runscript.rb
+tags non important,dumb junk
 
 [requirements]
 waiton    runfirst

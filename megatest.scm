@@ -120,7 +120,7 @@ Called as " (string-intersperse (argv) " ")))
 (include "process.scm")
 (include "launch.scm")
 (include "runs.scm")
-;; (include "gui.scm")
+(include "runconfig.scm")
 
 (define *didsomething* #f)
 
@@ -364,10 +364,7 @@ Called as " (string-intersperse (argv) " ")))
 	    ;; now can find our db
 	    (set! db (open-db))
 	    (change-directory work-area) 
-	    (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
-	      (if (file-exists? runconfigf)
-		  (setup-env-defaults db runconfigf run-id)
-		  (debug:print 0 "WARNING: You do not have a run config file: " runconfigf)))
+	    (set-run-config-vars db run-id)
             ;; environment overrides are done *before* the remaining critical envars.
             (alist->env-vars env-ovrd)
 	    (set-megatest-env-vars db run-id)
