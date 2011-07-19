@@ -92,8 +92,9 @@
      (print "ERROR: Possible out of date schema, attempting to add table metadata...")
      (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (id,var));")
-     (db:set-var db "MEGATEST_VERSION" megatest-version)
-     (print-call-chain))
+     (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")
+     (db:set-var db "MEGATEST_VERSION" 1.17)
+     )
    (let ((mver (db:get-var db "MEGATEST_VERSION")))
      (cond
       ((not mver)
@@ -101,7 +102,6 @@
        (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version)))
       ((< mver 1.18)
        (print "Adding tags column to tests table")
-       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")
        ))
      (db:set-var db "MEGATEST_VERSION" megatest-version)
      )))
