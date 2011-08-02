@@ -31,6 +31,7 @@ Run status updates (these require that you are in a test directory
   -setlog logfname        : set the path/filename to the final log relative to the test
                             directory. may be used with -test-status
   -set-toplog logfname    : set the overall log for a suite of sub-tests
+  -summarize-items        : for an itemized test create a summary html 
   -m comment              : insert a comment for this test
 
 Run data
@@ -96,6 +97,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-xterm"
 		        "-showkeys"
 		        "-test-status"
+			"-summarize-items"
 		        "-gui"
 			"-runall"    ;; run all tests
 			"-remove-runs"
@@ -546,7 +548,8 @@ Called as " (string-intersperse (argv) " ")))
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
-	(args:get-arg "-runstep"))
+	(args:get-arg "-runstep")
+	(args:get-arg "-summarize-items"))
     (if (not (getenv "MT_CMDINFO"))
 	(begin
 	  (debug:print 0 "ERROR: MT_CMDINFO env var not set, commands -test-status, -runstep and -setlog must be called *inside* a megatest environment!")
@@ -572,6 +575,8 @@ Called as " (string-intersperse (argv) " ")))
 	      (test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")
 	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	  (if (args:get-arg "-summarize-items")
+	      (tests:summarize-items db run-id test-name))
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin

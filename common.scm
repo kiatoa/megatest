@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format)
+(use sqlite3 srfi-1 posix regex-case base64 format dot-locking)
 (require-extension sqlite3 regex posix)
 
 (import (prefix sqlite3 sqlite3:))

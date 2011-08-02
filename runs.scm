@@ -130,6 +130,31 @@
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
 		   logf run-id test-name))
 
+(define (tests:summarize-items db run-id test-name)
+  (obtain-dot-lock "final-results.html" 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+  (let ((oup   (open-output-file "final-results.html")))
+    (with-output-to-port
+	oup
+      (print "<html><title>Summary: " test-name "</title><body><table>")
+      (sqlite3:for-each-row 
+       (lambda (id itempath state status run_duration logf comment)
+	 (print "<tr>"
+		"<td><href=\"" itempath "/" logf "\"</a>" itempath "</td>" 
+		"<td>" state    "</td>" 
+		"<td>" status   "</td>"
+		"<td>" comment  "</td>"
+		"</tr>")
+	 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"))
+      (print "</body></html>")
+      (close-output-port oup)
+      (release-dot-lock "final-results.html"))
+
+    ;; ADD UPDATE TO FINAL LOG HERE
+
+))
+			   
+
+
 ;; ;; TODO: Converge this with db:get-test-info
 ;; (define (runs:get-test-info db run-id test-name item-path)
 ;;   (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
