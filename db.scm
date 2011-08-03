@@ -52,7 +52,7 @@
                      cpuload    REAL DEFAULT -1,
                      diskfree   INTEGER DEFAULT -1,
                      uname      TEXT DEFAULT 'n/a', 
-                    rundir     TEXT DEFAULT 'n/a',
+                     rundir     TEXT DEFAULT 'n/a',
                      item_path  TEXT DEFAULT '',
                      state      TEXT DEFAULT 'NOT_STARTED',
                      status     TEXT DEFAULT 'FAIL',

@@ -130,30 +130,58 @@
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
 		   logf run-id test-name))
 
-(define (tests:summarize-items db run-id test-name)
-  (obtain-dot-lock "final-results.html" 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-  (let ((oup   (open-output-file "final-results.html")))
-    (with-output-to-port
-	oup
-      (print "<html><title>Summary: " test-name "</title><body><table>")
-      (sqlite3:for-each-row 
-       (lambda (id itempath state status run_duration logf comment)
-	 (print "<tr>"
-		"<td><href=\"" itempath "/" logf "\"</a>" itempath "</td>" 
-		"<td>" state    "</td>" 
-		"<td>" status   "</td>"
-		"<td>" comment  "</td>"
-		"</tr>")
-	 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"))
-      (print "</body></html>")
-      (close-output-port oup)
-      (release-dot-lock "final-results.html"))
-
-    ;; ADD UPDATE TO FINAL LOG HERE
-
-))
-			   
-
+(define (tests:summarize-items db run-id test-name force)
+  ;; if not force then only update the record if one of these is true:
+  ;;   1. logf is "log/final.log
+  ;;   2. logf is same as outputfilename
+  (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
+	(orig-dir       (current-directory))
+	(logf           #f))
+    (sqlite3:for-each-row 
+     (lambda (path final_logf)
+       (set! logf final_logf)
+       (if (directory? path)
+	   (begin
+	     (print "Found path: " path)
+	     (change-directory path))
+	     ;; (set! outputfilename (conc path "/" outputfilename)))
+	   (print "No such path: " path)))
+     db 
+     "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
+     run-id test-name)
+    (print "summarize-items with logf " logf)
+    (if (or (equal? logf "logs/final.log")
+	    (equal? logf outputfilename)
+	    force)
+	(begin
+	  (if (obtain-dot-lock outputfilename 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+	      (print "Obtained lock for " outputfilename)
+	      (print "Failed to obtain lock for " outputfilename))
+	  (let ((oup   (open-output-file outputfilename)))
+	    (with-output-to-port
+		oup
+	      (lambda ()
+		(print "<html><title>Summary: " test-name "</title><body><h1>Summary for " test-name "<table>")
+		(sqlite3:for-each-row 
+		 (lambda (id itempath state status run_duration logf comment)
+		   (print "<tr>"
+			  "<td><a href=\"" itempath "/" logf "\"</a>" itempath "</td>" 
+			  "<td>" state    "</td>" 
+			  "<td><font color=" (cond
+					      ((equal? status "PASS") "green")
+					      ((equal? status "FAIL") "red")
+					      (else "blue")) ">"   status   "</font></td>"
+					      "<td>" comment  "</td>"
+					      "</tr>"))
+		 db
+		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
+		 run-id test-name)
+		(print "</body></html>")
+		(release-dot-lock outputfilename)))
+	    (close-output-port oup)
+	    (change-directory orig-dir)
+	    (test-set-toplog! db run-id test-name outputfilename)
+	    )))))
 
 ;; ;; TODO: Converge this with db:get-test-info
 ;; (define (runs:get-test-info db run-id test-name item-path)

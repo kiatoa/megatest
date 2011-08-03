@@ -129,3 +129,32 @@
     (conc (if (> hrs 0)(conc hrs "hr ") "")
 	  (if (> min 0)(conc min "m ")  "")
 	  sec "s")))
+
+;;======================================================================
+;; Colors
+;;======================================================================
+      
+(define (common:name->iup-color name)
+  (case (string->symbol (string-downcase name))
+    ((red)    "223 33 49")
+    ((grey)   "192 192 192")
+    ((orange) "255 172 13")
+    ((purple) "This is unfinished ...")))
+
+(define (common:get-color-for-state-status state status type)
+  (case (string->symbol state)
+    ((COMPLETED)
+     (if (equal? status "PASS")
+	 "70 249 73"
+	 (if (or (equal? status "WARN")
+		 (equal? status "WAIVED"))
+	     "255 172 13"
+	     "223 33 49"))) ;; greenish orangeish redish
+    ((LAUNCHED)         "101 123 142")
+    ((CHECK)            "255 100 50")
+    ((REMOTEHOSTSTART)  "50 130 195")
+    ((RUNNING)          "9 131 232")
+    ((KILLREQ)          "39 82 206")
+    ((KILLED)           "234 101 17")
+    ((NOT_STARTED)      "240 240 240")
+    (else               "192 192 192")))

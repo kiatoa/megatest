@@ -1,1 +1,1 @@
-(define megatest-version 1.18)
+(define megatest-version 1.19)

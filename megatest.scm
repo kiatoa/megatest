@@ -493,7 +493,8 @@ Called as " (string-intersperse (argv) " ")))
 	      (thread-join! th2)
 	      (mutex-lock! m)
 	      (set! db (open-db))
-	      (let* ((testinfo (db:get-test-info db run-id test-name (item-list->path itemdat))))
+	      (let* ((item-path (item-list->path itemdat))
+		     (testinfo  (db:get-test-info db run-id test-name item-path)))
 		(if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		    (begin
 		      (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result")
@@ -504,7 +505,10 @@ Called as " (string-intersperse (argv) " ")))
 						     (eq? (vector-ref exit-info 2) 0))
 						"PASS"
 						"FAIL")
-					    "FAIL") itemdat (args:get-arg "-m")))))
+					    "FAIL") itemdat (args:get-arg "-m"))))
+		;; for automated creation of the rollup html file this is a good place...
+		(tests:summarize-items db run-id test-name #f) ;; don't force - just update if no
+		)
 	      (mutex-unlock! m)
 	      ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
 	      ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
@@ -576,7 +580,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (args:get-arg "-set-toplog")
 	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (tests:summarize-items db run-id test-name))
+	      (tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
