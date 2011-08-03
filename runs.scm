@@ -157,26 +157,56 @@
 	  (if (obtain-dot-lock outputfilename 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
 	      (print "Obtained lock for " outputfilename)
 	      (print "Failed to obtain lock for " outputfilename))
-	  (let ((oup   (open-output-file outputfilename)))
+	  (let ((oup    (open-output-file outputfilename))
+		(counts (make-hash-table))
+		(statecounts (make-hash-table))
+		(outtxt "")
+		(tot    0))
 	    (with-output-to-port
 		oup
 	      (lambda ()
-		(print "<html><title>Summary: " test-name "</title><body><h1>Summary for " test-name "<table>")
+		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
+				   "</title><body><h2>Summary for " test-name "</h2>"))
 		(sqlite3:for-each-row 
 		 (lambda (id itempath state status run_duration logf comment)
-		   (print "<tr>"
-			  "<td><a href=\"" itempath "/" logf "\"</a>" itempath "</td>" 
-			  "<td>" state    "</td>" 
-			  "<td><font color=" (cond
-					      ((equal? status "PASS") "green")
-					      ((equal? status "FAIL") "red")
-					      (else "blue")) ">"   status   "</font></td>"
-					      "<td>" comment  "</td>"
-					      "</tr>"))
+		   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+		   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+		   (set! outtxt (conc outtxt "<tr>"
+				      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+				      "<td>" state    "</td>" 
+				      "<td><font color=" (cond
+							  ((equal? status "PASS") "green")
+							  ((equal? status "FAIL") "red")
+							  (else "blue")) ">"   status   "</font></td>"
+							  "<td>" (if (equal? comment "")
+								     "&nbsp;"
+								     comment) "</td>"
+							  "</tr>")))
 		 db
 		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
 		 run-id test-name)
-		(print "</body></html>")
+
+		;; Print out stats for status
+		(set! tot 0)
+		(print "<h2>State stats</h2><table cellspacing=\"0\" border=\"1\">")
+		(for-each (lambda (state)
+			    (set! tot (+ tot (hash-table-ref statecounts state)))
+			    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
+			  (hash-table-keys statecounts))
+		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+
+		;; Print out stats for state
+		(set! tot 0)
+		(print "<h2>Status stats</h2><table cellspacing=\"0\" border=\"1\">")
+		(for-each (lambda (status)
+			    (set! tot (+ tot (hash-table-ref counts status)))
+			    (print "<tr><td>" status "</td><td>" (hash-table-ref counts status) "</td></tr>"))
+			  (hash-table-keys counts))
+		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+
+		(print "<table cellspacing=\"0\" border=\"1\">" 
+		       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
+		       outtxt "</table></body></html>")
 		(release-dot-lock outputfilename)))
 	    (close-output-port oup)
 	    (change-directory orig-dir)
