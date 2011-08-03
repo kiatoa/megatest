@@ -158,3 +158,13 @@
     ((KILLED)           "234 101 17")
     ((NOT_STARTED)      "240 240 240")
     (else               "192 192 192")))
+
+(define (common:get-color-from-status status)
+  (cond
+   ((equal? status "PASS")    "green")
+   ((equal? status "FAIL")    "red")
+   ((equal? status "WARN")    "orange")
+   ((equal? status "KILLED")  "orange")
+   ((equal? status "KILLREQ") "purple")
+   ((equal? status "RUNNING") "blue")
+   (else "black")))

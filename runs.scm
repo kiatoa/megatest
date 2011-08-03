@@ -174,35 +174,36 @@
 		   (set! outtxt (conc outtxt "<tr>"
 				      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
 				      "<td>" state    "</td>" 
-				      "<td><font color=" (cond
-							  ((equal? status "PASS") "green")
-							  ((equal? status "FAIL") "red")
-							  (else "blue")) ">"   status   "</font></td>"
-							  "<td>" (if (equal? comment "")
-								     "&nbsp;"
-								     comment) "</td>"
-							  "</tr>")))
+				      "<td><font color=" (common:get-color-from-status status)
+				      ">"   status   "</font></td>"
+				      "<td>" (if (equal? comment "")
+						 "&nbsp;"
+						 comment) "</td>"
+						 "</tr>")))
 		 db
 		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
 		 run-id test-name)
 
+		(print "<table><tr><td valign=\"top\">")
 		;; Print out stats for status
 		(set! tot 0)
-		(print "<h2>State stats</h2><table cellspacing=\"0\" border=\"1\">")
+		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
 		(for-each (lambda (state)
 			    (set! tot (+ tot (hash-table-ref statecounts state)))
 			    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
 			  (hash-table-keys statecounts))
 		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-
+		(print "</td><td valign=\"top\">")
 		;; Print out stats for state
 		(set! tot 0)
-		(print "<h2>Status stats</h2><table cellspacing=\"0\" border=\"1\">")
+		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
 		(for-each (lambda (status)
 			    (set! tot (+ tot (hash-table-ref counts status)))
-			    (print "<tr><td>" status "</td><td>" (hash-table-ref counts status) "</td></tr>"))
+			    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
+				   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
 			  (hash-table-keys counts))
 		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+		(print "</td></td></tr></table>")
 
 		(print "<table cellspacing=\"0\" border=\"1\">" 
 		       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
