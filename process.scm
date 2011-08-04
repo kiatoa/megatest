@@ -14,12 +14,15 @@
 ;;======================================================================
 
 (define (cmd-run-proc-each-line cmd proc . params)
+  ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions
    exn
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
      #f)
-   (let-values (((fh fho pid) (process cmd params)))
+   (let-values (((fh fho pid) (if (null? params)
+				  (process cmd)
+				  (process cmd params))))
      (let loop ((curr (read-line fh))
 		(result  '()))
        (if (not (eof-object? curr))

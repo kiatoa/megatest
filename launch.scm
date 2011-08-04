@@ -95,7 +95,8 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test db run-id test-conf keyvallst test-name test-path itemdat)
   (change-directory *toppath*)
-  (let ((launcher   (config-lookup *configdat* "jobtools"     "launcher"))
+  (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
+	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	(runscript  (config-lookup test-conf   "setup"        "runscript"))
 	(diskspace  (config-lookup test-conf   "requirements" "diskspace"))
 	(memory     (config-lookup test-conf   "requirements" "memory"))
@@ -159,9 +160,13 @@
 					  (list "MT_RUNNAME"   (args:get-arg ":runname")))
 				    itemdat)))
 	   (launch-results (apply cmd-run-proc-each-line
-				  (car fullcmd)
+				  (if useshell
+				      (string-intersperse fullcmd " ")
+				      (car fullcmd))
 				  print
-				  (cdr fullcmd)))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
+				  (if useshell
+				      '()
+				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 4 "Launch results: " launch-results)
       (if (not launch-results)
@@ -171,6 +176,7 @@
 	    ;; good ole "exit" seems not to work
 	    ;; (_exit 9)
 	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+	    ;; NB// Is this still needed? Should be safe to go back to "exit" now?
 	    (process-signal (current-process-id) signal/kill)
 	    ))
       (alist->env-vars miscprevvals)
