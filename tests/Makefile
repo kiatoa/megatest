@@ -16,7 +16,7 @@ dashboard :
 	../dashboard &
 
 remove :
-	(cd ../;make);../megatest -remove-runs :runname %3  -testpatt % -itempatt % :sysname % :fsname % :datapath %
+	(cd ../;make);../megatest -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;done

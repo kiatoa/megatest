@@ -406,8 +406,7 @@
 				      (begin
 					(set! ever-seen #t)
 					(if (not (and (equal? (db:test-get-state test) "COMPLETED")
-						      (or (equal? (db:test-get-status test) "PASS")
-							  (equal? (db:test-get-status test) "WARN"))))
+						      (member (db:test-get-status test) '("PASS" "WARN" "CHECK"))))
 					    (set! result (cons waitontest-name result))))))
 				tests)
 		      (if (not ever-seen)(set! result (cons waitontest-name result)))))

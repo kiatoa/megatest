@@ -5,6 +5,12 @@ require "#{ENV['MT_RUN_AREA_HOME']}/supportfiles/ruby/librunscript.rb"
 # run_record(stepname, cmd) - will record in db if exit code of script was zero or not
 run_and_record('create db',"sqlite3 testing.db << EOF\ncreate table if not exists blah(id INTEGER PRIMARY KEY,name TEXT);\n.q\nEOF","")
 
+if (! File.exists?("../../runfirst/I_was_here"))
+    puts "ERROR: This test was started before the prerequisites ran!"
+    system "megatest -test-status :state INCOMPLETE :status FAIL"
+    exit 1
+end
+
 # file_size_checker(stepname, filename, minsize, maxsize) - negative means ignore
 # file_size_checker('create db','testing.db',100,-1)
 

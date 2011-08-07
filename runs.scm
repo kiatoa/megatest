@@ -357,7 +357,8 @@
 (define (run-tests db test-names)
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys->vallist keys #t))
-	 (run-id      (register-run db keys))) ;;  test-name)))
+	 (run-id      (register-run db keys))  ;;  test-name)))
+	 (deferred    '())) ;; delay running these since they have a waiton clause
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
     (if (and (eq? *passnum* 0)
@@ -512,7 +513,9 @@
 						       (launch-test db run-id test-conf keyvallst test-name test-path itemdat)))
 				    (testrundat      (list get-prereqs-cmd launch-cmd)))
 			       (if (or (args:get-arg "-force")
-				       (null? ((car testrundat)))) ;; are there any tests that must be run before this one...
+				       (let ((preqs-not-yet-met ((car testrundat))))
+					 (debug:print 2 "Preqrequesites for " test-name ": " preqs-not-yet-met)
+					 (null? preqs-not-yet-met))) ;; are there any tests that must be run before this one...
 				   (if (not ((cadr testrundat))) ;; this is the line that launches the test to the remote host
 				       (begin
 					 (print "ERROR: Failed to launch the test. Exiting as soon as possible")
