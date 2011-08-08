@@ -635,3 +635,16 @@
 		   ))))
 	 ))
      runs)))
+
+;;======================================================================
+;; Routines for manipulating runs
+;;======================================================================
+
+(define (runs:rollup-run db keys n)
+  (let* ((new-run-id   (register-run db keys))
+	 (similar-runs (db:get-similar-runs db keys))
+	 (tests-n-days (db:get-tests-n-days db similar-runs)))
+    (for-each 
+     (lambda (test-id)
+       (db:rollup-test db run-id test-id))
+     tests-n-days)))

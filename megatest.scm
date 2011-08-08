@@ -56,6 +56,9 @@ Misc
   -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
                             if -keepgoing is also specified)
   -rebuild-db             : bring the database schema up to date
+  -rollup N               : fill run (set by :runname)  with latest test(s) from
+                            past N days, requires keys
+  -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -90,6 +93,9 @@ Called as " (string-intersperse (argv) " ")))
 			"-logpro"
 			"-m"
 			"-rerun"
+			"-days"
+			"-rename-run"
+			"-to"
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
@@ -104,6 +110,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-keepgoing"
 			"-usequeue"
 			"-rebuild-db"
+			"-rollup"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -281,6 +288,11 @@ Called as " (string-intersperse (argv) " ")))
 	  ;; (run-waiting-tests db)
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
+
+;;======================================================================
+;; Rollup into a run
+;;======================================================================
+(if (args:get-arg "-rollup")
 
 ;;======================================================================
 ;; run one test
