@@ -640,7 +640,33 @@
 ;; Routines for manipulating runs
 ;;======================================================================
 
-(define (runs:rollup-run db keys n)
+;; Since many calls to a run require pretty much the same setup 
+;; this wrapper is used to reduce the replication of code
+(define (general-run-call switchname action-desc proc)
+  (if (not (args:get-arg ":runname"))
+      (begin
+	(debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
+	(exit 2))
+      (let ((db #f))
+	(if (not (setup-for-run))
+	    (begin 
+	      (debug:print 0 "Failed to setup, exiting")
+	      (exit 1)))
+	(set! db (open-db))
+	(if (not (car *configinfo*))
+	    (begin
+	      (debug:print 0 "ERROR: Attempted to " action-desc " but run area config file not found")
+	      (exit 1))
+	    ;; Extract out stuff needed in most or many calls
+	    ;; here then call proc
+	    (let* ((keys       (db-get-keys db))
+		   (keynames   (map key:get-fieldname keys))
+		   (keyvallst  (keys->vallist keys #t)))
+	      (proc db keys keynames keyvallst)))
+	(sqlite3:finalize! db)
+	(set! *didsomething* #t))))
+
+(define (runs:rollup-run db keys keynames keyvallst n)
   (let* ((new-run-id   (register-run db keys))
 	 (similar-runs (db:get-similar-runs db keys))
 	 (tests-n-days (db:get-tests-n-days db similar-runs)))
