@@ -358,7 +358,7 @@
 ;;======================================================================
 
 ;; make-vector-record db testmeta id testname author owner description reviewed iterated avg_runtime avg_disk
-(define (make-db:testmeta)(make-vector 10))
+(define (make-db:testmeta)(make-vector 10 ""))
 (define-inline (db:testmeta-get-id            vec)    (vector-ref  vec 0))
 (define-inline (db:testmeta-get-testname      vec)    (vector-ref  vec 1))
 (define-inline (db:testmeta-get-author        vec)    (vector-ref  vec 2))
@@ -391,7 +391,7 @@
 
 ;; create a new record for a given testname
 (define (db:testmeta-add-record db testname)
-  (sqlite3:execute db "INSERT OR IGNORE INTO test_meta (testname) VALUES (?);" testname))
+  (sqlite3:execute db "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))
 
 ;; update one of the testmeta fields
 (define (db:testmeta-update-field db testname field value)

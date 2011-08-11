@@ -11,7 +11,7 @@ $(PREFIX)/bin/megatest : megatest
 	sleep 5
 	cp megatest $(PREFIX)/bin/megatest
 
-$(PREFIX)/bin/dashboard : dashboard
+$(PREFIX)/bin/dashboard : dashboard $(FILES)
 	cp dashboard $(PREFIX)/bin/dashboard
 
 install : $(PREFIX)/bin/megatest $(PREFIX)/bin/dashboard
