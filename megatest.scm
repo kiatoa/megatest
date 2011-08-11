@@ -56,6 +56,9 @@ Misc
   -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
                             if -keepgoing is also specified)
   -rebuild-db             : bring the database schema up to date
+  -rollup N               : fill run (set by :runname)  with latest test(s) from
+                            past N days, requires keys
+  -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -90,6 +93,9 @@ Called as " (string-intersperse (argv) " ")))
 			"-logpro"
 			"-m"
 			"-rerun"
+			"-days"
+			"-rename-run"
+			"-to"
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
@@ -104,6 +110,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-keepgoing"
 			"-usequeue"
 			"-rebuild-db"
+			"-rollup"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -260,27 +267,25 @@ Called as " (string-intersperse (argv) " ")))
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
 (if (args:get-arg "-runall")
-    (if (not (args:get-arg ":runname"))
-	(begin
-	  (debug:print 0 "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
-	  (exit 2))
-	(let* ((db      (if (setup-for-run)
-			    (open-db)
-			    (begin
-			      (debug:print 0 "Failed to setup, exiting")
-			      (exit 1)))))
-	  (if (not (car *configinfo*))
-	      (begin
-		(debug:print 0 "ERROR: Attempted to run a test but run area config file not found")
-		(exit 1))
-	      ;; put test parameters into convenient variables
-	      (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
-		(debug:print 1 "INFO: Attempting to start the following tests...")
-		(debug:print 1 "     " (string-intersperse test-names ","))
-		(run-tests db test-names)))
-	  ;; (run-waiting-tests db)
-	  (sqlite3:finalize! db)
-	  (set! *didsomething* #t))))
+    (general-run-call 
+     "-runall"
+     "run all tests"
+     (lambda (db keys keynames keyvallst)
+       (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
+	 (debug:print 1 "INFO: Attempting to start the following tests...")
+	 (debug:print 1 "     " (string-intersperse test-names ","))
+	 (run-tests db test-names)))))
+
+;;======================================================================
+;; Rollup into a run
+;;======================================================================
+(if (args:get-arg "-rollup")
+    (general-run-call 
+     "-rollup" 
+     "rollup tests" 
+     (lambda (db keys keynames keyvallst)
+       (let ((n (args:get-arg "-rollup")))
+	 (runs:rollup db keys keynames keyvallst n)))))
 
 ;;======================================================================
 ;; run one test
@@ -299,31 +304,13 @@ Called as " (string-intersperse (argv) " ")))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-(define (runtests)
-  (if (not (args:get-arg ":runname"))
-      (begin
-	(debug:print 0 "ERROR: Missing required parameter for -runtests, you must specify the run name with :runname runname")
-	(exit 2))
-      (let ((db #f))
-	(if (not (setup-for-run))
-	    (begin 
-	      (debug:print 0 "Failed to setup, exiting")
-	      (exit 1)))
-	(set! db (open-db))
-	(if (not (car *configinfo*))
-	    (begin
-	      (debug:print 0 "ERROR: Attempted to run a test but run area config file not found")
-	      (exit 1))
-	    ;; put test parameters into convenient variables
-	    (let* ((test-names   (string-split (args:get-arg "-runtests") ",")))
-	      (run-tests db test-names)))
-	;; run-waiting-tests db)
-	(sqlite3:finalize! db)
-	;; (run-waiting-tests #f)
-	(set! *didsomething* #t))))
-	  
 (if (args:get-arg "-runtests")
-    (runtests))
+  (general-run-call 
+   "-runtests" 
+   "run a test" 
+   (lambda (db keys keynames keyvallst)
+     (let ((test-names (string-split (args:get-arg "-runtests") ",")))
+       (run-tests db test-names)))))
 
 ;;======================================================================
 ;; execute the test
@@ -507,7 +494,8 @@ Called as " (string-intersperse (argv) " ")))
 						"FAIL")
 					    "FAIL") itemdat (args:get-arg "-m"))))
 		;; for automated creation of the rollup html file this is a good place...
-		(tests:summarize-items db run-id test-name #f) ;; don't force - just update if no
+		(if (not (equal? item-path ""))
+		   (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
 		)
 	      (mutex-unlock! m)
 	      ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))

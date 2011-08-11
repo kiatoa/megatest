@@ -62,6 +62,44 @@
 			   (db:test-get-id testdat))))))))
 
 ;;======================================================================
+;; Test meta panel
+;;======================================================================
+(define (test-meta-panel testmeta store-meta)
+  (iup:frame 
+   #:title "Test Meta Data" ; #:expand "YES"
+   (iup:hbox ; #:expand "YES"
+    (apply iup:vbox ; #:expand "YES"
+	   (append (map (lambda (val)
+			  (iup:label val ; #:expand "HORIZONTAL"
+				     ))
+			(list "Author: "
+			      "Owner: "
+			      "Reviewed: "
+			      "Tags: "
+			      "Description: "
+			      ))
+		   (list (iup:label "" #:expand "VERTICAL"))))
+    (apply iup:vbox  ; #:expand "YES"
+	   (list 
+	    (store-meta "author"
+			 (iup:label (db:testmeta-get-author testmeta) #:expand "HORIZONTAL")
+			 (lambda (testmeta)(db:testmeta-get-author testmeta)))
+	    (store-meta "owner"
+			 (iup:label (db:testmeta-get-owner testmeta) #:expand "HORIZONTAL")
+			 (lambda (testmeta)(db:testmeta-get-owner testmeta)))
+	    (store-meta "reviewed" 
+			 (iup:label (db:testmeta-get-reviewed testmeta) #:expand "HORIZONTAL")
+			 (lambda (testmeta)(db:testmeta-get-reviewed testmeta)))
+	    (store-meta "tags" 
+			 (iup:label (db:testmeta-get-tags testmeta) #:expand "HORIZONTAL")
+			 (lambda (testmeta)(db:testmeta-get-tags testmeta)))
+	    (store-meta "description" 
+			 (iup:label (db:testmeta-get-description testmeta) #:expand "HORIZONTAL")
+			 (lambda (testmeta)(db:testmeta-get-description testmeta)))
+	    )))))
+
+
+;;======================================================================
 ;; Run info panel
 ;;======================================================================
 (define (run-info-panel keydat testdat runname)
@@ -203,6 +241,11 @@
 	 (logfile       "/this/dir/better/not/exist")
 	 (rundir        logfile)
 	 (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
+	 (testname      (if testdat (db:test-get-testname testdat) "n/a"))
+	 (testmeta      (if testdat 
+			    (let ((tm (db:testmeta-get-record db testname)))
+			      (if tm tm (make-db:testmeta)))
+			    (make-db:testmeta)))
 	 (viewlog    (lambda (x)
 		       (if (file-exists? logfile)
 			   ;(system (conc "firefox " logfile "&"))
@@ -231,11 +274,24 @@
 			     (begin
 			       (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
 	 (widgets      (make-hash-table))
+	 (meta-widgets (make-hash-table))
 	 (self         #f)
 	 (store-label  (lambda (name lbl cmd)
 			 (hash-table-set! widgets name 
 					  (lambda (testdat)
 					    (let ((newval (cmd testdat))
+						  (oldval (iup:attribute lbl "TITLE")))
+					      (if (not (equal? newval oldval))
+						  (begin
+						    ;(mutex-lock! mx1)
+						    (iup:attribute-set! lbl "TITLE" newval)
+						    ;(mutex-unlock! mx1)
+						    )))))
+			 lbl))
+	 (store-meta  (lambda (name lbl cmd)
+			 (hash-table-set! meta-widgets name 
+					  (lambda (testmeta)
+					    (let ((newval (cmd testmeta))
 						  (oldval (iup:attribute lbl "TITLE")))
 					      (if (not (equal? newval oldval))
 						  (begin
@@ -257,7 +313,8 @@
                ;; The run and test info
 	       (iup:hbox  ; #:expand "YES"
 		(run-info-panel keydat testdat runname)
-		(test-info-panel testdat store-label widgets))
+		(test-info-panel testdat store-label widgets)
+		(test-meta-panel testmeta store-meta))
 	       (host-info-panel testdat store-label)
 	       ;; The controls
 	       (iup:frame #:title "Actions" 

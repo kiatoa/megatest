@@ -3,7 +3,7 @@ FILES=$(glob *.scm)
 megatest: common.scm configf.scm db.scm keys.scm launch.scm megatest.scm process.scm runs.scm gui.scm
 	csc megatest.scm 
 
-dashboard: megatest dashboard.scm dashboard-tests.scm
+dashboard: dashboard.scm dashboard-tests.scm
 	csc dashboard.scm
 
 $(PREFIX)/bin/megatest : megatest
@@ -11,11 +11,11 @@ $(PREFIX)/bin/megatest : megatest
 	sleep 5
 	cp megatest $(PREFIX)/bin/megatest
 
-$(PREFIX)/bin/dashboard : dashboard
+$(PREFIX)/bin/dashboard : dashboard $(FILES)
 	cp dashboard $(PREFIX)/bin/dashboard
 
 install : $(PREFIX)/bin/megatest $(PREFIX)/bin/dashboard
 
-test: megatest tests/tests.scm
+test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
 

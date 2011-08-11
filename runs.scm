@@ -428,6 +428,24 @@
 		(print "itestable: ")(pp (item-table->item-list itemstable))))
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
+
+	  ;; Here is where the test_meta table is best updated
+	  (let ((currrecord (db:testmeta-get-record db test-name)))
+	    (if (not currrecord)
+		(begin
+		  (set! currrecord (make-vector 10 #f))
+		  (db:testmeta-add-record db test-name)))
+	    (for-each 
+	     (lambda (key)
+	       (let* ((idx (cadr key))
+		      (fld (car  key))
+		      (val (config-lookup test-conf "test_meta" fld)))
+		 (if (and val (not (equal? (vector-ref currrecord idx) val)))
+		     (begin
+		       (print "Updating " test-name " " fld " to " val)
+		       (db:testmeta-update-field db test-name fld val)))))
+	     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9))))
+
 	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
 	  (if (null? allitems)(set! allitems '(())))
 	  (let loop ((itemdat (car allitems))
@@ -635,3 +653,42 @@
 		   ))))
 	 ))
      runs)))
+
+;;======================================================================
+;; Routines for manipulating runs
+;;======================================================================
+
+;; Since many calls to a run require pretty much the same setup 
+;; this wrapper is used to reduce the replication of code
+(define (general-run-call switchname action-desc proc)
+  (if (not (args:get-arg ":runname"))
+      (begin
+	(debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
+	(exit 2))
+      (let ((db #f))
+	(if (not (setup-for-run))
+	    (begin 
+	      (debug:print 0 "Failed to setup, exiting")
+	      (exit 1)))
+	(set! db (open-db))
+	(if (not (car *configinfo*))
+	    (begin
+	      (debug:print 0 "ERROR: Attempted to " action-desc " but run area config file not found")
+	      (exit 1))
+	    ;; Extract out stuff needed in most or many calls
+	    ;; here then call proc
+	    (let* ((keys       (db-get-keys db))
+		   (keynames   (map key:get-fieldname keys))
+		   (keyvallst  (keys->vallist keys #t)))
+	      (proc db keys keynames keyvallst)))
+	(sqlite3:finalize! db)
+	(set! *didsomething* #t))))
+
+(define (runs:rollup-run db keys keynames keyvallst n)
+  (let* ((new-run-id   (register-run db keys))
+	 (similar-runs (db:get-similar-runs db keys))
+	 (tests-n-days (db:get-tests-n-days db similar-runs)))
+    (for-each 
+     (lambda (test-id)
+       (db:rollup-test db run-id test-id))
+     tests-n-days)))

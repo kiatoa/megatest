@@ -81,7 +81,8 @@
 	  (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (id,var));")
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
-	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")))
+	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+	  (patch-db db)))
     db))
 
 ;;======================================================================
@@ -97,20 +98,32 @@
      (print "ERROR: Possible out of date schema, attempting to add table metadata...")
      (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (id,var));")
-     (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")
      (db:set-var db "MEGATEST_VERSION" 1.17)
      )
    (let ((mver (db:get-var db "MEGATEST_VERSION")))
-     (if(not mver)
+     (print "Current schema version: " mver " current megatest version: " megatest-version)
+     (if (not mver)
 	(begin
 	  (print "Adding megatest-version to metadata")
 	  (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version))))
-     (if (< mver 1.18)
-	 (begin
-	   (print "Adding tags column to tests table")
-	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
-     (db:set-var db "MEGATEST_VERSION" megatest-version)
-     )))
+     ;;      (if (< mver 1.18)
+     ;; 	 (begin
+     ;; 	   (print "Adding tags column to tests table")
+     ;; 	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
+     (if (< mver 1.20)
+	 (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
+                                     testname    TEXT DEFAULT '',
+                                     author      TEXT DEFAULT '',
+                                     owner       TEXT DEFAULT '',
+                                     description TEXT DEFAULT '',
+                                     reviewed    TIMESTAMP,
+                                     iterated    TEXT DEFAULT '',
+                                     avg_runtime REAL,
+                                     avg_disk    REAL,
+                                     tags        TEXT DEFAULT '',
+                                CONSTRAINT test_meta_contstraint UNIQUE (id,testname));"))
+     (if (< mver megatest-version)
+	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
 
 ;;======================================================================
 ;; meta get and set vars
@@ -341,6 +354,50 @@
      rundir run-id testname item-path))
 
 ;;======================================================================
+;; Tests meta data
+;;======================================================================
+
+;; make-vector-record db testmeta id testname author owner description reviewed iterated avg_runtime avg_disk
+(define (make-db:testmeta)(make-vector 10 ""))
+(define-inline (db:testmeta-get-id            vec)    (vector-ref  vec 0))
+(define-inline (db:testmeta-get-testname      vec)    (vector-ref  vec 1))
+(define-inline (db:testmeta-get-author        vec)    (vector-ref  vec 2))
+(define-inline (db:testmeta-get-owner         vec)    (vector-ref  vec 3))
+(define-inline (db:testmeta-get-description   vec)    (vector-ref  vec 4))
+(define-inline (db:testmeta-get-reviewed      vec)    (vector-ref  vec 5))
+(define-inline (db:testmeta-get-iterated      vec)    (vector-ref  vec 6))
+(define-inline (db:testmeta-get-avg_runtime   vec)    (vector-ref  vec 7))
+(define-inline (db:testmeta-get-avg_disk      vec)    (vector-ref  vec 8))
+(define-inline (db:testmeta-get-tags          vec)    (vector-ref  vec 9))
+(define-inline (db:testmeta-set-id!           vec val)(vector-set! vec 0 val))
+(define-inline (db:testmeta-set-testname!     vec val)(vector-set! vec 1 val))
+(define-inline (db:testmeta-set-author!       vec val)(vector-set! vec 2 val))
+(define-inline (db:testmeta-set-owner!        vec val)(vector-set! vec 3 val))
+(define-inline (db:testmeta-set-description!  vec val)(vector-set! vec 4 val))
+(define-inline (db:testmeta-set-reviewed!     vec val)(vector-set! vec 5 val))
+(define-inline (db:testmeta-set-iterated!     vec val)(vector-set! vec 6 val))
+(define-inline (db:testmeta-set-avg_runtime!  vec val)(vector-set! vec 7 val))
+(define-inline (db:testmeta-set-avg_disk!     vec val)(vector-set! vec 8 val))
+
+;; read the record given a testname
+(define (db:testmeta-get-record db testname)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags)
+       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags)))
+     db "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags FROM test_meta WHERE testname=?;"
+     testname)
+    res))
+
+;; create a new record for a given testname
+(define (db:testmeta-add-record db testname)
+  (sqlite3:execute db "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))
+
+;; update one of the testmeta fields
+(define (db:testmeta-update-field db testname field value)
+  (sqlite3:execute db (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
+
+;;======================================================================
 ;; Steps
 ;;======================================================================
 ;; Run steps
@@ -431,3 +488,4 @@
 ;;  	     (pre-dep-names   (map db:test-get-testname completed-tests))
 ;;  	     (result          (lset-difference string=? waiton pre-dep-names)))
 ;;  	(print "pre-dep-names: " pre-dep-names " waiton: " waiton " result: " result)
+
