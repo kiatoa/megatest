@@ -428,11 +428,23 @@
 		(print "itestable: ")(pp (item-table->item-list itemstable))))
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
+
 	  ;; Here is where the test_meta table is best updated
-	  (for-each 
-	   (lambda (key)
-	     (let ((val (config-lookup *configdat* "test_meta" key)))
-			
+	  (let ((currrecord (db:testmeta-get-record db test-name)))
+	    (if (not currrecord)
+		(begin
+		  (set! currrecord (make-vector 10 #f))
+		  (db:testmeta-add-record db test-name)))
+	    (for-each 
+	     (lambda (key)
+	       (let* ((idx (cadr key))
+		      (fld (car  key))
+		      (val (config-lookup test-conf "test_meta" fld)))
+		 (if (and val (not (equal? (vector-ref currrecord idx) val)))
+		     (begin
+		       (print "Updating " test-name " " fld " to " val)
+		       (db:testmeta-update-field db test-name fld val)))))
+	     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9))))
 
 	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
 	  (if (null? allitems)(set! allitems '(())))

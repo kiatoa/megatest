@@ -89,14 +89,14 @@
 								       (string-substitute (regexp lead) "" whsp)
 								       "")
 								   val)))
-						      (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
+						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
 						      (hash-table-set! res curr-section-name 
 								       (config:assoc-safe-add alist var-flag newval))
 						      (loop (read-line inp) curr-section-name var-flag (if lead lead whsp)))
 						    (loop (read-line inp) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (read-line inp) curr-section-name))))))))
+		     (loop (read-line inp) curr-section-name #f #f))))))))
   
 (define (find-and-read-config fname)
   (let* ((curr-dir   (current-directory))

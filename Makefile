@@ -3,7 +3,7 @@ FILES=$(glob *.scm)
 megatest: common.scm configf.scm db.scm keys.scm launch.scm megatest.scm process.scm runs.scm gui.scm
 	csc megatest.scm 
 
-dashboard: megatest dashboard.scm dashboard-tests.scm
+dashboard: dashboard.scm dashboard-tests.scm
 	csc dashboard.scm
 
 $(PREFIX)/bin/megatest : megatest
