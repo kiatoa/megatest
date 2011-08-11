@@ -20,6 +20,7 @@
 (test "Get best dir" #t (let ((bestdir (get-best-disk conffile)))
 			      (or (equal? "./"   bestdir)
 				  (equal? "/tmp" bestdir))))
+(test "Multiline variable" 4 (length (string-split (config-lookup conffile "metadata" "description") "\n")))
 
 ;; db
 (define row    (vector "a" "b" "c" "blah"))
@@ -62,7 +63,7 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(register-test *db* 1 "nada" "")
+	(register-test *db* 1 "nada" "" '("tag1" "tag2" "tag3"))
 	(test:get-state (db:get-test-info *db* 1 "nada" ""))))
 
 (test "get-keys" "sysname" (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))

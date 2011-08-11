@@ -428,6 +428,12 @@
 		(print "itestable: ")(pp (item-table->item-list itemstable))))
 	  (if (args:get-arg "-m")
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
+	  ;; Here is where the test_meta table is best updated
+	  (for-each 
+	   (lambda (key)
+	     (let ((val (config-lookup *configdat* "test_meta" key)))
+			
+
 	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
 	  (if (null? allitems)(set! allitems '(())))
 	  (let loop ((itemdat (car allitems))

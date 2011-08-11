@@ -27,8 +27,8 @@
 		  (loop remcwd))))))))
 
 (define (config:assoc-safe-add alist key val)
-  (let ((newalist (filter (lambda (x)(not (equal? key x))) alist)))
-    (append alist (list (list key val)))))
+  (let ((newalist (filter (lambda (x)(not (equal? key (car x)))) alist)))
+    (append newalist (list (list key val)))))
 
 ;; read a config file, returns two level hierarchial hash-table,
 ;; adds to ht if given (must be #f otherwise)
@@ -42,21 +42,24 @@
 	    (blank-l-rx (regexp "^\\s*$"))
 	    (key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
 	    (key-val-pr (regexp "^(\\S+)\\s+(.*)$"))
-	    (comment-rx (regexp "^\\s*#.*")))
+	    (comment-rx (regexp "^\\s*#.*"))
+	    (cont-ln-rx (regexp "^(\\s+)(\\S+.*)$")))
 	(let loop ((inl               (read-line inp))
-		   (curr-section-name "default"))
+		   (curr-section-name "default")
+		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
+		   (lead     #f))
 	  (if (eof-object? inl) 
 	      (begin
 		(close-input-port inp)
 		res)
 	      (regex-case 
 	       inl 
-	       (comment-rx _                  (loop (read-line inp) curr-section-name))
-	       (blank-l-rx _                  (loop (read-line inp) curr-section-name))
+	       (comment-rx _                  (loop (read-line inp) curr-section-name #f #f))
+	       (blank-l-rx _                  (loop (read-line inp) curr-section-name #f #f))
 	       (include-rx ( x include-file ) (begin
 						(read-config include-file res)
-						(loop (read-line inp) curr-section-name)))
-	       (section-rx ( x section-name ) (loop (read-line inp) section-name))
+						(loop (read-line inp) curr-section-name #f #f)))
+	       (section-rx ( x section-name ) (loop (read-line inp) section-name #f #f))
 	       (key-sys-pr ( x key cmd      ) (let ((alist (hash-table-ref/default res curr-section-name '()))
 						    (val   (let* ((cmdres  (cmd-run->list cmd))
 								  (status  (cadr cmdres))
@@ -71,13 +74,28 @@
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key val))
 								 ;; (append alist (list (list key val))))
-						(loop (read-line inp) curr-section-name)))
+						(loop (read-line inp) curr-section-name #f #f)))
 	       (key-val-pr ( x key val      ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key val))
-								 ;; (append alist (list (list key val))))
-						(loop (read-line inp) curr-section-name)))
+						(loop (read-line inp) curr-section-name key #f)))
+	       ;; if a continued line
+	       (cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
+						(if var-flag             ;; if set to a string then we have a continued var
+						    (let ((newval (conc 
+								   (config-lookup res curr-section-name var-flag) "\n"
+								   ;; trim lead from the incoming whsp to support some indenting.
+								   (if lead
+								       (string-substitute (regexp lead) "" whsp)
+								       "")
+								   val)))
+						      (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
+						      (hash-table-set! res curr-section-name 
+								       (config:assoc-safe-add alist var-flag newval))
+						      (loop (read-line inp) curr-section-name var-flag (if lead lead whsp)))
+						    (loop (read-line inp) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
+		     (set! var-flag #f)
 		     (loop (read-line inp) curr-section-name))))))))
   
 (define (find-and-read-config fname)

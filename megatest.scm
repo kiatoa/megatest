@@ -304,17 +304,13 @@ Called as " (string-intersperse (argv) " ")))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-
-(define (runtests)
+(if (args:get-arg "-runtests")
   (general-run-call 
    "-runtests" 
    "run a test" 
    (lambda (db keys keynames keyvallst)
      (let ((test-names (string-split (args:get-arg "-runtests") ",")))
        (run-tests db test-names)))))
-
-(if (args:get-arg "-runtests")
-    (runtests))
 
 ;;======================================================================
 ;; execute the test

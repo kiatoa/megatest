@@ -14,3 +14,11 @@ SEASON summer winter fall spring
 BLOCK a  b
 TOCK  1  2
 
+[test_meta]
+author matt
+owner  bob
+description This test must
+ be run before the other tests
+
+tags first,single
+reviewed 1/1/1965

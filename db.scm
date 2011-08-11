@@ -81,7 +81,19 @@
 	  (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (id,var));")
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
-	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")))
+	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+	  (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
+                                     testname    TEXT DEFAULT '',
+                                     author      TEXT DEFAULT '',
+                                     owner       TEXT DEFAULT '',
+                                     description TEXT DEFAULT '',
+                                     reviewed    TIMESTAMP,
+                                     iterated    TEXT DEFAULT '',
+                                     avg_runtime REAL,
+                                     avg_disk    REAL,
+                                CONSTRAINT test_meta_contstraint UNIQUE (id,testname));")
+
+	  ))
     db))
 
 ;;======================================================================
@@ -101,7 +113,7 @@
      (db:set-var db "MEGATEST_VERSION" 1.17)
      )
    (let ((mver (db:get-var db "MEGATEST_VERSION")))
-     (if(not mver)
+     (if (not mver)
 	(begin
 	  (print "Adding megatest-version to metadata")
 	  (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version))))

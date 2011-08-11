@@ -16,6 +16,6 @@ $(PREFIX)/bin/dashboard : dashboard
 
 install : $(PREFIX)/bin/megatest $(PREFIX)/bin/dashboard
 
-test: megatest tests/tests.scm
+test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
 
