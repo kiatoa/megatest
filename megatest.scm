@@ -59,6 +59,7 @@ Misc
   -rollup N               : fill run (set by :runname)  with latest test(s) from
                             past N days, requires keys
   -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
+  -update-meta            : update the tests metadata for all tests
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -111,6 +112,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-usequeue"
 			"-rebuild-db"
 			"-rollup"
+			"-update-meta"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -665,6 +667,22 @@ Called as " (string-intersperse (argv) " ")))
       ;; now can find our db
       (set! db (open-db))
       (patch-db db)
+      (sqlite3:finalize! db)
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Update the tests meta data from the testconfig files
+;;
+
+(if (args:get-arg "-update-meta")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      ;; now can find our db
+      (set! db (open-db))
+      (runs:update-all-test_meta db)
       (sqlite3:finalize! db)
       (set! *didsomething* #t)))
 

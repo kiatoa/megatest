@@ -402,7 +402,7 @@
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	 (test-conf    (if testexists (read-config test-configf) (make-hash-table)))
+	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))
 	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
 			 (if (string? w)(string-split w)'())))
 	 (tags         (let ((t (config-lookup test-conf "setup" "tags")))
@@ -430,21 +430,7 @@
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 
 	  ;; Here is where the test_meta table is best updated
-	  (let ((currrecord (db:testmeta-get-record db test-name)))
-	    (if (not currrecord)
-		(begin
-		  (set! currrecord (make-vector 10 #f))
-		  (db:testmeta-add-record db test-name)))
-	    (for-each 
-	     (lambda (key)
-	       (let* ((idx (cadr key))
-		      (fld (car  key))
-		      (val (config-lookup test-conf "test_meta" fld)))
-		 (if (and val (not (equal? (vector-ref currrecord idx) val)))
-		     (begin
-		       (print "Updating " test-name " " fld " to " val)
-		       (db:testmeta-update-field db test-name fld val)))))
-	     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9))))
+	  (runs:update-test_meta db test-name test-conf)
 
 	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
 	  (if (null? allitems)(set! allitems '(())))
@@ -684,9 +670,44 @@
 	(sqlite3:finalize! db)
 	(set! *didsomething* #t))))
 
+;;======================================================================
+;; Rollup runs
+;;======================================================================
+
+;; Update the test_meta table for this test
+(define (runs:update-test_meta db test-name test-conf)
+  (let ((currrecord (db:testmeta-get-record db test-name)))
+    (if (not currrecord)
+	(begin
+	  (set! currrecord (make-vector 10 #f))
+	  (db:testmeta-add-record db test-name)))
+    (for-each 
+     (lambda (key)
+       (let* ((idx (cadr key))
+	      (fld (car  key))
+	      (val (config-lookup test-conf "test_meta" fld)))
+	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
+	     (begin
+	       (print "Updating " test-name " " fld " to " val)
+	       (db:testmeta-update-field db test-name fld val)))))
+     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
+
+;; Update test_meta for all tests
+(define (runs:update-all-test_meta db)
+  (let ((test-names (get-all-legal-tests)))
+    (for-each 
+     (lambda (test-name)
+       (let* ((test-path    (conc *toppath* "/tests/" test-name))
+	      (test-configf (conc test-path "/testconfig"))
+	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	      ;; read configs with tricks turned off (i.e. no system)
+	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
+	 (runs:update-test_meta db test-name test-conf)))
+     test-names)))
+	 
 (define (runs:rollup-run db keys keynames keyvallst n)
   (let* ((new-run-id   (register-run db keys))
-	 (similar-runs (db:get-similar-runs db keys))
+	 (similar-runs (db:get-runs db keys))
 	 (tests-n-days (db:get-tests-n-days db similar-runs)))
     (for-each 
      (lambda (test-id)

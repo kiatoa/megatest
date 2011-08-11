@@ -12,10 +12,10 @@
 (include "../megatest-version.scm")
 
 (define conffile #f)
-(test "Read a config" #t (hash-table? (read-config "test.config")))
-(test "Read a config that doesn't exist" #t (hash-table? (read-config "nada.config")))
+(test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))
+(test "Read a config that doesn't exist" #t (hash-table? (read-config "nada.config" #f #f)))
 
-(set! conffile (read-config "test.config"))
+(set! conffile (read-config "test.config" #f #f))
 (test "Get available diskspace" #t (number? (get-df "./")))
 (test "Get best dir" #t (let ((bestdir (get-best-disk conffile)))
 			      (or (equal? "./"   bestdir)
