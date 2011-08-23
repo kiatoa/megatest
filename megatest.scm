@@ -39,6 +39,14 @@ Run data
   :state                  : required if updating step state; e.g. start, end, completed
   :status                 : required if updating step status; e.g. pass, fail, n/a
 
+Values and record errors and warnings
+  -set-values             : update or set values in the megatest db 
+  :value                  : value measured
+  :expected_value         : value expected
+  :tol                    : tolerance |value-expect| <= tol
+  :first_err              : record an error message
+  :first_warn             : record a warning message
+
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -testpatt patt          : in list-runs show only these tests, % is the wildcard
@@ -97,6 +105,13 @@ Called as " (string-intersperse (argv) " ")))
 			"-days"
 			"-rename-run"
 			"-to"
+			;; values and messages
+			":first_err"
+			":first_warn"
+			":value"
+			":expected_value"
+			":tol"
+			;; misc
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
@@ -104,6 +119,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-xterm"
 		        "-showkeys"
 		        "-test-status"
+			"-set-values"
 			"-summarize-items"
 		        "-gui"
 			"-runall"    ;; run all tests
@@ -362,7 +378,7 @@ Called as " (string-intersperse (argv) " ")))
 	    (set-item-env-vars itemdat)
             (save-environment-as-files "megatest")
 	    (test-set-meta-info db run-id test-name itemdat)
-	    (test-set-status! db run-id test-name "REMOTEHOSTSTART" "n/a" itemdat (args:get-arg "-m"))
+	    (test-set-status! db run-id test-name "REMOTEHOSTSTART" "n/a" itemdat (args:get-arg "-m") #f)
 	    (if (args:get-arg "-xterm")
 		(set! fullrunscript "xterm")
                 (if (not (file-execute-access? fullrunscript))
@@ -450,7 +466,7 @@ Called as " (string-intersperse (argv) " ")))
 						     (begin
 						       (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						       (test-set-status! db run-id test-name "KILLED"  "FAIL"
-									 itemdat (args:get-arg "-m"))
+									 itemdat (args:get-arg "-m") #f)
 						       (sqlite3:finalize! db)
 						       (exit 1))))
 					       ;;     (thread-terminate! job-thread)))
@@ -494,7 +510,7 @@ Called as " (string-intersperse (argv) " ")))
 						     (eq? (vector-ref exit-info 2) 0))
 						"PASS"
 						"FAIL")
-					    "FAIL") itemdat (args:get-arg "-m"))))
+					    "FAIL") itemdat (args:get-arg "-m") #f)))
 		;; for automated creation of the rollup html file this is a good place...
 		(if (not (equal? item-path ""))
 		   (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
@@ -542,6 +558,7 @@ Called as " (string-intersperse (argv) " ")))
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
+	(args:get-arg "-set-values")
 	(args:get-arg "-runstep")
 	(args:get-arg "-summarize-items"))
     (if (not (getenv "MT_CMDINFO"))
@@ -620,18 +637,29 @@ Called as " (string-intersperse (argv) " ")))
 		  ;; open the db
 		  ;; mark the end of the test
 		  )))
-	  (if (args:get-arg "-test-status")
+	  (if (or (args:get-arg "-test-status")
+		  (args:get-arg "-set-values"))
 	      (let ((newstatus (cond
 				((number? status)       (if (equal? status 0) "PASS" "FAIL"))
-				((string->number status)(if (equal? (string->number status) 0) "PASS" "FAIL"))
-				(else status))))
-		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m")))
-	      (if (and state status)
-		  (if (not (args:get-arg "-setlog"))
-		      (begin
-			(debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-			(sqlite3:finalize! db)
-			(exit 6)))))
+				((and (string? status)
+				      (string->number status))(if (equal? (string->number status) 0) "PASS" "FAIL"))
+				(else status)))
+		    ;; transfer relevant keys into a hash to be passed to test-set-status!
+		    ;; could use an assoc list I guess. 
+		    (otherdata (let ((res (make-hash-table)))
+				 (for-each (lambda (key)
+					     (if (args:get-arg key)
+						 (hash-table-set! res key (args:get-arg key))))
+					   (list ":value" ":tol" ":expected_value" ":first_err" ":first_warn"))
+				 res)))
+		(if (and (args:get-arg "-test-status")
+			 (or (not state)
+			     (not status)))
+		    (begin
+		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
+		      (sqlite3:finalize! db)
+		      (exit 6)))
+		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m") otherdata)))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 

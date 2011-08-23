@@ -64,7 +64,6 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
-                     tags       TEXT DEFAULT '',
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -346,8 +345,8 @@
     (sqlite3:for-each-row
      (lambda (count)
        (set! res count))
-     db
-     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING') AND run_id=?;" run-id)
+     db ;; NB// KILLREQ means the jobs is still probably running
+     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ') AND run_id=?;" run-id)
     res))
 
 ;; NB// Sync this with runs:get-test-info
@@ -460,24 +459,24 @@
      test-id)
     (reverse res)))
 
-;; check that *all* the prereqs are "COMPLETED"
-(define (db-get-prereqs-met db run-id waiton)
-  (let ((res          #f)
-	(not-complete 0)
-	(tests        (db-get-tests-for-run db run-id)))
-    (for-each
-     (lambda (test-name)
-       (for-each 
-	(lambda (test)
-	  (if (equal? (db:test-get-testname test) test-name)
-	      (begin
-		(set! res #t)
-		(if (not (equal? (db:test-get-state test) "COMPLETED"))
-		    (set! not-complete (+ 1 not-complete))))))
-	tests))
-     waiton)
-    (and (or (null? waiton) res)
-	 (eq? not-complete 0))))
+;; ;; check that *all* the prereqs are "COMPLETED"
+;; (define (db-get-prereqs-met db run-id waiton)
+;;   (let ((res          #f)
+;; 	(not-complete 0)
+;; 	(tests        (db-get-tests-for-run db run-id)))
+;;     (for-each
+;;      (lambda (test-name)
+;;        (for-each 
+;; 	(lambda (test)
+;; 	  (if (equal? (db:test-get-testname test) test-name)
+;; 	      (begin
+;; 		(set! res #t)
+;; 		(if (not (equal? (db:test-get-state test) "COMPLETED"))
+;; 		    (set! not-complete (+ 1 not-complete))))))
+;; 	tests))
+;;      waiton)
+;;     (and (or (null? waiton) res)
+;; 	 (eq? not-complete 0))))
 
 ;; USE: (lset-difference string=? '("a" "b" "c") '("d" "c" "e" "a"))
 ;;

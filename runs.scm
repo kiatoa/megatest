@@ -75,27 +75,58 @@
      runnamepatt)
     (vector header res)))
 
-(define (register-test db run-id test-name item-path tags)
+(define (register-test db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
     (for-each 
      (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status,tags) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a',?);" 
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
 			run-id 
 			test-name
 			pth 
-			(conc "," (string-intersperse tags ",") ",")))
+			;; (conc "," (string-intersperse tags ",") ",")
+			))
      item-paths )))
 
 ;;  (define db (open-db))
 ;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
 
-(define (test-set-status! db run-id test-name state status itemdat-or-path . comment)
-  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path))))
-    (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-		     state status run-id test-name item-path)
-    (if (and (not (equal? item-path "")) ;; need to update the top test record if PASS or FAIL and this is a subtest
+(define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
+  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
+	(otherdat  (if dat dat (make-hash-table))))
+    ;; update the primary record IF state AND status are defined
+    (if (and state status)
+	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+			 state status run-id test-name item-path))
+    ;; add metadata (need to do this way to avoid SQL injection issues)
+    ;; :value
+    (let ((val (hash-table-ref/default otherdat ":value" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :expected_value
+    (let ((val (hash-table-ref/default otherdat ":expected_value" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET expected_value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :tol
+    (let ((val (hash-table-ref/default otherdat ":tol" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET tol=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :first_err
+    (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :first_warn
+    (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :tol_perc
+    (let ((val (hash-table-ref/default otherdat ":tol_perc" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET tol_perc=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+
+    ;; need to update the top test record if PASS or FAIL and this is a subtest
+    (if (and (not (equal? item-path ""))
 	     (or (equal? status "PASS")
 		 (equal? status "WARN")
 		 (equal? status "FAIL")))
@@ -116,10 +147,11 @@
                 status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name)))
-    (if (and (not (null? comment))
-	     (car comment))
+    (if (and (string? comment)
+	     (string-match (regexp "\\S+") comment))
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (car comment) run-id test-name item-path))))
+			 (car comment) run-id test-name item-path))
+    ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 
   (let ((item-path (item-list->path itemdat)))
@@ -406,7 +438,11 @@
 	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
 			 (if (string? w)(string-split w)'())))
 	 (tags         (let ((t (config-lookup test-conf "setup" "tags")))
-			 (if (string? t)(string-split t ",") '()))))
+			 ;; we want our tags to be separated by commas and fully delimited by commas
+			 ;; so that queries with "like" can tie to the commas at either end of each tag
+			 ;; while also allowing the end user to freely use spaces and commas to separate tags
+			 (if (string? t)(string-substitute (regexp "[,\\s]+") "," (conc "," t ",") #t)
+			     '()))))
     (if (not testexists)
 	(begin
 	  (debug:print 0 "ERROR: Can't find config file " test-configf)
@@ -455,7 +491,7 @@
 		      (if (and (not ts)
 			       (< ct 10))
 			  (begin
-			    (register-test db run-id test-name item-path tags)
+			    (register-test db run-id test-name item-path)
 			    (db:test-set-comment db run-id test-name item-path "")
 			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))
