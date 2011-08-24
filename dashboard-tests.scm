@@ -331,24 +331,46 @@
 					   #:alignment "ALEFT:ATOP")))
 		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
 							  (let* ((currval (iup:attribute stepsdat "TITLE"))
-								 (fmtstr  "~15a~8a~8a~20a")
+								 (fmtstr  "~15a~8a~8a~8a~20a")
+								 (steps   (db:get-steps-for-test db test-id))
+								 ;; organise the steps for better readability
+								 (comprsteps (let ((res (make-hash-table)))
+									       (for-each 
+										(lambda (step)
+										  (let ((record (hash-table-ref/default 
+												 res 
+												 (db:step-get-stepname step) 
+												 ;;        stepname                 start end status
+												 (vector (db:step-get-stepname step) "" "" "" ""))))
+										    (case (string->symbol (db:step-get-state step))
+										      ((start)(vector-set! record 1 (db:step-get-event_time step))
+										              (vector-set! record 3 (db:step-get-status step)))
+										      ((end)  (vector-set! record 2 (db:step-get-event_time step))
+										              (vector-set! record 3 (db:step-get-status step)))
+										      (else   (vector-set! record 1 (db:step-get-event_time step)))
+											      (vector-set! record 2 (db:step-get-state step))
+											      (vector-set! record 3 (db:step-get-status step))
+											      (vector-set! record 4 (db:step-get-event_time step)))
+										    (hash-table-set! res (db:step-get-stepname step) record)))
+										steps)
+									       res))
 								 (newval  (string-intersperse 
 									   (append
 									    (list 
-									     (format #f fmtstr "Stepname" "State" "Status" "Event Time")
-									     (format #f fmtstr "========" "=====" "======" "=========="))
+									     (format #f fmtstr "Stepname" "Start" "End"    "Status" "Time")
+									     (format #f fmtstr "========" "=====" "======" "======" "=========="))
 									    (map (lambda (x)
 										   ;; take advantage of the \n on time->string
 										   (format #f fmtstr
-											   (db:step-get-stepname x)
-											   (db:step-get-state    x)
-											   (db:step-get-status   x)
-											   (time->string 
-											    (seconds->local-time 
-											     (db:step-get-event_time x)))))
-										 (db:get-steps-for-test db test-id)))
+											   (vector-ref x 0)
+											   (seconds->time-string (vector-ref x 1))
+											   (vector-ref x 2)
+											   (vector-ref x 3)
+											   (vector-ref x 4)))
+										 (sort (hash-table-values comprsteps)
+										       (lambda (a b)(< (vector-ref 1 a)(vector-ref 1 b))))))
 									   "\n")))
-							  (if (not (equal? currval newval))
+							    (if (not (equal? currval newval))
 								(iup:attribute-set! stepsdat "TITLE" newval)))))
 		  stepsdat)))))
       (iup:show self)

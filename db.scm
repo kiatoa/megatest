@@ -416,6 +416,13 @@
 (define-inline (db:step-set-status!         vec val)(vector-set! vec 4 val))
 (define-inline (db:step-set-event_time!     vec val)(vector-set! vec 5 val))
 
+(define (db:step-get-time-as-string vec)
+    (seconds->time-string (db:step-get-event_time vec)))
+
+(define (seconds->time-string sec)
+  (time->string 
+   (seconds->local-time sec)))
+
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test db test-id)
   (let ((res '()))
