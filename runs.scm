@@ -75,27 +75,58 @@
      runnamepatt)
     (vector header res)))
 
-(define (register-test db run-id test-name item-path tags)
+(define (register-test db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
     (for-each 
      (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status,tags) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a',?);" 
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
 			run-id 
 			test-name
 			pth 
-			(conc "," (string-intersperse tags ",") ",")))
+			;; (conc "," (string-intersperse tags ",") ",")
+			))
      item-paths )))
 
 ;;  (define db (open-db))
 ;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
 
-(define (test-set-status! db run-id test-name state status itemdat-or-path . comment)
-  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path))))
-    (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-		     state status run-id test-name item-path)
-    (if (and (not (equal? item-path "")) ;; need to update the top test record if PASS or FAIL and this is a subtest
+(define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
+  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
+	(otherdat  (if dat dat (make-hash-table))))
+    ;; update the primary record IF state AND status are defined
+    (if (and state status)
+	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+			 state status run-id test-name item-path))
+    ;; add metadata (need to do this way to avoid SQL injection issues)
+    ;; :value
+    (let ((val (hash-table-ref/default otherdat ":value" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :expected_value
+    (let ((val (hash-table-ref/default otherdat ":expected_value" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET expected_value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :tol
+    (let ((val (hash-table-ref/default otherdat ":tol" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET tol=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :first_err
+    (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :first_warn
+    (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; :tol_perc
+    (let ((val (hash-table-ref/default otherdat ":tol_perc" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET tol_perc=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+
+    ;; need to update the top test record if PASS or FAIL and this is a subtest
+    (if (and (not (equal? item-path ""))
 	     (or (equal? status "PASS")
 		 (equal? status "WARN")
 		 (equal? status "FAIL")))
@@ -116,10 +147,11 @@
                 status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name)))
-    (if (and (not (null? comment))
-	     (car comment))
+    (if (and (string? comment)
+	     (string-match (regexp "\\S+") comment))
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (car comment) run-id test-name item-path))))
+			 (car comment) run-id test-name item-path))
+    ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 
   (let ((item-path (item-list->path itemdat)))
@@ -402,11 +434,15 @@
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	 (test-conf    (if testexists (read-config test-configf) (make-hash-table)))
+	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))
 	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
 			 (if (string? w)(string-split w)'())))
 	 (tags         (let ((t (config-lookup test-conf "setup" "tags")))
-			 (if (string? t)(string-split t ",") '()))))
+			 ;; we want our tags to be separated by commas and fully delimited by commas
+			 ;; so that queries with "like" can tie to the commas at either end of each tag
+			 ;; while also allowing the end user to freely use spaces and commas to separate tags
+			 (if (string? t)(string-substitute (regexp "[,\\s]+") "," (conc "," t ",") #t)
+			     '()))))
     (if (not testexists)
 	(begin
 	  (debug:print 0 "ERROR: Can't find config file " test-configf)
@@ -430,21 +466,7 @@
 	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
 
 	  ;; Here is where the test_meta table is best updated
-	  (let ((currrecord (db:testmeta-get-record db test-name)))
-	    (if (not currrecord)
-		(begin
-		  (set! currrecord (make-vector 10 #f))
-		  (db:testmeta-add-record db test-name)))
-	    (for-each 
-	     (lambda (key)
-	       (let* ((idx (cadr key))
-		      (fld (car  key))
-		      (val (config-lookup test-conf "test_meta" fld)))
-		 (if (and val (not (equal? (vector-ref currrecord idx) val)))
-		     (begin
-		       (print "Updating " test-name " " fld " to " val)
-		       (db:testmeta-update-field db test-name fld val)))))
-	     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9))))
+	  (runs:update-test_meta db test-name test-conf)
 
 	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
 	  (if (null? allitems)(set! allitems '(())))
@@ -469,7 +491,7 @@
 		      (if (and (not ts)
 			       (< ct 10))
 			  (begin
-			    (register-test db run-id test-name item-path tags)
+			    (register-test db run-id test-name item-path)
 			    (db:test-set-comment db run-id test-name item-path "")
 			    (loop2 (db:get-test-info db run-id test-name item-path)
 				   (+ ct 1)))
@@ -684,9 +706,44 @@
 	(sqlite3:finalize! db)
 	(set! *didsomething* #t))))
 
+;;======================================================================
+;; Rollup runs
+;;======================================================================
+
+;; Update the test_meta table for this test
+(define (runs:update-test_meta db test-name test-conf)
+  (let ((currrecord (db:testmeta-get-record db test-name)))
+    (if (not currrecord)
+	(begin
+	  (set! currrecord (make-vector 10 #f))
+	  (db:testmeta-add-record db test-name)))
+    (for-each 
+     (lambda (key)
+       (let* ((idx (cadr key))
+	      (fld (car  key))
+	      (val (config-lookup test-conf "test_meta" fld)))
+	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
+	     (begin
+	       (print "Updating " test-name " " fld " to " val)
+	       (db:testmeta-update-field db test-name fld val)))))
+     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
+
+;; Update test_meta for all tests
+(define (runs:update-all-test_meta db)
+  (let ((test-names (get-all-legal-tests)))
+    (for-each 
+     (lambda (test-name)
+       (let* ((test-path    (conc *toppath* "/tests/" test-name))
+	      (test-configf (conc test-path "/testconfig"))
+	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	      ;; read configs with tricks turned off (i.e. no system)
+	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
+	 (runs:update-test_meta db test-name test-conf)))
+     test-names)))
+	 
 (define (runs:rollup-run db keys keynames keyvallst n)
   (let* ((new-run-id   (register-run db keys))
-	 (similar-runs (db:get-similar-runs db keys))
+	 (similar-runs (db:get-runs db keys))
 	 (tests-n-days (db:get-tests-n-days db similar-runs)))
     (for-each 
      (lambda (test-id)

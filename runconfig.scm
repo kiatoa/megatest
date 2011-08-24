@@ -6,7 +6,7 @@
   (let* ((keys    (get-keys db))
 	 (keyvals (get-key-vals db run-id))
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
-	 (confdat (read-config fname))
+	 (confdat (read-config fname #f #f))
 	 (whatfound (make-hash-table))
 	 (sections (list "default" thekey)))
     (debug:print 4 "Using key=\"" thekey "\"")

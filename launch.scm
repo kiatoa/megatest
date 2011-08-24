@@ -147,7 +147,7 @@
       (set! fullcmd (list remote-megatest "-execute" cmdparms))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
-    (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat) ;; (if launch-results launch-results "FAILED"))
+    (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set 
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (let* ((commonprevvals (alist->env-vars

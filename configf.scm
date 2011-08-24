@@ -32,11 +32,11 @@
 
 ;; read a config file, returns two level hierarchial hash-table,
 ;; adds to ht if given (must be #f otherwise)
-(define (read-config path . ht)
+(define (read-config path ht allow-system)
   (if (not (file-exists? path))
-      (if (null? ht)(make-hash-table) (car ht))
+      (if (not ht)(make-hash-table) ht)
       (let ((inp        (open-input-file path))
-	    (res        (if (null? ht)(make-hash-table)(car ht)))
+	    (res        (if (not ht)(make-hash-table) ht))
 	    (include-rx (regexp "^\\[include\\s+(.*)\\]\\s*$"))
 	    (section-rx (regexp "^\\[(.*)\\]\\s*$"))
 	    (blank-l-rx (regexp "^\\s*$"))
@@ -57,24 +57,25 @@
 	       (comment-rx _                  (loop (read-line inp) curr-section-name #f #f))
 	       (blank-l-rx _                  (loop (read-line inp) curr-section-name #f #f))
 	       (include-rx ( x include-file ) (begin
-						(read-config include-file res)
+						(read-config include-file res allow-system)
 						(loop (read-line inp) curr-section-name #f #f)))
 	       (section-rx ( x section-name ) (loop (read-line inp) section-name #f #f))
-	       (key-sys-pr ( x key cmd      ) (let ((alist (hash-table-ref/default res curr-section-name '()))
-						    (val   (let* ((cmdres  (cmd-run->list cmd))
-								  (status  (cadr cmdres))
-								  (res     (car  cmdres)))
-							     (if (not (eq? status 0))
-								 (begin
-								   (debug:print 0 "ERROR: problem with " inl ", return code " status)
-								   (exit 1)))
-							     (if (null? res)
-								 ""
-								 (string-intersperse res " ")))))
-						(hash-table-set! res curr-section-name 
-								 (config:assoc-safe-add alist key val))
-								 ;; (append alist (list (list key val))))
-						(loop (read-line inp) curr-section-name #f #f)))
+	       (key-sys-pr ( x key cmd      ) (if allow-system
+						  (let ((alist (hash-table-ref/default res curr-section-name '()))
+							(val   (let* ((cmdres  (cmd-run->list cmd))
+								      (status  (cadr cmdres))
+								      (res     (car  cmdres)))
+								 (if (not (eq? status 0))
+								     (begin
+								       (debug:print 0 "ERROR: problem with " inl ", return code " status)
+								       (exit 1)))
+								 (if (null? res)
+								     ""
+								     (string-intersperse res " ")))))
+						    (hash-table-set! res curr-section-name 
+								     (config:assoc-safe-add alist key val))
+						    (loop (read-line inp) curr-section-name #f #f))
+						  (loop (read-line inp) curr-section-name #f #f)))
 	       (key-val-pr ( x key val      ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key val))
@@ -104,7 +105,7 @@
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo)))
     (if toppath (change-directory toppath)) 
-    (let ((configdat  (if configfile (read-config configfile) #f))) ;; (make-hash-table))))
+    (let ((configdat  (if configfile (read-config configfile #f #t) #f))) ;; (make-hash-table))))
       (if toppath (change-directory curr-dir))
       (list configdat toppath configfile fname))))
 
@@ -120,7 +121,7 @@
 
 (define (setup)
   (let* ((configf (find-config))
-	 (config  (if configf (read-config configf) #f)))
+	 (config  (if configf (read-config configf #f #t) #f)))
     (if config
 	(setenv "RUN_AREA_HOME" (pathname-directory configf)))
     config))

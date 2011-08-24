@@ -64,7 +64,6 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
-                     tags       TEXT DEFAULT '',
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -111,7 +110,8 @@
      ;; 	   (print "Adding tags column to tests table")
      ;; 	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
      (if (< mver 1.20)
-	 (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
+	 (begin
+	   (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
                                      owner       TEXT DEFAULT '',
@@ -121,7 +121,18 @@
                                      avg_runtime REAL,
                                      avg_disk    REAL,
                                      tags        TEXT DEFAULT '',
-                                CONSTRAINT test_meta_contstraint UNIQUE (id,testname));"))
+                                CONSTRAINT test_meta_contstraint UNIQUE (id,testname));")
+	   (for-each 
+	    (lambda (stmt)
+	      (sqlite3:execute db stmt))
+	    (list 
+	     "ALTER TABLE tests ADD COLUMN expected_value REAL;" ;; DO NOT Add a default, we want it to be NULL
+	     "ALTER TABLE tests ADD COLUMN value REAL;"
+	     "ALTER TABLE tests ADD COLUMN tol REAL;"
+	     "ALTER TABLE tests ADD COLUMN tol_perc REAL;"
+	     "ALTER TABLE tests ADD COLUMN first_err TEXT;"
+	     "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
+	     ))))
      (if (< mver megatest-version)
 	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
 
@@ -199,6 +210,27 @@
 		    (number? (cadr count)))
 	       (conc " OFFSET " (cadr count))
 	       ""))
+     runpatt)
+    (vector header res)))
+
+;; replace header and keystr with a call to runs:get-std-run-fields
+;; keypatt: '(("key1" "patt1")("key2" "patt2")...)
+(define (db:get-runs db keys keypatts runpatt)
+  (let* ((res      '())
+	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
+	 (header    (append (map key:get-fieldname keys)
+			    remfields))
+	 (keystr    (conc (keys->keystr keys) ","
+			  (string-intersperse remfields ","))))
+    (sqlite3:for-each-row
+     (lambda (a . x) ;; turn all the fields returned into a vector and add to the list
+       (set! res (cons (apply vector a x) res)))
+     db
+     (conc "SELECT " keystr " FROM runs WHERE runname LIKE ? "
+	   (map (lambda (keypatt)
+		  (conc "AND " (car keypatt) " LIKE " (cadr keypatt) " "))
+		keypatts)
+	   "ORDER BY event_time DESC;")
      runpatt)
     (vector header res)))
 
@@ -313,8 +345,8 @@
     (sqlite3:for-each-row
      (lambda (count)
        (set! res count))
-     db
-     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING') AND run_id=?;" run-id)
+     db ;; NB// KILLREQ means the jobs is still probably running
+     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ') AND run_id=?;" run-id)
     res))
 
 ;; NB// Sync this with runs:get-test-info
@@ -434,24 +466,24 @@
      test-id)
     (reverse res)))
 
-;; check that *all* the prereqs are "COMPLETED"
-(define (db-get-prereqs-met db run-id waiton)
-  (let ((res          #f)
-	(not-complete 0)
-	(tests        (db-get-tests-for-run db run-id)))
-    (for-each
-     (lambda (test-name)
-       (for-each 
-	(lambda (test)
-	  (if (equal? (db:test-get-testname test) test-name)
-	      (begin
-		(set! res #t)
-		(if (not (equal? (db:test-get-state test) "COMPLETED"))
-		    (set! not-complete (+ 1 not-complete))))))
-	tests))
-     waiton)
-    (and (or (null? waiton) res)
-	 (eq? not-complete 0))))
+;; ;; check that *all* the prereqs are "COMPLETED"
+;; (define (db-get-prereqs-met db run-id waiton)
+;;   (let ((res          #f)
+;; 	(not-complete 0)
+;; 	(tests        (db-get-tests-for-run db run-id)))
+;;     (for-each
+;;      (lambda (test-name)
+;;        (for-each 
+;; 	(lambda (test)
+;; 	  (if (equal? (db:test-get-testname test) test-name)
+;; 	      (begin
+;; 		(set! res #t)
+;; 		(if (not (equal? (db:test-get-state test) "COMPLETED"))
+;; 		    (set! not-complete (+ 1 not-complete))))))
+;; 	tests))
+;;      waiton)
+;;     (and (or (null? waiton) res)
+;; 	 (eq? not-complete 0))))
 
 ;; USE: (lset-difference string=? '("a" "b" "c") '("d" "c" "e" "a"))
 ;;
@@ -476,23 +508,4 @@
 		      (if (not ever-seen)(set! result (cons waitontest-name result)))))
 		  waiton)
 	(delete-duplicates result))))
-;;  
-;;  	     ;; subtract from the waiton list the "COMPLETED" tests
-;;  	     ;;(completed-tests (filter (lambda (x)
-;;  	     ;;   			(equal? (db:test-get-state x) "COMPLETED"))
-;;  	     ;;   		      tests))
-;;  	     (completed-tests (let ((non-completed (make-hash-table)))
-;;  				(for-each (lambda (x)
-;;  					    ;; could add check for PASS here
-;;  					    (if (not (and (equal? (db:test-get-state x) "COMPLETED")
-;;  							  (equal? (db:test-get-status x) "PASS")))
-;;  						(hash-table-set! non-completed (db:test-get-testname x) x)))
-;;  					    ;; (debug:print 0 "Completed: " (db:test-get-testname x))))
-;;  					  tests)
-;;  				(filter (lambda (x)
-;;  					  (not (hash-table-ref/default non-completed (db:test-get-testname x) #f)))
-;;  					tests)))
-;;  	     (pre-dep-names   (map db:test-get-testname completed-tests))
-;;  	     (result          (lset-difference string=? waiton pre-dep-names)))
-;;  	(print "pre-dep-names: " pre-dep-names " waiton: " waiton " result: " result)
 
