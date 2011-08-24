@@ -120,6 +120,9 @@
     (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
       (if val
 	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    (let ((val (hash-table-ref/default otherdat ":units" #f)))
+      (if val
+	  (sqlite3:execute db "UPDATE tests SET units=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
     ;; :tol_perc
     (let ((val (hash-table-ref/default otherdat ":tol_perc" #f)))
       (if val

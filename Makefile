@@ -1,9 +1,11 @@
-FILES=$(glob *.scm)
+# $(glob *.scm) did not work as I expected it to!?
 
-megatest: common.scm configf.scm db.scm keys.scm launch.scm megatest.scm process.scm runs.scm gui.scm
+FILES=$(shell ls *.scm)
+
+megatest: $(FILES)
 	csc megatest.scm 
 
-dashboard: dashboard.scm dashboard-tests.scm
+dashboard: $(FILES)
 	csc dashboard.scm
 
 $(PREFIX)/bin/megatest : megatest

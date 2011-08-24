@@ -132,6 +132,7 @@
 	     "ALTER TABLE tests ADD COLUMN tol_perc REAL;"
 	     "ALTER TABLE tests ADD COLUMN first_err TEXT;"
 	     "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
+	     "ALTER TABLE tests ADD COLUMN units TEXT;"
 	     ))))
      (if (< mver megatest-version)
 	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
@@ -282,6 +283,12 @@
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
+(define-inline (db:test-get-value        vec) (printable (vector-ref vec 15)))
+(define-inline (db:test-get-expected_value vec)(printable (vector-ref vec 16)))
+(define-inline (db:test-get-tol          vec) (printable (vector-ref vec 17)))
+(define-inline (db:test-get-units        vec) (printable (vector-ref vec 18)))
+(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 19)))
+(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 20)))
 
 (define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
 (define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
@@ -292,10 +299,10 @@
 	(testpatt (if (or (null? params)(not (car params))) "%" (car params)))
 	(itempatt (if (> (length params) 1)(cadr params) "%")))
     (sqlite3:for-each-row 
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment value expected-value tol units first-err first-warn)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment value expected-value tol units first-err first-warn) res)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
      run-id testpatt (if itempatt itempatt "%"))
     res))
 
@@ -353,10 +360,10 @@
 (define (db:get-test-info db run-id testname item-path)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
     res))
 
@@ -364,10 +371,10 @@
 (define (db:get-test-data-by-id db test-id)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE id=?;"
      test-id)
     res))
 

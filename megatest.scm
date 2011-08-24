@@ -43,7 +43,8 @@ Values and record errors and warnings
   -set-values             : update or set values in the megatest db 
   :value                  : value measured
   :expected_value         : value expected
-  :tol                    : tolerance |value-expect| <= tol
+  :tol                    : |value-expect| <= tol
+  :units                  : name of the units for value, expected_value and tol
   :first_err              : record an error message
   :first_warn             : record a warning message
 
@@ -111,6 +112,7 @@ Called as " (string-intersperse (argv) " ")))
 			":value"
 			":expected_value"
 			":tol"
+			":units"
 			;; misc
 			"-debug" ;; for *verbosity* > 2
 			) 
@@ -650,7 +652,7 @@ Called as " (string-intersperse (argv) " ")))
 				 (for-each (lambda (key)
 					     (if (args:get-arg key)
 						 (hash-table-set! res key (args:get-arg key))))
-					   (list ":value" ":tol" ":expected_value" ":first_err" ":first_warn"))
+					   (list ":value" ":tol" ":expected_value" ":first_err" ":first_warn" ":units"))
 				 res)))
 		(if (and (args:get-arg "-test-status")
 			 (or (not state)

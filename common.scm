@@ -49,6 +49,15 @@
   (if (<= n *verbosity*)
       (apply print params)))
 
+;; if a value is printable (i.e. string or number) return the value
+;; else return an empty string
+(define-inline (printable val)
+  (if (or (number? val)(string? val)) val ""))
+
+;;======================================================================
+;; System stuff
+;;======================================================================
+
 (define (get-df path)
   (let* ((df-results (cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
