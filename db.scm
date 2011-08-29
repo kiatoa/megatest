@@ -109,7 +109,7 @@
      ;; 	 (begin
      ;; 	   (print "Adding tags column to tests table")
      ;; 	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
-     (if (< mver 1.20)
+     (if (< mver 1.21)
 	 (begin
 	   (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
@@ -156,15 +156,23 @@
 (define (db:set-var db var val)
   (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
-(define (db-get-keys db)
-  (let ((res '()))
-    (sqlite3:for-each-row 
-     (lambda (key keytype)
-       (set! res (cons (vector key keytype) res)))
-     db
-     "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
-    res))
+;; use a global for some primitive caching, it is just silly to re-read the db 
+;; over and over again for the keys since they never change
 
+(define *db-keys* #f)
+
+(define (db-get-keys db)
+  (if *db-keys* *db-keys* 
+      (let ((res '()))
+	(sqlite3:for-each-row 
+	 (lambda (key keytype)
+	   (set! res (cons (vector key keytype) res)))
+	 db
+	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
+	(set! *db-keys* res)
+	res)))
+
+(define db:get-keys db-get-keys)
 
 (define-inline (db:get-header vec)(vector-ref vec 0))
 (define-inline (db:get-rows   vec)(vector-ref vec 1))

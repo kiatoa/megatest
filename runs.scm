@@ -89,12 +89,24 @@
 			))
      item-paths )))
 
-;;  (define db (open-db))
-;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
+;; get the previous record for when this test was run where all keys match but runname
+(define (test:get-previous-test-run-record db run-id test-name item-path)
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (keyvals #f)
+	 
+    
+    
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	(otherdat  (if dat dat (make-hash-table))))
+	(otherdat  (if dat dat (make-hash-table)))
+	;; before proceeding we must find out if the previous test (where all keys matched except runname)
+	;; was WAIVED if this test is FAIL
+	(waived   (if (equal? status "FAIL")
+		      (let ((
+
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
@@ -576,7 +588,7 @@
 			      100) ;; i.e. no update for more than 100 seconds
 			   (begin
 			     (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead"))
+			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
 			   (debug:print 2 "NOTE: " test-name " is already running")))
 		      (else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat))))))
 	      (if (not (null? tal))
