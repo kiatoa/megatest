@@ -90,13 +90,35 @@
      item-paths )))
 
 ;; get the previous record for when this test was run where all keys match but runname
-(define (test:get-previous-test-run-record db run-id test-name item-path)
+(define (test:get-previous-test-run-records db run-id test-name item-path)
   (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
-	 (keyvals #f)
-	 
-    
+	 (keyvals #f))
+    ;; first look up the key values from the run selected by run-id
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! keyvals (cons a b)))
+     db
+     (conc "SELECT " selstr " FROM runs WHERE run_id=? ORDER BY event_time DESC;"))
+    (if (not keyvals)
+	#f
+	(let ((prev-run-ids '()))
+	  (apply sqlite3:for-each-row
+		 (lambda (id)
+		   (set! prev-run-ids (cons id prev-run-ids)))
+		 db
+		 (conc "SELECT run_id FROM runs WHERE " qrystr ";"))
+	  ;; for each run starting with the most recent look to see if there is a matching test
+	  ;; if found then return that matching test record
+	  (if (null? prev-run-ids) #f
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (db-get-tests-for-run db test-name item-path)))
+		  (if (and (null? results)
+			   (not (null? tal)))
+		      (loop (car tal)(cdr tal))
+		      (car results)))))))))
     
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
@@ -105,7 +127,17 @@
 	;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	;; was WAIVED if this test is FAIL
 	(waived   (if (equal? status "FAIL")
-		      (let ((
+		      (let ((prev-test (test:get-previous-test-run-records db run-id test-name item-path)))
+			(if (and prev-test (not (null? prev-test))) ;; true if we found a previous test in this run series
+			    (let ((prev-status (db:test-get-status   prev-test))
+				  (prev-state  (db:test-get-state    prev-test))
+				  (prev-comment (db:test-get-comment prev-test)))
+			      (if (and (equal? prev-status "COMPLETED")
+				       (equal? prev-state  "WAIVED"))
+				  prev-comment ;; waived is either the comment or #f
+				  #f))
+			    #f))
+		      #f)))
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
