@@ -122,8 +122,9 @@
     
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
-  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	(otherdat  (if dat dat (make-hash-table)))
+  (let ((real-status status)
+	(item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
+	(otherdat    (if dat dat (make-hash-table)))
 	;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	;; was WAIVED if this test is FAIL
 	(waived   (if (equal? status "FAIL")
@@ -138,6 +139,8 @@
 				  #f))
 			    #f))
 		      #f)))
+
+    (if waived (set! real-status "WAIVED"))
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
@@ -194,10 +197,11 @@
                 status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name)))
-    (if (and (string? comment)
-	     (string-match (regexp "\\S+") comment))
+    (if (or (and (string? comment)
+		 (string-match (regexp "\\S+") comment))
+	    waived)
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (car comment) run-id test-name item-path))
+			 (if waived waived comment) run-id test-name item-path))
     ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 
