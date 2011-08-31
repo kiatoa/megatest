@@ -89,16 +89,66 @@
 			))
      item-paths )))
 
-;;  (define db (open-db))
-;;  (test-set-status! db 2 "runfirst" "COMPLETED" "PASS" "summer")
+;; get the previous record for when this test was run where all keys match but runname
+(define (test:get-previous-test-run-records db run-id test-name item-path)
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (keyvals #f))
+    ;; first look up the key values from the run selected by run-id
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! keyvals (cons a b)))
+     db
+     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
+    (if (not keyvals)
+	#f
+	(let ((prev-run-ids '()))
+	  (apply sqlite3:for-each-row
+		 (lambda (id)
+		   (set! prev-run-ids (cons id prev-run-ids)))
+		 db
+		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
+	  ;; for each run starting with the most recent look to see if there is a matching test
+	  ;; if found then return that matching test record
+	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
+	  (if (null? prev-run-ids) #f
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (db-get-tests-for-run db hed test-name item-path)))
+		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
+		  (if (and (null? results)
+			   (not (null? tal)))
+		      (loop (car tal)(cdr tal))
+		      (car results)))))))))
+    
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
-  (let ((item-path (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	(otherdat  (if dat dat (make-hash-table))))
+  (let* ((real-status status)
+	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
+	 (otherdat    (if dat dat (make-hash-table)))
+	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
+	 ;; was WAIVED if this test is FAIL
+	 (waived   (if (equal? status "FAIL")
+		       (let ((prev-test (test:get-previous-test-run-records db run-id test-name item-path)))
+			 (if prev-test ;; true if we found a previous test in this run series
+			     (let ((prev-status (db:test-get-status   prev-test))
+				   (prev-state  (db:test-get-state    prev-test))
+				   (prev-comment (db:test-get-comment prev-test)))
+			       (debug:print 4 "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
+			       (if (and (equal? prev-state  "COMPLETED")
+					(equal? prev-status "WAIVED"))
+				   prev-comment ;; waived is either the comment or #f
+				   #f))
+			     #f))
+		       #f)))
+    (if waived (set! real-status "WAIVED"))
+    (debug:print 4 "real-status " real-status ", waived " waived ", status " status)
+
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-			 state status run-id test-name item-path))
+			 state real-status run-id test-name item-path))
     ;; add metadata (need to do this way to avoid SQL injection issues)
     ;; :value
     (let ((val (hash-table-ref/default otherdat ":value" #f)))
@@ -132,13 +182,14 @@
     (if (and (not (equal? item-path ""))
 	     (or (equal? status "PASS")
 		 (equal? status "WARN")
-		 (equal? status "FAIL")))
+		 (equal? status "FAIL")
+		 (equal? status "WAIVED")))
 	(begin
 	  (sqlite3:execute 
 	   db
 	   "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN'))
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name run-id test-name)
 	  (sqlite3:execute
@@ -150,10 +201,11 @@
                 status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name)))
-    (if (and (string? comment)
-	     (string-match (regexp "\\S+") comment))
+    (if (or (and (string? comment)
+		 (string-match (regexp "\\S+") comment))
+	    waived)
 	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (car comment) run-id test-name item-path))
+			 (if waived waived comment) run-id test-name item-path))
     ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 
@@ -576,7 +628,7 @@
 			      100) ;; i.e. no update for more than 100 seconds
 			   (begin
 			     (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead"))
+			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
 			   (debug:print 2 "NOTE: " test-name " is already running")))
 		      (else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat))))))
 	      (if (not (null? tal))
