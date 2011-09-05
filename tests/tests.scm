@@ -1,6 +1,7 @@
 (use test)
 ;; (require-library args)
 
+(include "../megatest.scm")
 (include "../common.scm")
 (include "../keys.scm")
 (include "../db.scm")
@@ -9,7 +10,10 @@
 (include "../launch.scm")
 (include "../items.scm")
 (include "../runs.scm")
+(include "../runconfig.scm")
 (include "../megatest-version.scm")
+
+(define test-work-dir (current-directory))
 
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))
@@ -35,7 +39,7 @@
 		     (set! *db* (open-db))
 		     (if *db* #t #f)))
 
-;; quit wasting time changing db to *db*
+;; quit wasting time, I'm changing *db* to db
 (define db *db*)
 
 (test "get cpu load" #t (number? (get-cpu-load)))
@@ -76,6 +80,7 @@
 		 0))
 
 (test "register-run" #t (number? (register-run *db* (db-get-keys *db*))))
+(define keys (db-get-keys *db*))
 
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
@@ -97,3 +102,40 @@
 (test "Items table" "SEASON" (caadar (item-table->item-list '(("ANIMAL" "Elephant Lion")("SEASON" "Spring Winter")))))
 (test "Items table empty items I" '() (item-table->item-list '(("A"))))
 (test "Items table empty items II" '() (item-table->item-list '(("A" ""))))
+
+;; Test out the steps code
+
+(define test-id #f)
+
+;; force keepgoing
+; (hash-table-set! args:arg-hash "-keepgoing" #t)
+(hash-table-set! args:arg-hash "-itempatt" "%")
+(hash-table-set! args:arg-hash "-testpatt" "%")
+(test "Setup for a run"       #t (begin (setup-for-run) #t))
+(test "Remove the rollup run" #t (begin (remove-runs) #t))
+(test "Run a test" #t (general-run-call 
+		       "-runtests" 
+		       "run a test" 
+		       (lambda (db keys keynames keyvallst)
+			 (let ((test-names '("runfirst")))
+			   (run-tests db test-names)))))
+
+(change-directory test-work-dir)
+(test "Add a step"  #t
+      (begin
+	(teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
+	(sleep 2)
+	(teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
+	(set! test-id (db:test-get-id (car (db-get-tests-for-run db 1 "runfirst" ""))))
+	(number? test-id)))
+
+(test "Get nice table for steps" "2.0s"
+      (begin
+	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "firststep") 4)))
+
+(hash-table-set! args:arg-hash ":runname" "rollup")
+
+(test "Remove the rollup run" #t (begin (remove-runs) #t))
+(test "Rollup the run(s)" #t (begin
+			       (runs:rollup-run db keys)
+			       #t))

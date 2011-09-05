@@ -65,8 +65,8 @@ Misc
   -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
                             if -keepgoing is also specified)
   -rebuild-db             : bring the database schema up to date
-  -rollup N               : fill run (set by :runname)  with latest test(s) from
-                            past N days, requires keys
+  -rollup                 : fill run (set by :runname)  with latest test(s) from
+                            prior runs with same keys
   -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
   -update-meta            : update the tests metadata for all tests
 
@@ -305,7 +305,7 @@ Called as " (string-intersperse (argv) " ")))
      "rollup tests" 
      (lambda (db keys keynames keyvallst)
        (let ((n (args:get-arg "-rollup")))
-	 (runs:rollup db keys keynames keyvallst n)))))
+	 (runs:rollup-run db keys)))))
 
 ;;======================================================================
 ;; run one test

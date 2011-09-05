@@ -54,6 +54,14 @@
 (define-inline (printable val)
   (if (or (number? val)(string? val)) val ""))
 
+;; convert stuff to a number if possible
+(define (any->number val)
+  (cond 
+   ((number? val) val)
+   ((string? val) (string->number val))
+   ((symbol? val) (any->number (symbol->string val)))
+   (else #f)))
+
 ;;======================================================================
 ;; System stuff
 ;;======================================================================

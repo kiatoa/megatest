@@ -357,33 +357,7 @@
 		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
 							  (let* ((currval (iup:attribute stepsdat "TITLE"))
 								 (fmtstr  "~25a~10a~10a~15a~20a")
-								 (steps   (db:get-steps-for-test db test-id))
-								 ;; organise the steps for better readability
-								 (comprsteps (let ((res (make-hash-table)))
-									       (for-each 
-										(lambda (step)
-										  (let ((record (hash-table-ref/default 
-												 res 
-												 (db:step-get-stepname step) 
-												 ;;        stepname                 start end status
-												 (vector (db:step-get-stepname step) "" "" "" ""))))
-										    (case (string->symbol (db:step-get-state step))
-										      ((start)(vector-set! record 1 (db:step-get-event_time step))
-										              (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-															(db:step-get-status step))))
-										      ((end)  (vector-set! record 2 (db:step-get-event_time step))
-										              (vector-set! record 3 (db:step-get-status step))
-											      (vector-set! record 4 (let ((startt (vector-ref record 1))
-															  (endt   (vector-ref record 2)))
-														      (if (and (number? startt)(number? endt))
-															  (seconds->hr-min-sec (- endt startt)) "-1"))))
-										      (else   (vector-set! record 1 (db:step-get-event_time step)))
-											      (vector-set! record 2 (db:step-get-state step))
-											      (vector-set! record 3 (db:step-get-status step))
-											      (vector-set! record 4 (db:step-get-event_time step)))
-										    (hash-table-set! res (db:step-get-stepname step) record)))
-										steps)
-									       res))
+								 (comprsteps (db:get-steps-table db test-id))
 								 (newval  (string-intersperse 
 									   (append
 									    (list 
@@ -421,3 +395,4 @@
 					; (iup:refresh self)
 			   (if *exit-started*
 			       (set! *exit-started* 'ok))))))))
+

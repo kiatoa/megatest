@@ -122,6 +122,52 @@
 		      (loop (car tal)(cdr tal))
 		      (car results)))))))))
     
+;; get the previous record for when this test was run where all keys match but runname
+;; NB// Merge this with test:get-previous-test-run-records
+(define (test:get-matching-previous-test-run-records db run-id test-name item-path)
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (keyvals #f)
+	 (tests-hash (make-hash-table)))
+    ;; first look up the key values from the run selected by run-id
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! keyvals (cons a b)))
+     db
+     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
+    (if (not keyvals)
+	#f
+	(let ((prev-run-ids '()))
+	  (apply sqlite3:for-each-row
+		 (lambda (id)
+		   (set! prev-run-ids (cons id prev-run-ids)))
+		 db
+		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
+	  ;; collect all matching tests for the runs then
+	  ;; extract the most recent test and return that.
+	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
+		       ", previous run ids found: " prev-run-ids)
+	  (if (null? prev-run-ids) #f ;; no previous runs? return #f
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (db-get-tests-for-run db hed test-name item-path)))
+		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
+			       ", item-path " item-path " results: " (intersperse results "\n"))
+		  ;; Keep only the youngest of any test/item combination
+		  (for-each 
+		   (lambda (testdat)
+		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
+			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
+		       (if (or (not stored-test)
+			       (and stored-test
+				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
+			   ;; this test is younger, store it in the hash
+			   (hash-table-set! tests-hash full-testname testdat))))
+		   results)
+		  (if (null? tal)
+		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
+		      (loop (car tal)(cdr tal))))))))))
 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let* ((real-status status)
@@ -684,10 +730,12 @@
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
-						(db:get-value-by-header run header (vector-ref k 0))) keys) "/")))
+						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
+	     (dirs-to-remove (make-hash-table)))
 	 (let* ((run-id (db:get-value-by-header run header "id") )
 		(tests  (db-get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt))
 		(lasttpath "/does/not/exist/I/hope"))
+
 	   (if (not (null? tests))
 	       (begin
 		 (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
@@ -701,19 +749,41 @@
 		      (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
 			  (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
 			    (set! lasttpath fullpath)
-			    (debug:print 1 "rm -rf " fullpath)
-			    (system (conc "rm -rf " fullpath))
-			    (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
-				   (dir-to-rem (get-dir-up-n fullpath dirs-count))
-				   (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
-				   (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
-			      (if (file-exists? fullpath)
-				  (begin
-				    (debug:print 1 cmd)
-				    (system cmd)))
-			      ))
-			    )))
+			    (hash-table-set! dirs-to-remove fullpath #t)
+			    ;; The following was the safe delete code but it was not being exectuted.
+			    ;; (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
+			    ;;        (dir-to-rem (get-dir-up-n fullpath dirs-count))
+			    ;;        (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
+			    ;;        (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
+			    ;;   (if (file-exists? fullpath)
+			    ;;       (begin
+			    ;;         (debug:print 1 cmd)
+			    ;;         (system cmd)))
+			    ;;   ))
+			    ))))
 		    tests)))
+
+	   ;; look though the dirs-to-remove for candidates for removal. Do this after deleting the records
+	   ;; for each test in case we get killed. That should minimize the detritus left on disk
+	   ;; process the dirs from longest string length to shortest
+	   (for-each 
+	    (lambda (dir-to-remove)
+	      (if (file-exists? dir-to-remove)
+		  (let ((dir-in-db '()))
+		    (sqlite3:for-each-row
+		     (lambda (dir)
+		       (set! dir-in-db (cons dir dir-in-db)))
+		     db "SELECT rundir FROM tests WHERE rundir LIKE ?;" 
+		     (conc "%" dir-to-remove "%")) ;; yes, I'm going to bail if there is anything like this dir in the db
+		    (if (null? dir-in-db)
+			(begin
+			  (debug:print 2 "Removing directory with zero db references: " dir-to-remove)
+			  (system (conc "rm -rf " dir-to-remove))
+			  (hash-table-delete! dirs-to-remove dir-to-remove))
+			(debug:print 2 "Skipping removal of " dir-to-remove " for now as it still has references in the database")))))
+	    (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
+
+	   ;; remove the run if zero tests remain
 	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id"))))
 	     (if (null? remtests) ;; no more tests remaining
 		 (let* ((dparts  (string-split lasttpath "/"))
@@ -796,11 +866,47 @@
 	 (runs:update-test_meta db test-name test-conf)))
      test-names)))
 	 
-(define (runs:rollup-run db keys keynames keyvallst n)
+;; This could probably be refactored into one complex query ...
+(define (runs:rollup-run db keys)
   (let* ((new-run-id   (register-run db keys))
-	 (similar-runs (db:get-runs db keys))
-	 (tests-n-days (db:get-tests-n-days db similar-runs)))
+	 (prev-tests   (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (curr-tests   (db-get-tests-for-run db new-run-id "%" "%"))
+	 (curr-tests-hash (make-hash-table)))
+    ;; index the already saved tests by testname and itempath in curr-tests-hash
+    (for-each
+     (lambda (testdat)
+       (let* ((testname  (db:test-get-testname testdat))
+	      (item-path (db:test-get-item-path testdat))
+	      (full-name (conc testname "/" item-path)))
+	 (hash-table-set! curr-tests-hash full-name testdat)))
+     curr-tests)
+    ;; NOPE: Non-optimal approach. Try this instead.
+    ;;   1. tests are received in a list, most recent first
+    ;;   2. replace the rollup test with the new *always*
     (for-each 
-     (lambda (test-id)
-       (db:rollup-test db run-id test-id))
-     tests-n-days)))
+     (lambda (testdat)
+       (let* ((testname  (db:test-get-testname testdat))
+	      (item-path (db:test-get-item-path testdat))
+	      (full-name (conc testname "/" item-path))
+	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
+	      (test-steps      (db:get-steps-for-test db (db:test-get-id testdat)))
+	      (new-test-record #f))
+	 ;; replace these with insert ... select
+	 (apply sqlite3:execute 
+		db 
+		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn) "
+		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
+		new-run-id (cddr (vector->list testdat)))
+	 (set! new-testdat (car (db-get-tests-for-run db new-run-id testname item-path)))
+	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
+	 ;; Now duplicate the test steps
+	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
+	 (sqlite3:execute 
+	  db 
+	  (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
+		"SELECT " (db:test-get-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
+	  (db:test-get-id testdat))
+	 ))
+     prev-tests)))
+	 
+     

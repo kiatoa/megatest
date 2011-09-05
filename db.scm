@@ -477,24 +477,53 @@
      test-id)
     (reverse res)))
 
-;; ;; check that *all* the prereqs are "COMPLETED"
-;; (define (db-get-prereqs-met db run-id waiton)
-;;   (let ((res          #f)
-;; 	(not-complete 0)
-;; 	(tests        (db-get-tests-for-run db run-id)))
-;;     (for-each
-;;      (lambda (test-name)
-;;        (for-each 
-;; 	(lambda (test)
-;; 	  (if (equal? (db:test-get-testname test) test-name)
-;; 	      (begin
-;; 		(set! res #t)
-;; 		(if (not (equal? (db:test-get-state test) "COMPLETED"))
-;; 		    (set! not-complete (+ 1 not-complete))))))
-;; 	tests))
-;;      waiton)
-;;     (and (or (null? waiton) res)
-;; 	 (eq? not-complete 0))))
+;; get a pretty table to summarize steps
+;;
+(define (db:get-steps-table db test-id)
+  (let ((steps   (db:get-steps-for-test db test-id)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(db:step-get-stepname step) 
+			;;        stepname                start end status
+			(vector (db:step-get-stepname step) ""   "" ""     ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))
+	   (case (string->symbol (db:step-get-state step))
+	     ((start)(vector-set! record 1 (db:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(db:step-get-status step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (db:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1"))))
+	     (else   (vector-set! record 1 (db:step-get-event_time step)))
+	     (vector-set! record 2 (db:step-get-state step))
+	     (vector-set! record 3 (db:step-get-status step))
+	     (vector-set! record 4 (db:step-get-event_time step)))
+	   (hash-table-set! res (db:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))))
+       (sort steps (lambda (a b)(< (db:step-get-event_time a)(db:step-get-event_time b)))))
+      res)))
 
 ;; USE: (lset-difference string=? '("a" "b" "c") '("d" "c" "e" "a"))
 ;;
