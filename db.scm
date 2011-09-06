@@ -79,9 +79,12 @@
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
-	  (patch-db db)))
+	  (patch-db db)
+	  (patch-db db) ;; yes, need to do it twice BUG FIXME
+	  ;; Must do this *after* running patch db
+	  (db:set-var db "MEGATEST_VERSION" megatest-version)
+	  ))
     db))
 
 ;;======================================================================
@@ -339,6 +342,7 @@
 ;; 
 (define (db:delete-test-records db test-id)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
+  (sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
   (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
@@ -476,15 +480,16 @@
 (define (db:load-test-data db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
 	 (testdat (db:get-test-info db run-id test-name item-path))
-	 (test-id (db:test-get-id testdat)))
+	 (test-id (if testdat (db:test-get-id testdat) #f)))
     (debug:print 1 "Enter records to insert in the test_data table, four fields, comma separated per line")
     (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
-    (let loop ((lin (read-line)))
-      (if (not (eof-object? lin))
-	  (begin
-	    (debug:print 4 lin)
-	    (db:csv->testdata db test-id lin)
-	    (loop (read-line)))))))    
+    (if test-id
+	(let loop ((lin (read-line)))
+	  (if (not (eof-object? lin))
+	      (begin
+		(debug:print 4 lin)
+		(db:csv->testdata db test-id lin)
+		(loop (read-line)))))))    )
 
 ;;======================================================================
 ;; S T E P S 

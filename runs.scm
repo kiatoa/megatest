@@ -906,6 +906,13 @@
 	  (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
 		"SELECT " (db:test-get-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
 	  (db:test-get-id testdat))
+	 ;; Now duplicate the test data
+	 (debug:print 4 "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
+	 (sqlite3:execute 
+	  db 
+	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,comment) "
+		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,comment FROM test_data WHERE test_id=?;")
+	  (db:test-get-id testdat))
 	 ))
      prev-tests)))
 	 
