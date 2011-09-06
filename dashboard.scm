@@ -84,7 +84,7 @@ Misc
 (define *buttondat*    (make-hash-table)) ;; <run-id color text test run-key>
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
-(define *num-runs*      10)
+(define *num-runs*      6)
 (define *num-tests*     15)
 (define *start-run-offset*  0)
 (define *start-test-offset* 0)
@@ -410,22 +410,28 @@ Misc
 	  )
     
     ;; create the left most column for the run key names and the test names 
-    (set! lftlst (list (apply iup:vbox 
-			      (map (lambda (x)		
-				     (let ((res (iup:hbox
-						 (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
-						 (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
-							      #:action (lambda (obj unk val)
-									 (update-search x val))))))
-				       (set! i (+ i 1))
-				       res))
-				   keynames))))
+    (set! lftlst (list (iup:hbox
+			(iup:label) ;; (iup:valuator)
+			(apply iup:vbox 
+			       (map (lambda (x)		
+				      (let ((res (iup:hbox
+						  (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
+						  (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
+							       #:action (lambda (obj unk val)
+									  (update-search x val))))))
+					(set! i (+ i 1))
+					res))
+				    keynames)))))
     (let loop ((testnum  0)
 	       (res      '()))
       (cond
        ((>= testnum ntests)
 	;; now lftlst will be an hbox with the test keys and the test name labels
-	(set! lftlst (append lftlst (list (apply iup:vbox (reverse res))))))
+	(set! lftlst (append lftlst (list (iup:hbox 
+					   (iup:valuator #:action (lambda (obj val)(print "Got: " obj ", " val)) 
+							 #:expand "YES" 
+							 #:orientation "VERTICAL")
+					   (apply iup:vbox (reverse res)))))))
        (else
 	(let ((labl  (iup:button "" 
 				 #:flat "YES" 
