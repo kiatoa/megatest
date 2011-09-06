@@ -48,6 +48,11 @@ Values and record errors and warnings
   :first_err              : record an error message
   :first_warn             : record a warning message
 
+Arbitrary test data loading
+  -load-test-data         : read test specific data for storage in the test_data table
+                            from standard in. Each line is comma delimited with four
+                            fields category,variable,value,comment
+
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -testpatt patt          : in list-runs show only these tests, % is the wildcard
@@ -122,6 +127,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-showkeys"
 		        "-test-status"
 			"-set-values"
+			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
 			"-runall"    ;; run all tests
@@ -561,6 +567,7 @@ Called as " (string-intersperse (argv) " ")))
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
+	(args:get-arg "-load-test-data")
 	(args:get-arg "-runstep")
 	(args:get-arg "-summarize-items"))
     (if (not (getenv "MT_CMDINFO"))
@@ -584,6 +591,8 @@ Called as " (string-intersperse (argv) " ")))
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 	  (set! db (open-db))
+	  (if (args:get-arg "-load-test-data")
+	      (db:load-test-data db run-id test-name itemdat))
 	  (if (args:get-arg "-setlog")
 	      (test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")

@@ -26,12 +26,12 @@
 	       (keystr   (keys->keystr keys))
 	       (fieldstr (keys->key/field keys)))
 	  ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
-	  (sqlite3:execute db "CREATE TABLE keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
 	  (for-each (lambda (key)
 		      (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
 		    keys)
 	  (sqlite3:execute db (conc 
-			    "CREATE TABLE runs (id INTEGER PRIMARY KEY, " 
+			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
 			    fieldstr (if havekeys "," "")
 			    "runname TEXT,"
 			    "state TEXT DEFAULT '',"
@@ -44,7 +44,7 @@
 			    "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
 	  (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
 	  (sqlite3:execute db 
-			"CREATE TABLE tests 
+			"CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
@@ -68,7 +68,7 @@
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
 	  (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-	  (sqlite3:execute db "CREATE TABLE test_steps 
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -76,11 +76,11 @@
                                status TEXT DEFAULT 'n/a',event_time TIMESTAMP,
                                comment TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-	  (sqlite3:execute db "CREATE TABLE extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-	  (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
-                                  CONSTRAINT metadat_constraint UNIQUE (id,var));")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (var));")
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
-	  (sqlite3:execute db "CREATE TABLE access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
 	  (patch-db db)))
     db))
 
@@ -95,11 +95,22 @@
    (begin
      (print "Exception: " exn)
      (print "ERROR: Possible out of date schema, attempting to add table metadata...")
-     (sqlite3:execute db "CREATE TABLE metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
-                                  CONSTRAINT metadat_constraint UNIQUE (id,var));")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (var));")
      (db:set-var db "MEGATEST_VERSION" 1.17)
      )
-   (let ((mver (db:get-var db "MEGATEST_VERSION")))
+   (let ((mver (db:get-var db "MEGATEST_VERSION"))
+	 (test-meta-def "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
+                                     testname    TEXT DEFAULT '',
+                                     author      TEXT DEFAULT '',
+                                     owner       TEXT DEFAULT '',
+                                     description TEXT DEFAULT '',
+                                     reviewed    TIMESTAMP,
+                                     iterated    TEXT DEFAULT '',
+                                     avg_runtime REAL,
+                                     avg_disk    REAL,
+                                     tags        TEXT DEFAULT '',
+                                CONSTRAINT test_meta_constraint UNIQUE (testname));"))
      (print "Current schema version: " mver " current megatest version: " megatest-version)
      (if (not mver)
 	(begin
@@ -111,17 +122,7 @@
      ;; 	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
      (if (< mver 1.21)
 	 (begin
-	   (sqlite3:execute db "CREATE TABLE test_meta (id INTEGER PRIMARY KEY,
-                                     testname    TEXT DEFAULT '',
-                                     author      TEXT DEFAULT '',
-                                     owner       TEXT DEFAULT '',
-                                     description TEXT DEFAULT '',
-                                     reviewed    TIMESTAMP,
-                                     iterated    TEXT DEFAULT '',
-                                     avg_runtime REAL,
-                                     avg_disk    REAL,
-                                     tags        TEXT DEFAULT '',
-                                CONSTRAINT test_meta_contstraint UNIQUE (id,testname));")
+	   (sqlite3:execute db test-meta-def)
 	   (for-each 
 	    (lambda (stmt)
 	      (sqlite3:execute db stmt))
@@ -134,6 +135,17 @@
 	     "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
 	     "ALTER TABLE tests ADD COLUMN units TEXT;"
 	     ))))
+     (if (< mver 1.22)
+	 (begin
+	   (sqlite3:execute db "DROP TABLE test_meta;")
+	   (sqlite3:execute db test-meta-def)
+	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+                                test_id INTEGER,
+                                category TEXT DEFAULT '',
+                                variable TEXT,
+                                value,
+                                comment TEXT DEFAULT '',
+                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")))
      (if (< mver megatest-version)
 	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
 
@@ -154,7 +166,13 @@
 	res)))
 
 (define (db:set-var db var val)
-  (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
+  ;; Odd, I thought that if a constraint was placed on column then an insert with duplicate data
+  ;; would fail and the insert would fall back to replace.
+  ;; NB// accidently included primary key in the unique constraint which does not work.
+  (let ((have (db:get-var db var)))
+    ;; (if have
+    ;; (sqlite3:execute db "UPDATE metadat SET val=? WHERE var=?;" val var)
+	(sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
@@ -445,7 +463,31 @@
   (sqlite3:execute db (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
 
 ;;======================================================================
-;; Steps
+;; T E S T   D A T A 
+;;======================================================================
+(define (db:csv->testdata db test-id csvdata)
+  (let ((csvlist (csv->list csvdata)))
+    (for-each 
+     (lambda (csvrow)
+       (apply sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,comment) VALUES (?,?,?,?,?);"
+	      test-id (take (append csvrow '("" "" "" "")) 4)))
+     csvlist)))
+
+(define (db:load-test-data db run-id test-name itemdat)
+  (let* ((item-path (item-list->path itemdat))
+	 (testdat (db:get-test-info db run-id test-name item-path))
+	 (test-id (db:test-get-id testdat)))
+    (debug:print 1 "Enter records to insert in the test_data table, four fields, comma separated per line")
+    (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
+    (let loop ((lin (read-line)))
+      (if (not (eof-object? lin))
+	  (begin
+	    (debug:print 4 lin)
+	    (db:csv->testdata db test-id lin)
+	    (loop (read-line)))))))    
+
+;;======================================================================
+;; S T E P S 
 ;;======================================================================
 ;; Run steps
 ;; make-vector-record "Run steps" db step id test_id stepname step_complete step_pass event_time    
