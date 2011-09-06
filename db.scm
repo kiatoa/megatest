@@ -243,6 +243,17 @@
      runpatt)
     (vector header res)))
 
+;; just get count of runs
+(define (db:get-num-runs db runpatt)
+  (let ((numruns 0))
+    (sqlite3:for-each-row 
+     (lambda (count)
+       (set! numruns count))
+     db
+     "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
+    numruns))
+
+
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;; keypatt: '(("key1" "patt1")("key2" "patt2")...)
 (define (db:get-runs db keys keypatts runpatt)
