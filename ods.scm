@@ -134,7 +134,7 @@ EEmHSDpE0iGSDpF0iKRDJB0i6RBJh+gv8TgE/jVPQbMAAAAASUVORK5CYII=
 	(rows (cdr sheetdat)))
     (conc "<table:table table:name=\"" name "\" table:style-name=\"ta1\" table:print=\"false\">\n"
 	  (conc (ods:column)
-		(apply conc (map ods:row rows)))
+		(string-join (map ods:row rows) ""))
 	  "</table:table>")))
 
 ;; seems to be called once at top of each sheet, i.e. a column of rows
@@ -143,20 +143,25 @@ EEmHSDpE0iGSDpF0iKRDJB0i6RBJh+gv8TgE/jVPQbMAAAAASUVORK5CYII=
 
 ;; cells is a list of <table:table-cell ..> ... </table:table-cell>
 (define (ods:row cells)
-  (apply conc
-	 (cons "<table:table-row table:style-name=\"ro1\">\n"
-	       (append (map ods:cell cells)
-		       (list "</table:table-row>\n")))))
+  (conc	 "<table:table-row table:style-name=\"ro1\">\n"
+	 (string-join (map ods:cell cells) "")
+	 "</table:table-row>\n"))
 
 ;; types are "string" or "float"
 (define (ods:cell value)
-  (let ((type (cond
+  (let* ((type (cond
 	       ((string? value) "string")
 	       ((symbol? value) "string")
 	       ((number? value) "float")
-	       (else "string"))))
-    (conc "<table:table-cell office:value-type=\"" type "\">" "\n"
-	  "<text:p>" value "</text:p>" "\n"
+	       (else #f)))
+	(tmpval (if (symbol? value)
+		    (symbol->string value) 
+		    (if type value ""))) ;; convert everything else to an empty string
+	(escval (if (string? tmpval)(string-substitute (regexp "<") "&lt;" (string-substitute (regexp ">") "&gt;" tmpval)) tmpval)))
+    (conc "<table:table-cell office:value-type=\"" (if type type "string") "\""
+	  (if (equal? type "float")(conc " office:value=\"" value "\"") "")
+	  ">\n"
+	  "<text:p>" escval "</text:p>" "\n"
 	  "</table:table-cell>" "\n")))
 
 ;; create the directories
@@ -205,5 +210,5 @@ EEmHSDpE0iGSDpF0iKRDJB0i6RBJh+gv8TgE/jVPQbMAAAAASUVORK5CYII=
 	    (map print 
 		 (map ods:sheet data))
 	    (map display ods:content-footer)))
-	(system (conc "cd " path "; zip " fname " -n mimetype mimetype `find . |grep -v mimetype`")))))
+	(system (conc "cd " path "; zip " fname " -n mimetype mimetype `find . |grep -v mimetype` > /dev/null")))))
 

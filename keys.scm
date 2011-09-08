@@ -87,18 +87,14 @@
 			   (if withkey (list x val) (list val))))
 		       argkeys))))
   
-;; (define (keys->alist keys)
-;;   (let* ((keynames   (map key:get-fieldname keys))
-;; 	 (argkeys    (map (lambda (k)(conc ":" k)) keynames))
-;; 	 (withkey    (not (null? withkey)))
-;; 	 (newremargs (args:get-args (cons "blah" remargs) argkeys '() args:arg-hash 0))) ;; the cons blah works around a bug in args
-;;     (debug:print 0 "remargs: " remargs " newremargs: " newremargs)
-;;     (apply append (map (lambda (x)
-;; 			 (let ((val (args:get-arg x)))
-;; 			   (if (not val)
-;; 			       (debug:print 0 "ERROR: Ignoring key " x " found in database but not on command line"))
-;; 			   (if withkey (list x val) (list val))))
-;; 		       argkeys))))
+;; Given a list of keys (list of vectors) return an alist ((key argval) ...)
+(define (keys->alist keys defaultval)
+  (let* ((keynames   (map key:get-fieldname keys))
+	 (newremargs (args:get-args (cons "blah" remargs) (map (lambda (k)(conc ":" k)) keynames) '() args:arg-hash 0))) ;; the cons blah works around a bug in args
+    (map (lambda (key)
+	   (let ((val (args:get-arg (conc ":" key))))
+	     (list key (if val val defaultval))))
+	 keynames)))
 
 (define (keystring->keys keystring)
   (map (lambda (x)

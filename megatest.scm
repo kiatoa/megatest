@@ -74,6 +74,7 @@ Misc
                             prior runs with same keys
   -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
   -update-meta            : update the tests metadata for all tests
+  -extract-ods            : extract an open document spreadsheet from the database
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -119,6 +120,7 @@ Called as " (string-intersperse (argv) " ")))
 			":tol"
 			":units"
 			;; misc
+			"-extract-ods"
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
@@ -313,6 +315,20 @@ Called as " (string-intersperse (argv) " ")))
      (lambda (db keys keynames keyvallst)
        (let ((n (args:get-arg "-rollup")))
 	 (runs:rollup-run db keys)))))
+
+;;======================================================================
+;; Extract a spreadsheet from the runs database
+;;======================================================================
+
+(if (args:get-arg "-extract-ods")
+    (general-run-call
+     "-extract-ods"
+     "Make ods spreadsheet"
+     (lambda (db keys keynames keyvallst)
+       (let ((outputfile (args:get-arg "-extract-ods"))
+	     (runspatt   (args:get-arg ":runname"))
+	     (keyvalalist (keys->alist keys "%")))
+	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%"))))))
 
 ;;======================================================================
 ;; run one test
