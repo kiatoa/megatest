@@ -607,3 +607,59 @@
 		  waiton)
 	(delete-duplicates result))))
 
+;;======================================================================
+;; Extract ods file from the db
+;;======================================================================
+
+;; runspatt is a comma delimited list of run patterns
+;; keypatt-alist must contain *all* keys with an associated pattern: '( ("KEY1" "%") .. )
+(define (db:extract-ods-file db outputfile keypatt-alist runspatt)
+  (let ((keysstr  (string-intersperse (map car keypatt-alist) ","))
+	(keyqry   (string-intersperse (map (lambda (p)(conc (car p) " like ? ")) keypatt-alist) " AND "))
+	(results   '())
+	(test-ids '())
+	(tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id))))
+    (apply sqlite3:for-each-row
+     (lambda (test-id . b)
+       (set! test-ids (cons test-id test-ids))
+       (set! results (append results (list b)))) ;; note, drop the test-id
+     db
+     (conc "SELECT
+              t.id,runname," keysstr ",t.testname,description,
+              item_path,t.state,t.status,
+              attemptnum,final_logf,logdat,run_duration,r.comment,
+              t.event_time,expected_value,value,tol,tol_perc,
+              first_err,first_warn,tm.tags,
+              r.owner,t.comment,
+              author,tm.owner,reviewed,iterated,avg_runtime,
+              diskfree,uname,rundir,avg_disk,t.tags,run_id,
+              host,cpuload
+            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id INNER JOIN test_meta AS tm ON tm.testname=t.testname
+            WHERE runname LIKE ? AND " keyqry ";")
+     runspatt (map cadr keypatt-alist))
+    (set! results (list "Runs" results))
+    ;; now, for each test, collect the test_data info and add a new sheet
+    (for-each
+     (lambda (test-id)
+       (let ((test-data '())
+	     (curr-test-name #f))
+	 (sqlite3:for-each-row
+	  (lambda (testname item_path category variable value comment)
+	    (set! curr-test-name testname)
+	    (set! test-data (append test-data (list (list testname item_path category variable value comment)))))
+	  db 
+	  "SELECT testname,item_path,category,variable,value,comment FROM test_data INNER JOIN tests ON tests.id=test_data.test_id WHERE test_id=?;"
+	  test-id)
+	 (set! results (append results (list (cons curr-test-name test-data))))
+	 ))
+     test-ids)
+    (system (conc "mkdir -p " tempdir))
+    (pp results)
+    (ods:list->ods 
+     tempdir
+     (if (string-match (regexp "^/") outputfile) ;; full path?
+	 outputfile
+	 (conc (current-directory) "/" outputfile))
+     results)))
+
+;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")

@@ -156,6 +156,7 @@ Called as " (string-intersperse (argv) " ")))
 (include "launch.scm")
 (include "runs.scm")
 (include "runconfig.scm")
+(include "ods.scm")
 
 (define *didsomething* #f)
 
