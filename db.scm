@@ -140,6 +140,7 @@
 	     ))))
      (if (< mver 1.25)
 	 (begin
+	   (sqlite3:execute db "DROP TABLE test_data;")
 	   (sqlite3:execute db "DROP TABLE test_meta;")
 	   (sqlite3:execute db test-meta-def)
 	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,

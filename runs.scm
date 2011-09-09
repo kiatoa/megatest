@@ -90,7 +90,8 @@
      item-paths )))
 
 ;; get the previous record for when this test was run where all keys match but runname
-(define (test:get-previous-test-run-records db run-id test-name item-path)
+;; returns #f if no such test found, returns a single test record if found
+(define (test:get-previous-test-run-record db run-id test-name item-path)
   (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
@@ -122,8 +123,9 @@
 		      (loop (car tal)(cdr tal))
 		      (car results)))))))))
     
-;; get the previous record for when this test was run where all keys match but runname
-;; NB// Merge this with test:get-previous-test-run-records
+;; get the previous records for when these tests were run where all keys match but runname
+;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
+;; can use wildcards. 
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
   (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
@@ -137,7 +139,7 @@
      db
      (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
     (if (not keyvals)
-	#f
+	'()
 	(let ((prev-run-ids '()))
 	  (apply sqlite3:for-each-row
 		 (lambda (id)
@@ -148,7 +150,7 @@
 	  ;; extract the most recent test and return that.
 	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
 		       ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) #f ;; no previous runs? return #f
+	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
 		(let ((results (db-get-tests-for-run db hed test-name item-path)))
@@ -176,7 +178,7 @@
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (test:get-previous-test-run-records db run-id test-name item-path)))
+		       (let ((prev-test (test:get-previous-test-run-record db run-id test-name item-path)))
 			 (if prev-test ;; true if we found a previous test in this run series
 			     (let ((prev-status (db:test-get-status   prev-test))
 				   (prev-state  (db:test-get-state    prev-test))
@@ -229,7 +231,8 @@
 	     (or (equal? status "PASS")
 		 (equal? status "WARN")
 		 (equal? status "FAIL")
-		 (equal? status "WAIVED")))
+		 (equal? status "WAIVED")
+		 (equal? status "RUNNING")))
 	(begin
 	  (sqlite3:execute 
 	   db
@@ -238,15 +241,17 @@
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name run-id test-name)
-	  (sqlite3:execute
-	   db
-	   "UPDATE tests
-             SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
+	  (if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
+	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" run-id test-name)
+	      (sqlite3:execute
+	       db
+	       "UPDATE tests
+                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
                           'RUNNING'
                        ELSE 'COMPLETED' END,
-                status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
-             WHERE run_id=? AND testname=? AND item_path='';"
-	   run-id test-name run-id test-name)))
+                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
+                       WHERE run_id=? AND testname=? AND item_path='';"
+	       run-id test-name run-id test-name))))
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
@@ -868,9 +873,9 @@
 	 
 ;; This could probably be refactored into one complex query ...
 (define (runs:rollup-run db keys)
-  (let* ((new-run-id   (register-run db keys))
-	 (prev-tests   (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests   (db-get-tests-for-run db new-run-id "%" "%"))
+  (let* ((new-run-id      (register-run db keys))
+	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%"))
 	 (curr-tests-hash (make-hash-table)))
     ;; index the already saved tests by testname and itempath in curr-tests-hash
     (for-each
@@ -894,8 +899,8 @@
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
 		db 
-		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn) "
-		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
+		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn) "
+		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
 	 (set! new-testdat (car (db-get-tests-for-run db new-run-id testname item-path)))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
@@ -910,8 +915,8 @@
 	 (debug:print 4 "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
 	 (sqlite3:execute 
 	  db 
-	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,comment) "
-		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,comment FROM test_data WHERE test_id=?;")
+	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected_value,tol,units,comment) "
+		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected_value,tol,units,comment FROM test_data WHERE test_id=?;")
 	  (db:test-get-id testdat))
 	 ))
      prev-tests)))

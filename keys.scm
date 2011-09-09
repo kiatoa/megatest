@@ -68,6 +68,10 @@
 
 (define (args:usage . a) #f)
 
+;; keys->vallist is called several times (quite unnecessarily), use this hash to suppress multiple
+;; reporting of missing keys on the command line.
+(define keys:warning-suppress-hash (make-hash-table))
+
 ;; Using the keys pulled from the database (initially set from the megatest.config file)
 ;; look for the equivalent value on the command line and add it to a list, or #f if not found.
 ;; default => (val1 val2 val3 ...)
@@ -82,8 +86,12 @@
 			 (let ((val (args:get-arg x)))
 			   ;; (debug:print 0 "x: " x " val: " val)
 			   (if (not val)
-			       ;; (debug:print 0 "WARNING: missing key " x ". Specified in database but not on command line, using \"unk\"")
-			       (set! val "default"))
+			       (begin
+				 (if (not (hash-table-ref/default keys:warning-suppress-hash x #f))
+				     (begin
+				       (debug:print 0 "WARNING: missing key " x ". Specified in database but not on command line, using \"unk\"")
+				       (hash-table-set! keys:warning-suppress-hash x #t)))
+				 (set! val "default")))
 			   (if withkey (list x val) (list val))))
 		       argkeys))))
   

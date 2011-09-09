@@ -64,26 +64,26 @@
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
 			   (db:test-get-id testdat)))
-	    (store-label "testvalue"
-			 (iup:label "TestValue                          "
-				    #:expand "HORIZONTAL")
-			 (lambda (testdat)
-			   (db:test-get-value testdat)))
-	    (store-label "testexpectedvalue"
-			 (iup:label "TestExpectedValue                  "
-				    #:expand "HORIZONTAL")
-			 (lambda (testdat)
-			   (db:test-get-expected_value testdat)))
-	    (store-label "testtol"
-			 (iup:label "TestTol                             "
-				    #:expand "HORIZONTAL")
-			 (lambda (testdat)
-			   (db:test-get-tol testdat)))
-	    (store-label "testunits"
-			 (iup:label "TestUnits                          "
-				    #:expand "HORIZONTAL")
-			 (lambda (testdat)
-			   (db:test-get-units testdat)))
+;;	    (store-label "testvalue"
+;;			 (iup:label "TestValue                          "
+;;				    #:expand "HORIZONTAL")
+;;			 (lambda (testdat)
+;;			   (db:test-get-value testdat)))
+;;	    (store-label "testexpectedvalue"
+;;			 (iup:label "TestExpectedValue                  "
+;;				    #:expand "HORIZONTAL")
+;;			 (lambda (testdat)
+;;			   (db:test-get-expected_value testdat)))
+;;	    (store-label "testtol"
+;;			 (iup:label "TestTol                             "
+;;				    #:expand "HORIZONTAL")
+;;			 (lambda (testdat)
+;;			   (db:test-get-tol testdat)))
+;;	    (store-label "testunits"
+;;			 (iup:label "TestUnits                          "
+;;				    #:expand "HORIZONTAL")
+;;			 (lambda (testdat)
+;;			   (db:test-get-units testdat)))
 	    )))))
 
 ;;======================================================================
