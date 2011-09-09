@@ -44,7 +44,7 @@
 			    "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
 	  (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
 	  (sqlite3:execute db 
-			"CREATE TABLE IF NOT EXISTS tests 
+                 "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
@@ -130,15 +130,15 @@
 	    (lambda (stmt)
 	      (sqlite3:execute db stmt))
 	    (list 
-	     "ALTER TABLE tests ADD COLUMN expected_value REAL;" ;; DO NOT Add a default, we want it to be NULL
-	     "ALTER TABLE tests ADD COLUMN value REAL;"
-	     "ALTER TABLE tests ADD COLUMN tol REAL;"
-	     "ALTER TABLE tests ADD COLUMN tol_perc REAL;"
+	     ;; "ALTER TABLE tests ADD COLUMN expected_value REAL;" ;; DO NOT Add a default, we want it to be NULL
+	     ;; "ALTER TABLE tests ADD COLUMN value REAL;"
+	     ;; "ALTER TABLE tests ADD COLUMN tol REAL;"
+	     ;; "ALTER TABLE tests ADD COLUMN tol_perc REAL;"
 	     "ALTER TABLE tests ADD COLUMN first_err TEXT;"
 	     "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
-	     "ALTER TABLE tests ADD COLUMN units TEXT;"
+	     ;; "ALTER TABLE tests ADD COLUMN units TEXT;"
 	     ))))
-     (if (< mver 1.22)
+     (if (< mver 1.25)
 	 (begin
 	   (sqlite3:execute db "DROP TABLE test_meta;")
 	   (sqlite3:execute db test-meta-def)
@@ -146,7 +146,10 @@
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
-                                value,
+	                        value REAL,
+	                        expected_value REAL,
+	                        tol REAL,
+                                units TEXT,
                                 comment TEXT DEFAULT '',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")))
      (if (< mver megatest-version)
@@ -323,12 +326,12 @@
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
-(define-inline (db:test-get-value        vec) (printable (vector-ref vec 15)))
-(define-inline (db:test-get-expected_value vec)(printable (vector-ref vec 16)))
-(define-inline (db:test-get-tol          vec) (printable (vector-ref vec 17)))
-(define-inline (db:test-get-units        vec) (printable (vector-ref vec 18)))
-(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 19)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 20)))
+;; (define-inline (db:test-get-value        vec) (printable (vector-ref vec 15)))
+;; (define-inline (db:test-get-expected_value vec)(printable (vector-ref vec 16)))
+;; (define-inline (db:test-get-tol          vec) (printable (vector-ref vec 17)))
+;; (define-inline (db:test-get-units        vec) (printable (vector-ref vec 15))) ;; 18)))
+(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15))) ;; 19)))
+(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16))) ;; 20)))
 
 (define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
 (define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
@@ -339,10 +342,10 @@
 	(testpatt (if (or (null? params)(not (car params))) "%" (car params)))
 	(itempatt (if (> (length params) 1)(cadr params) "%")))
     (sqlite3:for-each-row 
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment value expected-value tol units first-err first-warn)
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment value expected-value tol units first-err first-warn) res)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn) res)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
      run-id testpatt (if itempatt itempatt "%"))
     res))
 
@@ -401,10 +404,10 @@
 (define (db:get-test-info db run-id testname item-path)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
     res))
 
@@ -412,10 +415,10 @@
 (define (db:get-test-data-by-id db test-id)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment value expected-value tol units first-err first-warn)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,value,expected_value,tol,units,first_err,first_warn FROM tests WHERE id=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE id=?;"
      test-id)
     res))
 
@@ -484,15 +487,15 @@
   (let ((csvlist (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
-       (apply sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,comment) VALUES (?,?,?,?,?);"
-	      test-id (take (append csvrow '("" "" "" "")) 4)))
+       (apply sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) VALUES (?,?,?,?,?,?,?);"
+	      test-id (take (append csvrow '("" "" "" "" "" "" "")) 7)))
      csvlist)))
 
 (define (db:load-test-data db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
 	 (testdat (db:get-test-info db run-id test-name item-path))
 	 (test-id (if testdat (db:test-get-id testdat) #f)))
-    (debug:print 1 "Enter records to insert in the test_data table, four fields, comma separated per line")
+    (debug:print 1 "Enter records to insert in the test_data table, seven fields, comma separated per line")
     (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
     (if test-id
 	(let loop ((lin (read-line)))
@@ -628,9 +631,6 @@
 				   "Final Log"
 				   "Run Duration"
 				   "When Run"
-				   "Expected Value"
-				   "Value Found"
-				   "Tolerance"
 				   "Error"
 				   "Warn"
 				   "Tags"
@@ -648,6 +648,9 @@
 				   "Run Id")))
 	 (results (list runsheader)))
     (debug:print 2 "Using " tempdir " for constructing the ods file")
+    ;; "Expected Value"
+    ;; "Value Found"
+    ;; "Tolerance"
     (apply sqlite3:for-each-row
      (lambda (test-id . b)
        (set! test-ids (cons test-id test-ids))
@@ -657,7 +660,7 @@
               t.id,runname," keysstr ",t.testname,description,
               item_path,t.state,t.status,
               final_logf,run_duration, 
-              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime'),expected_value,value,tol,
+              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime')
               first_err,first_warn,tm.tags,r.owner,t.comment,
               author,
               tm.owner,reviewed,iterated,
@@ -677,7 +680,7 @@
 	    (set! curr-test-name testname)
 	    (set! test-data (append test-data (list (list testname item_path category variable value comment)))))
 	  db 
-	  "SELECT testname,item_path,category,variable,test_data.value AS value,test_data.comment AS comment FROM test_data INNER JOIN tests ON tests.id=test_data.test_id WHERE test_id=?;"
+	  "SELECT testname,item_path,category,variable,test_data.value AS value,expected_value,tol,units,test_data.comment AS comment FROM test_data INNER JOIN tests ON tests.id=test_data.test_id WHERE test_id=?;"
 	  test-id)
 	 (if curr-test-name
 	     (set! results (append results (list (cons curr-test-name test-data)))))
