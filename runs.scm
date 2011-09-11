@@ -418,12 +418,8 @@
 		  testname
 		  item-path)))
 
-(define (test-update-meta-info db run-id testname itemdat minutes)
-  (let ((item-path (item-list->path itemdat))
-	(cpuload  (get-cpu-load))
-	(diskfree (get-df (current-directory))))
-    (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
-    (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
+(define (test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
+  (let ((item-path (item-list->path itemdat)))
     (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
     ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
     ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))

@@ -12,6 +12,8 @@
 (use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml)
 (require-extension sqlite3 regex posix)
 
+(require-extension (srfi 18) extras tcp rpc)
+
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -32,6 +34,7 @@
 (define *globalexitstatus* 0) ;; attempt to work around possible thread issues
 (define *passnum*     0) ;; when running track calls to run-tests or similar
 (define *verbosity*   1)
+(define *rpc:listener* #f) ;; if set up for server communication this will hold the tcp port
 
 (define-inline (get-with-default val default)
   (let ((val (args:get-arg val)))
