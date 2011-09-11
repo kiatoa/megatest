@@ -313,8 +313,7 @@ Called as " (string-intersperse (argv) " ")))
      "-rollup" 
      "rollup tests" 
      (lambda (db keys keynames keyvallst)
-       (let ((n (args:get-arg "-rollup")))
-	 (runs:rollup-run db keys)))))
+       (runs:rollup-run db keys))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database

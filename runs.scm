@@ -174,6 +174,8 @@
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let* ((real-status status)
 	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
+	 (testdat     (db:get-test-info db run-id test-name item-path))
+	 (test-id     (if testdat (db:test-get-id testdat) #f))
 	 (otherdat    (if dat dat (make-hash-table)))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
@@ -197,34 +199,22 @@
     (if (and state status)
 	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
 			 state real-status run-id test-name item-path))
+
+    ;; if status is "AUTO" then call rollup
+    (if (and test-id state status (equal? status "AUTO")) 
+	(db:test-data-rollup db test-id))
+
     ;; add metadata (need to do this way to avoid SQL injection issues)
-    ;; :value
-    (let ((val (hash-table-ref/default otherdat ":value" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-    ;; :expected_value
-    (let ((val (hash-table-ref/default otherdat ":expected_value" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET expected_value=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-    ;; :tol
-    (let ((val (hash-table-ref/default otherdat ":tol" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET tol=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+
     ;; :first_err
     (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
       (if val
 	  (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+
     ;; :first_warn
     (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
       (if val
 	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-    (let ((val (hash-table-ref/default otherdat ":units" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET units=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-    ;; :tol_perc
-    (let ((val (hash-table-ref/default otherdat ":tol_perc" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET tol_perc=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
 
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (and (not (equal? item-path ""))

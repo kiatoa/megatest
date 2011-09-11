@@ -62,6 +62,10 @@
    ((symbol? val) (any->number (symbol->string val)))
    (else #f)))
 
+(define (any->number-if-possible val)
+  (let ((num (any->number val)))
+    (if num num val)))
+
 ;;======================================================================
 ;; System stuff
 ;;======================================================================

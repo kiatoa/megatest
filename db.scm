@@ -152,6 +152,7 @@
 	                        tol REAL,
                                 units TEXT,
                                 comment TEXT DEFAULT '',
+                                status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")))
      (if (< mver megatest-version)
 	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
@@ -484,27 +485,114 @@
 ;;======================================================================
 ;; T E S T   D A T A 
 ;;======================================================================
-(define (db:csv->testdata db test-id csvdata)
-  (let ((csvlist (csv->list csvdata)))
+(define (make-db:test-data)(make-vector 10))
+(define-inline (db:test-data-get-id               vec)    (vector-ref  vec 0))
+(define-inline (db:test-data-get-test_id          vec)    (vector-ref  vec 1))
+(define-inline (db:test-data-get-category         vec)    (vector-ref  vec 2))
+(define-inline (db:test-data-get-variable         vec)    (vector-ref  vec 3))
+(define-inline (db:test-data-get-value            vec)    (vector-ref  vec 4))
+(define-inline (db:test-data-get-expected_value   vec)    (vector-ref  vec 5))
+(define-inline (db:test-data-get-tol              vec)    (vector-ref  vec 6))
+(define-inline (db:test-data-get-units            vec)    (vector-ref  vec 7))
+(define-inline (db:test-data-get-comment          vec)    (vector-ref  vec 8))
+(define-inline (db:test-data-get-status           vec)    (vector-ref  vec 9))
+
+(define (db:csv->test-data db test-id csvdata)
+  (let ((csvlist (csv->list (make-csv-reader
+			     (open-input-string csvdata)
+			     '((strip-leading-whitespace? #t)
+			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
-       (apply sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) VALUES (?,?,?,?,?,?,?);"
-	      test-id (take (append csvrow '("" "" "" "" "" "" "")) 7)))
+       (let* ((padded-row  (take (append csvrow '(#f #f #f #f #f #f #f #f)) 8))
+	      (category    (list-ref padded-row 0))
+	      (variable    (list-ref padded-row 1))
+	      (value       (any->number-if-possible (list-ref padded-row 2)))
+	      (expected    (any->number-if-possible (list-ref padded-row 3)))
+	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
+	      (units       (list-ref padded-row 5))
+	      (comment     (list-ref padded-row 6))
+	      (status      (list-ref padded-row 7))) ;; if specified on the input then use, else calculate
+	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	 (if (and (or (not expected)(equal? expected ""))
+		  (or (not tol)     (equal? expected ""))
+		  (or (not units)   (equal? expected "")))
+	     (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
+	       (set! expected new-expected)
+	       (set! tol      new-tol)
+	       (set! units    new-units)))
+	 ;; calculate status if NOT specified
+	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
+	     (if (number? tol) ;; if tol is a number then we do the standard comparison
+		 (let ((max-val (+ expected tol))
+		       (min-val (- expected tol)))
+		   (set! status (if (and (>=  value min-val)(<= value max-val)) "pass" "fail")))
+		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
+		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
+			 ((>)  (if (>  value expected) "pass" "fail"))
+			 ((<)  (if (<  value expected) "pass" "fail"))
+			 ((>=) (if (>= value expected) "pass" "fail"))
+			 ((<=) (if (<= value expected) "pass" "fail"))
+			 (else (conc "ERROR: bad tol comparator " tol))))))
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected_value,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
+	      test-id category variable value expected tol units (if comment comment "") status)))
      csvlist)))
+
+;; get a list of test_data records matching categorypatt
+(define (db:read-test-data db test-id categorypatt)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test_id category variable value expected_value tol units comment status)
+       (set! res (cons res (vector id test_id category variable value expected_value tol units comment status))))
+     db
+     "SELECT id,test_id,category,variable,value,expected_value,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ?;" test-id categorypatt)
+    (reverse res)))
 
 (define (db:load-test-data db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
 	 (testdat (db:get-test-info db run-id test-name item-path))
 	 (test-id (if testdat (db:test-get-id testdat) #f)))
-    (debug:print 1 "Enter records to insert in the test_data table, seven fields, comma separated per line")
+    ;; (debug:print 1 "Enter records to insert in the test_data table, seven fields, comma separated per line")
     (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
     (if test-id
 	(let loop ((lin (read-line)))
 	  (if (not (eof-object? lin))
 	      (begin
 		(debug:print 4 lin)
-		(db:csv->testdata db test-id lin)
-		(loop (read-line)))))))    )
+		(db:csv->test-data db test-id lin)
+		(loop (read-line))))))
+    ;; roll up the current results.
+    (db:test-data-rollup db test-id)))
+  
+;; WARNING: Do NOT call this for the parent test on an iterated test
+;; Roll up test_data pass/fail results
+;; look at the test_data status field, 
+;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
+;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
+(define (db:test-data-rollup db test-id)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests 
+      SET fail_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail'),
+          pass_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass')
+      WHERE id=?;"
+   test-id test-id test-id)
+  ;; if the test is not FAIL then set status based on the fail and pass counts.
+  (sleep 1)
+  (sqlite3:execute
+   db
+   "UPDATE tests
+      SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                         THEN 'FAIL'
+                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0
+                         THEN 'PASS'
+                      ELSE status
+                  END WHERE id=?;"
+   test-id test-id test-id))
+
+(define (db:get-prev-tol-for-test db test-id category variable)
+  ;; Finish me?
+  (values #f #f #f))
 
 ;;======================================================================
 ;; S T E P S 
@@ -573,10 +661,10 @@
 						   ", get-status: " (db:step-get-status step))
 				      (if (and (number? startt)(number? endt))
 					  (seconds->hr-min-sec (- endt startt)) "-1"))))
-	     (else   (vector-set! record 1 (db:step-get-event_time step)))
-	     (vector-set! record 2 (db:step-get-state step))
-	     (vector-set! record 3 (db:step-get-status step))
-	     (vector-set! record 4 (db:step-get-event_time step)))
+	     (else   (vector-set! record 1 (db:step-get-event_time step))))
+	   (vector-set! record 2 (db:step-get-state step))
+	   (vector-set! record 3 (db:step-get-status step))
+	   (vector-set! record 4 (db:step-get-event_time step))
 	   (hash-table-set! res (db:step-get-stepname step) record)
 	   (debug:print 6 "record(after)  = " record 
 			"\nid:       " (db:step-get-id step)
@@ -677,11 +765,11 @@
        (let ((test-data '())
 	     (curr-test-name #f))
 	 (sqlite3:for-each-row
-	  (lambda (testname item_path category variable value comment)
+	  (lambda (testname item_path category variable value comment status)
 	    (set! curr-test-name testname)
-	    (set! test-data (append test-data (list (list testname item_path category variable value comment)))))
+	    (set! test-data (append test-data (list (list testname item_path category variable value comment status)))))
 	  db 
-	  "SELECT testname,item_path,category,variable,test_data.value AS value,expected_value,tol,units,test_data.comment AS comment FROM test_data INNER JOIN tests ON tests.id=test_data.test_id WHERE test_id=?;"
+	  "SELECT testname,item_path,category,variable,td.value AS value,expected_value,tol,units,td.comment AS comment,td.status AS status FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
 	  test-id)
 	 (if curr-test-name
 	     (set! results (append results (list (cons curr-test-name test-data)))))
