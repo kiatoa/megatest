@@ -41,10 +41,12 @@ Run data
 
 Values and record errors and warnings
   -set-values             : update or set values in the megatest db 
-  :value                  : value measured
-  :expected_value         : value expected
-  :tol                    : |value-expect| <= tol
-  :units                  : name of the units for value, expected_value and tol
+  :category               : set the category field (optional)
+  :variable               : set the variable name (optional)
+  :value                  : value measured (required)
+  :expected               : value expected (required)
+  :tol                    : |value-expect| <= tol (required, can be <, >, >=, <= or number)
+  :units                  : name of the units for value, expected_value etc. (optional)
   :first_err              : record an error message
   :first_warn             : record a warning message
 
@@ -113,10 +115,12 @@ Called as " (string-intersperse (argv) " ")))
 			"-rename-run"
 			"-to"
 			;; values and messages
+			":category"
+			":variable"
 			":first_err"
 			":first_warn"
 			":value"
-			":expected_value"
+			":expected"
 			":tol"
 			":units"
 			;; misc
@@ -651,7 +655,7 @@ Called as " (string-intersperse (argv) " ")))
 				 (for-each (lambda (key)
 					     (if (args:get-arg key)
 						 (hash-table-set! res key (args:get-arg key))))
-					   (list ":value" ":tol" ":expected_value" ":first_err" ":first_warn" ":units"))
+					   (list ":value" ":tol" ":expected" ":first_err" ":first_warn" ":units" ":category" ":variable"))
 				 res)))
 		(if (and (args:get-arg "-test-status")
 			 (or (not state)

@@ -19,6 +19,6 @@ foo,bra,1.2,pass,silly stuff
 faz,bar,10,8mA,,,"this is a comment"
 EOF
 
-$MT_MEGATEST -test-status :state COMPLETED :status $? -m "This is a test level comment" :value 0e6 :expected_value 1.1e6 :tol 100e3
+$MT_MEGATEST -test-status :state COMPLETED :status $? -m "This is a test level comment" :value 10e6 :expected_value 1.1e6 :tol 100e3 :category nada :variable sillyvar :units mFarks :comment "This is the value/expected comment"
 
 # $MT_MEGATEST -test-status :state COMPLETED :status FAIL

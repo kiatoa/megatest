@@ -64,6 +64,8 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
+                     first_err  TEXT,
+                     first_warn TEXT,
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -80,6 +82,28 @@
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
+                                     testname    TEXT DEFAULT '',
+                                     author      TEXT DEFAULT '',
+                                     owner       TEXT DEFAULT '',
+                                     description TEXT DEFAULT '',
+                                     reviewed    TIMESTAMP,
+                                     iterated    TEXT DEFAULT '',
+                                     avg_runtime REAL,
+                                     avg_disk    REAL,
+                                     tags        TEXT DEFAULT '',
+                                CONSTRAINT test_meta_constraint UNIQUE (testname));")
+	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+                                test_id INTEGER,
+                                category TEXT DEFAULT '',
+                                variable TEXT,
+	                        value REAL,
+	                        expected REAL,
+	                        tol REAL,
+                                units TEXT,
+                                comment TEXT DEFAULT '',
+                                status TEXT DEFAULT 'n/a',
+                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")
 	  (patch-db db)
 	  (patch-db db) ;; yes, need to do it twice BUG FIXME
 	  ;; Must do this *after* running patch db
@@ -99,9 +123,9 @@
      (print "Exception: " exn)
      (print "ERROR: Possible out of date schema, attempting to add table metadata...")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
-                                  CONSTRAINT metadat_constraint UNIQUE (var));")
-     (db:set-var db "MEGATEST_VERSION" 1.17)
-     )
+                                 CONSTRAINT metadat_constraint UNIQUE (var));")
+     (if (not (db:get-var db "MEGATEST_VERSION"))
+	 (db:set-var db "MEGATEST_VERSION" 1.17)))
    (let ((mver (db:get-var db "MEGATEST_VERSION"))
 	 (test-meta-def "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
@@ -115,47 +139,44 @@
                                      tags        TEXT DEFAULT '',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));"))
      (print "Current schema version: " mver " current megatest version: " megatest-version)
-     (if (not mver)
-	(begin
-	  (print "Adding megatest-version to metadata")
-	  (sqlite3:execute db (db:set-var db "MEGATEST_VERSION" megatest-version))))
-     ;;      (if (< mver 1.18)
-     ;; 	 (begin
-     ;; 	   (print "Adding tags column to tests table")
-     ;; 	   (sqlite3:execute db "ALTER TABLE tests ADD COLUMN tags TEXT DEFAULT '';")))
-     (if (< mver 1.21)
-	 (begin
-	   (sqlite3:execute db test-meta-def)
-	   (for-each 
-	    (lambda (stmt)
-	      (sqlite3:execute db stmt))
-	    (list 
-	     ;; "ALTER TABLE tests ADD COLUMN expected_value REAL;" ;; DO NOT Add a default, we want it to be NULL
-	     ;; "ALTER TABLE tests ADD COLUMN value REAL;"
-	     ;; "ALTER TABLE tests ADD COLUMN tol REAL;"
-	     ;; "ALTER TABLE tests ADD COLUMN tol_perc REAL;"
-	     "ALTER TABLE tests ADD COLUMN first_err TEXT;"
-	     "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
-	     ;; "ALTER TABLE tests ADD COLUMN units TEXT;"
-	     ))))
-     (if (< mver 1.25)
-	 (begin
-	   (sqlite3:execute db "DROP TABLE test_data;")
-	   (sqlite3:execute db "DROP TABLE test_meta;")
-	   (sqlite3:execute db test-meta-def)
-	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+     (cond
+      ((not mver)
+       (print "Adding megatest-version to metadata") ;; Need to recreate the table
+       (sqlite3:execute db "DROP TABLE IF EXISTS metadat;")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (var));")
+       (db:set-var db "MEGATEST_VERSION" 1.17))
+      ((< mver 1.21)
+       (sqlite3:execute db "DROP TABLE IF EXISTS metadat;")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (var));")
+       (db:set-var db "MEGATEST_VERSION" 1.21) ;; set before, just in case the changes are already applied
+       (sqlite3:execute db test-meta-def)
+       (for-each 
+	(lambda (stmt)
+	  (sqlite3:execute db stmt))
+	(list 
+	 "ALTER TABLE tests ADD COLUMN first_err TEXT;"
+	 "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
+	 )))
+      ((< mver 1.24)
+       (db:set-var db "MEGATEST_VERSION" 1.24)
+       (sqlite3:execute db "DROP TABLE IF EXISTS test_data;")
+       (sqlite3:execute db "DROP TABLE IF EXISTS test_meta;")
+       (sqlite3:execute db test-meta-def)
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
 	                        value REAL,
-	                        expected_value REAL,
+	                        expected REAL,
 	                        tol REAL,
                                 units TEXT,
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
-                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")))
-     (if (< mver megatest-version)
-	 (db:set-var db "MEGATEST_VERSION" megatest-version)))))
+                              CONSTRAINT test_data UNIQUE (test_id,category,variable));"))
+     ((< mver megatest-version)
+      (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
 ;;======================================================================
 ;; meta get and set vars
@@ -491,13 +512,14 @@
 (define-inline (db:test-data-get-category         vec)    (vector-ref  vec 2))
 (define-inline (db:test-data-get-variable         vec)    (vector-ref  vec 3))
 (define-inline (db:test-data-get-value            vec)    (vector-ref  vec 4))
-(define-inline (db:test-data-get-expected_value   vec)    (vector-ref  vec 5))
+(define-inline (db:test-data-get-expected         vec)    (vector-ref  vec 5))
 (define-inline (db:test-data-get-tol              vec)    (vector-ref  vec 6))
 (define-inline (db:test-data-get-units            vec)    (vector-ref  vec 7))
 (define-inline (db:test-data-get-comment          vec)    (vector-ref  vec 8))
 (define-inline (db:test-data-get-status           vec)    (vector-ref  vec 9))
 
 (define (db:csv->test-data db test-id csvdata)
+  (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let ((csvlist (csv->list (make-csv-reader
 			     (open-input-string csvdata)
 			     '((strip-leading-whitespace? #t)
@@ -534,7 +556,7 @@
 			 ((>=) (if (>= value expected) "pass" "fail"))
 			 ((<=) (if (<= value expected) "pass" "fail"))
 			 (else (conc "ERROR: bad tol comparator " tol))))))
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected_value,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
 	      test-id category variable value expected tol units (if comment comment "") status)))
      csvlist)))
 
@@ -542,10 +564,10 @@
 (define (db:read-test-data db test-id categorypatt)
   (let ((res '()))
     (sqlite3:for-each-row 
-     (lambda (id test_id category variable value expected_value tol units comment status)
-       (set! res (cons res (vector id test_id category variable value expected_value tol units comment status))))
+     (lambda (id test_id category variable value expected tol units comment status)
+       (set! res (cons res (vector id test_id category variable value expected tol units comment status))))
      db
-     "SELECT id,test_id,category,variable,value,expected_value,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ?;" test-id categorypatt)
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ?;" test-id categorypatt)
     (reverse res)))
 
 (define (db:load-test-data db run-id test-name itemdat)
@@ -769,7 +791,7 @@
 	    (set! curr-test-name testname)
 	    (set! test-data (append test-data (list (list testname item_path category variable value comment status)))))
 	  db 
-	  "SELECT testname,item_path,category,variable,td.value AS value,expected_value,tol,units,td.comment AS comment,td.status AS status FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
+	  "SELECT testname,item_path,category,variable,td.value AS value,expected,tol,units,td.comment AS comment,td.status AS status FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
 	  test-id)
 	 (if curr-test-name
 	     (set! results (append results (list (cons curr-test-name test-data)))))

@@ -216,6 +216,25 @@
       (if val
 	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
 
+    (let ((category (hash-table-ref/default otherdat ":category" ""))
+	  (variable (hash-table-ref/default otherdat ":variable" ""))
+	  (value    (hash-table-ref/default otherdat ":value"    #f))
+	  (expected (hash-table-ref/default otherdat ":expected" #f))
+	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
+	  (units    (hash-table-ref/default otherdat ":units"    "")))
+      (debug:print 4 
+		   "category: " category ", variable: " variable ", value: " value
+		   ", expected: " expected ", tol: " tol ", units: " units)
+      (if (and value expected tol) ;; all three required
+	  (db:csv->test-data db test-id 
+			     (conc category ","
+				   variable ","
+				   value    ","
+				   expected ","
+				   tol      ","
+				   units    ","
+				   comment  ","))))
+				   
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (and (not (equal? item-path ""))
 	     (or (equal? status "PASS")
