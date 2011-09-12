@@ -195,13 +195,7 @@
 	res)))
 
 (define (db:set-var db var val)
-  ;; Odd, I thought that if a constraint was placed on column then an insert with duplicate data
-  ;; would fail and the insert would fall back to replace.
-  ;; NB// accidently included primary key in the unique constraint which does not work.
-  (let ((have (db:get-var db var)))
-    ;; (if have
-    ;; (sqlite3:execute db "UPDATE metadat SET val=? WHERE var=?;" val var)
-	(sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
+  (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
