@@ -649,6 +649,14 @@
      test-id)
     (reverse res)))
 
+;; 
+(define (make-db:steps-table)(make-vector 5))
+(define-inline (db:steps-table-get-stepname   vec)    (vector-ref  vec 0))
+(define-inline (db:steps-table-get-start      vec)    (vector-ref  vec 1))
+(define-inline (db:steps-table-get-end        vec)    (vector-ref  vec 2))
+(define-inline (db:steps-table-get-status     vec)    (vector-ref  vec 3))
+(define-inline (db:steps-table-get-runtime    vec)    (vector-ref  vec 4))
+
 ;; get a pretty table to summarize steps
 ;;
 (define (db:get-steps-table db test-id)

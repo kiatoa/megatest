@@ -47,12 +47,4 @@
 	 (hostdat  (if hostinfo (string-split hostinfo ":")))
 	 (host     (if hostinfo (car hostdat)))
 	 (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
-    
-    (rpc:publish-procedure!
-     'query
-     host
-     (lambda (sql callback)
-       (print "Executing query '" sql "' ...")
-       (sqlite3:for-each-row
-	callback
-	db sql))))
+    (set! *runremote* (vector host port))))

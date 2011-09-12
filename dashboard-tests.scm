@@ -350,12 +350,17 @@
 	       (set-fields-panel test-id testdat)
 	       (iup:frame 
 		#:title "Test Steps"
-		(let ((stepsdat (iup:label "Test steps ........................................." 
-					   #:expand "YES" 
-					   #:size "200x150"
-					   #:alignment "ALEFT:ATOP")))
+		(let ((stepsdat ;;(iup:label "Test steps ........................................." 
+				;;	   #:expand "YES" 
+				;;	   #:size "200x150"
+				;;	   #:alignment "ALEFT:ATOP")))
+		       (iup:textbox #:action (lambda (obj char val)
+					       #f)
+				    #:expand "YES"
+				    #:multiline "YES"
+				    #:font "Courier New, -10")))
 		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
-							  (let* ((currval (iup:attribute stepsdat "TITLE"))
+							  (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
 								 (fmtstr  "~25a~10a~10a~15a~20a")
 								 (comprsteps (db:get-steps-table db test-id))
 								 (newval  (string-intersperse 
@@ -380,7 +385,7 @@
 											     #t)))))
 									   "\n")))
 							    (if (not (equal? currval newval))
-								(iup:attribute-set! stepsdat "TITLE" newval)))))
+								(iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
 		  stepsdat)))))
       (iup:show self)
       (iup:callback-set! *tim* "ACTION_CB"
