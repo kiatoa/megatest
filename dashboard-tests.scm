@@ -361,7 +361,7 @@
 				    #:font "Courier New, -10")))
 		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
 							  (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
-								 (fmtstr  "~25a~10a~10a~15a~20a")
+								 (fmtstr  "~25a~10a~10a~15a~15a")
 								 (comprsteps (db:get-steps-table db test-id))
 								 (newval  (string-intersperse 
 									   (append
@@ -376,8 +376,8 @@
 											     (if (number? s)(seconds->time-string s) s))
 											   (let ((s (vector-ref x 2)))
 											     (if (number? s)(seconds->time-string s) s))
-											   (vector-ref x 3)
-											   (vector-ref x 4)))
+											   (vector-ref x 3)    ;; status
+											   (vector-ref x 4)))  ;; time delta
 										 (sort (hash-table-values comprsteps)
 										       (lambda (a b)
 											 (if (and (number? a)(number? b))

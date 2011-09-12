@@ -650,6 +650,12 @@
 (define-inline (db:steps-table-get-end        vec)    (vector-ref  vec 2))
 (define-inline (db:steps-table-get-status     vec)    (vector-ref  vec 3))
 (define-inline (db:steps-table-get-runtime    vec)    (vector-ref  vec 4))
+(define-inline (db:step-stable-set-stepname!  vec val)(vector-set! vec 0 val))
+(define-inline (db:step-stable-set-start!     vec val)(vector-set! vec 1 val))
+(define-inline (db:step-stable-set-end!       vec val)(vector-set! vec 2 val))
+(define-inline (db:step-stable-set-status!    vec val)(vector-set! vec 3 val))
+(define-inline (db:step-stable-set-runtime!   vec val)(vector-set! vec 4 val))
+
 
 ;; get a pretty table to summarize steps
 ;;

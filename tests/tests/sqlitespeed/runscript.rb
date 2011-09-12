@@ -30,7 +30,6 @@ else
   status='fail'
 end
 
-
 record_step("add #{num_records}","end",status)
 
 
