@@ -531,7 +531,11 @@
 	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
 	      (units       (list-ref padded-row 5))
 	      (comment     (list-ref padded-row 6))
-	      (status      (list-ref padded-row 7))) ;; if specified on the input then use, else calculate
+	      (status      (let ((s (list-ref padded-row 7)))
+			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
+						     (string-match (regexp "^n/a$"))))
+				 #f
+				 status)))) ;; if specified on the input then use, else calculate
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))

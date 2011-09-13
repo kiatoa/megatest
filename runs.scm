@@ -221,7 +221,8 @@
 	  (value    (hash-table-ref/default otherdat ":value"    #f))
 	  (expected (hash-table-ref/default otherdat ":expected" #f))
 	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
-	  (units    (hash-table-ref/default otherdat ":units"    "")))
+	  (units    (hash-table-ref/default otherdat ":units"    ""))
+	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
@@ -233,7 +234,7 @@
 				   expected ","
 				   tol      ","
 				   units    ","
-				   comment  ","))))
+				   dcomment ","))))
 				   
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (and (not (equal? item-path ""))
