@@ -331,8 +331,8 @@
 			;;	   #:expand "YES" 
 			;;	   #:size "200x150"
 			;;	   #:alignment "ALEFT:ATOP")))
-			(iup:textbox #:action (lambda (obj char val)
-						#f)
+			(iup:textbox ;; #:action (lambda (obj char val)
+				     ;;    	#f)
 				     #:expand "YES"
 				     #:multiline "YES"
 				     #:font "Courier New, -10"
@@ -370,8 +370,8 @@
 		(iup:frame
 		 #:title "Test Data"
 		 (let ((test-data
-			(iup:textbox  #:action (lambda (obj char val)
-						#f)
+			(iup:textbox  ;; #:action (lambda (obj char val)
+				      ;;   	#f)
 				      #:expand "YES"
 				      #:multiline "YES"
 				      #:font "Courier New, -10"

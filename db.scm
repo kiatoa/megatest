@@ -145,7 +145,8 @@
        (sqlite3:execute db "DROP TABLE IF EXISTS metadat;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-       (db:set-var db "MEGATEST_VERSION" 1.17))
+       (db:set-var db "MEGATEST_VERSION" 1.17)
+       (patch-db))
       ((< mver 1.21)
        (sqlite3:execute db "DROP TABLE IF EXISTS metadat;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER, var TEXT, val TEXT,
@@ -158,7 +159,8 @@
 	(list 
 	 "ALTER TABLE tests ADD COLUMN first_err TEXT;"
 	 "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
-	 )))
+	 ))
+       (patch-db))
       ((< mver 1.24)
        (db:set-var db "MEGATEST_VERSION" 1.24)
        (sqlite3:execute db "DROP TABLE IF EXISTS test_data;")
@@ -174,7 +176,8 @@
                                 units TEXT,
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
-                              CONSTRAINT test_data UNIQUE (test_id,category,variable));"))
+                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+       (patch-db))
      ((< mver megatest-version)
       (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
@@ -559,7 +562,7 @@
   (let ((res '()))
     (sqlite3:for-each-row 
      (lambda (id test_id category variable value expected tol units comment status)
-       (set! res (cons res (vector id test_id category variable value expected tol units comment status))))
+       (set! res (cons (vector id test_id category variable value expected tol units comment status) res)))
      db
      "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
@@ -743,7 +746,8 @@
 	 (tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id)))
 	 (runsheader (append (list "Runname")
 			     (map car keypatt-alist)
-			     (list "Testname" 
+			     (list "Run Id"
+				   "Testname" 
 				   "Description"
 				   "Item Path"
 				   "State"
@@ -764,20 +768,20 @@
 				   "Uname"
 				   "Rundir"
 				   "Host"
-				   "Cpu Load"
-				   "Run Id")))
-	 (results (list runsheader)))
+				   "Cpu Load")))
+	 (results (list runsheader))
+	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
     (debug:print 2 "Using " tempdir " for constructing the ods file")
     ;; "Expected Value"
     ;; "Value Found"
     ;; "Tolerance"
     (apply sqlite3:for-each-row
      (lambda (test-id . b)
-       (set! test-ids (cons test-id test-ids))
+       (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
        (set! results (append results (list b)))) ;; note, drop the test-id
      db
      (conc "SELECT
-              t.id,runname," keysstr ",t.testname,description,
+              t.testname,r.id,runname," keysstr ",t.testname,description,
               item_path,t.state,t.status,
               final_logf,run_duration, 
               strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime')
@@ -793,19 +797,20 @@
     ;; now, for each test, collect the test_data info and add a new sheet
     (for-each
      (lambda (test-id)
-       (let ((test-data '())
+       (let ((test-data (list testdata-header))
 	     (curr-test-name #f))
 	 (sqlite3:for-each-row
-	  (lambda (testname item_path category variable value comment status)
+	  (lambda (run-id testname item-path category variable value expected tol units status comment)
 	    (set! curr-test-name testname)
-	    (set! test-data (append test-data (list (list testname item_path category variable value comment status)))))
+	    (set! test-data (append test-data (list (list run-id testname item-path category variable value expected tol units status comment)))))
 	  db 
-	  "SELECT testname,item_path,category,variable,td.value AS value,expected,tol,units,td.comment AS comment,td.status AS status FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
+	  ;; "SELECT run_id,testname,item_path,category,variable,td.value AS value,expected,tol,units,td.status AS status,td.comment AS comment FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE test_id=?;"
+	  "SELECT run_id,testname,item_path,category,variable,td.value AS value,expected,tol,units,td.status AS status,td.comment AS comment FROM test_data AS td INNER JOIN tests ON tests.id=td.test_id WHERE testname=?;"
 	  test-id)
 	 (if curr-test-name
 	     (set! results (append results (list (cons curr-test-name test-data)))))
 	 ))
-     test-ids)
+     (delete-duplicates test-ids))
     (system (conc "mkdir -p " tempdir))
     ;; (pp results)
     (ods:list->ods 
