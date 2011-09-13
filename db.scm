@@ -561,7 +561,7 @@
      (lambda (id test_id category variable value expected tol units comment status)
        (set! res (cons res (vector id test_id category variable value expected tol units comment status))))
      db
-     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ?;" test-id categorypatt)
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
 
 (define (db:load-test-data db run-id test-name itemdat)
@@ -691,10 +691,10 @@
 						   ", get-status: " (db:step-get-status step))
 				      (if (and (number? startt)(number? endt))
 					  (seconds->hr-min-sec (- endt startt)) "-1"))))
-	     (else   (vector-set! record 1 (db:step-get-event_time step))))
-	   (vector-set! record 2 (db:step-get-state step))
-	   (vector-set! record 3 (db:step-get-status step))
-	   (vector-set! record 4 (db:step-get-event_time step))
+	     (else
+	        (vector-set! record 2 (db:step-get-state step))
+	        (vector-set! record 3 (db:step-get-status step))
+	        (vector-set! record 4 (db:step-get-event_time step))))
 	   (hash-table-set! res (db:step-get-stepname step) record)
 	   (debug:print 6 "record(after)  = " record 
 			"\nid:       " (db:step-get-id step)
@@ -702,6 +702,7 @@
 			"\nstate:    " (db:step-get-state step)
 			"\nstatus:   " (db:step-get-status step)
 			"\ntime:     " (db:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
        (sort steps (lambda (a b)(< (db:step-get-event_time a)(db:step-get-event_time b)))))
       res)))
 

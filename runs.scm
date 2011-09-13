@@ -920,8 +920,8 @@
 	 (debug:print 4 "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
 	 (sqlite3:execute 
 	  db 
-	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected_value,tol,units,comment) "
-		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected_value,tol,units,comment FROM test_data WHERE test_id=?;")
+	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) "
+		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
 	  (db:test-get-id testdat))
 	 ))
      prev-tests)))

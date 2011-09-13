@@ -25,11 +25,7 @@
 			      "Current state: "
 			      "Current status: "
 			      "Test comment: "
-			      "Test id: "
-			      "Value: "
-			      "Expected value: "
-			      "Tolerance: "
-			      "Units: "))
+			      "Test id: "))
 		   (list (iup:label "" #:expand "VERTICAL"))))
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
@@ -64,26 +60,6 @@
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
 			   (db:test-get-id testdat)))
-;;	    (store-label "testvalue"
-;;			 (iup:label "TestValue                          "
-;;				    #:expand "HORIZONTAL")
-;;			 (lambda (testdat)
-;;			   (db:test-get-value testdat)))
-;;	    (store-label "testexpectedvalue"
-;;			 (iup:label "TestExpectedValue                  "
-;;				    #:expand "HORIZONTAL")
-;;			 (lambda (testdat)
-;;			   (db:test-get-expected_value testdat)))
-;;	    (store-label "testtol"
-;;			 (iup:label "TestTol                             "
-;;				    #:expand "HORIZONTAL")
-;;			 (lambda (testdat)
-;;			   (db:test-get-tol testdat)))
-;;	    (store-label "testunits"
-;;			 (iup:label "TestUnits                          "
-;;				    #:expand "HORIZONTAL")
-;;			 (lambda (testdat)
-;;			   (db:test-get-units testdat)))
 	    )))))
 
 ;;======================================================================
@@ -348,45 +324,83 @@
 			   (iup:button "Start Xterm" #:action xterm   #:size "120x")
 			   (iup:button "Close"       #:action (lambda (x)(exit)) #:size "120x")))
 	       (set-fields-panel test-id testdat)
-	       (iup:frame 
-		#:title "Test Steps"
-		(let ((stepsdat ;;(iup:label "Test steps ........................................." 
-				;;	   #:expand "YES" 
-				;;	   #:size "200x150"
-				;;	   #:alignment "ALEFT:ATOP")))
-		       (iup:textbox #:action (lambda (obj char val)
-					       #f)
-				    #:expand "YES"
-				    #:multiline "YES"
-				    #:font "Courier New, -10")))
-		  (hash-table-set! widgets "Test Steps" (lambda (testdat)
-							  (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
-								 (fmtstr  "~25a~10a~10a~15a~15a")
-								 (comprsteps (db:get-steps-table db test-id))
-								 (newval  (string-intersperse 
-									   (append
-									    (list 
-									     (format #f fmtstr "Stepname" "Start" "End"    "Status" "Time")
-									     (format #f fmtstr "========" "=====" "======" "======" "=========="))
-									    (map (lambda (x)
-										   ;; take advantage of the \n on time->string
-										   (format #f fmtstr
-											   (vector-ref x 0)
-											   (let ((s (vector-ref x 1)))
-											     (if (number? s)(seconds->time-string s) s))
-											   (let ((s (vector-ref x 2)))
-											     (if (number? s)(seconds->time-string s) s))
-											   (vector-ref x 3)    ;; status
-											   (vector-ref x 4)))  ;; time delta
-										 (sort (hash-table-values comprsteps)
-										       (lambda (a b)
-											 (if (and (number? a)(number? b))
-											     (< (vector-ref a 1)(vector-ref b 1))
-											     #t)))))
-									   "\n")))
-							    (if (not (equal? currval newval))
-								(iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
-		  stepsdat)))))
+	       (iup:hbox
+		(iup:frame 
+		 #:title "Test Steps"
+		 (let ((stepsdat ;;(iup:label "Test steps ........................................." 
+			;;	   #:expand "YES" 
+			;;	   #:size "200x150"
+			;;	   #:alignment "ALEFT:ATOP")))
+			(iup:textbox #:action (lambda (obj char val)
+						#f)
+				     #:expand "YES"
+				     #:multiline "YES"
+				     #:font "Courier New, -10"
+				     #:size "100x150")))
+		   (hash-table-set! widgets "Test Steps" 
+				    (lambda (testdat)
+				      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
+					     (fmtstr  "~20a~10a~10a~12a~15a")
+					     (comprsteps (db:get-steps-table db test-id))
+					     (newval  (string-intersperse 
+						       (append
+							(list 
+							 (format #f fmtstr "Stepname" "Start" "End" "Status" "Time")
+							 (format #f fmtstr "========" "=====" "===" "======" "===="))
+							(map (lambda (x)
+							       ;; take advantage of the \n on time->string
+							       (format #f fmtstr
+								       (vector-ref x 0)
+								       (let ((s (vector-ref x 1)))
+									 (if (number? s)(seconds->time-string s) s))
+								       (let ((s (vector-ref x 2)))
+									 (if (number? s)(seconds->time-string s) s))
+								       (vector-ref x 3)    ;; status
+								       (vector-ref x 4)))  ;; time delta
+							     (sort (hash-table-values comprsteps)
+								   (lambda (a b)
+								     (if (and (number? a)(number? b))
+									 (< (vector-ref a 1)(vector-ref b 1))
+									 #t)))))
+						       "\n")))
+					(if (not (equal? currval newval))
+					    (iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
+		   stepsdat))
+		;; populate the Test Data panel
+		(iup:frame
+		 #:title "Test Data"
+		 (let ((test-data
+			(iup:textbox  #:action (lambda (obj char val)
+						#f)
+				      #:expand "YES"
+				      #:multiline "YES"
+				      #:font "Courier New, -10"
+				      #:size "100x150")))
+		   (hash-table-set! widgets "Test Data"
+				    (lambda (testdat) ;; 
+				      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
+					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~a") ;; category,variable,value,expected,tol,units,comment
+					     (newval  (string-intersperse 
+						       (append
+							(list 
+							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Comment")
+							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "======="))
+							(map (lambda (x)
+							       (format #f fmtstr
+								       (db:test-data-get-category x)
+								       (db:test-data-get-variable x)
+								       (db:test-data-get-value    x)
+								       (db:test-data-get-expected x)
+								       (db:test-data-get-tol      x)
+								       (db:test-data-get-status   x)
+								       (db:test-data-get-units    x)
+								       (db:test-data-get-comment  x)))
+							     (db:read-test-data db test-id "%")))
+						       "\n")))
+					(if (not (equal? currval newval))
+					    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
+		   test-data)))
+		)))
       (iup:show self)
       (iup:callback-set! *tim* "ACTION_CB"
 			 (lambda (x)
