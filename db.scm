@@ -744,31 +744,29 @@
 	 (keyqry   (string-intersperse (map (lambda (p)(conc (car p) " like ? ")) keypatt-alist) " AND "))
 	 (test-ids '())
 	 (tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id)))
-	 (runsheader (append (list "Runname")
+	 (runsheader (append (list "Run Id" "Runname")
 			     (map car keypatt-alist)
-			     (list "Run Id"
-				   "Testname" 
-				   "Description"
+			     (list "Testname" 
 				   "Item Path"
+				   "Description"
 				   "State"
 				   "Status"
 				   "Final Log"
 				   "Run Duration"
 				   "When Run"
-				   "Error"
-				   "Warn"
 				   "Tags"
 				   "Run Owner"
 				   "Comment"
 				   "Author"
 				   "Test Owner"
 				   "Reviewed"
-				   "Iterated"
 				   "Diskfree"
 				   "Uname"
 				   "Rundir"
 				   "Host"
-				   "Cpu Load")))
+				   "Cpu Load"
+                                   "Warn"
+                                   "Error")))
 	 (results (list runsheader))
 	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
     (debug:print 2 "Using " tempdir " for constructing the ods file")
@@ -781,15 +779,15 @@
        (set! results (append results (list b)))) ;; note, drop the test-id
      db
      (conc "SELECT
-              t.testname,r.id,runname," keysstr ",t.testname,description,
-              item_path,t.state,t.status,
+              t.testname,r.id,runname," keysstr ",t.testname,
+              t.item_path,tm.description,t.state,t.status,
               final_logf,run_duration, 
-              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime')
-              first_err,first_warn,tm.tags,r.owner,t.comment,
+              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime'),
+              tm.tags,r.owner,t.comment,
               author,
-              tm.owner,reviewed,iterated,
+              tm.owner,reviewed,
               diskfree,uname,rundir,
-              host,cpuload,run_id
+              host,cpuload,first_err,first_warn
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id INNER JOIN test_meta AS tm ON tm.testname=t.testname
             WHERE runname LIKE ? AND " keyqry ";")
      runspatt (map cadr keypatt-alist))
