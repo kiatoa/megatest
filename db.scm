@@ -523,7 +523,7 @@
 			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
-       (let* ((padded-row  (take (append csvrow '(#f #f #f #f #f #f #f #f)) 8))
+       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f)) 8))
 	      (category    (list-ref padded-row 0))
 	      (variable    (list-ref padded-row 1))
 	      (value       (any->number-if-possible (list-ref padded-row 2)))
@@ -533,9 +533,9 @@
 	      (comment     (list-ref padded-row 6))
 	      (status      (let ((s (list-ref padded-row 7)))
 			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
-						     (string-match (regexp "^n/a$"))))
+						     (string-match (regexp "^n/a$") s)))
 				 #f
-				 status)))) ;; if specified on the input then use, else calculate
+				 s)))) ;; if specified on the input then use, else calculate
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
