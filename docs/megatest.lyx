@@ -391,7 +391,7 @@ Date
 \begin_inset Text
 
 \begin_layout Plain Layout
-0.1
+v1.25
 \end_layout
 
 \end_inset
@@ -400,7 +400,7 @@ Date
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+matt
 \end_layout
 
 \end_inset
@@ -409,7 +409,7 @@ Date
 \begin_inset Text
 
 \begin_layout Plain Layout
-
+converted to new document format
 \end_layout
 
 \end_inset
@@ -1326,6 +1326,30 @@ runscript main.csh
 
 waiton cpu mem
 \end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Dashboard
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dashboard.png
+	scale 80
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename dashboard-test.png
+	scale 80
 
 \end_inset
 
@@ -2380,11 +2404,11 @@ ENCRYPTION true
 TESTPATH /nfs/testing/megacorp_runs
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Writing tests
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Subsubsection
 testconfig file
 \end_layout
 
@@ -2597,7 +2621,7 @@ The test will be repeated once for each item with the variable name set
 
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Subsubsection
 Command line
 \end_layout
 

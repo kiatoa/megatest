@@ -35,7 +35,7 @@
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2011
+  license GPL, Copyright (C) Matt Welland 2011
 
 Usage: dashboard [options]
   -h              : this help

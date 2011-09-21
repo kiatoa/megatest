@@ -4,26 +4,111 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <meta name="generator" content="http://www.nongnu.org/elyxer/"/>
-<meta name="create-date" content="2011-08-03"/>
+<meta name="create-date" content="2011-09-20"/>
 <link rel="stylesheet" href="http://www.nongnu.org/elyxer/lyx.css" type="text/css" media="screen"/>
-<title>Megatest</title>
+<title>Converted document</title>
 </head>
 <body>
 <div id="globalWrapper">
+<div class="Standard">
+
+</div>
+<div class="Standard">
+
+</div>
+<div class="Standard">
+
+</div>
 <h1 class="title">
-Megatest
+
 </h1>
-<h2 class="Date">
-5/5/2011 
-</h2>
 <h2 class="author">
-Matt Welland
+Matthew Welland
 </h2>
-<div class="abstract">
-<p class="abstract-message">
-Abstract
+<h2 class="Date">
+Sept. 20, 
+</h2>
+<div class="Standard">
+
+</div>
+<div class="Standard">
+<p><br/>
 </p>
-Megatest is a minimalistic tool to help automate and manage the running of a suite of regression tests or other processes and to roll up the results for display on a web page or dashboard.
+2011 Matthew Welland. All rights reserved. 
+</div>
+<div class="Standard">
+Megatest is free software released under the General Public License v2.0. Please see the file COPYING in the source distribution for details. 
+</div>
+<div class="Standard">
+<div class="medskip">
+
+</div>
+Email: matt@kiatoa.com. 
+</div>
+<div class="Standard">
+Web: www.kiatoa.com/fossils/megatest
+</div>
+<div class="Standard">
+<div class="medskip">
+
+</div>
+This document is believed to be acurate at the time of writing but as with any opensource project the source code itself is the final arbiter of the softwares behaviour. It is the responsibility of the end user to validate that the code will perform as they expect. The author assumes no responsibility for any inaccuracies that this document may contain. In no event will Matthew Welland be liable for direct, indirect, special, exemplary, incidental, or consequential damages resulting from any defect or omission in this document, even if advised of the possibility of such damages. 
+</div>
+<div class="Standard">
+This document is a snapshot in time and the Megatest software has likely been changed since publication. This document and the product that it describes may be improved at any time, without notice or obligation. 
+</div>
+<div class="Standard">
+<p><br/>
+</p>
+
+</div>
+<h1 class="Section-">
+<a class="toc" name="toc-Section--1"></a>Document Revision History
+</h1>
+<div class="Standard">
+<i>Notable revisions of the software are occasionally documented here</i>.
+</div>
+<div class="Standard">
+<div class="center">
+<table>
+<tr>
+<td align="center" valign="top">
+Version
+</td>
+<td align="center" valign="top">
+Author
+</td>
+<td align="justify" valign="top">
+Description
+</td>
+<td align="center" valign="top">
+Date
+</td>
+
+</tr>
+<tr>
+<td align="center" valign="top">
+v1.25
+</td>
+<td align="center" valign="top">
+matt
+</td>
+<td align="justify" valign="top">
+converted to new document format
+</td>
+<td align="center" valign="top">
+<div class="PlainVisible">
+
+</div>
+
+</td>
+
+</tr>
+
+</table>
+
+</div>
+
 </div>
 <div class="fulltoc">
 <div class="tocheader">
@@ -31,199 +116,198 @@ Table of Contents
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Chapter-1">Chapter 1: About Megatest</a>
+<a class="Link" href="#toc-Section--1">Section: Document Revision History</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-1">Section 1: Introduction</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Section-1.1">Section 1.1: Megatest design philosophy</a>
+<a class="Link" href="#toc-Subsection-1.1">Subsection 1.1: Megatest design philosophy</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-1.2">Section 1.2: Megatest architecture</a>
+<a class="Link" href="#toc-Subsection-1.2">Subsection 1.2: Megatest architecture</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Chapter-2">Chapter 2: Installation</a>
+<a class="Link" href="#toc-Section-2">Section 2: Installation</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Section-2.1">Section 2.1: Compilation</a>
+<a class="Link" href="#toc-Subsection-2.1">Subsection 2.1: Dependencies</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-2.2">Subsection 2.2: Build and Install</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-3">Section 3: Setup</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.1.1">Subsection 2.1.1: Dependencies</a>
+<a class="Link" href="#toc-Subsection-3.1">Subsection 3.1: Create megatest.config</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.1.2">Subsection 2.1.2: Build and install</a>
+<a class="Link" href="#toc-Subsection-3.2">Subsection 3.2: Create runconfigs.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-3.3">Subsection 3.3: Create the tests directory and your first test</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-3.4">Subsection 3.4: Create the testconfig file for your test</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-3.5">Subsection 3.5: Create your test running script, main.sh</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-3.6">Subsection 3.6: Run megatest and watch your run progress</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-2.2">Section 2.2: Setup</a>
+<a class="Link" href="#toc-Section-4">Section 4: How to Write Tests</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.1">Subsection 2.2.1: Create megatest.config</a>
+<a class="Link" href="#toc-Subsection-4.1">Subsection 4.1: A Simple Test with one Step</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.2">Subsection 2.2.2: Create runconfigs.config</a>
+<a class="Link" href="#toc-Subsection-4.2">Subsection 4.2: Create your testconfig file</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.3">Subsection 2.2.3: Create the tests directory and your first test</a>
+<a class="Link" href="#toc-Subsection-4.3">Subsection 4.3: Create the main.csh script</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.4">Subsection 2.2.4: Create the testconfig file for your test</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.5">Subsection 2.2.5: Create your test running script, main.sh</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-2.2.6">Subsection 2.2.6: Run megatest and watch your run progress</a>
-</div>
+<a class="Link" href="#toc-Subsection-4.4">Subsection 4.4: Simple Test with Multiple Steps </a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Chapter-3">Chapter 3: How to Write Tests</a>
+<a class="Link" href="#toc-Section-5">Section 5: Simple Test with Multiple Steps, Some in Parallel</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Section-3.1">Section 3.1: A Simple Test with one Step</a>
+<a class="Link" href="#toc-Subsection-5.1">Subsection 5.1: The Makefile</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-5.2">Subsection 5.2: The main.csh file</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-6">Section 6: Simple Test with Iteration</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.1.1">Subsection 3.1.1: Create your test directory. The directory name will be the name of the test</a>
+<a class="Link" href="#toc-Subsection-6.1">Subsection 6.1: Update your testconfig file for iteration</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.1.2">Subsection 3.1.2: Create your testconfig file. This file contains various specifications for your test. For our example the test author has chosen to write the test using csh scripting.</a>
+<a class="Link" href="#toc-Subsection-6.2">Subsection 6.2: Rewrite your main.csh for iteration</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.1.3">Subsection 3.1.3: Create your main.csh script</a>
+<a class="Link" href="#toc-Subsection-6.3">Subsection 6.3: Tests with Inter-test dependencies</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-3.2">Section 3.2: Simple Test with Multiple Steps </a>
+<a class="Link" href="#toc-Section-7">Section 7: Dashboard</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-3.3">Section 3.3: Simple Test with Multiple Steps, Some in Parallel </a>
+<a class="Link" href="#toc-Section-8">Section 8: Reference</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.3.1">Subsection 3.3.1: The Makefile</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-3.3.2">Subsection 3.3.2: The main.csh file</a>
-</div>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Section-3.4">Section 3.4: Simple Test with Iteration</a>
+<a class="Link" href="#toc-Subsection-8.1">Subsection 8.1: Configuration file Syntax</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.4.1">Subsection 3.4.1: Update you testconfig file for iteration</a>
+<a class="Link" href="#toc-Subsubsection-8.1.1">Subsubsection 8.1.1: Sections</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-3.4.2">Subsection 3.4.2: Rewrite your main.csh for iteration</a>
+<a class="Link" href="#toc-Subsubsection-8.1.2">Subsubsection 8.1.2: Variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-8.1.3">Subsubsection 8.1.3: Includes</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-8.1.4">Subsubsection 8.1.4: Setting a variable by running a command</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-8.1.5">Subsubsection 8.1.5: Notes</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-3.5">Section 3.5: Tests with Inter-test dependencies</a>
-</div>
+<a class="Link" href="#toc-Subsection-8.2">Subsection 8.2: Environment variables</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Chapter-4">Chapter 4: Reference</a>
+<a class="Link" href="#toc-Subsection-8.3">Subsection 8.3: megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-8.4">Subsection 8.4: runconfigs.config file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-8.5">Subsection 8.5: Writing tests</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Section-4.1">Section 4.1: Configuration file Syntax</a>
-</div>
-<div class="tocindent">
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.1.1">Subsection 4.1.1: Sections</a>
+<a class="Link" href="#toc-Subsubsection-8.5.1">Subsubsection 8.5.1: testconfig file</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-4.1.2">Subsection 4.1.2: Variables</a>
+<a class="Link" href="#toc-Subsubsection-8.5.2">Subsubsection 8.5.2: Command line</a>
 </div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.1.3">Subsection 4.1.3: Includes</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.1.4">Subsection 4.1.4: Setting a variable by running a command</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.1.5">Subsection 4.1.5: Notes</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-4.2">Section 4.2: Environment variables</a>
+<a class="Link" href="#toc-Section-A">Section A: Data</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-4.3">Section 4.3: Configuration files</a>
-</div>
-<div class="tocindent">
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.3.1">Subsection 4.3.1: megatest.config</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.3.2">Subsection 4.3.2: runconfigs.config file</a>
-</div>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Section-4.4">Section 4.4: Writing tests</a>
-</div>
-<div class="tocindent">
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.4.1">Subsection 4.4.1: testconfig file</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-4.4.2">Subsection 4.4.2: Command line</a>
-</div>
-</div>
+<a class="Link" href="#toc-Section-B">Section B: References</a>
 </div>
 </div>
 
 </div>
-<h1 class="Chapter">
-<a class="toc" name="toc-Chapter-1">1</a> About Megatest
+<div class="Standard">
+<p><br/>
+</p>
+
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-1">1</a> Introduction
 </h1>
-<h2 class="Section">
-<a class="toc" name="toc-Section-1.1">1.1</a> Megatest design philosophy
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-1.1">1.1</a> Megatest design philosophy
 </h2>
-<div class="Unindented">
+<div class="Standard">
 Megatest is intended to provide the minimum needed resources to make writing a suite of tests for software, design engineering or process control (via owlfs for example) without being specialized for any specific problem space. Megatest in of itself does not know what constitutes a PASS or FAIL of a test. In most cases megatest is best used in conjunction with logpro or a similar tool to parse, analyze and decide on the test outcome. A call to megatest can then be made to record the result. 
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-1.2">1.2</a> Megatest architecture
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-1.2">1.2</a> Megatest architecture
 </h2>
-<div class="Unindented">
+<div class="Standard">
 All data to specify the tests and configure the system is stored in plain text files. All system state is stored in an sqlite3 database. Tests are launched using the launching system available for the distributed compute platform in use. A template script is provided which can launch jobs on local and remote Linux hosts. Currently megatest uses the network filesystem to “call home” to your master sqlite3 database.
 </div>
-<h1 class="Chapter">
-<a class="toc" name="toc-Chapter-2">2</a> Installation
+<h1 class="Section">
+<a class="toc" name="toc-Section-2">2</a> Installation
 </h1>
-<h2 class="Section">
-<a class="toc" name="toc-Section-2.1">2.1</a> Compilation
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-2.1">2.1</a> Dependencies
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.1.1">2.1.1</a> Dependencies
-</h3>
-<div class="Unindented">
-Chicken scheme and a number of eggs are required for building megatest. See the file utils/installall.sh for an automated way to install the dependencies on Linux.
+<div class="Standard">
+Chicken scheme and a number of “eggs” are required for building megatest. See the file utils/installall.sh for an automated way to install the dependencies on Linux.
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.1.2">2.1.2</a> Build and install
-</h3>
-<div class="Unindented">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-2.2">2.2</a> Build and Install
+</h2>
+<div class="Standard">
 Run “make test” to create the megatest executable. You may wish to copy the executable to a centrally accessible location.
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-2.2">2.2</a> Setup
+<h1 class="Section">
+<a class="toc" name="toc-Section-3">3</a> Setup
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.1">3.1</a> Create megatest.config
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.1">2.2.1</a> Create megatest.config
-</h3>
-<div class="Unindented">
+<div class="Standard">
 Create the file megatest.config using the megatest.config template from the tests directory. At a minimum you need the following:
 </div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-1"></a><div class="listing">
+<div class="Standard">
+<div class="listing">
 <pre class="listing"># Fields are the keys under which your test runs are organized
 [fields]
 field1 TEXT
@@ -247,25 +331,24 @@ disk1 /tmp
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.2">2.2.2</a> Create runconfigs.config
-</h3>
-<div class="Unindented">
-This file is used to set environment variables that are run specific. You can simply create an empty file to start.<div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.2">3.2</a> Create runconfigs.config
+</h2>
+<div class="Standard">
+This file is used to set environment variables that are run specific. You can simply create an empty file to start.
+</div>
+<div class="Standard">
+<div class="listing">
 <pre class="listing"># runconfigs.config
-​
 </pre>
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.3">2.2.3</a> Create the tests directory and your first test
-</h3>
-<div class="Unindented">
-The structure should look like this:
-</div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-2"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.3">3.3</a> Create the tests directory and your first test
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing">../tests
   ├── megatest.config
   ├── runconfigs.config
@@ -277,36 +360,35 @@ The structure should look like this:
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.4">2.2.4</a> Create the testconfig file for your test
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-3"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.4">3.4</a> Create the testconfig file for your test
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing">[setup]
 runscript main.sh
 </pre>
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.5">2.2.5</a> Create your test running script, main.sh
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-4"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.5">3.5</a> Create your test running script, main.sh
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing">#!/bin/bash
 ​
 $MT_MEGATEST -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
-​
 $MT_MEGATEST -test-status :state COMPLETED :status PASS -m "This is a comment"
 </pre>
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-2.2.6">2.2.6</a> Run megatest and watch your run progress
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-5"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-3.6">3.6</a> Run megatest and watch your run progress
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing">megatest :field1 abc :field2 def :runname 2011week08.4a -runall
 ​
 watch megatest -list-runs %
@@ -318,31 +400,25 @@ dashboard &amp;
 </div>
 
 </div>
-<div class="Code">
-
-</div>
-<h1 class="Chapter">
-<a class="toc" name="toc-Chapter-3">3</a> How to Write Tests
+<h1 class="Section">
+<a class="toc" name="toc-Section-4">4</a> How to Write Tests
 </h1>
-<h2 class="Section">
-<a class="toc" name="toc-Section-3.1">3.1</a> A Simple Test with one Step
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-4.1">4.1</a> A Simple Test with one Step
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.1.1">3.1.1</a> Create your test directory. The directory name will be the name of the test
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-6"></a><div class="listing">
+<div class="Standard">
+<div class="listing">
 <pre class="listing">mkdir simpletest
 cd simpletest
 </pre>
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.1.2">3.1.2</a> Create your testconfig file. This file contains various specifications for your test. For our example the test author has chosen to write the test using csh scripting.
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-7"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-4.2">4.2</a> Create your testconfig file
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing"># testconfig
 ​
 [setup]
@@ -351,14 +427,14 @@ runscript main.csh
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.1.3">3.1.3</a> Create your main.csh script
-</h3>
-<div class="Unindented">
-Note: Using csh is NOT recommended. Use bash, perl, ruby, zsh or anything other than csh. We use csh here because it is popular in some industries. 
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-4.3">4.3</a> Create the main.csh script
+</h2>
+<div class="Standard">
+Note: Using csh is NOT recommended. Use bash, perl, ruby, zsh or anything other than csh. We use csh here because it is popular in the EDA industry for which Megatest was originally created. 
 </div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-8"></a><div class="listing">
+<div class="Standard">
+<div class="listing">
 <pre class="listing">#!/bin/tcsh -x
 ​
 # run the cpu1 simulation.
@@ -372,17 +448,17 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 </div>
 
 </div>
-<div class="Unindented">
+<div class="Standard">
 You can now run megatest and the created test directory will contain the new files “run_simulation.html” and “run_simulation.log”. If you are using the dashboard you can click on the run and then push the “View log” button to view the log file in firefox.
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-3.2">3.2</a> Simple Test with Multiple Steps 
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-4.4">4.4</a> Simple Test with Multiple Steps 
 </h2>
-<div class="Unindented">
+<div class="Standard">
 To run multiple steps simply add them to the main.csh file. Here we add a step to test “cpu2”. The second step that tests cpu2 will only run after the step that tested “cpu1” completes.
 </div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-9"></a><div class="listing">
+<div class="Standard">
+<div class="listing">
 <pre class="listing">#!/bin/tcsh -x
 ​
 # run the cpu1 simulation.
@@ -397,17 +473,17 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 </div>
 
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-3.3">3.3</a> Simple Test with Multiple Steps, Some in Parallel 
+<h1 class="Section">
+<a class="toc" name="toc-Section-5">5</a> Simple Test with Multiple Steps, Some in Parallel
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-5.1">5.1</a> The Makefile
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.3.1">3.3.1</a> The Makefile
-</h3>
-<div class="Unindented">
+<div class="Standard">
 A good way to run steps in parallel within a single test, especially when there are following steps, is to use the Unix Make utility. Writing Makefiles is beyond the scope of this document but here is a minimal example that will run “runsim cpu1” and “runsim cpu2” in parallel. For more information on make try “info make” at the Linux command prompt.
 </div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-10"></a><div class="listing">
+<div class="Standard">
+<div class="listing">
 <pre class="listing"># Example Makefile to run two steps in parallel
 ​
 RTLDIR=/path/to/rtl
@@ -419,121 +495,196 @@ run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.3.2">3.3.2</a> The main.csh file
-</h3>
-<div class="Unindented">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-5.2">5.2</a> The main.csh file
+</h2>
+<div class="Standard">
 <div class="listing">
 <pre class="listing">#!/bin/tcsh -x
 ​
 # run the cpu1 and cpu2 simulations in parallel. 
 # The -j parameter tells make how many jobs it may run in parallel
 ​
+<div class="left">
 make -j 2 
+</div>
+
 $MT_MEGATEST -test-status :state COMPLETED :status $?
 </pre>
 </div>
 
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-3.4">3.4</a> Simple Test with Iteration
-</h2>
-<div class="Unindented">
+<h1 class="Section">
+<a class="toc" name="toc-Section-6">6</a> Simple Test with Iteration
+</h1>
+<div class="Standard">
 Since no jobs run after the cpu1 and cpu2 simulations in this test it is possible to use iterated mode.
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.4.1">3.4.1</a> Update you testconfig file for iteration
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-11"></a><div class="listing">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-6.1">6.1</a> Update your testconfig file for iteration
+</h2>
+<div class="Standard">
+<div class="listing">
 <pre class="listing">[setup]
 runscript main.csh
-​
+<div class="left">
+
+</div>
+
 [items]
 CPU cpu1 cpu2
 </pre>
 </div>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-3.4.2">3.4.2</a> Rewrite your main.csh for iteration
-</h3>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-12"></a><div class="listing">
-<pre class="listing">#!/bin/tcsh -x
-​
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-6.2">6.2</a> Rewrite your main.csh for iteration
+</h2>
+<div class="Standard">
+<div class="listing">
+<pre class="listing"><div class="left">
+#!/bin/tcsh -x
+</div>
+
+<div class="left">
+
+</div>
+
+<div class="left">
 # run the cpu simulation but now use the environment variable $CPU
+</div>
+
+<div class="left">
 # to select what cpu to run the simulation against
-​
+</div>
+
+<div class="left">
+
+</div>
+
+<div class="left">
 $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
+</div>
+
+<div class="left">
 # As of version 1.07 Megatest automatically converts a status of "0"
+</div>
+
+<div class="left">
 # to "PASS", any other number to "FAIL" and directly uses the value of
+</div>
+
+<div class="left">
 # a string passed in.
+</div>
+
+<div class="left">
 $MT_MEGATEST -test-status :state COMPLETED :status $?
+</div>
+
 </pre>
 </div>
 
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-3.5">3.5</a> Tests with Inter-test dependencies
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-6.3">6.3</a> Tests with Inter-test dependencies
 </h2>
-<div class="Unindented">
+<div class="Standard">
 Sometimes a test depends on the output from a previous test or it may not make sense to run a test is another test does not complete with status “PASS”. In either of these scenarios you can use the “waiton” keyword in your testconfig file to indicate that this test must wait on one or more tests to complete before being launched. In this example there is no point in running the “system” test if the “cpu” and “mem” tests either do not complete or complete but with status “FAIL”.
 </div>
-<div class="Paragraph">
-<a class="toc" name="toc-Paragraph-13"></a><div class="listing">
-<pre class="listing"># testconfig for the "system" test
+<div class="Standard">
+<div class="listing">
+<pre class="listing"><div class="left">
+# testconfig for the "system" test
+</div>
+
+<div class="left">
 [setup]
+</div>
+
+<div class="left">
 runscript main.csh
+</div>
+
+<div class="left">
 waiton cpu mem
+</div>
+
 </pre>
 </div>
 
 </div>
-<h1 class="Chapter">
-<a class="toc" name="toc-Chapter-4">4</a> Reference
+<h1 class="Section">
+<a class="toc" name="toc-Section-7">7</a> Dashboard
 </h1>
-<h2 class="Section">
-<a class="toc" name="toc-Section-4.1">4.1</a> Configuration file Syntax
+<div class="Standard">
+<img class="embedded" src="dashboard.png" alt="figure dashboard.png" style="width: 730px; max-width: 913px; height: 626px; max-height: 783px; "/>
+
+</div>
+<div class="Standard">
+<img class="embedded" src="dashboard-test.png" alt="figure dashboard-test.png" style="width: 643px; max-width: 804px; height: 571px; max-height: 714px; "/>
+
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-8">8</a> Reference
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-8.1">8.1</a> Configuration file Syntax
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1.1">4.1.1</a> Sections
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.1.1">8.1.1</a> Sections
 </h3>
-<div class="Unindented">
-[section name]
+<div class="Standard">
+<div class="listing">
+<pre class="listing">[section name]
+</pre>
 </div>
-<blockquote class="Quotation">
+
+</div>
+<div class="Standard">
 This creates a section named “section name”
-</blockquote>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1.2">4.1.2</a> Variables
-</h3>
-<div class="Unindented">
-VARX has this value
 </div>
-<blockquote class="Quotation">
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.1.2">8.1.2</a> Variables
+</h3>
+<div class="Standard">
+<div class="listing">
+<pre class="listing">VARX has this value
+</pre>
+</div>
+
+</div>
+<div class="Standard">
 The variable “VARX” will have the value “has this value”
-</blockquote>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1.3">4.1.3</a> Includes
-</h3>
-<div class="Unindented">
-[include filename]
 </div>
-<blockquote class="Quotation">
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.1.3">8.1.3</a> Includes
+</h3>
+<div class="Standard">
+<div class="listing">
+<pre class="listing">[include filename]
+</pre>
+</div>
+
+</div>
+<div class="Standard">
 The file named “filename” will be included as if part of the calling file. NOTE: This means no section can be named “include “ (with the whitespace).
-</blockquote>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1.4">4.1.4</a> Setting a variable by running a command
-</h3>
-<div class="Unindented">
-VARNAME [system ls /tmp]
 </div>
-<blockquote class="Quotation">
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.1.4">8.1.4</a> Setting a variable by running a command
+</h3>
+<div class="Standard">
+<div class="listing">
+<pre class="listing">VARNAME [system ls /tmp]
+</pre>
+</div>
+
+</div>
+<div class="Standard">
 The variable “VARNAME” will get a value created by the Unix command “ls /tmp”. All lines of output from the command will be joined with a space.
-</blockquote>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1.5">4.1.5</a> Notes
+</div>
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.1.5">8.1.5</a> Notes
 </h3>
 <ul>
 <li>
@@ -544,10 +695,10 @@ Comments (lines starting with #) and blank lines are ignored.
 </li>
 
 </ul>
-<h2 class="Section">
-<a class="toc" name="toc-Section-4.2">4.2</a> Environment variables
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-8.2">8.2</a> Environment variables
 </h2>
-<div class="Unindented">
+<div class="Standard">
 <table>
 <tr>
 <td align="left" valign="top">
@@ -555,9 +706,6 @@ Variable
 </td>
 <td align="left" valign="top">
 Purpose
-</td>
-<td align="left" valign="top">
-Default value/Comment
 </td>
 
 </tr>
@@ -568,9 +716,6 @@ MT_CMDINFO
 <td align="left" valign="top">
 Conveys test variables to the megatest test runner.
 </td>
-<td align="left" valign="top">
-Not for use by the end user
-</td>
 
 </tr>
 <tr>
@@ -579,9 +724,6 @@ MT_TEST_RUN_DIR
 </td>
 <td align="left" valign="top">
 Directory assigned by megatest for the test to run.
-</td>
-<td align="left" valign="top">
-Tests can consider this their “home” directory
 </td>
 
 </tr>
@@ -592,9 +734,6 @@ MT_TEST_NAME
 <td align="left" valign="top">
 Name of the test, corrosponds to the directory name under tests.
 </td>
-<td align="left" valign="top">
-
-</td>
 
 </tr>
 <tr>
@@ -603,9 +742,6 @@ MT_ITEM_INFO
 </td>
 <td align="left" valign="top">
 Iterated tests will set this to a sequence of key/values ((KEY val) ...) 
-</td>
-<td align="left" valign="top">
-
 </td>
 
 </tr>
@@ -616,9 +752,6 @@ MT_RUN_AREA_HOME
 <td align="left" valign="top">
 Directory where megatest was launched from and where the tests code can be found
 </td>
-<td align="left" valign="top">
-
-</td>
 
 </tr>
 <tr>
@@ -627,9 +760,6 @@ MT_RUNNAME
 </td>
 <td align="left" valign="top">
 Name of this run as set by the :runname parameter
-</td>
-<td align="left" valign="top">
-
 </td>
 
 </tr>
@@ -640,9 +770,6 @@ MT_MEGATEST
 <td align="left" valign="top">
 Path/Filename to megatest executable. Found either from called path or but using the “exectuable” keyword in the [setup] section.
 </td>
-<td align="left" valign="top">
-
-</td>
 
 </tr>
 <tr>
@@ -652,22 +779,16 @@ Path/Filename to megatest executable. Found either from called path or but using
 <td align="left" valign="top">
 The field values as set on the megatest -runall command line (e.g. :field1 abc)
 </td>
-<td align="left" valign="top">
-Planning ahead your field names is important so as to avoid collisions with other environment variables
-</td>
 
 </tr>
 
 </table>
 
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-4.3">4.3</a> Configuration files
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-8.3">8.3</a> megatest.config
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.3.1">4.3.1</a> megatest.config
-</h3>
-<div class="Unindented">
+<div class="Standard">
 <table>
 <tr>
 <td align="left" valign="top">
@@ -835,10 +956,10 @@ The disk usage balancing algorithm is to choose the disk with the least space fo
 </table>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.3.2">4.3.2</a> runconfigs.config file
-</h3>
-<div class="Unindented">
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-8.4">8.4</a> runconfigs.config file
+</h2>
+<div class="Standard">
 <table>
 <tr>
 <td align="left" valign="top">
@@ -898,10 +1019,10 @@ the values in this section will be set for any run where field1 is field1value, 
 </table>
 
 </div>
-<div class="Indented">
+<div class="Standard">
 Example: a test suite that checks that a piece of software works correctly for different customer configurations and locations each of which is done as a separate release regression run. The fields, CUSTOMER and LOCATION were chosen. The following runconfigs.config file would set some variables specific to runs for megacorp in India and femtocorp in the Cook Islands and New Zealand:
 </div>
-<div class="Indented">
+<div class="Standard">
 <div class="listing">
 <pre class="listing"># runconfigs.config
 [default]
@@ -938,13 +1059,13 @@ ENCRYPTION true
 <div class="Code">
 TESTPATH /nfs/testing/megacorp_runs
 </div>
-<h2 class="Section">
-<a class="toc" name="toc-Section-4.4">4.4</a> Writing tests
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-8.5">8.5</a> Writing tests
 </h2>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.4.1">4.4.1</a> testconfig file
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.5.1">8.5.1</a> testconfig file
 </h3>
-<div class="Unindented">
+<div class="Standard">
 <table>
 <tr>
 <td align="left" valign="top">
@@ -1022,10 +1143,10 @@ The test will be repeated once for each item with the variable name set to the v
 </table>
 
 </div>
-<h3 class="Subsection">
-<a class="toc" name="toc-Subsection-4.4.2">4.4.2</a> Command line
+<h3 class="Subsubsection">
+<a class="toc" name="toc-Subsubsection-8.5.2">8.5.2</a> Command line
 </h3>
-<div class="Unindented">
+<div class="Standard">
 <table>
 <tr>
 <td align="left" valign="top">
@@ -1361,10 +1482,16 @@ If using logpro to asses the PASS/FAIL status of the step you specify the logpro
 </table>
 
 </div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-A">A</a> Data
+</h1>
+<h1 class="Section">
+<a class="toc" name="toc-Section-B">B</a> References
+</h1>
 
 <hr class="footer"/>
 <div class="footer" id="generated-by">
-Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-08-03T20:43:07.693353</span>
+Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-09-20T23:11:19.692083</span>
 </div>
 </div>
 </body>
