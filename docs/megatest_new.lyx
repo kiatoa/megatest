@@ -1,0 +1,1325 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+% Include the proper LaTeX packages:
+%----------------------------------------------------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{titling}
+\usepackage{ifthen}
+\usepackage[absolute]{textpos}
+\usepackage[colorlinks=true,
+                       pagecolor=black,
+                       menucolor=black,
+                       linkcolor=black,
+                       citecolor=blue,
+                       pagebordercolor=1 1 1,
+                       urlcolor=red,
+                       plainpages=false,
+                       pdfpagelabels=true,
+                       bookmarksnumbered=true]{hyperref}
+\usepackage{lastpage}
+
+\newcommand{\reportTopic}{<reportTopic>}
+\newcommand{\revisionNumber}{<rev. no.>}
+\newcommand{\documentNumber}{<doc. no.>}
+
+
+% Setup the right-hand header to display the current doc section:
+%----------------------------------------------------------------------------------------------------
+\renewcommand{\sectionmark}[1]{\markright{#1}}
+\renewcommand{\subsectionmark}[1]{\markright{#1}}
+
+% Setup for roman numeral page numbers until TOC:
+%----------------------------------------------------------------------------------------------------
+\newboolean{romanpn}
+
+\pagenumbering{roman}
+\setboolean{romanpn}{true}
+\let\myTOC\tableofcontents
+
+\renewcommand\tableofcontents{%
+\myTOC
+\clearpage
+\pagenumbering{arabic}
+\setboolean{romanpn}{false}
+}
+
+% Modify titlepage format:
+%----------------------------------------------------------------------------------------------------
+\setlength{\TPHorizModule}{1in}
+\setlength{\TPVertModule}{\TPHorizModule}
+\textblockorigin{3.25in}{1in}
+
+\pretitle
+ {
+    \begin{flushright}\LARGE\sffamily 
+    \thispagestyle{empty}
+    \begin{textblock}{4}(0,0)
+    \includegraphics[width=2in,keepaspectratio=true]
+{/home/matt/data/megatest/docs/megatest_logo.png}
+    \end{textblock}
+    \vspace{1in}
+  }
+
+\posttitle{\par\end{flushright}}
+
+\preauthor{\begin{flushright} \large \sffamily \lineskip 0.5em 
+\begin{tabular}[t]{c}}
+\postauthor{\end{tabular} \par\end{flushright}}
+
+\predate{\begin{flushright}\large \sffamily Document Number: \documentNumber \\ Revision Number: \revisionNumber \\}
+
+\postdate{
+\vspace{2in}
+\\Matt Welland.
+\par\end{flushright}}
+
+% Setup "fancy" page layout:
+%----------------------------------------------------------------------------------------------------
+\fancyhf{}
+\setlength{\topmargin}{-1in}
+\setlength{\headheight}{1in}
+\setlength{\headsep}{0.5in}
+\setlength{\oddsidemargin}{0.25in}
+\setlength{\evensidemargin}{\oddsidemargin}
+\setlength{\textwidth}{6in}
+\setlength{\headwidth}{\textwidth}
+\setlength{\textheight}{8.375in}
+\setlength{\footskip}{0.5in}
+
+% Setup header:
+%------------------------------------------------------------------------------------------
+\fancyhead[L]{\sffamily \bfseries \large Megatest.\\\mdseries \reportTopic}
+\fancyhead[R]{\sffamily \bfseries \large User Manual\\ \mdseries \nouppercase{\rightmark}}
+
+% Setup footer:
+%------------------------------------------------------------------------------------------
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyfoot[L]{\sffamily \bfseries \documentNumber \\ \mdseries Revision:  \revisionNumber}
+\fancyfoot[C]{\sffamily \bfseries\thedate \\ \mdseries Use at your own risk}
+\fancyfoot[R]{\ifthenelse{\boolean{romanpn}}{\sffamily  \thepage}{\sffamily \bfseries Page \thepage\ of \pageref{LastPage}}}
+\end_preamble
+\use_default_options false
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman times
+\font_sans helvet
+\font_typewriter courier
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize 11
+\spacing single
+\use_hyperref false
+\papersize letterpaper
+\use_geometry false
+\use_amsmath 1
+\use_esint 0
+\use_mhchem 0
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation skip
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle fancy
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+documentNumber}{TSETAGEM-011}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+reportTopic}{Megatest User Manual}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+revisionNumber}{v1.25}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Title
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+
+\backslash
+ 
+\backslash
+reportTopic
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Author
+Matthew Welland
+\end_layout
+
+\begin_layout Date
+Sept.
+ 20, 2011
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+thispagestyle{empty}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+copyright
+\end_layout
+
+\end_inset
+
+2011 Matthew Welland.
+ All rights reserved.
+ 
+\end_layout
+
+\begin_layout Standard
+Megatest is free software released under the General Public License v2.0.
+ Please see the file COPYING in the source distribution for details.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace medskip
+\end_inset
+
+Email: matt@kiatoa.com.
+ 
+\end_layout
+
+\begin_layout Standard
+Web: www.kiatoa.com/fossils/megatest
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace medskip
+\end_inset
+
+This document is believed to be acurate at the time of writing but as with
+ any opensource project the source code itself is the final arbiter of the
+ softwares behaviour.
+ It is the responsibility of the end user to validate that the code will
+ perform as they expect.
+ The author assumes no responsibility for any inaccuracies that this document
+ may contain.
+ In no event will Matthew Welland be liable for direct, indirect, special,
+ exemplary, incidental, or consequential damages resulting from any defect
+ or omission in this document, even if advised of the possibility of such
+ damages.
+ 
+\end_layout
+
+\begin_layout Standard
+This document is a snapshot in time and the Megatest software has likely
+ been changed since publication.
+ This document and the product that it describes may be improved at any
+ time, without notice or obligation.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+Document Revision History
+\end_layout
+
+\begin_layout Standard
+
+\shape italic
+Notable revisions of the software are occasionally documented here
+\shape default
+.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Tabular
+<lyxtabular version="3" rows="2" columns="4">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top" width="0.5in">
+<column alignment="center" valignment="top" width="0.5in">
+<column alignment="block" valignment="top" width="3in">
+<column alignment="center" valignment="top" width="1in">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Version
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Author
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Date
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+0.1
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+thedate
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\begin_inset CommandInset toc
+LatexCommand tableofcontents
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Subsection
+Megatest design philosophy
+\end_layout
+
+\begin_layout Standard
+Megatest is intended to provide the minimum needed resources to make writing
+ a suite of tests for software, design engineering or process control (via
+ owlfs for example) without being specialized for any specific problem space.
+ Megatest in of itself does not know what constitutes a PASS or FAIL of
+ a test.
+ In most cases megatest is best used in conjunction with logpro or a similar
+ tool to parse, analyze and decide on the test outcome.
+ A call to megatest can then be made to record the result.
+ 
+\end_layout
+
+\begin_layout Subsection
+Megatest architecture
+\end_layout
+
+\begin_layout Standard
+All data to specify the tests and configure the system is stored in plain
+ text files.
+ All system state is stored in an sqlite3 database.
+ Tests are launched using the launching system available for the distributed
+ compute platform in use.
+ A template script is provided which can launch jobs on local and remote
+ Linux hosts.
+ Currently megatest uses the network filesystem to 
+\begin_inset Quotes eld
+\end_inset
+
+call home
+\begin_inset Quotes erd
+\end_inset
+
+ to your master sqlite3 database.
+\end_layout
+
+\begin_layout Section
+Installation
+\end_layout
+
+\begin_layout Subsection
+Dependencies
+\end_layout
+
+\begin_layout Standard
+Chicken scheme and a number of 
+\begin_inset Quotes eld
+\end_inset
+
+eggs
+\begin_inset Quotes erd
+\end_inset
+
+ are required for building megatest.
+ See the file utils/installall.sh for an automated way to install the dependencie
+s on Linux.
+\end_layout
+
+\begin_layout Subsection
+Build and Install
+\end_layout
+
+\begin_layout Standard
+Run “make test” to create the megatest executable.
+ You may wish to copy the executable to a centrally accessible location.
+\end_layout
+
+\begin_layout Section
+Setup
+\end_layout
+
+\begin_layout Subsection
+Create megatest.config
+\end_layout
+
+\begin_layout Standard
+Create the file megatest.config using the megatest.config template from the
+ tests directory.
+ At a minimum you need the following:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Fields are the keys under which your test runs are organized
+\end_layout
+
+\begin_layout Plain Layout
+
+[fields]
+\end_layout
+
+\begin_layout Plain Layout
+
+field1 TEXT
+\end_layout
+
+\begin_layout Plain Layout
+
+field2 TEXT
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[jobtools]
+\end_layout
+
+\begin_layout Plain Layout
+
+# The launcher launches jobs to the local or remote hosts,
+\end_layout
+
+\begin_layout Plain Layout
+
+# the job is managed on the target host by megatest,
+\end_layout
+
+\begin_layout Plain Layout
+
+# comment out launcher to run local only.
+ An example launcher
+\end_layout
+
+\begin_layout Plain Layout
+
+# "nbfake" can be found in the utils directory.
+ 
+\end_layout
+
+\begin_layout Plain Layout
+
+launcher nbfake
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# The disks section specifies where the tests will be run.
+ As you
+\end_layout
+
+\begin_layout Plain Layout
+
+# run out of space in a partition you can add additional disks
+\end_layout
+
+\begin_layout Plain Layout
+
+# entries.
+\end_layout
+
+\begin_layout Plain Layout
+
+# Format is:
+\end_layout
+
+\begin_layout Plain Layout
+
+# name /path/to/area 
+\end_layout
+
+\begin_layout Plain Layout
+
+[disks]
+\end_layout
+
+\begin_layout Plain Layout
+
+disk1 /tmp 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create runconfigs.config
+\end_layout
+
+\begin_layout Standard
+This file is used to set environment variables that are run specific.
+ You can simply create an empty file to start.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# runconfigs.config
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create the tests directory and your first test
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+../tests
+\end_layout
+
+\begin_layout Plain Layout
+
+  ├── megatest.config
+\end_layout
+
+\begin_layout Plain Layout
+
+  ├── runconfigs.config
+\end_layout
+
+\begin_layout Plain Layout
+
+  └── tests
+\end_layout
+
+\begin_layout Plain Layout
+
+     └── mytest
+\end_layout
+
+\begin_layout Plain Layout
+
+           ├── main.sh
+\end_layout
+
+\begin_layout Plain Layout
+
+           └── testconfig
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create the testconfig file for your test
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.sh
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create your test running script, main.sh
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/bash
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -test-status :state COMPLETED :status PASS -m "This is a comment"
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Run megatest and watch your run progress
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest :field1 abc :field2 def :runname 2011week08.4a -runall
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+watch megatest -list-runs %
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# OR use the dashboard
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+dashboard &
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+How to Write Tests
+\end_layout
+
+\begin_layout Subsection
+A Simple Test with one Step
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+mkdir simpletest
+\end_layout
+
+\begin_layout Plain Layout
+
+cd simpletest
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create your testconfig file
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# testconfig
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Create the main.csh script
+\end_layout
+
+\begin_layout Standard
+Note: Using csh is NOT recommended.
+ Use bash, perl, ruby, zsh or anything other than csh.
+ We use csh here because it is popular in the EDA industry for which Megatest
+ was originally created.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 simulation.
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The step name is "run_simulation"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The commandline being run for this step is "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The logpro file to validate the output from the run is "runsim.logpro"
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -test-status :state COMPLETED :status $?
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+You can now run megatest and the created test directory will contain the
+ new files “run_simulation.html” and “run_simulation.log”.
+ If you are using the dashboard you can click on the run and then push the
+ “View log” button to view the log file in firefox.
+\end_layout
+
+\begin_layout Subsection
+Simple Test with Multiple Steps 
+\end_layout
+
+\begin_layout Standard
+To run multiple steps simply add them to the main.csh file.
+ Here we add a step to test “cpu2”.
+ The second step that tests cpu2 will only run after the step that tested
+ “cpu1” completes.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 simulation.
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The step name is "run_simulation"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The commandline being run for this step is "runsim cpu1"
+\end_layout
+
+\begin_layout Plain Layout
+
+#   The logpro file to validate the output from the run is "runsim.logpro"
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -runstep run_simulation_cpu1 -logpro runsim.logpro "runsim cpu1"
+ && 
+\backslash
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -runstep run_simulation_cpu2 -logpro runsim.logpro "runsim cpu2"
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -test-status :state COMPLETED :status $?
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Simple Test with Multiple Steps, Some in Parallel
+\end_layout
+
+\begin_layout Subsection
+The Makefile
+\end_layout
+
+\begin_layout Standard
+A good way to run steps in parallel within a single test, especially when
+ there are following steps, is to use the Unix Make utility.
+ Writing Makefiles is beyond the scope of this document but here is a minimal
+ example that will run “runsim cpu1” and “runsim cpu2” in parallel.
+ For more information on make try “info make” at the Linux command prompt.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Example Makefile to run two steps in parallel
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+RTLDIR=/path/to/rtl
+\end_layout
+
+\begin_layout Plain Layout
+
+CPUS = cpu1 cpu2
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
+\end_layout
+
+\begin_layout Plain Layout
+
+	$(MT_MEGATEST) -runstep run_simulation_$(CPUS) -logpro runsim.logpro "runsim
+ $(CPUS)
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+The main.csh file
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu1 and cpu2 simulations in parallel.
+ 
+\end_layout
+
+\begin_layout Plain Layout
+
+# The -j parameter tells make how many jobs it may run in parallel
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+make -j 2 
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -test-status :state COMPLETED :status $?
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Simple Test with Iteration
+\end_layout
+
+\begin_layout Standard
+Since no jobs run after the cpu1 and cpu2 simulations in this test it is
+ possible to use iterated mode.
+\end_layout
+
+\begin_layout Subsection
+Update your testconfig file for iteration
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[items]
+\end_layout
+
+\begin_layout Plain Layout
+
+CPU cpu1 cpu2
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Rewrite your main.csh for iteration
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+#!/bin/tcsh -x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# run the cpu simulation but now use the environment variable $CPU
+\end_layout
+
+\begin_layout Plain Layout
+
+# to select what cpu to run the simulation against
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
+\end_layout
+
+\begin_layout Plain Layout
+
+# As of version 1.07 Megatest automatically converts a status of "0"
+\end_layout
+
+\begin_layout Plain Layout
+
+# to "PASS", any other number to "FAIL" and directly uses the value of
+\end_layout
+
+\begin_layout Plain Layout
+
+# a string passed in.
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -test-status :state COMPLETED :status $?
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Tests with Inter-test dependencies
+\end_layout
+
+\begin_layout Standard
+Sometimes a test depends on the output from a previous test or it may not
+ make sense to run a test is another test does not complete with status
+ “PASS”.
+ In either of these scenarios you can use the “waiton” keyword in your testconfi
+g file to indicate that this test must wait on one or more tests to complete
+ before being launched.
+ In this example there is no point in running the “system” test if the “cpu”
+ and “mem” tests either do not complete or complete but with status “FAIL”.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# testconfig for the "system" test
+\end_layout
+
+\begin_layout Plain Layout
+
+[setup]
+\end_layout
+
+\begin_layout Plain Layout
+
+runscript main.csh
+\end_layout
+
+\begin_layout Plain Layout
+
+waiton cpu mem
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+abc
+\end_layout
+
+\begin_layout Section
+\start_of_appendix
+Data
+\end_layout
+
+\begin_layout Section
+References
+\end_layout
+
+\end_body
+\end_document

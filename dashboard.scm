@@ -32,9 +32,9 @@
 (include "dashboard-tests.scm")
 (include "megatest-version.scm")
 
-(define help "
-Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
-  version 0.2
+(define help (conc 
+"Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
+  version " megatest-version "
   license GPL, Copyright Matt Welland 2011
 
 Usage: dashboard [options]
@@ -44,7 +44,7 @@ Usage: dashboard [options]
 
 Misc
   -rows N         : set number of rows
-")
+"))
 
 ;; process args
 (define remargs (args:get-args 
