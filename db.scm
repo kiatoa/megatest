@@ -537,6 +537,8 @@
 				 #f
 				 s)))) ;; if specified on the input then use, else calculate
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	 (debug:print 4 "category: " category ", variable: " variable ", value: " value 
+		      ", expected: " expected ", tol: " tol ", units: " units ", status: " status ", comment: " comment)
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
 		  (or (not units)   (equal? expected "")))
