@@ -2,16 +2,115 @@
 \lyxformat 413
 \begin_document
 \begin_header
-\textclass docbook-book
+\textclass article
+\begin_preamble
+% Include the proper LaTeX packages:
+%----------------------------------------------------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{titling}
+\usepackage{ifthen}
+\usepackage[absolute]{textpos}
+\usepackage[colorlinks=true,
+                       pagecolor=black,
+                       menucolor=black,
+                       linkcolor=black,
+                       citecolor=blue,
+                       pagebordercolor=1 1 1,
+                       urlcolor=red,
+                       plainpages=false,
+                       pdfpagelabels=true,
+                       bookmarksnumbered=true]{hyperref}
+\usepackage{lastpage}
+
+\newcommand{\reportTopic}{<reportTopic>}
+\newcommand{\revisionNumber}{<rev. no.>}
+\newcommand{\documentNumber}{<doc. no.>}
+
+
+% Setup the right-hand header to display the current doc section:
+%----------------------------------------------------------------------------------------------------
+\renewcommand{\sectionmark}[1]{\markright{#1}}
+\renewcommand{\subsectionmark}[1]{\markright{#1}}
+
+% Setup for roman numeral page numbers until TOC:
+%----------------------------------------------------------------------------------------------------
+\newboolean{romanpn}
+
+\pagenumbering{roman}
+\setboolean{romanpn}{true}
+\let\myTOC\tableofcontents
+
+\renewcommand\tableofcontents{%
+\myTOC
+\clearpage
+\pagenumbering{arabic}
+\setboolean{romanpn}{false}
+}
+
+% Modify titlepage format:
+%----------------------------------------------------------------------------------------------------
+\setlength{\TPHorizModule}{1in}
+\setlength{\TPVertModule}{\TPHorizModule}
+\textblockorigin{3.25in}{1in}
+
+\pretitle
+ {
+    \begin{flushright}\LARGE\sffamily 
+    \thispagestyle{empty}
+    \begin{textblock}{4}(0,0)
+    \includegraphics[width=2in,keepaspectratio=true]
+{/home/matt/data/megatest/docs/megatest_logo.png}
+    \end{textblock}
+    \vspace{1in}
+  }
+
+\posttitle{\par\end{flushright}}
+
+\preauthor{\begin{flushright} \large \sffamily \lineskip 0.5em 
+\begin{tabular}[t]{c}}
+\postauthor{\end{tabular} \par\end{flushright}}
+
+\predate{\begin{flushright}\large \sffamily Document Number: \documentNumber \\ Revision Number: \revisionNumber \\}
+
+\postdate{
+\vspace{2in}
+\\Matt Welland.
+\par\end{flushright}}
+
+% Setup "fancy" page layout:
+%----------------------------------------------------------------------------------------------------
+\fancyhf{}
+\setlength{\topmargin}{-1in}
+\setlength{\headheight}{1in}
+\setlength{\headsep}{0.5in}
+\setlength{\oddsidemargin}{0.25in}
+\setlength{\evensidemargin}{\oddsidemargin}
+\setlength{\textwidth}{6in}
+\setlength{\headwidth}{\textwidth}
+\setlength{\textheight}{8.375in}
+\setlength{\footskip}{0.5in}
+
+% Setup header:
+%------------------------------------------------------------------------------------------
+\fancyhead[L]{\sffamily \bfseries \large Megatest.\\\mdseries \reportTopic}
+\fancyhead[R]{\sffamily \bfseries \large User Manual\\ \mdseries \nouppercase{\rightmark}}
+
+% Setup footer:
+%------------------------------------------------------------------------------------------
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyfoot[L]{\sffamily \bfseries \documentNumber \\ \mdseries Revision:  \revisionNumber}
+\fancyfoot[C]{\sffamily \bfseries\thedate \\ \mdseries Free Software. License: GPL v2.0}
+\fancyfoot[R]{\ifthenelse{\boolean{romanpn}}{\sffamily  \thepage}{\sffamily \bfseries Page \thepage\ of \pageref{LastPage}}}
+\end_preamble
 \use_default_options false
 \maintain_unincluded_children false
 \language english
 \language_package default
 \inputencoding auto
 \fontencoding global
-\font_roman default
-\font_sans default
-\font_typewriter default
+\font_roman times
+\font_sans helvet
+\font_typewriter courier
 \font_default_family default
 \use_non_tex_fonts false
 \font_sc false
@@ -21,17 +120,17 @@
 
 \graphics default
 \default_output_format default
-\output_sync 1
+\output_sync 0
 \bibtex_command default
 \index_command default
-\paperfontsize default
+\paperfontsize 11
 \spacing single
 \use_hyperref false
-\papersize default
+\papersize letterpaper
 \use_geometry false
-\use_amsmath 0
+\use_amsmath 1
 \use_esint 0
-\use_mhchem 1
+\use_mhchem 0
 \use_mathdots 1
 \cite_engine basic
 \use_bibtopic false
@@ -45,12 +144,12 @@
 \end_index
 \secnumdepth 3
 \tocdepth 3
-\paragraph_separation indent
-\paragraph_indentation default
+\paragraph_separation skip
+\defskip medskip
 \quotes_language english
 \papercolumns 1
 \papersides 1
-\paperpagestyle default
+\paperpagestyle fancy
 \tracking_changes false
 \output_changes false
 \html_math_output 0
@@ -60,25 +159,295 @@
 
 \begin_body
 
-\begin_layout Title
-Megatest
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+documentNumber}{TSETAGEM-011}
 \end_layout
 
-\begin_layout Date
-5/5/2011 
-\end_layout
+\end_inset
 
-\begin_layout Author
-Matt Welland
-\end_layout
 
-\begin_layout Abstract
-Megatest is a minimalistic tool to help automate and manage the running
- of a suite of regression tests or other processes and to roll up the results
- for display on a web page or dashboard.
 \end_layout
 
 \begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+reportTopic}{Megatest User Manual}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+renewcommand{
+\backslash
+revisionNumber}{v1.25}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Title
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+reportTopic
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Author
+Matthew Welland
+\end_layout
+
+\begin_layout Date
+Sept.
+ 20, 
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+thispagestyle{empty}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+copyright
+\end_layout
+
+\end_inset
+
+2011 Matthew Welland.
+ All rights reserved.
+ 
+\end_layout
+
+\begin_layout Standard
+Megatest is free software released under the General Public License v2.0.
+ Please see the file COPYING in the source distribution for details.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace medskip
+\end_inset
+
+Email: matt@kiatoa.com.
+ 
+\end_layout
+
+\begin_layout Standard
+Web: www.kiatoa.com/fossils/megatest
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace medskip
+\end_inset
+
+This document is believed to be acurate at the time of writing but as with
+ any opensource project the source code itself is the final arbiter of the
+ softwares behaviour.
+ It is the responsibility of the end user to validate that the code will
+ perform as they expect.
+ The author assumes no responsibility for any inaccuracies that this document
+ may contain.
+ In no event will Matthew Welland be liable for direct, indirect, special,
+ exemplary, incidental, or consequential damages resulting from any defect
+ or omission in this document, even if advised of the possibility of such
+ damages.
+ 
+\end_layout
+
+\begin_layout Standard
+This document is a snapshot in time and the Megatest software has likely
+ been changed since publication.
+ This document and the product that it describes may be improved at any
+ time, without notice or obligation.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+Document Revision History
+\end_layout
+
+\begin_layout Standard
+
+\shape italic
+Notable revisions of the software are occasionally documented here
+\shape default
+.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Tabular
+<lyxtabular version="3" rows="2" columns="4">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top" width="0.5in">
+<column alignment="center" valignment="top" width="0.5in">
+<column alignment="block" valignment="top" width="3in">
+<column alignment="center" valignment="top" width="1in">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Version
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Author
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Date
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+0.1
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+\begin_inset ERT
+status collapsed
+
+\begin_layout Plain Layout
+
+
+\backslash
+thedate
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
 \begin_inset CommandInset toc
 LatexCommand tableofcontents
 
@@ -87,11 +456,18 @@ LatexCommand tableofcontents
 
 \end_layout
 
-\begin_layout Chapter
-About Megatest
+\begin_layout Standard
+\begin_inset Newpage newpage
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Subsection
 Megatest design philosophy
 \end_layout
 
@@ -107,7 +483,7 @@ Megatest is intended to provide the minimum needed resources to make writing
  
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Megatest architecture
 \end_layout
 
@@ -130,12 +506,8 @@ call home
  to your master sqlite3 database.
 \end_layout
 
-\begin_layout Chapter
-Installation
-\end_layout
-
 \begin_layout Section
-Compilation
+Installation
 \end_layout
 
 \begin_layout Subsection
@@ -143,25 +515,25 @@ Dependencies
 \end_layout
 
 \begin_layout Standard
-Chicken scheme and a number of eggs are required for building megatest.
+Chicken scheme and a number of 
+\begin_inset Quotes eld
+\end_inset
+
+eggs
+\begin_inset Quotes erd
+\end_inset
+
+ are required for building megatest.
  See the file utils/installall.sh for an automated way to install the dependencie
 s on Linux.
 \end_layout
 
 \begin_layout Subsection
-Build and install
+Build and Install
 \end_layout
 
 \begin_layout Standard
-Run 
-\begin_inset Quotes eld
-\end_inset
-
-make test
-\begin_inset Quotes erd
-\end_inset
-
- to create the megatest executable.
+Run “make test” to create the megatest executable.
  You may wish to copy the executable to a centrally accessible location.
 \end_layout
 
@@ -179,7 +551,7 @@ Create the file megatest.config using the megatest.config template from the
  At a minimum you need the following:
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -292,6 +664,9 @@ Create runconfigs.config
 \begin_layout Standard
 This file is used to set environment variables that are run specific.
  You can simply create an empty file to start.
+\end_layout
+
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -299,10 +674,6 @@ status open
 \begin_layout Plain Layout
 
 # runconfigs.config
-\end_layout
-
-\begin_layout Plain Layout
-
 \end_layout
 
 \end_inset
@@ -315,10 +686,6 @@ Create the tests directory and your first test
 \end_layout
 
 \begin_layout Standard
-The structure should look like this:
-\end_layout
-
-\begin_layout Paragraph
 \begin_inset listings
 inline false
 status open
@@ -367,7 +734,7 @@ status open
 Create the testconfig file for your test
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -391,7 +758,7 @@ runscript main.sh
 Create your test running script, main.sh
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -412,10 +779,6 @@ $MT_MEGATEST -runstep mystep1 "sleep 20;echo Done" -m "mystep1 is done"
 
 \begin_layout Plain Layout
 
-\end_layout
-
-\begin_layout Plain Layout
-
 $MT_MEGATEST -test-status :state COMPLETED :status PASS -m "This is a comment"
 \end_layout
 
@@ -428,7 +791,7 @@ $MT_MEGATEST -test-status :state COMPLETED :status PASS -m "This is a comment"
 Run megatest and watch your run progress
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -470,24 +833,15 @@ dashboard &
 
 \end_layout
 
-\begin_layout Code
-
-\end_layout
-
-\begin_layout Chapter
+\begin_layout Section
 How to Write Tests
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 A Simple Test with one Step
 \end_layout
 
-\begin_layout Subsection
-Create your test directory.
- The directory name will be the name of the test
-\end_layout
-
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -508,13 +862,10 @@ cd simpletest
 \end_layout
 
 \begin_layout Subsection
-Create your testconfig file.
- This file contains various specifications for your test.
- For our example the test author has chosen to write the test using csh
- scripting.
+Create your testconfig file
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -544,17 +895,18 @@ runscript main.csh
 \end_layout
 
 \begin_layout Subsection
-Create your main.csh script
+Create the main.csh script
 \end_layout
 
 \begin_layout Standard
 Note: Using csh is NOT recommended.
  Use bash, perl, ruby, zsh or anything other than csh.
- We use csh here because it is popular in some industries.
+ We use csh here because it is popular in the EDA industry for which Megatest
+ was originally created.
  
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -609,63 +961,23 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 
 \begin_layout Standard
 You can now run megatest and the created test directory will contain the
- new files 
-\begin_inset Quotes eld
-\end_inset
-
-run_simulation.html
-\begin_inset Quotes erd
-\end_inset
-
- and 
-\begin_inset Quotes eld
-\end_inset
-
-run_simulation.log
-\begin_inset Quotes erd
-\end_inset
-
-.
+ new files “run_simulation.html” and “run_simulation.log”.
  If you are using the dashboard you can click on the run and then push the
- 
-\begin_inset Quotes eld
-\end_inset
-
-View log
-\begin_inset Quotes erd
-\end_inset
-
- button to view the log file in firefox.
+ “View log” button to view the log file in firefox.
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Simple Test with Multiple Steps 
 \end_layout
 
 \begin_layout Standard
 To run multiple steps simply add them to the main.csh file.
- Here we add a step to test 
-\begin_inset Quotes eld
-\end_inset
-
-cpu2
-\begin_inset Quotes erd
-\end_inset
-
-.
+ Here we add a step to test “cpu2”.
  The second step that tests cpu2 will only run after the step that tested
- 
-\begin_inset Quotes eld
-\end_inset
-
-cpu1
-\begin_inset Quotes erd
-\end_inset
-
- completes.
+ “cpu1” completes.
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -727,7 +1039,7 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
 
 \begin_layout Section
-Simple Test with Multiple Steps, Some in Parallel 
+Simple Test with Multiple Steps, Some in Parallel
 \end_layout
 
 \begin_layout Subsection
@@ -738,35 +1050,11 @@ The Makefile
 A good way to run steps in parallel within a single test, especially when
  there are following steps, is to use the Unix Make utility.
  Writing Makefiles is beyond the scope of this document but here is a minimal
- example that will run 
-\begin_inset Quotes eld
-\end_inset
-
-runsim cpu1
-\begin_inset Quotes erd
-\end_inset
-
- and 
-\begin_inset Quotes eld
-\end_inset
-
-runsim cpu2
-\begin_inset Quotes erd
-\end_inset
-
- in parallel.
- For more information on make try 
-\begin_inset Quotes eld
-\end_inset
-
-info make
-\begin_inset Quotes erd
-\end_inset
-
- at the Linux command prompt.
+ example that will run “runsim cpu1” and “runsim cpu2” in parallel.
+ For more information on make try “info make” at the Linux command prompt.
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -844,6 +1132,8 @@ status open
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 make -j 2 
 \end_layout
@@ -871,7 +1161,7 @@ Since no jobs run after the cpu1 and cpu2 simulations in this test it is
 Update your testconfig file for iteration
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
@@ -887,6 +1177,8 @@ runscript main.csh
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 \end_layout
 
@@ -909,55 +1201,75 @@ CPU cpu1 cpu2
 Rewrite your main.csh for iteration
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 #!/bin/tcsh -x
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # run the cpu simulation but now use the environment variable $CPU
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # to select what cpu to run the simulation against
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # As of version 1.07 Megatest automatically converts a status of "0"
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # to "PASS", any other number to "FAIL" and directly uses the value of
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # a string passed in.
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 $MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
@@ -967,88 +1279,50 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Tests with Inter-test dependencies
 \end_layout
 
 \begin_layout Standard
 Sometimes a test depends on the output from a previous test or it may not
  make sense to run a test is another test does not complete with status
- 
-\begin_inset Quotes eld
-\end_inset
-
-PASS
-\begin_inset Quotes erd
-\end_inset
-
-.
- In either of these scenarios you can use the 
-\begin_inset Quotes eld
-\end_inset
-
-waiton
-\begin_inset Quotes erd
-\end_inset
-
- keyword in your testconfig file to indicate that this test must wait on
- one or more tests to complete before being launched.
- In this example there is no point in running the 
-\begin_inset Quotes eld
-\end_inset
-
-system
-\begin_inset Quotes erd
-\end_inset
-
- test if the 
-\begin_inset Quotes eld
-\end_inset
-
-cpu
-\begin_inset Quotes erd
-\end_inset
-
- and 
-\begin_inset Quotes eld
-\end_inset
-
-mem
-\begin_inset Quotes erd
-\end_inset
-
- tests either do not complete or complete but with status 
-\begin_inset Quotes eld
-\end_inset
-
-FAIL
-\begin_inset Quotes erd
-\end_inset
-
-.
+ “PASS”.
+ In either of these scenarios you can use the “waiton” keyword in your testconfi
+g file to indicate that this test must wait on one or more tests to complete
+ before being launched.
+ In this example there is no point in running the “system” test if the “cpu”
+ and “mem” tests either do not complete or complete but with status “FAIL”.
 \end_layout
 
-\begin_layout Paragraph
+\begin_layout Standard
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 # testconfig for the "system" test
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 [setup]
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 runscript main.csh
 \end_layout
 
 \begin_layout Plain Layout
+\noindent
+\align left
 
 waiton cpu mem
 \end_layout
@@ -1058,121 +1332,110 @@ waiton cpu mem
 
 \end_layout
 
-\begin_layout Chapter
+\begin_layout Section
 Reference
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Configuration file Syntax
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Subsubsection
 Sections
 \end_layout
 
 \begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 [section name]
 \end_layout
 
-\begin_layout Quotation
-This creates a section named 
-\begin_inset Quotes eld
-\end_inset
-
-section name
-\begin_inset Quotes erd
 \end_inset
 
 
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Standard
+This creates a section named “section name”
+\end_layout
+
+\begin_layout Subsubsection
 Variables
 \end_layout
 
 \begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 VARX has this value
 \end_layout
 
-\begin_layout Quotation
-The variable 
-\begin_inset Quotes eld
-\end_inset
-
-VARX
-\begin_inset Quotes erd
-\end_inset
-
- will have the value 
-\begin_inset Quotes eld
-\end_inset
-
-has this value
-\begin_inset Quotes erd
 \end_inset
 
 
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Standard
+The variable “VARX” will have the value “has this value”
+\end_layout
+
+\begin_layout Subsubsection
 Includes
 \end_layout
 
 \begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 [include filename]
 \end_layout
 
-\begin_layout Quotation
-The file named 
-\begin_inset Quotes eld
 \end_inset
 
-filename
-\begin_inset Quotes erd
-\end_inset
 
- will be included as if part of the calling file.
- NOTE: This means no section can be named 
-\begin_inset Quotes eld
-\end_inset
-
-include 
-\begin_inset Quotes eld
-\end_inset
-
- (with the whitespace).
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Standard
+The file named “filename” will be included as if part of the calling file.
+ NOTE: This means no section can be named “include “ (with the whitespace).
+\end_layout
+
+\begin_layout Subsubsection
 Setting a variable by running a command
 \end_layout
 
 \begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
 VARNAME [system ls /tmp]
 \end_layout
 
-\begin_layout Quotation
-The variable 
-\begin_inset Quotes eld
 \end_inset
 
-VARNAME
-\begin_inset Quotes erd
-\end_inset
 
- will get a value created by the Unix command 
-\begin_inset Quotes eld
-\end_inset
+\end_layout
 
-ls /tmp
-\begin_inset Quotes erd
-\end_inset
-
-.
+\begin_layout Standard
+The variable “VARNAME” will get a value created by the Unix command “ls
+ /tmp”.
  All lines of output from the command will be joined with a space.
 \end_layout
 
-\begin_layout Subsection
+\begin_layout Subsubsection
 Notes
 \end_layout
 
@@ -1185,17 +1448,16 @@ Some variables are infered as lists.
 Comments (lines starting with #) and blank lines are ignored.
 \end_layout
 
-\begin_layout Section
+\begin_layout Subsection
 Environment variables
 \end_layout
 
 \begin_layout Standard
 \begin_inset Tabular
-<lyxtabular version="3" rows="9" columns="3">
-<features tabularvalignment="middle">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
+<lyxtabular version="3" rows="9" columns="2">
+<features tabularvalignment="middle" tabularwidth="80page%">
+<column alignment="left" valignment="top" width="10page%">
+<column alignment="left" valignment="top" width="50page%">
 <row>
 <cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
@@ -1206,7 +1468,7 @@ Variable
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1215,18 +1477,9 @@ Purpose
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Default value/Comment
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1235,7 +1488,7 @@ MT_CMDINFO
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1244,18 +1497,9 @@ Conveys test variables to the megatest test runner.
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Not for use by the end user
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1264,7 +1508,7 @@ MT_TEST_RUN_DIR
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1273,26 +1517,9 @@ Directory assigned by megatest for the test to run.
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Tests can consider this their 
-\begin_inset Quotes eld
-\end_inset
-
-home
-\begin_inset Quotes erd
-\end_inset
-
- directory
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1301,7 +1528,7 @@ MT_TEST_NAME
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1310,18 +1537,9 @@ Name of the test, corrosponds to the directory name under tests.
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1330,7 +1548,7 @@ MT_ITEM_INFO
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1339,18 +1557,9 @@ Iterated tests will set this to a sequence of key/values ((KEY val) ...)
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1359,7 +1568,7 @@ MT_RUN_AREA_HOME
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1369,18 +1578,9 @@ Directory where megatest was launched from and where the tests code can
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1389,7 +1589,7 @@ MT_RUNNAME
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1398,18 +1598,9 @@ Name of this run as set by the :runname parameter
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\end_inset
-</cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1418,36 +1609,20 @@ MT_MEGATEST
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
 Path/Filename to megatest executable.
- Found either from called path or but using the 
-\begin_inset Quotes eld
-\end_inset
-
-exectuable
-\begin_inset Quotes erd
-\end_inset
-
- keyword in the [setup] section.
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
+ Found either from called path or but using the “exectuable” keyword in
+ the [setup] section.
 \end_layout
 
 \end_inset
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1456,22 +1631,12 @@ exectuable
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
 The field values as set on the megatest -runall command line (e.g.
  :field1 abc)
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-Planning ahead your field names is important so as to avoid collisions with
- other environment variables
 \end_layout
 
 \end_inset
@@ -1484,10 +1649,6 @@ Planning ahead your field names is important so as to avoid collisions with
 
 \end_layout
 
-\begin_layout Section
-Configuration files
-\end_layout
-
 \begin_layout Subsection
 megatest.config
 \end_layout
@@ -1495,12 +1656,12 @@ megatest.config
 \begin_layout Standard
 \begin_inset Tabular
 <lyxtabular version="3" rows="9" columns="5">
-<features tabularvalignment="middle">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
+<features tabularvalignment="middle" tabularwidth="80page%">
+<column alignment="left" valignment="top" width="10page%">
+<column alignment="left" valignment="top" width="15page%">
+<column alignment="left" valignment="top" width="20page%">
+<column alignment="left" valignment="top" width="6page%">
+<column alignment="left" valignment="top" width="20page%">
 <row>
 <cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
@@ -1529,7 +1690,7 @@ value
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1576,7 +1737,7 @@ if variable is not defined no limit on jobs
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1623,7 +1784,7 @@ full path to megatest binary
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1644,7 +1805,7 @@ Use only if necessary, megatest will extract the location from where it
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1653,7 +1814,7 @@ Use only if necessary, megatest will extract the location from where it
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1662,7 +1823,7 @@ runsdir
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1671,7 +1832,7 @@ full path to where the link tree to all runs will be created
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1680,7 +1841,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1719,7 +1880,7 @@ string of letters, numbers and underscore
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1739,7 +1900,7 @@ at least one
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1748,7 +1909,7 @@ at least one
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1757,7 +1918,7 @@ launcher
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1767,7 +1928,7 @@ command line used to launch jobs - the job command (megatest -execute) will
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1776,7 +1937,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1787,7 +1948,7 @@ no
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1796,7 +1957,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1805,7 +1966,7 @@ workhosts
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1814,7 +1975,7 @@ list of hostnames to run jobs on NOT SUPPORTED RIGHT NOW
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1823,7 +1984,7 @@ n/a
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1861,7 +2022,7 @@ any string
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1910,7 +2071,7 @@ a valid path writable by the test launching process and by the test process
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -1945,12 +2106,12 @@ runconfigs.config file
 \begin_layout Standard
 \begin_inset Tabular
 <lyxtabular version="3" rows="3" columns="5">
-<features tabularvalignment="middle">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
+<features tabularvalignment="middle" tabularwidth="80page%">
+<column alignment="left" valignment="top" width="20page%">
+<column alignment="left" valignment="top" width="12page%">
+<column alignment="left" valignment="top" width="3page%">
+<column alignment="left" valignment="top" width="4page%">
+<column alignment="left" valignment="top" width="30page%">
 <row>
 <cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
@@ -1979,7 +2140,7 @@ value
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2026,7 +2187,7 @@ any
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2048,7 +2209,7 @@ variables set in this section will be available for all runs, defining the
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2057,7 +2218,7 @@ variables set in this section will be available for all runs, defining the
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2066,7 +2227,7 @@ string of letters, numbers and underscore
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2075,7 +2236,7 @@ any
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2084,7 +2245,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2230,12 +2391,12 @@ testconfig file
 \begin_layout Standard
 \begin_inset Tabular
 <lyxtabular version="3" rows="4" columns="5">
-<features tabularvalignment="middle">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
+<features tabularvalignment="middle" tabularwidth="80page%">
+<column alignment="left" valignment="top" width="8page%">
+<column alignment="left" valignment="top" width="6page%">
+<column alignment="left" valignment="top" width="12page%">
+<column alignment="left" valignment="top" width="6page%">
+<column alignment="left" valignment="top" width="30page%">
 <row>
 <cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
@@ -2264,7 +2425,7 @@ value
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2311,7 +2472,7 @@ name of script to execute for this test
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2332,7 +2493,7 @@ The script must be executable and either provide the full path or put a
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2341,7 +2502,7 @@ The script must be executable and either provide the full path or put a
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2350,7 +2511,7 @@ waiton
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2359,7 +2520,7 @@ list of valid test names
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2368,7 +2529,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2380,7 +2541,7 @@ This test will not run until the named tests are state completed and status
 </cell>
 </row>
 <row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2389,7 +2550,7 @@ This test will not run until the named tests are state completed and status
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2398,7 +2559,7 @@ any valid
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2407,7 +2568,7 @@ list of values
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2416,7 +2577,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2446,8 +2607,8 @@ Command line
 <features tabularvalignment="middle">
 <column alignment="left" valignment="top" width="0">
 <column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
-<column alignment="left" valignment="top" width="0">
+<column alignment="left" valignment="top" width="30page%">
+<column alignment="left" valignment="top" width="0pt">
 <row>
 <cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
@@ -2619,7 +2780,7 @@ stepname
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2628,7 +2789,7 @@ record a step
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2657,7 +2818,7 @@ requires :state and :status
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2666,7 +2827,7 @@ record the test status
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2695,7 +2856,7 @@ logfilename
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2704,7 +2865,7 @@ set the logfile name for a test
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2733,7 +2894,7 @@ logfilename
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2742,7 +2903,7 @@ set the logfile name for the top test in an iterated test run
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2778,7 +2939,7 @@ comment
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2787,7 +2948,7 @@ sets a comment for the step, test or run
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2816,7 +2977,7 @@ sets a comment for the step, test or run
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2825,7 +2986,7 @@ directory in which this run will be stored in the test run area
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2854,7 +3015,7 @@ any value
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2864,7 +3025,7 @@ Set the step or test state, this is stored in the state field in the steps
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2909,7 +3070,7 @@ any value
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2919,7 +3080,7 @@ Set the step or test status, this is stored in the status field in the steps
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2972,7 +3133,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2981,7 +3142,7 @@ Respects -itempatt and -testpatt for filters
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3010,7 +3171,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3019,7 +3180,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3048,7 +3209,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3057,7 +3218,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3086,7 +3247,7 @@ any value, % is wildcard
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3095,7 +3256,7 @@ Print the keys being used for this database
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3124,7 +3285,7 @@ Print the keys being used for this database
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3157,7 +3318,7 @@ KILLED
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3194,7 +3355,7 @@ waiton
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3204,7 +3365,7 @@ Launch an xterm instead of run the test.
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3233,7 +3394,7 @@ Launch an xterm instead of run the test.
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3244,7 +3405,7 @@ Remove a run, test or subtest from the database and the disk.
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3275,7 +3436,7 @@ Test helpers
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3284,7 +3445,7 @@ Test helpers
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3313,7 +3474,7 @@ Test helpers
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3323,7 +3484,7 @@ Used inside a test to run a step, record the start and end of the step and
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3352,7 +3513,7 @@ Used inside a test to run a step, record the start and end of the step and
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3362,7 +3523,7 @@ If using logpro to asses the PASS/FAIL status of the step you specify the
 
 \end_inset
 </cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -3377,6 +3538,15 @@ If using logpro to asses the PASS/FAIL status of the step you specify the
 \end_inset
 
 
+\end_layout
+
+\begin_layout Section
+\start_of_appendix
+Data
+\end_layout
+
+\begin_layout Section
+References
 \end_layout
 
 \end_body
