@@ -328,7 +328,7 @@ This document is a snapshot in time and the Megatest software has likely
 \end_layout
 
 \begin_layout Section*
-Document Revision History
+Megatest/document Revision History
 \end_layout
 
 \begin_layout Standard
@@ -409,7 +409,7 @@ matt
 \begin_inset Text
 
 \begin_layout Plain Layout
-converted to new document format
+converted to new document template
 \end_layout
 
 \end_inset
@@ -1332,8 +1332,164 @@ waiton cpu mem
 
 \end_layout
 
+\begin_layout Subsection
+Rolling up Miscellaneous Data
+\end_layout
+
+\begin_layout Standard
+Use the -load-test-data switch to roll up arbitrary data from a test into
+ the test_data table.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Fields are:
+\end_layout
+
+\begin_layout Plain Layout
+
+# category,variable,value,expected,tol,units,comment,status
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+$MT_MEGATEST -load-test-data << EOF
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,bar,1.2,1.9,>
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,rab,1.0e9,10e9,1e9
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,bla,1.2,1.9,<
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,bal,1.2,1.2,<,,Check for overload
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,alb,1.2,1.2,<=,Amps,This is the high power circuit test
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,abl,1.2,1.3,0.1
+\end_layout
+
+\begin_layout Plain Layout
+
+foo,bra,1.2,pass,silly stuff
+\end_layout
+
+\begin_layout Plain Layout
+
+faz,bar,10,8mA,,,"this is a comment"
+\end_layout
+
+\begin_layout Plain Layout
+
+EOF
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+New entries are keyed on the category and variable.
+ If a new record is inserted with a category and variable that have already
+ been used the new record will replace the old record.
+\end_layout
+
+\begin_layout Standard
+Where value, expected and tol are specified the behavior is as follows.
+\end_layout
+
+\begin_layout Itemize
+If value, expected and tol are numbers then status is calculated as PASS
+ if (expected-tol) <= value <= (expected+tol)
+\end_layout
+
+\begin_layout Itemize
+If value and expected are numbers and tol is >, <, >= or <= then value is
+ compared with expected using the operator given by tol
+\end_layout
+
+\begin_layout Itemize
+If status is specified its value overrides the above calculations.
+\end_layout
+
+\begin_layout Subsection
+Rolling up Runs
+\end_layout
+
+\begin_layout Standard
+To roll up a number of tests in a sequence of runs to a single run use the
+ -rollup command.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest -rollup :sysname ubuntu :fsname nfs :datapath none :runname rollup_ww38
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+All keys must be specified and the runname is the name of the run that will
+ be created.
+ All paths are kept original inside the database.
+ When -remove-runs is used to delete runs the data is not deleted if there
+ are rollups that refer to the data.
+ 
+\end_layout
+
 \begin_layout Section
 Dashboard
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+> dashboard &
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
@@ -1347,6 +1503,12 @@ Dashboard
 \end_layout
 
 \begin_layout Standard
+Pushing one of the buttons on the main dashboard will bring up the test
+ specific dashboard.
+ Values are updated in semi-real time as the test runs.
+\end_layout
+
+\begin_layout Standard
 \begin_inset Graphics
 	filename dashboard-test.png
 	scale 80
@@ -1354,6 +1516,37 @@ Dashboard
 \end_inset
 
 
+\end_layout
+
+\begin_layout Section
+Generating an OpenDocument Spreadsheet from the Database
+\end_layout
+
+\begin_layout Standard
+And OpenDocument multi-paned spreadsheet can be generated from the megatest.db
+ file by running -extract-ods
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest -extract-ods results.ods :runname % 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+You can optionally specify the keys for your database to limit further the
+ runs to extract into the spreadsheet.
+ The first sheet contains all the run data and subsequent sheets contain
+ data rolled up for the individual tests.
 \end_layout
 
 \begin_layout Section
