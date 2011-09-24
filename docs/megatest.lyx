@@ -214,19 +214,7 @@ revisionNumber}{v1.25}
 \end_layout
 
 \begin_layout Title
-\begin_inset ERT
-status open
-
-\begin_layout Plain Layout
-
-
-\backslash
-reportTopic
-\end_layout
-
-\end_inset
-
-
+Megatest User Manual
 \end_layout
 
 \begin_layout Author
@@ -907,6 +895,8 @@ Note: Using csh is NOT recommended.
 \end_layout
 
 \begin_layout Standard
+\noindent
+\align left
 \begin_inset listings
 inline false
 status open
@@ -1208,68 +1198,58 @@ status open
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 #!/bin/tcsh -x
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # run the cpu simulation but now use the environment variable $CPU
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # to select what cpu to run the simulation against
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 $MT_MEGATEST -runstep run_simulation -logpro runsim.logpro "runsim $CPU"
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # As of version 1.07 Megatest automatically converts a status of "0"
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # to "PASS", any other number to "FAIL" and directly uses the value of
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # a string passed in.
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 $MT_MEGATEST -test-status :state COMPLETED :status $?
 \end_layout
@@ -1301,28 +1281,24 @@ status open
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 # testconfig for the "system" test
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 [setup]
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 runscript main.csh
 \end_layout
 
 \begin_layout Plain Layout
 \noindent
-\align left
 
 waiton cpu mem
 \end_layout
