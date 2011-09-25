@@ -225,7 +225,7 @@ Called as " (string-intersperse (argv) " ")))
 	   (runpatt  (args:get-arg "-list-runs"))
 	   (testpatt (args:get-arg "-testpatt"))
 	   (itempatt (args:get-arg "-itempatt"))
-	   (runsdat  (db-get-runs db runpatt))
+	   (runsdat  (db:get-runs db runpatt #f #f '()))
 	   (runs     (db:get-rows runsdat))
 	   (header   (db:get-header runsdat))
 	   (keys     (db-get-keys db))
@@ -265,7 +265,7 @@ Called as " (string-intersperse (argv) " ")))
 			     "\n         rundir:   " (db:test-get-rundir test)
 			     )
 		      ;; Each test
-		      (let ((steps (db-get-test-steps-for-run db (db:test-get-id test))))
+		      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
 			(for-each 
 			 (lambda (step)
 			   (format #t 

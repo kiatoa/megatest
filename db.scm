@@ -241,28 +241,46 @@
 			  (string-intersperse remfields ","))))
     (list keystr header)))
 
+;; WAS db-get-runs FIXME IN REMAINING CODE
+;;
+;; MERGE THIS WITH db:get-runs, accidently wrote it twice
+;;
 ;; replace header and keystr with a call to runs:get-std-run-fields
-(define (db-get-runs db runpatt . count)
+;;
+;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
+;;
+(define (db:get-runs db runpatt count offset keypatts)
   (let* ((res      '())
 	 (keys      (db-get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header    (append (map key:get-fieldname keys)
 			    remfields))
 	 (keystr    (conc (keys->keystr keys) ","
-			  (string-intersperse remfields ","))))
+			  (string-intersperse remfields ",")))
+	 (qrystr    (conc "SELECT " keystr " FROM runs WHERE runname LIKE ? "
+			  ;; Generate: " AND x LIKE 'keypatt' ..."
+			  (if (null? keypatts) ""
+			      (conc " AND "
+				    (string-join 
+				     (map (lambda (keypatt)
+					    (let ((key  (car keypatt))
+						  (patt (cadr keypatt)))
+					      (conc key " LIKE '" patt "'")))
+					  keypatts)
+				     " AND ")))
+			  " ORDER BY event_time DESC "
+			  (if (number? count)
+			      (conc " LIMIT " count)
+			      "")
+			  (if (number? offset)
+			      (conc " OFFSET " offset)
+			      ""))))
+    (debug:print 4 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
      db
-     (conc "SELECT " keystr " FROM runs WHERE runname LIKE ? ORDER BY event_time DESC "
-	   (if (and (not (null? count))
-		    (number? (car count)))
-	       (conc " LIMIT " (car count))
-	       "")
-	   (if (and (> (length count) 1)
-		    (number? (cadr count)))
-	       (conc " OFFSET " (cadr count))
-	       ""))
+     qrystr
      runpatt)
     (vector header res)))
 
@@ -276,27 +294,6 @@
      "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
     numruns))
 
-
-;; replace header and keystr with a call to runs:get-std-run-fields
-;; keypatt: '(("key1" "patt1")("key2" "patt2")...)
-(define (db:get-runs db keys keypatts runpatt)
-  (let* ((res      '())
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header    (append (map key:get-fieldname keys)
-			    remfields))
-	 (keystr    (conc (keys->keystr keys) ","
-			  (string-intersperse remfields ","))))
-    (sqlite3:for-each-row
-     (lambda (a . x) ;; turn all the fields returned into a vector and add to the list
-       (set! res (cons (apply vector a x) res)))
-     db
-     (conc "SELECT " keystr " FROM runs WHERE runname LIKE ? "
-	   (map (lambda (keypatt)
-		  (conc "AND " (car keypatt) " LIKE " (cadr keypatt) " "))
-		keypatts)
-	   "ORDER BY event_time DESC;")
-     runpatt)
-    (vector header res)))
 
 ;; use this one for db-get-run-info
 (define-inline (db:get-row    vec)(vector-ref vec 1))
@@ -678,8 +675,8 @@
 	 (let ((record (hash-table-ref/default 
 			res 
 			(db:step-get-stepname step) 
-			;;        stepname                start end status
-			(vector (db:step-get-stepname step) ""   "" ""     ""))))
+			;;        stepname                start end status    time (needed for sorting)
+			(vector (db:step-get-stepname step) ""   "" ""     "" 0))))
 	   (debug:print 6 "record(before) = " record 
 			"\nid:       " (db:step-get-id step)
 			"\nstepname: " (db:step-get-stepname step)

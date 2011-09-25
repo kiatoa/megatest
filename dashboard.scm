@@ -77,7 +77,7 @@ Misc
 (define dlg      #f)
 (define max-test-num 0)
 (define *keys*   (get-keys   *db*))
-(define dbkeys   (map (lambda (x)(vector-ref x 0))
+(define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
 (define *header*       #f)
 (define *allruns*     '())
@@ -177,8 +177,9 @@ Misc
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
-(define (update-rundat runnamepatt numruns testnamepatt itemnamepatt)
-  (let* ((allruns     (db-get-runs *db* runnamepatt numruns *start-run-offset*))
+;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
+(define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
+  (let* ((allruns     (db:get-runs *db* runnamepatt numruns *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
@@ -523,8 +524,8 @@ Misc
     (begin
         (set! *num-tests* (string->number (or (args:get-arg "-rows")
 					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%" "%"))
-    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%") 8) 20)))
+	(update-rundat "%" *num-runs* "%" "%" '()))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -535,7 +536,13 @@ Misc
   (update-buttons uidat *num-runs* *num-tests*)
   (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 		 (hash-table-ref/default *searchpatts* "test-name" "%")
-		 (hash-table-ref/default *searchpatts* "item-name" "%")))
+		 (hash-table-ref/default *searchpatts* "item-name" "%")
+		 (let ((res '()))
+		   (for-each (lambda (key)
+			       (let ((val (hash-table-ref/default *searchpatts* key #f)))
+				 (if val (set! res (cons (list key val) res)))))
+			     *dbkeys*)
+		   res)))
 
 (cond 
  ((args:get-arg "-run")
@@ -557,7 +564,7 @@ Misc
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
  (else
-  (set! uidat (make-dashboard-buttons *num-runs* *num-tests* dbkeys))
+  (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
