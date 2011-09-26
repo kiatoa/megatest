@@ -594,9 +594,15 @@
 		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs"))
 		   (parent-test (and (not (null? items))(equal? item-path "")))
 		   (single-test (and (null? items) (equal? item-path "")))
-		   (item-test   (not (equal? item-path ""))))
+		   (item-test   (not (equal? item-path "")))
+		   (item-patt   (args:get-arg "-itempatt"))
+		   (patt-match  (if item-patt
+				    (string-match (glob->regexp
+						   (string-translate item-patt "%" "*"))
+						  item-path)
+				    #t)))
 	      (debug:print 3 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	      (if (runs:can-run-more-tests db)
+	      (if (and patt-match (runs:can-run-more-tests db))
 		  (begin
 		    (let loop2 ((ts (db:get-test-info db run-id test-name item-path)) ;; #f)
 				(ct 0))

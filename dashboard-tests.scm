@@ -247,6 +247,13 @@
 			    (let ((tm (db:testmeta-get-record db testname)))
 			      (if tm tm (make-db:testmeta)))
 			    (make-db:testmeta)))
+
+	 (keystring  (string-intersperse 
+		      (map (lambda (keyval)
+			     (conc ":" (car keyval) " " (cadr keyval)))
+			   keydat)
+		      " "))
+	 (item-path  (db:test-get-item-path testdat))
 	 (viewlog    (lambda (x)
 		       (if (file-exists? logfile)
 			   ;(system (conc "firefox " logfile "&"))
@@ -301,7 +308,27 @@
 						    ;(mutex-unlock! mx1)
 						    )))))
 			 lbl))
-	 (store-button store-label))
+	 (store-button store-label)
+	 (command-text-box (iup:textbox #:expand "YES" #:font "Courier New, -10"))
+	 (command-launch-button (iup:button "Execute!" #:action (lambda (x)
+								  (let ((cmd (iup:attribute command-text-box "VALUE")))
+								    (system (conc cmd "  &"))))))
+	 (run-test  (lambda (x)
+		      (iup:attribute-set! 
+		       command-text-box "VALUE"
+		       (conc "megatest -runtests " testname " " keystring " :runname " runname 
+			     " -itempatt " (if (equal? item-path "")
+					       "%" 
+					       item-path)
+			     " > run.log" ))))
+	 (remove-test (lambda (x)
+			(iup:attribute-set!
+			 command-text-box "VALUE"
+			 (conc "megatest -remove-runs " keystring " :runname " runname " -testpatt " testname " -itempatt "
+			       (if (equal? item-path "")
+				   "%"
+				   item-path)
+			       " > clean.log")))))
     (cond
      ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
      ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -319,10 +346,16 @@
 	       (host-info-panel testdat store-label)
 	       ;; The controls
 	       (iup:frame #:title "Actions" 
-			  (iup:hbox 
-			   (iup:button "View Log"    #:action viewlog #:size "120x")
-			   (iup:button "Start Xterm" #:action xterm   #:size "120x")
-			   (iup:button "Close"       #:action (lambda (x)(exit)) #:size "120x")))
+			  (iup:vbox
+			   (iup:hbox 
+			    (iup:button "View Log"    #:action viewlog     #:size "120x")
+			    (iup:button "Start Xterm" #:action xterm       #:size "120x")
+			    (iup:button "Run Test"    #:action run-test    #:size "120x")
+			    (iup:button "Clean Test"  #:action remove-test #:size "120x")
+			    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "120x"))
+			   (apply 
+			    iup:hbox
+			    (list command-text-box command-launch-button))))
 	       (set-fields-panel test-id testdat)
 	       (iup:hbox
 		(iup:frame 
