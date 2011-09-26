@@ -532,17 +532,29 @@ Misc
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
 
+;; Move this stuff to db.scm FIXME
+;;
+(define *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db")))
+(define (db:been-changed)
+  (> (file-modification-time (conc *toppath* "/megatest.db")) *last-db-update-time*))
+(define (db:set-db-update-time)
+  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
+
 (define (run-update x)
   (update-buttons uidat *num-runs* *num-tests*)
-  (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		 (hash-table-ref/default *searchpatts* "test-name" "%")
-		 (hash-table-ref/default *searchpatts* "item-name" "%")
-		 (let ((res '()))
-		   (for-each (lambda (key)
-			       (let ((val (hash-table-ref/default *searchpatts* key #f)))
-				 (if val (set! res (cons (list key val) res)))))
-			     *dbkeys*)
-		   res)))
+  ;; (if (db:been-changed)
+  (begin
+    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		   (hash-table-ref/default *searchpatts* "test-name" "%")
+		   (hash-table-ref/default *searchpatts* "item-name" "%")
+		   (let ((res '()))
+		     (for-each (lambda (key)
+				 (let ((val (hash-table-ref/default *searchpatts* key #f)))
+				   (if val (set! res (cons (list key val) res)))))
+			       *dbkeys*)
+		     res))
+    ; (db:set-db-update-time)
+    ))
 
 (cond 
  ((args:get-arg "-run")

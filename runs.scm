@@ -408,12 +408,12 @@
     (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
 	     (or (not state)(not status)))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status status-in state-in) "\", update your validstates section in megatest.config"))
+	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
     (if testdat
 	(let ((test-id (test:get-id testdat)))
 	  (sqlite3:execute db 
 			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment) VALUES(?,?,?,?,strftime('%s','now'),?);"
-			test-id teststep-name state status (if comment comment "")))
+			test-id teststep-name state-in status-in (if comment comment "")))
 	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
 
 (define (test-get-kill-request db run-id test-name itemdat)

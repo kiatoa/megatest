@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Purpose: run a step, record start and end with exit codes
+#
+# Call like this:
+# mt_runstep stepname command ....
+# 
+# This expects that you have a logpro file named stepname.logpro and must be run
+# inside a test environment (click on xterm button on a test control panel
+# then source megatest.csh (if you are using tcsh) or megatest.sh (if you are using
+# bash, sh or zsh)
+# 
+# Example: copy files
+# mt_runstep copy_files cp $frompath $topath
+#
+# Use a copy_files.logpro file like this:
+# (expect:error in "LogFileBody" = 0 "Any err/error/warn/warning" #/(err|warn)/)
+# 
+stepname=$1;shift
+
+# Theoretically could call megatest directly like the following line but
+# we'll do each individual step so folks can see what is going on.
+#
+# $MT_MEGATEST -runstep $stepname -logpro ${stepname}.logpro "$*" || exit $?
+
+# First, register the start of this step
+$MT_MEGATEST -step $stepname :state start :status n/a 
+
+# Second, run the command (the remaining stuff on the command line after the stepname)
+# We could put the results in a log file for processing but we are relying on logpro...
+# $* 2>&1 ${stepname}.log
+
+# So lets use a pipe to logpro, put the output from logpro into stepname_logpro.log
+$* 2>&1| logpro ${stepname}.logpro ${stepname}.html 2>&1 ${stepname}_logpro.log 
+
+# Finally, log the step completion and exit status
+$MT_MEGATEST -step $stepname :state end :status ${PIPESTATUS[*]}
