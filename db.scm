@@ -675,8 +675,8 @@
 	 (let ((record (hash-table-ref/default 
 			res 
 			(db:step-get-stepname step) 
-			;;        stepname                start end status    time (needed for sorting)
-			(vector (db:step-get-stepname step) ""   "" ""     "" 0))))
+			;;        stepname                start end status    
+			(vector (db:step-get-stepname step) ""   "" ""     ""))))
 	   (debug:print 6 "record(before) = " record 
 			"\nid:       " (db:step-get-id step)
 			"\nstepname: " (db:step-get-stepname step)
