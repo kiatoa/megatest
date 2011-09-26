@@ -320,7 +320,7 @@
 			     " -itempatt " (if (equal? item-path "")
 					       "%" 
 					       item-path)
-			     " > run.log" ))))
+			     " -keepgoing > run.log" ))))
 	 (remove-test (lambda (x)
 			(iup:attribute-set!
 			 command-text-box "VALUE"
