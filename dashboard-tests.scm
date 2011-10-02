@@ -189,7 +189,7 @@
 	     (iup:label "STATE:" #:size "30x")
 	     (let* ((btns  (map (lambda (state)
 				  (let ((btn (iup:button state
-							 #:expand "YES" #:size "70x"
+							 #:expand "YES" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    (db:test-set-state-status-by-id *db* test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
@@ -209,7 +209,7 @@
 	     (iup:label "STATUS:" #:size "30x")
 	     (let* ((btns  (map (lambda (status)
 				  (let ((btn (iup:button status
-							 #:expand "YES" #:size "70x"
+							 #:expand "YES" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    (db:test-set-state-status-by-id *db* test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
@@ -348,11 +348,11 @@
 	       (iup:frame #:title "Actions" 
 			  (iup:vbox
 			   (iup:hbox 
-			    (iup:button "View Log"    #:action viewlog     #:size "120x")
-			    (iup:button "Start Xterm" #:action xterm       #:size "120x")
-			    (iup:button "Run Test"    #:action run-test    #:size "120x")
-			    (iup:button "Clean Test"  #:action remove-test #:size "120x")
-			    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "120x"))
+			    (iup:button "View Log"    #:action viewlog     #:size "80x")
+			    (iup:button "Start Xterm" #:action xterm       #:size "80x")
+			    (iup:button "Run Test"    #:action run-test    #:size "80x")
+			    (iup:button "Clean Test"  #:action remove-test #:size "80x")
+			    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "80x"))
 			   (apply 
 			    iup:hbox
 			    (list command-text-box command-launch-button))))
@@ -369,7 +369,7 @@
 				     #:expand "YES"
 				     #:multiline "YES"
 				     #:font "Courier New, -10"
-				     #:size "100x150")))
+				     #:size "60x100")))
 		   (hash-table-set! widgets "Test Steps" 
 				    (lambda (testdat)
 				      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
@@ -410,7 +410,7 @@
 				      #:expand "YES"
 				      #:multiline "YES"
 				      #:font "Courier New, -10"
-				      #:size "100x150")))
+				      #:size "100x100")))
 		   (hash-table-set! widgets "Test Data"
 				    (lambda (testdat) ;; 
 				      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))

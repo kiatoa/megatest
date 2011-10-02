@@ -121,7 +121,8 @@
 		  (if (and (null? results)
 			   (not (null? tal)))
 		      (loop (car tal)(cdr tal))
-		      (car results)))))))))
+		      (if (null? results) #f
+			  (car results))))))))))
     
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
@@ -801,7 +802,7 @@
 	    (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
 
 	   ;; remove the run if zero tests remain
-	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id"))))
+	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id") #f #f)))
 	     (if (null? remtests) ;; no more tests remaining
 		 (let* ((dparts  (string-split lasttpath "/"))
 			(runpath (conc "/" (string-intersperse 

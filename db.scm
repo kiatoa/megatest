@@ -354,16 +354,16 @@
 (define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
 (define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
 
-(define (db-get-tests-for-run db run-id . params)
-  (let ((res '())
-	(testpatt (if (or (null? params)(not (car params))) "%" (car params)))
-	(itempatt (if (> (length params) 1)(cadr params) "%")))
+(define (db-get-tests-for-run db run-id testpatt itempatt)
+  (let ((res '()))
     (sqlite3:for-each-row 
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn)
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn) res)))
      db 
      "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
-     run-id testpatt (if itempatt itempatt "%"))
+     run-id
+     (if testpatt testpatt "%")
+     (if itempatt itempatt "%"))
     res))
 
 ;; this one is a bit broken BUG FIXME
@@ -534,8 +534,9 @@
 				 #f
 				 s)))) ;; if specified on the input then use, else calculate
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
-	 (debug:print 4 "category: " category ", variable: " variable ", value: " value 
-		      ", expected: " expected ", tol: " tol ", units: " units ", status: " status ", comment: " comment)
+	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
 		  (or (not units)   (equal? expected "")))
@@ -543,12 +544,17 @@
 	       (set! expected new-expected)
 	       (set! tol      new-tol)
 	       (set! units    new-units)))
+
+	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	 ;; calculate status if NOT specified
 	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
 	     (if (number? tol) ;; if tol is a number then we do the standard comparison
-		 (let ((max-val (+ expected tol))
-		       (min-val (- expected tol)))
-		   (set! status (if (and (>=  value min-val)(<= value max-val)) "pass" "fail")))
+		 (let* ((max-val (+ expected tol))
+			(min-val (- expected tol))
+			(result  (and (>=  value min-val)(<= value max-val))))
+		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+		   (set! status (if result "pass" "fail")))
 		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
 		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
 			 ((>)  (if (>  value expected) "pass" "fail"))
@@ -556,6 +562,8 @@
 			 ((>=) (if (>= value expected) "pass" "fail"))
 			 ((<=) (if (<= value expected) "pass" "fail"))
 			 (else (conc "ERROR: bad tol comparator " tol))))))
+	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
 	      test-id category variable value expected tol units (if comment comment "") status)))
      csvlist)))
@@ -720,7 +728,7 @@
   (if (null? waiton)
       '()
       (let* ((unmet-pre-reqs '())
-	     (tests           (db-get-tests-for-run db run-id))
+	     (tests           (db-get-tests-for-run db run-id #f #f))
 	     (result         '()))
 	(for-each (lambda (waitontest-name)
 		    (let ((ever-seen #f))

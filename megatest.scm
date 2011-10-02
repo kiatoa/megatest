@@ -390,7 +390,7 @@ Called as " (string-intersperse (argv) " ")))
 	    (setenv "MT_ITEM_INFO" (conc itemdat))
 	    (setenv "MT_RUNNAME"   runname)
 	    (setenv "MT_MEGATEST"  megatest)
-	    (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path))
+	    (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	    
 	    (if (not (setup-for-run))
 		(begin

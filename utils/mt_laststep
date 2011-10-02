@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ $MT_CMDINFO == "" ];then
+  echo "ERROR: $0 should be run within a megatest test environment"
+  exit
+fi
+
 # Purpose: run a step, record start and end with exit codes, if sucessful
 # update test status with PASS, else update with FAIL
 #

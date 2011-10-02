@@ -1,4 +1,4 @@
-;;======================================================================
+k;;======================================================================
 ;; Copyright 2006-2011, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -219,8 +219,18 @@ Misc
   
 (define blank-line-rx (regexp "^\\s*$"))
 
+(define (run-item-name->vectors lst)
+  (map (lambda (x)
+	 (let ((splst (string-split x "("))
+	       (res   (vector "" "")))
+	   (vector-set! res 0 (car splst))
+	   (if (> (length splst) 1)
+	       (vector-set! res 1 (car (string-split (cadr splst) ")"))))
+	   res))
+       lst))
+
 (define (collapse-rows inlst)
-  (let ((newlst (filter (lambda (x)
+  (let* ((newlst (filter (lambda (x)
 			  (let* ((tparts    (string-split x "("))
 				 (basetname (if (null? tparts) x (car tparts))))
 					;(print "x " x " tparts: " tparts " basetname: " basetname)
@@ -231,19 +241,33 @@ Misc
 					;(print "Removing " basetname " from items")
 			      #f)
 			     (else #t))))
-			inlst)))
-    ;; special sort to push the test(item) to after test
-    (sort newlst (lambda (a b)
-		   (let* ((partsa (string-split a "("))
-			  (partsb (string-split b "("))
-			  (lena   (length partsa))
-			  (lenb   (length partsb)))
-		     (if (or (and (eq? lena 1)(> lenb 1))
-			     (and (eq? lenb 1)(> lena 1)))
-			 (if (equal? (car partsa)(car partsb)) ;; same test
-			     (> lenb lena)
-			     #t)
-			 #t))))))
+			inlst))
+	 (vlst  (run-item-name->vectors newlst))
+	 ;; sort by second field
+	 (vlst-s1 (sort vlst (lambda (a b)
+			       (let ((astr (vector-ref a 1))
+				     (bstr (vector-ref b 1)))
+				 (if (string=? astr "") #f #t)))))
+			;; (>= (string-length (vector-ref a 1))(string-length (vector-ref b 1))))))
+	 (vlst-s2 (sort vlst-s1 (lambda (a b)
+				  (string>= (vector-ref a 0)(vector-ref b 0))))))
+    (map (lambda (x)
+	   (if (equal? (vector-ref x 1) "")
+	       (vector-ref x 0)
+	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
+	 vlst-s2)))
+    
+    ;; (sort newlst (lambda (a b)
+    ;;     	   (let* ((partsa (string-split a "("))
+    ;;     		  (partsb (string-split b "("))
+    ;;     		  (lena   (length partsa))
+    ;;     		  (lenb   (length partsb)))
+    ;;     	     (if (or (and (eq? lena 1)(> lenb 1))
+    ;;     		     (and (eq? lenb 1)(> lena 1)))
+    ;;     		 (if (equal? (car partsa)(car partsb)) ;; same test
+    ;;     		     (> lenb lena)
+    ;;     		     #t)
+    ;;     		 #t))))))
 			     
 (define (update-labels uidat)
   (let* ((rown    0)
