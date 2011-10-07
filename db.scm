@@ -25,6 +25,16 @@
 	       (havekeys (> (length keys) 0))
 	       (keystr   (keys->keystr keys))
 	       (fieldstr (keys->key/field keys)))
+	  (for-each (lambda (key)
+		      (let ((keyn (vector-ref key 0)))
+			(if (member (string-downcase keyn)
+				     (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
+					   "pass_count"))
+			    (begin
+			      (print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table")
+			      (system (conc "rm -f " dbpath))
+			      (exit 1)))))
+		    keys)
 	  ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
 	  (for-each (lambda (key)
@@ -82,7 +92,18 @@
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
+	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+                                test_id INTEGER,
+                                category TEXT DEFAULT '',
+                                variable TEXT,
+	                        value REAL,
+	                        expected REAL,
+	                        tol REAL,
+                                units TEXT,
+                                comment TEXT DEFAULT '',
+                                status TEXT DEFAULT 'n/a',
+                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
                                      owner       TEXT DEFAULT '',
@@ -104,9 +125,7 @@
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
-	  (patch-db db)
-	  (patch-db db) ;; yes, need to do it twice BUG FIXME
-	  ;; Must do this *after* running patch db
+	  ;; Must do this *after* running patch db !! No more. 
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  ))
     db))
