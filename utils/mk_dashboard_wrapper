@@ -1,0 +1,11 @@
+#!/bin/bash
+
+prefix=$1
+echo "#!/bin/bash"
+if [ $LD_LIBRARY_PATH != "" ];then
+  echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+fi
+
+dboard=`realpath $prefix/bin/dboard`
+
+echo "$dboard \$*"

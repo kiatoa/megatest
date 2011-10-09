@@ -41,7 +41,9 @@ $(HELPERS)  : utils/mt_*
 
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dashboard $(FILES)
-	cp dashboard $(PREFIX)/bin/dboard
+	cp dboard $(PREFIX)/bin/dboard
+	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
+	chmod a+x $(PREFIX)/bin/dashboard
 	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
