@@ -6,7 +6,7 @@ SRCFILES = common.scm items.scm launch.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm
 
-GUISRCF  = dashboard.scm dboard.scm dashboard-tests.scm
+GUISRCF  = dashboard.scm dashboard-tests.scm
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
