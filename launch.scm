@@ -13,8 +13,9 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64)
+(use regex regex-case base64 sqlite3)
 (import (prefix base64 base64:))
+(import (prefix sqlite3 sqlite3:))
 
 (declare (unit launch))
 (declare (uses common))
@@ -162,6 +163,7 @@
     (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set 
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
+    (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
 			    (hash-table-ref/default *configdat* "env-override" '())))
 	   (testprevvals   (alist->env-vars

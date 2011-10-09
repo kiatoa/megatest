@@ -13,12 +13,22 @@
 ;; Test info panel
 ;;======================================================================
 
+(use format)
+(require-library iup)
+(import (prefix iup iup:))
+
+(use canvas-draw)
+
+(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(import (prefix sqlite3 sqlite3:))
+
 (declare (unit dashboard-tests))
 (declare (uses common))
 (declare (uses db))
-(declare (uses dboard))
 
 (include "common_records.scm")
+(include "db_records.scm")
+(include "run_records.scm")
 
 (define (test-info-panel testdat store-label widgets)
   (iup:frame 

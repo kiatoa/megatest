@@ -13,7 +13,7 @@
 ;; Database access
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit db))

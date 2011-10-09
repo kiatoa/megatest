@@ -27,11 +27,12 @@ k;;======================================================================
 (declare (uses process))
 (declare (uses launch))
 (declare (uses runs))
-(declare (uses dboard))
 (declare (uses dashboard-tests))
 (declare (uses megatest-version))
 
 (include "common_records.scm")
+(include "db_records.scm")
+(include "run_records.scm")
 
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest

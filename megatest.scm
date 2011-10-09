@@ -10,6 +10,10 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64)
+(import (prefix sqlite3 sqlite3:))
+(import (prefix base64 base64:))
+
 (declare (uses common))
 (declare (uses megatest-version))
 (declare (uses margs))
@@ -17,6 +21,8 @@
 (declare (uses launch))
 
 (include "common_records.scm")
+(include "key_records.scm")
+(include "db_records.scm")
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest

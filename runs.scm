@@ -10,7 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -22,6 +22,7 @@
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
+(include "run_records.scm")
 
 ;; register a test run with the db
 (define (register-run db keys) ;; test-name)
@@ -386,23 +387,10 @@
 ;;      run-id test-name item-path)
 ;;     res))
 
-(define-inline (test:get-id vec)       (vector-ref vec 0))
-(define-inline (test:get-run_id vec)   (vector-ref vec 1))
-(define-inline (test:get-test-name vec)(vector-ref vec 2))
-(define-inline (test:get-state vec)    (vector-ref vec 3))
-(define-inline (test:get-status vec)   (vector-ref vec 4))
-(define-inline (test:get-item-path vec)(vector-ref vec 5))
-
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
-
-(define-inline (test:test-get-fullname test)
-   (conc (db:test-get-testname test)
-	 (if (equal? (db:test-get-item-path test) "")
-	     ""
-	     (conc "(" (db:test-get-item-path test) ")"))))
 
 (define (check-valid-items class item)
   (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))

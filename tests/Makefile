@@ -12,8 +12,8 @@ test :
 	make runall
 
 dashboard :
-	cd ../;make dashboard
-	../dashboard &
+	cd ../;make dboard
+	../dboard &
 
 remove :
 	(cd ../;make);../megatest -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
