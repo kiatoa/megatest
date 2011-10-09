@@ -13,6 +13,11 @@
 ;; 		     (temperature "cool medium hot")
 ;; 		     (season      "summer winter fall spring")))
 
+(declare (unit items))
+(declare (uses common))
+
+(include "common_records.scm")
+
 ;; Mostly worked = puts out all combinations?
 (define (process-itemlist-try1 curritemkey itemlist)
   (let loop ((hed (car itemlist))
@@ -115,9 +120,6 @@
             ;; Nope, not now, return null as of 6/6/2011
 		
   
-(define-inline (item-list->path itemdat)
-  (string-intersperse  (map cadr itemdat) "/"))
-
 ;; (pp (item-assoc->item-list itemdat))
 
 

@@ -8,6 +8,8 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
+(declare (unit server))
+
 ;; procstr is the name of the procedure to be called as a string
 (define (server:autoremote procstr params)
   (handle-exceptions

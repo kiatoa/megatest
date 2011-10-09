@@ -13,6 +13,13 @@
 ;; Config file handling
 ;;======================================================================
 
+(use regex regex-case)
+(declare (unit configf))
+(declare (uses common))
+(declare (uses process))
+
+(include "common_records.scm")
+
 ;; return list (path fullpath configname)
 (define (find-config configname)
   (let* ((cwd (string-split (current-directory) "/")))

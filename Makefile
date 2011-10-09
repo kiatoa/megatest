@@ -1,14 +1,34 @@
 
 PREFIX=.
 
-FILES=$(shell ls *.scm)
+SRCFILES = common.scm items.scm launch.scm \
+           ods.scm runconfig.scm server.scm configf.scm \
+           db.scm keys.scm margs.scm megatest-version.scm \
+           process.scm runs.scm
+
+GUISRCF  = dashboard.scm dboard.scm dashboard-tests.scm
+
+OFILES   = $(SRCFILES:%.scm=%.o)
+GOFILES  = $(GUISRCF:%.scm=%.o)
+
 HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep)
 
-megatest: $(FILES)
-	csc megatest.scm 
+all : megatest dashboard
 
-dashboard: $(FILES)
-	csc dashboard.scm
+megatest: $(OFILES) megatest.o
+	csc $(OFILES) megatest.o -o megatest
+
+dashboard: $(OFILES) $(GOFILES)
+	csc $(OFILES) $(GOFILES) -o dashboard
+
+db.o launch.o runs.o : db_records.scm
+
+keys.o db.o runs.o launch.o  : key_records.scm
+
+$(OFILES) $(GOFILES) : common_records.scm 
+
+%.o : %.scm
+	csc -c $<
 
 $(PREFIX)/bin/megatest : megatest
 	@echo Installing to PREFIX=$(PREFIX), use ^C to cancel and change

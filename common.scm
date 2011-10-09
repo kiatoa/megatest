@@ -17,8 +17,12 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
+(declare (unit common))
+
+(include "common_records.scm")
+
 ;; (require-library margs)
-(include "margs.scm")
+;; (include "margs.scm")
 
 (define getenv get-environment-variable)
 
@@ -36,26 +40,17 @@
 (define *verbosity*   1)
 (define *rpc:listener* #f) ;; if set up for server communication this will hold the tcp port
 
-(define-inline (get-with-default val default)
+(define (get-with-default val default)
   (let ((val (args:get-arg val)))
     (if val val default)))
 
-(define-inline (assoc/default key lst . default)
+(define (assoc/default key lst . default)
   (let ((res (assoc key lst)))
     (if res (cadr res)(if (null? default) #f (car default)))))
 
 ;;======================================================================
 ;; Misc utils
 ;;======================================================================
-
-(define-inline (debug:print n . params)
-  (if (<= n *verbosity*)
-      (apply print params)))
-
-;; if a value is printable (i.e. string or number) return the value
-;; else return an empty string
-(define-inline (printable val)
-  (if (or (number? val)(string? val)) val ""))
 
 ;; convert stuff to a number if possible
 (define (any->number val)

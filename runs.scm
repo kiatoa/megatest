@@ -10,6 +10,19 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
+(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(import (prefix sqlite3 sqlite3:))
+
+(declare (unit runs))
+(declare (uses db))
+(declare (uses common))
+(declare (uses items))
+(declare (uses runconfig))
+
+(include "common_records.scm")
+(include "key_records.scm")
+(include "db_records.scm")
+
 ;; register a test run with the db
 (define (register-run db keys) ;; test-name)
   (let* ((keystr    (keys->keystr keys))

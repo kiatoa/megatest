@@ -13,6 +13,18 @@
 ;;
 ;;======================================================================
 
+(use regex regex-case base64)
+(import (prefix base64 base64:))
+
+(declare (unit launch))
+(declare (uses common))
+(declare (uses configf))
+(declare (uses db))
+
+(include "common_records.scm")
+(include "key_records.scm")
+(include "db_records.scm")
+
 (define (setup-for-run)
   (set! *configinfo* (find-and-read-config (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))

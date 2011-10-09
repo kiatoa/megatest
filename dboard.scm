@@ -13,21 +13,23 @@
 (require-library iup)
 (import (prefix iup iup:))
 
+(declare (unit dboard))
+(declare (uses common))
+(declare (uses db))
+(declare (uses margs))
+(declare (uses keys))
+(declare (uses configf))
+(declare (uses process))
+(declare (uses launch))
+(declare (uses runs))
+
+(include "common_records.scm")
+
 ;; (use canvas-draw)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 
 (import (prefix sqlite3 sqlite3:))
-
-(include "margs.scm")
-(include "keys.scm")
-(include "items.scm")
-(include "db.scm")
-(include "configf.scm")
-(include "process.scm")
-(include "launch.scm")
-(include "runs.scm")
-(include "gui.scm")
 
 (define help "
 Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest

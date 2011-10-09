@@ -7,6 +7,9 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
+(declare (unit margs))
+(declare (uses common))
+
 (define args:arg-hash (make-hash-table))
 
 (define (args:get-arg arg . default)

@@ -2,6 +2,14 @@
 ;; read a config file, loading only the section pertinent
 ;; to this run field1val/field2val/field3val ...
 ;;======================================================================
+
+(use format)
+
+(declare (unit runconfig))
+(declare (uses common))
+
+(include "common_records.scm")
+
 (define (setup-env-defaults db fname run-id . already-seen)
   (let* ((keys    (get-keys db))
 	 (keyvals (get-key-vals db run-id))

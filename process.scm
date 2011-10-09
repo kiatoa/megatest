@@ -13,6 +13,9 @@
 ;; Process convience utils
 ;;======================================================================
 
+(declare (unit process))
+(declare (uses common))
+
 (define (cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions

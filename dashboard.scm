@@ -16,21 +16,22 @@ k;;======================================================================
 (use canvas-draw)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
-
 (import (prefix sqlite3 sqlite3:))
 
-(include "common.scm")
-(include "margs.scm")
-(include "keys.scm")
-(include "items.scm")
-(include "db.scm")
-(include "configf.scm")
-(include "process.scm")
-(include "launch.scm")
-(include "runs.scm")
-(include "gui.scm")
-(include "dashboard-tests.scm")
-(include "megatest-version.scm")
+(declare (uses common))
+(declare (uses margs))
+(declare (uses keys))
+(declare (uses items))
+(declare (uses db))
+(declare (uses configf))
+(declare (uses process))
+(declare (uses launch))
+(declare (uses runs))
+(declare (uses dboard))
+(declare (uses dashboard-tests))
+(declare (uses megatest-version))
+
+(include "common_records.scm")
 
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest

@@ -12,6 +12,14 @@
 ;;======================================================================
 ;; Test info panel
 ;;======================================================================
+
+(declare (unit dashboard-tests))
+(declare (uses common))
+(declare (uses db))
+(declare (uses dboard))
+
+(include "common_records.scm")
+
 (define (test-info-panel testdat store-label widgets)
   (iup:frame 
    #:title "Test Info" ; #:expand "YES"

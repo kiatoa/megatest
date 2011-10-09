@@ -12,9 +12,14 @@
 ;; Run keys, these are used to hierarchially organise tests and run areas
 ;;======================================================================
 
+(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(import (prefix sqlite3 sqlite3:))
 
-(define-inline (key:get-fieldname key)(vector-ref key 0))
-(define-inline (key:get-fieldtype key)(vector-ref key 1))
+(declare (unit keys))
+(declare (uses common))
+
+(include "key_records.scm")
+(include "common_records.scm")
 
 (define (get-keys db)
   (let ((keys '())) ;; keys are vectors <fieldname,type>
@@ -59,12 +64,6 @@
 
 (define (keys->keystr keys) ;; => key1,key2,key3,additiona1, ...
   (string-intersperse (map key:get-fieldname keys) ","))
-
-(define-inline (keys->valslots keys) ;; => ?,?,? ....
-  (string-intersperse (map (lambda (x) "?") keys) ","))
-
-(define-inline (keys->key/field keys . additional)
-  (string-join (map (lambda (k)(conc (key:get-fieldname k) " " (key:get-fieldtype k)))(append keys additional)) ","))
 
 (define (args:usage . a) #f)
 

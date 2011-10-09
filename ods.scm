@@ -8,6 +8,8 @@
 ;;  PURPOSE
 
 (use csv-xml)
+(declare (unit ods))
+(declare (uses common))
 
 (define ods:dirs
   '("Configurations2"

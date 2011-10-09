@@ -7,8 +7,16 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
-(include "common.scm")
-(include "megatest-version.scm")
+;; (include "common.scm")
+;; (include "megatest-version.scm")
+
+(declare (uses common))
+(declare (uses megatest-version))
+(declare (uses margs))
+(declare (uses runs))
+(declare (uses launch))
+
+(include "common_records.scm")
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -153,16 +161,6 @@ Called as " (string-intersperse (argv) " ")))
     (begin
       (print help)
       (exit)))
-
-(include "keys.scm")
-(include "items.scm")
-(include "db.scm")
-(include "configf.scm")
-(include "process.scm")
-(include "launch.scm")
-(include "runs.scm")
-(include "runconfig.scm")
-(include "ods.scm")
 
 (define *didsomething* #f)
 
