@@ -822,6 +822,15 @@ dashboard &
 \end_layout
 
 \begin_layout Section
+Choose Flow or Unstructured Run?
+\end_layout
+
+\begin_layout Standard
+A flow is a structured and specifically sequenced set of tests.
+ See the Flows chapter to understand the difference.
+\end_layout
+
+\begin_layout Section
 How to Write Tests
 \end_layout
 
@@ -1523,6 +1532,142 @@ You can optionally specify the keys for your database to limit further the
  runs to extract into the spreadsheet.
  The first sheet contains all the run data and subsequent sheets contain
  data rolled up for the individual tests.
+\end_layout
+
+\begin_layout Section
+Flows
+\end_layout
+
+\begin_layout Standard
+A flow specifies the tests to run, the order and dependencies and is managed
+ by a running megatest process.
+\end_layout
+
+\begin_layout Section
+Flow Specification and Running
+\end_layout
+
+\begin_layout Subsection
+Write your flow file
+\end_layout
+
+\begin_layout Standard
+flows/<flowname>.config
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+# Flow: <flowname>
+\end_layout
+
+\begin_layout Plain Layout
+
+[flowconfig]
+\end_layout
+
+\begin_layout Plain Layout
+
+# turn on item level dependencies
+\end_layout
+
+\begin_layout Plain Layout
+
+itemdeps on
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+[flowsteps]
+\end_layout
+
+\begin_layout Plain Layout
+
+# <testname>[,<predecessor>]
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# Run the test "copydata"
+\end_layout
+
+\begin_layout Plain Layout
+
+copydata
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# Run the test "setup" after copydata completes with PASS, WARN or WAIVE
+\end_layout
+
+\begin_layout Plain Layout
+
+setup,copydata
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+# once the test "setup" completes successfully run sim1, sim2 and sim3
+\end_layout
+
+\begin_layout Plain Layout
+
+sim1,setup
+\end_layout
+
+\begin_layout Plain Layout
+
+sim2,setup
+\end_layout
+
+\begin_layout Plain Layout
+
+sim3,setup
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Run the flow
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest -runflow <flowname> :FIELD1 val1 :FIELD2 val2 :runname wk32.4
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section
