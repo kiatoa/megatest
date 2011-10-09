@@ -36,6 +36,11 @@
 ;; now are
 ;; stepname {VAR=first,second,third ...} command ...
 
+;; given an exit code and whether or not logpro was used calculate OK/BAD
+;; return #t if we are ok, #f otherwise
+(define (steprun-good? logpro exitcode)
+  (or (eq? exitcode 0)
+      (and logpro (eq? exitcode 2))))
 
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
@@ -122,7 +127,8 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t)) ;; FIXME??? is allow-system ok here?
-					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
+					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
+					    (db         (open-db)))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -137,11 +143,14 @@
 							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
 							(stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
 							(stepcmd   (list-ref stepparts 3))
-							(script   "#!/bin/bash\n")) ;; yep, we depend on bin/bash FIXME!!!
+							(script   "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!
+							(logpro-used #f))
 						   ;; NB// can safely assume we are in test-area directory
 						   (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 								" stepparms: " stepparms " stepcmd: " stepcmd)
 						   
+						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
+
 						   ;; first source the previous environment
 						   (if (and prevstep (file-exists? prevstep))
 						       (set! script (conc script "source .ezsteps/" prevstep ".sh")))
@@ -151,6 +160,7 @@
 
 						   (debug:print 4 "script: " script)
 
+						   (teststep-set-status! db run-id test-name stepname "start" "-" itemdat #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -164,8 +174,19 @@
 								       (begin
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
-								   )))
-						   (if (not (null? tal))
+								   ))
+						     (teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f)
+						     (cond
+						      ;; WARN from logpro
+						      ((and (eq? (vector-ref exit-info 1) 2) logpro-used)
+						       (test-set-status! db run-id test-name "COMPLETE" "WARN" itemdat "Logpro warning found" #f))
+						      ((eq? (vector-ref exit-info 1) 0)
+						       (test-set-status! db run-id test-name "COMPLETE" "PASS" itemdat #f #f))
+						      (else
+						       (test-set-status! db run-id test-name "COMPLETE" "FAIL" itemdat (conc "Failed at step " stepname) #f)))
+						     )
+						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
+							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
 					     (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
 		 (monitorjob   (lambda ()

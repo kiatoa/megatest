@@ -3,6 +3,8 @@
 [ezsteps]
 lookittmp   ls /tmp
 lookithome  ls /home
+lookitnada  ls /nada
+lookitusr   ls /usr
 
 [test_meta]
 author matt
