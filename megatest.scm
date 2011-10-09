@@ -91,6 +91,7 @@ Misc
   -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
   -update-meta            : update the tests metadata for all tests
   -extract-ods            : extract an open document spreadsheet from the database
+  -env2file fname         : write the environment to fname.csh and fname.sh
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
@@ -139,6 +140,7 @@ Called as " (string-intersperse (argv) " ")))
 			":units"
 			;; misc
 			"-extract-ods"
+			"-env2file"
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"
@@ -179,6 +181,15 @@ Called as " (string-intersperse (argv) " ")))
 		   ((args:get-arg "-v")    2)
 		   ((args:get-arg "-q")    0)
 		   (else                   1)))
+
+;;======================================================================
+;; Misc general calls
+;;======================================================================
+
+(if (args:get-arg "-env2file")
+    (begin
+      (save-environment-as-files (args:get-arg "-env2file"))
+      (set! *didsomething* #t)))
 
 ;;======================================================================
 ;; Remove old run(s)

@@ -53,12 +53,16 @@ $MT_MEGATEST -step $stepname :state end :status $runstatus
 
 if [ $runstatus -ne 0 ]; then
     finalstatus=FAIL
+    exitstatus=$runstatus
 elif [ $logprostatus -eq 0 ]; then
     finalstatus=PASS
+    exitstatus=$logprostatus
 elif [ $logprostatus -eq 2 ]; then
     finalstatus=WARN
+    exitstatus=0
 else 
     finalstatus=FAIL
+    exitstatus=1
 fi
 
 # test ${logprostatus} -eq 0 && finalstatus="PASS"
@@ -68,3 +72,5 @@ fi
 
 # Set the final test status
 $MT_MEGATEST -test-status :state COMPLETED :status $finalstatus
+
+exit $exitstatus

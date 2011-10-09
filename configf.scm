@@ -37,7 +37,7 @@
   (let ((newalist (filter (lambda (x)(not (equal? key (car x)))) alist)))
     (append newalist (list (list key val)))))
 
-;; read a config file, returns two level hierarchial hash-table,
+;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
 (define (read-config path ht allow-system)
   (if (not (file-exists? path))

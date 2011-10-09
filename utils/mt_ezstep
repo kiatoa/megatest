@@ -1,0 +1,42 @@
+#!/bin/bash -x
+
+if [ "$MT_CMDINFO" == "" ];then
+  echo "ERROR: $0 should be run within a megatest test environment"
+  exit
+fi
+
+# Purpose: This is for the [ezsteps] secton in your testconfig file.
+#   DO NOT USE IN YOUR SCRIPTS!
+#
+# Call like this:
+# mt_ezstep stepname command ....
+# 
+stepname=$1;shift
+command=$*
+
+# if a logpro file exists then use it otherwise just run the command, nb// was using 2>&1
+if [ -e ${stepname}.logpro ];then
+   $command 2>&1| logpro ${stepname}.logpro ${stepname}.html &> ${stepname}.log 
+   allstatus=(${PIPESTATUS[0]} ${PIPESTATUS[1]})
+   runstatus=${allstatus[0]}
+   logprostatus=${allstatus[1]}
+else
+   $command &> ${stepname}.log
+   runstatus=$?
+   logprostatus=$runstatus
+fi
+
+# If the test exits with non-zero, we will record FAIL even if logpro
+# says it is a PASS
+
+if [ $runstatus -ne 0 ]; then
+    exitstatus=$runstatus
+elif [ $logprostatus -eq 0 ]; then
+    exitstatus=$logprostatus
+elif [ $logprostatus -eq 2 ]; then
+    exitstatus=0
+else 
+    exitstatus=1
+fi
+$MT_MEGATEST -env2file .ezsteps/${stepname}
+exit $exitstatus

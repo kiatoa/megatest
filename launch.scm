@@ -13,7 +13,7 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3)
+(use regex regex-case base64 sqlite3 srfi-18)
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -26,6 +26,17 @@
 (include "key_records.scm")
 (include "db_records.scm")
 
+;;======================================================================
+;; ezsteps
+;;======================================================================
+
+;; ezsteps were going to be coded as
+;; stepname[,predstep1,predstep2 ...] [{VAR1=first,second,third}] command to execute
+;;   BUT
+;; now are
+;; stepname {VAR=first,second,third ...} command ...
+
+
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
     (setenv "MT_CMDINFO" encoded-cmd)
@@ -34,6 +45,7 @@
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
+	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
@@ -41,7 +53,7 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
-	       (fullrunscript (conc testpath "/" runscript))
+	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
 	       (db        #f))
 	  (debug:print 2 "Exectuing " test-name " on " (get-host-name))
 	  (change-directory testpath)
@@ -69,7 +81,7 @@
 	  (test-set-status! db run-id test-name "REMOTEHOSTSTART" "n/a" itemdat (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
-	      (if (not (file-execute-access? fullrunscript))
+	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
 		  (system (conc "chmod ug+x " fullrunscript))))
 	  ;; We are about to actually kick off the test
 	  ;; so this is a good place to remove the records for 
@@ -83,26 +95,79 @@
 
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
-		 (exit-info    (make-vector 3))
+		 (exit-info    (vector #t #t #t))
 		 (job-thread   #f)
 		 (runit        (lambda ()
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 (let ((pid (process-run fullrunscript)))
-				   (let loop ((i 0))
-				     (let-values
-				      (((pid-val exit-status exit-code) (process-wait pid #t)))
-				      (mutex-lock! m)
-				      (vector-set! exit-info 0 pid)
-				      (vector-set! exit-info 1 exit-status)
-				      (vector-set! exit-info 2 exit-code)
-				      (mutex-unlock! m)
-				      (if (eq? pid-val 0)
-					  (begin
-					    (thread-sleep! 2)
-					    (loop (+ i 1)))
-					  ))))))
+				 
+				 ;; if there is a runscript do it first
+				 (if fullrunscript
+				     (let ((pid (process-run fullrunscript)))
+				       (let loop ((i 0))
+					 (let-values
+					  (((pid-val exit-status exit-code) (process-wait pid #t)))
+					  (mutex-lock! m)
+					  (vector-set! exit-info 0 pid)
+					  (vector-set! exit-info 1 exit-status)
+					  (vector-set! exit-info 2 exit-code)
+					  (mutex-unlock! m)
+					  (if (eq? pid-val 0)
+					      (begin
+						(thread-sleep! 2)
+						(loop (+ i 1)))
+					      )))))
+				 ;; then, if runscript ran ok (or did not get called)
+				 ;; do all the ezsteps (if any)
+				 (if ezsteps
+				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t)) ;; FIXME??? is allow-system ok here?
+					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
+				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
+				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
+				       (if (not (> (length ezstepslst) 0))
+					   (debug:print 0 "ERROR: ezsteps defined but ezstepslst is zero length")
+					   (let loop ((ezstep (car ezstepslst))
+						      (tal    (cdr ezstepslst))
+						      (prevstep #f))
+					     ;; check exit-info (vector-ref exit-info 1)
+					     (if (vector-ref exit-info 1)
+						 (let* ((stepname  (car ezstep))  ;; do stuff to run the step
+							(stepinfo  (cadr ezstep))
+							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
+							(stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
+							(stepcmd   (list-ref stepparts 3))
+							(script   "#!/bin/bash\n")) ;; yep, we depend on bin/bash FIXME!!!
+						   ;; NB// can safely assume we are in test-area directory
+						   (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
+								" stepparms: " stepparms " stepcmd: " stepcmd)
+						   
+						   ;; first source the previous environment
+						   (if (and prevstep (file-exists? prevstep))
+						       (set! script (conc script "source .ezsteps/" prevstep ".sh")))
+						   
+						   ;; call the command using mt_ezstep
+						   (set! script (conc script "mt_ezstep " stepname " " stepcmd "\n"))
+
+						   (debug:print 4 "script: " script)
+
+						   ;; now launch
+						   (let ((pid (process-run script)))
+						     (let processloop ((i 0))
+						       (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
+								   (mutex-lock! m)
+								   (vector-set! exit-info 0 pid)
+								   (vector-set! exit-info 1 exit-status)
+								   (vector-set! exit-info 2 exit-code)
+								   (mutex-unlock! m)
+								   (if (eq? pid-val 0)
+								       (begin
+									 (thread-sleep! 2)
+									 (processloop (+ i 1))))
+								   )))
+						   (if (not (null? tal))
+						       (loop (car tal) (cdr tal) stepname)))
+					     (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
 		 (monitorjob   (lambda ()
 				 (let* ((start-seconds (current-seconds))
 					(calc-minutes  (lambda ()
@@ -271,12 +336,13 @@
   (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	(runscript  (config-lookup test-conf   "setup"        "runscript"))
+	(ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
 	(diskspace  (config-lookup test-conf   "requirements" "diskspace"))
 	(memory     (config-lookup test-conf   "requirements" "memory"))
 	(hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
 	(remote-megatest (config-lookup *configdat* "setup" "executable"))
 	(local-megatest  (car (argv)))
-	;; (item-path  (item-list->path itemdat)) test-path is the full path including the item-path
+	(test-sig   (conc "=" test-name ":" (item-list->path itemdat) "=")) ;; test-path is the full path including the item-path
 	(work-area  #f)
 	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	(diskpath   #f)
@@ -305,6 +371,7 @@
 						   (list 'run-id    run-id   )
 						   (list 'itemdat   itemdat  )
 						   (list 'megatest  remote-megatest)
+						   (list 'ezsteps   ezsteps)
 						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '()))
 						   (list 'runname   (args:get-arg ":runname"))
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
@@ -313,11 +380,12 @@
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
-      (set! fullcmd (append launcher (car hosts)(list remote-megatest "-execute" cmdparms))))
+      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
      (launcher
-      (set! fullcmd (append launcher (list remote-megatest "-execute" cmdparms))))
+      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
      (else
-      (set! fullcmd (list remote-megatest "-execute" cmdparms))))
+      (if (not useshell)(debug:print 0 "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
+      (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat #f #f) ;; (if launch-results launch-results "FAILED"))

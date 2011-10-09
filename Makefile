@@ -11,7 +11,7 @@ GUISRCF  = dashboard.scm dashboard-tests.scm
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
 
-HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep)
+HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
 
 all : megatest dboard
 
@@ -32,8 +32,7 @@ $(OFILES) $(GOFILES) : common_records.scm
 	csc -c $<
 
 $(PREFIX)/bin/megatest : megatest
-	@echo Installing to PREFIX=$(PREFIX), use ^C to cancel and change
-	sleep 2 
+	@echo Installing to PREFIX=$(PREFIX)
 	cp megatest $(PREFIX)/bin/megatest
 
 $(HELPERS)  : utils/mt_*
