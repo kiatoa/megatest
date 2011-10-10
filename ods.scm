@@ -7,7 +7,7 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE
 
-(use csv-xml)
+(use csv-xml regex)
 (declare (unit ods))
 (declare (uses common))
 

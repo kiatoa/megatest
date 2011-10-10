@@ -191,10 +191,10 @@ Misc
 	 (states      (hash-table-keys *state-ignore-hash*))
 	 (statuses    (hash-table-keys *status-ignore-hash*)))
     ;; Instead of this mechanism lets try setting number of runs based on "result" below
-    ;; (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
-    ;;     (begin
-    ;;       (set! *last-update* (current-seconds))
-    ;;       (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
+    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
+        (begin
+          (set! *last-update* (current-seconds))
+          (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
     (for-each (lambda (run)
 		(let* ((run-id   (db:get-value-by-header run header "id"))
 		       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses))
@@ -206,7 +206,7 @@ Misc
 	      runs)
     (set! *header*  header)
     (set! *allruns* result)
-    (set! *tot-run-count* (+ 1 (length *allruns*)))
+    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
     maxtests))
 
 (define *collapsed* (make-hash-table))
@@ -433,16 +433,19 @@ Misc
     ;; controls (along bottom)
     (set! controls
 	  (iup:hbox
-	   (iup:frame 
-	    #:title "filter test and items"
+	   (iup:vbox
+	    (iup:frame 
+	     #:title "filter test and items"
+	     (iup:hbox
+	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			   #:action (lambda (obj unk val)
+				      (update-search "test-name" val)))
+	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			   #:action (lambda (obj unk val)
+				      (update-search "item-name" val)))))
 	    (iup:hbox
-	     (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			  #:action (lambda (obj unk val)
-				     (update-search "test-name" val)))
-	     (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			  #:action (lambda (obj unk val)
-				     (update-search "item-name" val)))))
-	   (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	     (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
 	   ;; (iup:button "Down   v" #:action (lambda (obj)(set! *start-test-offset* (if (>= *start-test-offset* (length *alltestnamelst*))(length *alltestnamelst*)(+ *start-test-offset* 1)))))
@@ -463,7 +466,11 @@ Misc
 						(if (eq? val 1)
 						    (hash-table-set! *status-ignore-hash* "WARN" #t)
 						    (hash-table-delete! *status-ignore-hash* "WARN"))))
-	      (iup:toggle "WAIVED"   #:action   (lambda (obj val)
+	      (iup:toggle "CHECK"   #:action   (lambda (obj val)
+                                                  (if (eq? val 1)
+                                                      (hash-table-set! *status-ignore-hash* "CHECK" #t)
+                                                      (hash-table-delete! *status-ignore-hash* "CHECK"))))
+              (iup:toggle "WAIVED"   #:action   (lambda (obj val)
 						  (if (eq? val 1)
 						      (hash-table-set! *status-ignore-hash* "WAIVED" #t)
 						      (hash-table-delete! *status-ignore-hash* "WAIVED"))))

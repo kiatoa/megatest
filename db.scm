@@ -19,6 +19,7 @@
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
+(declare (uses ods))
 
 (include "common_records.scm")
 (include "db_records.scm")
