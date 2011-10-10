@@ -255,7 +255,7 @@ Called as " (string-intersperse (argv) " ")))
 		"/"
 		(db:get-value-by-header run header "runname"))
 	 (let ((run-id (db:get-value-by-header run header "id")))
-	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt)))
+	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt #f #f)))
 	     ;; Each test
 	     (for-each 
 	      (lambda (test)

@@ -135,6 +135,7 @@
                                 units TEXT,
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
+                                type TEXT DEFAULT '',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
 	  ;; Must do this *after* running patch db !! No more. 
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
@@ -208,8 +209,12 @@
                                 status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
        (patch-db))
-     ((< mver megatest-version)
-      (db:set-var db "MEGATEST_VERSION" megatest-version))))))
+      ((< mver 1.27)
+       (db:set-var db "MEGATEST_VERSION" 1.27)
+       (sqlite3:execute db "ALTER TABLE test_data ADD COLUMN type TEXT DEFAULT '';")
+       (patch-db))
+      ((< mver megatest-version)
+       (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
 ;;======================================================================
 ;; meta get and set vars
@@ -349,13 +354,22 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (db-get-tests-for-run db run-id testpatt itempatt)
-  (let ((res '()))
+;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
+;; i.e. these lists define what to NOT show.
+(define (db-get-tests-for-run db run-id testpatt itempatt states statuses)
+  (let ((res '())
+	(states-str   (if (and states (not (null? states)))
+			  (conc " AND state NOT IN ('" (string-intersperse states   "','") "')") ""))
+	(statuses-str (if (and statuses (not (null? statuses)))
+			  (conc " AND status NOT IN ('" (string-intersperse statuses "','") "')") "")))
     (sqlite3:for-each-row 
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn)
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn) res)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? ORDER BY id DESC;"
+     (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn "
+	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? "
+	   states-str statuses-str
+	   " ORDER BY id DESC;")
      run-id
      (if testpatt testpatt "%")
      (if itempatt itempatt "%"))

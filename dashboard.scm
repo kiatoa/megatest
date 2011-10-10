@@ -94,6 +94,8 @@ Misc
 (define *start-test-offset* 0)
 (define *examine-test-dat* (make-hash-table))
 (define *exit-started* #f)
+(define *status-ignore-hash* (make-hash-table))
+(define *state-ignore-hash*  (make-hash-table))
 
 (define *verbosity* (cond
 		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
@@ -185,14 +187,16 @@ Misc
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
-	 (maxtests    0))
+	 (maxtests    0)
+	 (states      (hash-table-keys *state-ignore-hash*))
+	 (statuses    (hash-table-keys *status-ignore-hash*)))
     (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 	(begin
 	  (set! *last-update* (current-seconds))
 	  (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
     (for-each (lambda (run)
 		(let* ((run-id   (db:get-value-by-header run header "id"))
-		       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt))
+		       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses))
 		       (key-vals (get-key-vals *db* run-id)))
 		  (if (> (length tests) maxtests)
 		      (set! maxtests (length tests)))
@@ -426,17 +430,53 @@ Misc
     ;; controls (along bottom)
     (set! controls
 	  (iup:hbox
-	   (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			#:action (lambda (obj unk val)
-				   (update-search "test-name" val)))
-	   (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			#:action (lambda (obj unk val)
-				   (update-search "item-name" val)))
+	   (iup:frame 
+	    #:title "filter test and items"
+	    (iup:hbox
+	     (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			  #:action (lambda (obj unk val)
+				     (update-search "test-name" val)))
+	     (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+			  #:action (lambda (obj unk val)
+				     (update-search "item-name" val)))))
 	   (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
-	   (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
-	   (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
-	   (iup:button "Down   v" #:action (lambda (obj)(set! *start-test-offset* (if (>= *start-test-offset* (length *alltestnamelst*))(length *alltestnamelst*)(+ *start-test-offset* 1)))))
-	   (iup:button "Right ->" #:action (lambda (obj)(set! *start-run-offset*  (if (> *start-run-offset* 0)(- *start-run-offset* 1) 0))))
+	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
+	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
+	   ;; (iup:button "Down   v" #:action (lambda (obj)(set! *start-test-offset* (if (>= *start-test-offset* (length *alltestnamelst*))(length *alltestnamelst*)(+ *start-test-offset* 1)))))
+	   ;; (iup:button "Right ->" #:action (lambda (obj)(set! *start-run-offset*  (if (> *start-run-offset* 0)(- *start-run-offset* 1) 0))))
+	   (iup:frame 
+	    #:title "hide"
+	    (iup:vbox
+	     (iup:hbox
+	      (iup:toggle "PASS"  #:action   (lambda (obj val)
+					       (if (eq? val 1)
+						   (hash-table-set! *status-ignore-hash* "PASS" #t)
+						   (hash-table-delete! *status-ignore-hash* "PASS"))))
+	      (iup:toggle "FAIL"   #:action   (lambda (obj val)
+						(if (eq? val 1)
+						    (hash-table-set! *status-ignore-hash* "FAIL" #t)
+						    (hash-table-delete! *status-ignore-hash* "FAIL"))))
+	      (iup:toggle "WARN"   #:action   (lambda (obj val)
+						(if (eq? val 1)
+						    (hash-table-set! *status-ignore-hash* "WARN" #t)
+						    (hash-table-delete! *status-ignore-hash* "WARN"))))
+	      (iup:toggle "WAIVED"   #:action   (lambda (obj val)
+						  (if (eq? val 1)
+						      (hash-table-set! *status-ignore-hash* "WAIVED" #t)
+						      (hash-table-delete! *status-ignore-hash* "WAIVED")))))
+	     (iup:hbox
+	      (iup:toggle "RUNNING"   #:action   (lambda (obj val)
+						   (if (eq? val 1)
+						       (hash-table-set! *state-ignore-hash* "RUNNING" #t)
+						       (hash-table-delete! *state-ignore-hash* "RUNNING"))))
+	      (iup:toggle "COMPLETED"   #:action   (lambda (obj val)
+						     (if (eq? val 1)
+							 (hash-table-set! *state-ignore-hash* "COMPLETED" #t)
+							 (hash-table-delete! *state-ignore-hash* "COMPLETED"))))
+	      (iup:toggle "KILLED"   #:action   (lambda (obj val)
+						  (if (eq? val 1)
+						      (hash-table-set! *state-ignore-hash* "KILLED" #t)
+						      (hash-table-delete! *state-ignore-hash* "KILLED")))))))
 	   (iup:valuator #:valuechanged_cb (lambda (obj)
 					     (let ((val (inexact->exact (round (string->number (iup:attribute obj "VALUE")))))
 						   (maxruns  *tot-run-count*)) ;;; (+ *num-runs* (length *allruns*))))
