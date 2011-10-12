@@ -35,9 +35,14 @@ $(PREFIX)/bin/megatest : megatest
 	@echo Installing to PREFIX=$(PREFIX)
 	cp megatest $(PREFIX)/bin/megatest
 
-$(HELPERS)  : utils/mt_*
+$(HELPERS) : utils/mt_* 
 	cp $< $@
 	chmod a+x $@
+
+$(PREFIX)/bin/nbfake : utils/nbfake
+	cp $< $@
+	chmod a+x $@
+
 
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dboard $(FILES)
@@ -47,7 +52,7 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
-install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS)
+install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake
 
 bin : 
 	mkdir $(PREFIX)/bin
