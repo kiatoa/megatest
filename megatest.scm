@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -255,7 +255,7 @@ Called as " (string-intersperse (argv) " ")))
 		"/"
 		(db:get-value-by-header run header "runname"))
 	 (let ((run-id (db:get-value-by-header run header "id")))
-	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt #f #f)))
+	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt '() '())))
 	     ;; Each test
 	     (for-each 
 	      (lambda (test)

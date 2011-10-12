@@ -130,7 +130,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db-get-tests-for-run db hed test-name item-path #f #f)))
+		(let ((results (db-get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -168,7 +168,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db-get-tests-for-run db hed test-name item-path #f #f)))
+		(let ((results (db-get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -752,7 +752,7 @@
 						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
 	     (dirs-to-remove (make-hash-table)))
 	 (let* ((run-id (db:get-value-by-header run header "id") )
-		(tests  (db-get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt #f #f))
+		(tests  (db-get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt '() '()))
 		(lasttpath "/does/not/exist/I/hope"))
 
 	   (if (not (null? tests))
@@ -803,7 +803,7 @@
 	    (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
 
 	   ;; remove the run if zero tests remain
-	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id") #f #f #f #f)))
+	   (let ((remtests (db-get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
 	     (if (null? remtests) ;; no more tests remaining
 		 (let* ((dparts  (string-split lasttpath "/"))
 			(runpath (conc "/" (string-intersperse 
@@ -889,7 +889,7 @@
 (define (runs:rollup-run db keys)
   (let* ((new-run-id      (register-run db keys))
 	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%" #f #f))
+	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     ;; index the already saved tests by testname and itempath in curr-tests-hash
     (for-each
@@ -916,7 +916,7 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (db-get-tests-for-run db new-run-id testname item-path #f #f)))
+	 (set! new-testdat (car (db-get-tests-for-run db new-run-id testname item-path '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))

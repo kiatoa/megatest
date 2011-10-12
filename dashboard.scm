@@ -183,7 +183,8 @@ Misc
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
-  (let* ((allruns     (db:get-runs *db* runnamepatt (+ numruns (/ numruns 2)) *start-run-offset* keypatts))
+  (let* ((allruns     (db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+		      *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
@@ -505,7 +506,7 @@ Misc
 						      (hash-table-set! *state-ignore-hash* "KILLED" #t)
 						      (hash-table-delete! *state-ignore-hash* "KILLED")))))))
 	   (iup:valuator #:valuechanged_cb (lambda (obj)
-					     (let ((val (inexact->exact (round (+ 0.5 (string->number (iup:attribute obj "VALUE"))))))
+					     (let ((val (inexact->exact (round (+ 0.0 (string->number (iup:attribute obj "VALUE"))))))
 						   (maxruns  *tot-run-count*)) ;;; (+ *num-runs* (length *allruns*))))
 					       (set! *start-run-offset* val)
 					       (debug:print 3 "maxruns: " maxruns ", val: " val)

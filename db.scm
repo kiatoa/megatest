@@ -357,19 +357,19 @@
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
+;; states and statuses are required to be lists, empty is ok
 (define (db-get-tests-for-run db run-id testpatt itempatt states statuses)
   (let ((res '())
-	(states-str   (if (and states (not (null? states)))
-			  (conc " AND state NOT IN ('" (string-intersperse states   "','") "')") ""))
-	(statuses-str (if (and statuses (not (null? statuses)))
-			  (conc " AND status NOT IN ('" (string-intersperse statuses "','") "')") "")))
+	(states-str    (conc "('" (string-intersperse states   "','") "')"))
+	(statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
+	)
     (sqlite3:for-each-row 
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn)
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn) res)))
      db 
      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn "
-	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? "
-	   states-str statuses-str
+	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
+	   " AND NOT (state in " states-str " AND status IN " statuses-str ") "
 	   " ORDER BY id DESC;")
      run-id
      (if testpatt testpatt "%")
@@ -676,7 +676,7 @@
   (if (null? waiton)
       '()
       (let* ((unmet-pre-reqs '())
-	     (tests           (db-get-tests-for-run db run-id #f #f))
+	     (tests           (db-get-tests-for-run db run-id #f #f '() '()))
 	     (result         '()))
 	(for-each (lambda (waitontest-name)
 		    (let ((ever-seen #f))
