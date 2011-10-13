@@ -2,7 +2,7 @@
 runscript main.sh
 
 [requirements]
-priority 9
+priority 7
 
 [test_meta]
 author matt

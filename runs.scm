@@ -499,7 +499,45 @@
 	      (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
 			   ", max_concurrent_jobs: " max-concurrent-jobs)
 	      #f)))))
+
+(define (test:get-testconfig test-name system-allowed)
+  (let* ((test-path    (conc *toppath* "/tests/" test-name))
+	 (test-configf (conc test-path "/testconfig"))
+	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
+    (if testexists
+	(read-config test-configf #f system-allowed)
+	#f)))
   
+;; sort tests by priority and waiton
+;; Move test specific stuff to a test unit FIXME one of these days
+(define (tests:sort-by-priority-and-waiton test-names)
+  (let ((testdetails   (make-hash-table))
+	(mungepriority (lambda (priority)
+			 (if priority
+			     (let ((tmp (any->number priority)))
+			       (if tmp tmp (begin (debug:print 0 "ERROR: bad priority value " priority ", using 0") 0)))
+			     0))))
+    (for-each (lambda (test-name)
+		(let ((test-config (test:get-testconfig test-name #f)))
+		  (if test-config (hash-table-set! testdetails test-name test-config))))
+	      test-names)
+    (sort 
+     (hash-table-keys testdetails) ;; avoid dealing with deleted tests, look at the hash table
+     (lambda (a b)
+       (let* ((tconf-a   (hash-table-ref testdetails a))
+	      (tconf-b   (hash-table-ref testdetails b))
+	      (a-waiton   (config-lookup tconf-a "requirements" "waiton"))
+	      (b-waiton   (config-lookup tconf-b "requirements" "waiton"))
+	      (a-priority (mungepriority (config-lookup tconf-a "requirements" "priority")))
+	      (b-priority (mungepriority (config-lookup tconf-b "requirements" "priority"))))
+	 (if (and a-waiton (equal? a-waiton b))
+	     #f ;; cannot have a which is waiting on b happening before b
+	     (if (and b-waiton (equal? b-waiton a))
+		 #t ;; this is the correct order, b is waiting on a and b is before a
+		 (if (> a-priority b-priority)
+		     #t ;; if a is a higher priority than b then we are good to go
+		     #f))))))))
+
 (define (run-tests db test-names)
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys->vallist keys #t))
@@ -525,7 +563,7 @@
 	     ;; add some delay 
 	     ;(sleep 2)
 	     ))
-       test-names)
+       (tests:sort-by-priority-and-waiton test-names))
       ;; (run-waiting-tests db)
       (if (args:get-arg "-keepgoing")
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))
@@ -545,7 +583,7 @@
   (setenv "MT_RUNNAME"   (args:get-arg ":runname"))
   (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
   (change-directory *toppath*)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name))
+  (let* ((test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))

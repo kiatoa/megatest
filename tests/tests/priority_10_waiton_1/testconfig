@@ -2,7 +2,8 @@
 runscript main.sh
 
 [requirements]
-priority 9
+priority 10
+waiton priority_1
 
 [test_meta]
 author matt

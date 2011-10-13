@@ -1,5 +1,8 @@
 [setup]
 
+[requirements]
+priority 10
+
 [ezsteps]
 lookittmp   ls /tmp
 lookithome  ls /home
