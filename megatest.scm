@@ -49,6 +49,8 @@ Run status updates (these require that you are in a test directory
   -m comment              : insert a comment for this test
 
 Run data
+  -target key1/key2/...   : run for key1, key2, etc.
+  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
   :runname                : required, name for this particular test run
   :state                  : required if updating step state; e.g. start, end, completed
   :status                 : required if updating step status; e.g. pass, fail, n/a
@@ -61,8 +63,6 @@ Values and record errors and warnings
   :expected               : value expected (required)
   :tol                    : |value-expect| <= tol (required, can be <, >, >=, <= or number)
   :units                  : name of the units for value, expected_value etc. (optional)
-  :first_err              : record an error message
-  :first_warn             : record a warning message
 
 Arbitrary test data loading
   -load-test-data         : read test specific data for storage in the test_data table
@@ -113,6 +113,8 @@ Called as " (string-intersperse (argv) " ")))
 			"-execute"   ;; run the command encoded in the base64 parameter
 			"-step"
 			":runname"   
+			"-target"
+			"-reqtarg"
 			":item"
 			":runname"   
 			":state"  
@@ -132,8 +134,6 @@ Called as " (string-intersperse (argv) " ")))
 			;; values and messages
 			":category"
 			":variable"
-			":first_err"
-			":first_warn"
 			":value"
 			":expected"
 			":tol"

@@ -831,20 +831,33 @@
       (begin
 	(debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
 	(exit 2))
-      (let ((db #f))
+      (let ((db   #f)
+	    (keys #f))
 	(if (not (setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
-	(set! db (open-db))
+	(set! db   (open-db))
+	(set! keys (db-get-keys db))
+	;; have enough to process -target or -reqtarg here
+	(if (args:get-arg "-reqtarg")
+	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config"))
+		   (runconfig  (read-config runconfigf #f #f)))
+	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
+		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
+		  (begin
+		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
+		    (sqlite3:finalize! db)
+		    (exit 1))))
+	    (if (args:get-arg "-target")
+		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
 	(if (not (car *configinfo*))
 	    (begin
 	      (debug:print 0 "ERROR: Attempted to " action-desc " but run area config file not found")
 	      (exit 1))
 	    ;; Extract out stuff needed in most or many calls
 	    ;; here then call proc
-	    (let* ((keys       (db-get-keys db))
-		   (keynames   (map key:get-fieldname keys))
+	    (let* ((keynames   (map key:get-fieldname keys))
 		   (keyvallst  (keys->vallist keys #t)))
 	      (proc db keys keynames keyvallst)))
 	(sqlite3:finalize! db)

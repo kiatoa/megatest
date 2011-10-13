@@ -535,7 +535,8 @@ Misc
 				 #:size "100x15"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
-					      (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
+					    (set! *last-db-update-time* 0)
+					    (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
     ;; 

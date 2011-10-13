@@ -71,6 +71,17 @@
 ;; reporting of missing keys on the command line.
 (define keys:warning-suppress-hash (make-hash-table))
 
+;; this now invalidates using "/" in item names
+(define (keys:target-set-args keys target ht)
+  (let ((vals (string-split target "/")))
+    (if (eq? (length vals)(length keys))
+	(for-each (lambda (key val)
+		    (hash-table-set! ht (conc ":" (vector-ref key 0)) val))
+		  keys
+		  vals)
+	(debug:print 0 "ERROR: wrong number of values in " target ", should match " keys))
+    vals))
+
 ;; Using the keys pulled from the database (initially set from the megatest.config file)
 ;; look for the equivalent value on the command line and add it to a list, or #f if not found.
 ;; default => (val1 val2 val3 ...)
