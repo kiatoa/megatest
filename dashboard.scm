@@ -474,7 +474,7 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *status-ignore-hash* status #t)
 							  (hash-table-delete! *status-ignore-hash* status)))))
-	      '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD")))
+	      '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
