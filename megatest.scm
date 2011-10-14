@@ -93,6 +93,8 @@ Misc
   -extract-ods            : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
                             will clear the field if no rundir/testname/itempath/logfile
+                            if it contains forward slashes the path will be converted
+                            to windows style
   -env2file fname         : write the environment to fname.csh and fname.sh
 
 Helpers

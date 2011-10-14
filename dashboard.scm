@@ -200,7 +200,7 @@ Misc
 		 (maxtests    0)
 		 (states      (hash-table-keys *state-ignore-hash*))
 		 (statuses    (hash-table-keys *status-ignore-hash*)))
-	    (debug:print 2 "update-rundat, got " (length runs) " runs")
+	    (debug:print 6 "update-rundat, got " (length runs) " runs")
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
 		  (set! *last-update* (current-seconds))
@@ -216,7 +216,7 @@ Misc
 		      runs)
 	    (set! *header*  header)
 	    (set! *allruns* result)
-	    (debug:print 2 "*allruns* has " (length *allruns*) " runs")
+	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
 	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
 	    maxtests))
 	*num-tests*))) ;; FIXME, naughty coding eh?
@@ -493,7 +493,7 @@ Misc
 						     (maxruns  *tot-run-count*))
 						 (set! *start-run-offset* val)
 						 (set! *last-db-update-time* 0)
-						 (debug:print 1 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						 (debug:print 6 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "YES"
 			   #:max (* 10 (length *allruns*)))))
@@ -528,7 +528,7 @@ Misc
 										   (newmax  (* 10 (length *alltestnamelst*))))
 									       (set! *please-update-buttons* #t)
 									       (set! *start-test-offset* (inexact->exact (round (/ val 10))))
-									       (debug:print 1 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
+									       (debug:print 6 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
 									       (if (< val 10)
 										   (iup:attribute-set! obj "MAX" newmax))
 									       ))

@@ -704,9 +704,10 @@
 ;; keypatt-alist must contain *all* keys with an associated pattern: '( ("KEY1" "%") .. )
 (define (db:extract-ods-file db outputfile keypatt-alist runspatt pathmod)
   (let* ((keysstr  (string-intersperse (map car keypatt-alist) ","))
-	 (keyqry   (string-intersperse (map (lambda (p)(conc (car p) " like ? ")) keypatt-alist) " AND "))
+	 (keyqry   (string-intersperse (map (lambda (p)(conc (car p) " LIKE ? ")) keypatt-alist) " AND "))
 	 (numkeys  (length keypatt-alist))
 	 (test-ids '())
+	 (windows  (and pathmod (substring-index "\\" pathmod)))
 	 (tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id)))
 	 (runsheader (append (list "Run Id" "Runname") ; 0 1
 			     (map car keypatt-alist)   ; + N = length keypatt-alist
@@ -733,7 +734,7 @@
                                    "Error")))          ; 22
 	 (results (list runsheader))			 
 	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
-    (debug:print 2 "Using " tempdir " for constructing the ods file")
+    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist))
     ;; "Expected Value"
     ;; "Value Found"
     ;; "Tolerance"
@@ -743,18 +744,29 @@
        (set! results (append results ;; note, drop the test-id
 			     (list
 			      (if pathmod
-				  (let* ((vb (apply vector b))
+				  (let* ((vb        (apply vector b))
+					 (keyvals   (let loop ((i    0)
+							       (res '()))
+						      (if (>= i numkeys)
+							  res
+							  (loop (+ i 1)
+								(append res (list (vector-ref vb (+ i 2))))))))
+					 (runname   (vector-ref vb 1))
 					 (testname  (vector-ref vb (+  2 numkeys)))
 					 (item-path (vector-ref vb (+  3 numkeys)))
 					 (final-log (vector-ref vb (+  7 numkeys)))
 					 (run-dir   (vector-ref vb (+ 18 numkeys)))
-					 (log-fpath (conc run-dir "/" testname "/" item-path "/" final-log)))
+					 (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
 				    (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
 				    (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
-								      (conc pathmod
-									    "/" testname "/"
-									    (if (string=? item-path "") "" (conc "/" item-path))
-									    final-log)
+								      (let ((newpath (conc pathmod "/"
+											   (string-intersperse keyvals "/")
+											   "/" runname "/" testname "/"
+											   (if (string=? item-path "") "" (conc "/" item-path))
+											   final-log)))
+									;; for now throw away newpath and use the log-fpath conc'd with pathmod
+									(set! newpath (conc pathmod log-fpath))
+									(if windows (string-translate newpath "/" "\\") newpath))
 								      (if (> *verbosity* 1)
 									  (conc final-log " not-found")
 									  "")))
