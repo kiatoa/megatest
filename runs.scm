@@ -942,6 +942,7 @@
 	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
 	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
+    (db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itempath in curr-tests-hash
     (for-each
      (lambda (testdat)

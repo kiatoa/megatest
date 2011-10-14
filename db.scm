@@ -308,7 +308,7 @@
 			  (if (number? offset)
 			      (conc " OFFSET " offset)
 			      ""))))
-    (debug:print 4 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts)
+    (debug:print 4 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
@@ -348,8 +348,12 @@
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
+;; does not (obviously!) removed dependent data. 
 (define (db:delete-run db run-id)
   (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+
+(define (db:update-run-event_time db run-id)
+  (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)) 
 
 ;;======================================================================
 ;;  T E S T S
@@ -698,35 +702,36 @@
 
 ;; runspatt is a comma delimited list of run patterns
 ;; keypatt-alist must contain *all* keys with an associated pattern: '( ("KEY1" "%") .. )
-(define (db:extract-ods-file db outputfile keypatt-alist runspatt)
+(define (db:extract-ods-file db outputfile keypatt-alist runspatt pathmod)
   (let* ((keysstr  (string-intersperse (map car keypatt-alist) ","))
 	 (keyqry   (string-intersperse (map (lambda (p)(conc (car p) " like ? ")) keypatt-alist) " AND "))
+	 (numkeys  (length keypatt-alist))
 	 (test-ids '())
 	 (tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id)))
-	 (runsheader (append (list "Run Id" "Runname")
-			     (map car keypatt-alist)
-			     (list "Testname" 
-				   "Item Path"
-				   "Description"
-				   "State"
-				   "Status"
-				   "Final Log"
-				   "Run Duration"
-				   "When Run"
-				   "Tags"
-				   "Run Owner"
-				   "Comment"
-				   "Author"
-				   "Test Owner"
-				   "Reviewed"
-				   "Diskfree"
-				   "Uname"
-				   "Rundir"
-				   "Host"
-				   "Cpu Load"
-                                   "Warn"
-                                   "Error")))
-	 (results (list runsheader))
+	 (runsheader (append (list "Run Id" "Runname") ; 0 1
+			     (map car keypatt-alist)   ; + N = length keypatt-alist
+			     (list "Testname"          ; 2
+				   "Item Path"         ; 3 
+				   "Description"       ; 4 
+				   "State"             ; 5 
+				   "Status"            ; 6  
+				   "Final Log"         ; 7 
+				   "Run Duration"      ; 8 
+				   "When Run"          ; 9 
+				   "Tags"              ; 10
+				   "Run Owner"         ; 11
+				   "Comment"           ; 12
+				   "Author"            ; 13
+				   "Test Owner"        ; 14
+				   "Reviewed"          ; 15
+				   "Diskfree"          ; 16
+				   "Uname"             ; 17
+				   "Rundir"            ; 18
+				   "Host"              ; 19
+				   "Cpu Load"          ; 20
+                                   "Warn"              ; 21
+                                   "Error")))          ; 22
+	 (results (list runsheader))			 
 	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
     (debug:print 2 "Using " tempdir " for constructing the ods file")
     ;; "Expected Value"
@@ -735,7 +740,26 @@
     (apply sqlite3:for-each-row
      (lambda (test-id . b)
        (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
-       (set! results (append results (list b)))) ;; note, drop the test-id
+       (set! results (append results ;; note, drop the test-id
+			     (list
+			      (if pathmod
+				  (let* ((vb (apply vector b))
+					 (testname  (vector-ref vb (+  2 numkeys)))
+					 (item-path (vector-ref vb (+  3 numkeys)))
+					 (final-log (vector-ref vb (+  7 numkeys)))
+					 (run-dir   (vector-ref vb (+ 18 numkeys)))
+					 (log-fpath (conc run-dir "/" testname "/" item-path "/" final-log)))
+				    (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
+				    (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
+								      (conc pathmod
+									    "/" testname "/"
+									    (if (string=? item-path "") "" (conc "/" item-path))
+									    final-log)
+								      (if (> *verbosity* 1)
+									  (conc final-log " not-found")
+									  "")))
+				    (vector->list vb))
+				  b)))))
      db
      (conc "SELECT
               t.testname,r.id,runname," keysstr ",t.testname,
@@ -767,7 +791,7 @@
 	 (if curr-test-name
 	     (set! results (append results (list (cons curr-test-name test-data)))))
 	 ))
-     (delete-duplicates test-ids))
+     (sort (delete-duplicates test-ids) string<=))
     (system (conc "mkdir -p " tempdir))
     ;; (pp results)
     (ods:list->ods 

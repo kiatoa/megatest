@@ -200,7 +200,7 @@ Misc
 		 (maxtests    0)
 		 (states      (hash-table-keys *state-ignore-hash*))
 		 (statuses    (hash-table-keys *status-ignore-hash*)))
-	    ;; Instead of this mechanism lets try setting number of runs based on "result" below
+	    (debug:print 2 "update-rundat, got " (length runs) " runs")
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
 		  (set! *last-update* (current-seconds))
@@ -211,11 +211,12 @@ Misc
 			       (key-vals (get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
-			  (if (not (null? tests))
-			      (set! result (cons (vector run tests key-vals) result)))))
+			  ;(if (not (null? tests))
+			      (set! result (cons (vector run tests key-vals) result)))); )
 		      runs)
 	    (set! *header*  header)
 	    (set! *allruns* result)
+	    (debug:print 2 "*allruns* has " (length *allruns*) " runs")
 	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
 	    maxtests))
 	*num-tests*))) ;; FIXME, naughty coding eh?
@@ -452,9 +453,11 @@ Misc
 	     (iup:hbox
 	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
+				      (set! *last-db-update-time* 0)
 				      (update-search "test-name" val)))
 	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
+				      (set! *last-db-update-time* 0)
 				      (update-search "item-name" val)))))
 	    (iup:hbox
 	     (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
@@ -483,17 +486,17 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *state-ignore-hash* state #t)
 							  (hash-table-delete! *state-ignore-hash* state)))))
-		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED")))))
-	   (iup:valuator #:valuechanged_cb (lambda (obj)
-					     (let ((val (inexact->exact (round (+ 0.0 (string->number (iup:attribute obj "VALUE"))))))
-						   (maxruns  *tot-run-count*)) ;;; (+ *num-runs* (length *allruns*))))
-					       (set! *start-run-offset* val)
-					       (set! *last-db-update-time* 0)
-					       (debug:print 3 "maxruns: " maxruns ", val: " val)
-					       (iup:attribute-set! obj "MAX" maxruns)))
-			 #:expand "YES"
-			 #:max (+ ;; *num-runs*
-				(length *allruns*)))
+		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED")))
+	     (iup:valuator #:valuechanged_cb (lambda (obj)
+					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
+						     (oldmax   (string->number (iup:attribute obj "MAX")))
+						     (maxruns  *tot-run-count*))
+						 (set! *start-run-offset* val)
+						 (set! *last-db-update-time* 0)
+						 (debug:print 1 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
+						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
+			   #:expand "YES"
+			   #:max (* 10 (length *allruns*)))))
 	   ;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
 	   ;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
 	   )
@@ -508,6 +511,7 @@ Misc
 						  (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
 						  (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
 							       #:action (lambda (obj unk val)
+									  (set! *last-db-update-time* 0)
 									  (update-search x val))))))
 					(set! i (+ i 1))
 					res))
@@ -519,11 +523,15 @@ Misc
 	;; now lftlst will be an hbox with the test keys and the test name labels
 	(set! lftlst (append lftlst (list (iup:hbox 
 					   (iup:valuator #:valuechanged_cb (lambda (obj)
-									     (let ((val (iup:attribute obj "VALUE")))
+									     (let ((val (string->number (iup:attribute obj "VALUE")))
+										   (oldmax  (string->number (iup:attribute obj "MAX")))
+										   (newmax  (* 10 (length *alltestnamelst*))))
 									       (set! *please-update-buttons* #t)
-									       (set! *start-test-offset* (inexact->exact (round (string->number val))))
-									       (iup:attribute-set! obj "MAX" (length *alltestnamelst*))
-									       ) )
+									       (set! *start-test-offset* (inexact->exact (round (/ val 10))))
+									       (debug:print 1 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
+									       (if (< val 10)
+										   (iup:attribute-set! obj "MAX" newmax))
+									       ))
 							 #:expand "YES" 
 							 #:orientation "VERTICAL")
 					   (apply iup:vbox (reverse res)))))))

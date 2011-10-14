@@ -91,6 +91,8 @@ Misc
   -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
   -update-meta            : update the tests metadata for all tests
   -extract-ods            : extract an open document spreadsheet from the database
+  -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
+                            will clear the field if no rundir/testname/itempath/logfile
   -env2file fname         : write the environment to fname.csh and fname.sh
 
 Helpers
@@ -140,6 +142,7 @@ Called as " (string-intersperse (argv) " ")))
 			":units"
 			;; misc
 			"-extract-ods"
+			"-pathmod"
 			"-env2file"
 			"-debug" ;; for *verbosity* > 2
 			) 
@@ -345,8 +348,9 @@ Called as " (string-intersperse (argv) " ")))
      (lambda (db keys keynames keyvallst)
        (let ((outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
+	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
-	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%"))))))
+	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
 ;; run one test

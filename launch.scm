@@ -35,6 +35,7 @@
 ;;   BUT
 ;; now are
 ;; stepname {VAR=first,second,third ...} command ...
+;; where the {VAR=first,second,third ...} is optional.
 
 ;; given an exit code and whether or not logpro was used calculate OK/BAD
 ;; return #t if we are ok, #f otherwise
@@ -176,6 +177,8 @@
 									 (processloop (+ i 1))))
 								   ))
 						     (teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f)
+						     (if logpro-used
+							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
 						     (cond
 						      ;; WARN from logpro
 						      ((and (eq? (vector-ref exit-info 1) 2) logpro-used)
