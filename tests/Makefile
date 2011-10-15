@@ -1,9 +1,11 @@
 # run some tests
 
-MEGATEST=$(shell realpath ../megatest)
+BINPATH=$(shell realpath ../bin)
+MEGATEST=$(BINPATH)/megatest
+PATH := $(BINPATH):$(PATH)
 
 runall :
-	cd ../;make 
+	cd ../;make install 
 	$(MEGATEST) -keepgoing -runall :sysname ubuntu :fsname nfs :datapath none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v
 
 test :
