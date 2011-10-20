@@ -75,6 +75,7 @@
                      diskfree   INTEGER DEFAULT -1,
                      uname      TEXT DEFAULT 'n/a', 
                      rundir     TEXT DEFAULT 'n/a',
+                     shortdir   TEXT DEFAULT '',
                      item_path  TEXT DEFAULT '',
                      state      TEXT DEFAULT 'NOT_STARTED',
                      status     TEXT DEFAULT 'FAIL',
@@ -86,8 +87,6 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
-                     first_err  TEXT,
-                     first_warn TEXT,
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -97,25 +96,16 @@
                                test_id INTEGER, 
                                stepname TEXT, 
                                state TEXT DEFAULT 'NOT_STARTED', 
-                               status TEXT DEFAULT 'n/a',event_time TIMESTAMP,
+                               status TEXT DEFAULT 'n/a',
+                               event_time TIMESTAMP,
                                comment TEXT DEFAULT '',
+                               logfile TEXT,
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
-	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
-                                test_id INTEGER,
-                                category TEXT DEFAULT '',
-                                variable TEXT,
-	                        value REAL,
-	                        expected REAL,
-	                        tol REAL,
-                                units TEXT,
-                                comment TEXT DEFAULT '',
-                                status TEXT DEFAULT 'n/a',
-                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")
-	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
                                      owner       TEXT DEFAULT '',
@@ -126,7 +116,7 @@
                                      avg_disk    REAL,
                                      tags        TEXT DEFAULT '',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-	   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -207,12 +197,17 @@
 	                        tol REAL,
                                 units TEXT,
                                 comment TEXT DEFAULT '',
-                                status TEXT DEFAULT 'n/a',
+                                status TEXT DEFAULT 'n/a',foss
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
        (patch-db))
       ((< mver 1.27)
        (db:set-var db "MEGATEST_VERSION" 1.27)
        (sqlite3:execute db "ALTER TABLE test_data ADD COLUMN type TEXT DEFAULT '';")
+       (patch-db))
+      ((< mver 1.28)
+       (db:set-var db "MEGATEST_VERSION" 1.28)
+       (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT;")
+       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';")
        (patch-db))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))

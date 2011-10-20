@@ -407,7 +407,8 @@ Called as " (string-intersperse (argv) " ")))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (db        #f)
 	       (state    (args:get-arg ":state"))
-	       (status   (args:get-arg ":status")))
+	       (status   (args:get-arg ":status"))
+	       (logfile  (args:get-arg "-setlog")))
 	  (change-directory testpath)
 	  (if (not (setup-for-run))
 	      (begin
@@ -415,7 +416,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (and state status)
-	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m"))
+	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
@@ -478,7 +479,7 @@ Called as " (string-intersperse (argv) " ")))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m"))
+		    (teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step
@@ -500,7 +501,7 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  (test-set-log! db run-id test-name itemdat htmllogfile)))
-		    (teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m"))
+		    (teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
 		    (sqlite3:finalize! db)
 		    (if (not (eq? exitstat 0))
 			(exit 254)) ;; (exit exitstat) doesn't work?!?

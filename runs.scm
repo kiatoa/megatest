@@ -400,7 +400,7 @@
 	    item #f)
 	item)))
 
-(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment)
+(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
   (debug:print 4 "run-id: " run-id " test-name: " test-name)
   (let* ((state     (check-valid-items "state" state-in))
 	 (status    (check-valid-items "status" status-in))
@@ -413,9 +413,10 @@
 	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
     (if testdat
 	(let ((test-id (test:get-id testdat)))
+	  ;; FIXME - this should not update the logfile unless it is specified.
 	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment) VALUES(?,?,?,?,strftime('%s','now'),?);"
-			test-id teststep-name state-in status-in (if comment comment "")))
+			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
+			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile "")))
 	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
 
 (define (test-get-kill-request db run-id test-name itemdat)
