@@ -128,6 +128,8 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+	  ;; (sqlite3:execute db "CREATE TABLE IF NOT EXISTS task_calls (id INTEGER PRIMARY KEY,
+                                
 	  ;; Must do this *after* running patch db !! No more. 
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  ))

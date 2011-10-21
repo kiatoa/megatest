@@ -292,10 +292,11 @@
 	(for-each 
 	 (lambda (disk-num)
 	   (let* ((dirpath    (cadr (assoc disk-num disks)))
-		  (freespc    (if (directory? dirpath)
+		  (freespc    (if (and (directory? dirpath)
+				       (file-write-access? dirpath))
 				  (get-df dirpath)
 				  (begin
-				    (debug:print 0 "WARNING: path " dirpath " in [disks] section not valid")
+				    (debug:print 0 "WARNING: path " dirpath " in [disks] section not valid or writable")
 				    0))))
 	     (if (> freespc bestsize)
 		 (begin
