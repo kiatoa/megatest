@@ -1,3 +1,14 @@
+;;======================================================================
+;; Copyright 2006-2011, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+;;======================================================================
+
 (define-inline (test:get-id vec)       (vector-ref vec 0))
 (define-inline (test:get-run_id vec)   (vector-ref vec 1))
 (define-inline (test:get-test-name vec)(vector-ref vec 2))

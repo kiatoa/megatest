@@ -1544,7 +1544,7 @@ A flow specifies the tests to run, the order and dependencies and is managed
 \end_layout
 
 \begin_layout Section
-Flow Specification and Running
+Flow Specification and Running (Not released yet)
 \end_layout
 
 \begin_layout Subsection
@@ -1664,6 +1664,23 @@ status open
 
 megatest -runflow <flowname> :FIELD1 val1 :FIELD2 val2 :runname wk32.4
 \end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Monitor based running
+\end_layout
+
+\begin_layout Subsection
+Monitor logic
+\end_layout
+
+\begin_layout Standard
+\begin_inset Graphics
+	filename monitor-state-diagram.svg
 
 \end_inset
 
