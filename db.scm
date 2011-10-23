@@ -127,7 +127,7 @@
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
-                              CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+                              CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS task_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
@@ -138,12 +138,13 @@
                                 item TEXT DEFAULT '',
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP;")
-	  (sqlite3:execute db "CREATE monitors (id INTEGER PRIMARY KEY,
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
-                                username TEXT);")
+                                username TEXT,
+                               CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
 	  ;; Must do this *after* running patch db !! No more. 
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  ))
@@ -220,10 +221,27 @@
        (db:set-var db "MEGATEST_VERSION" 1.27)
        (sqlite3:execute db "ALTER TABLE test_data ADD COLUMN type TEXT DEFAULT '';")
        (patch-db))
-      ((< mver 1.28)
-       (db:set-var db "MEGATEST_VERSION" 1.28)
+      ((< mver 1.29)
+       (db:set-var db "MEGATEST_VERSION" 1.29)
        (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT;")
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+                                action TEXT DEFAULT '',
+                                owner TEXT,
+                                state TEXT DEFAULT 'new',
+                                target TEXT DEFAULT '',
+                                name TEXT DEFAULT '',
+                                test TEXT DEFAULT '',
+                                item TEXT DEFAULT '',
+                                creation_time TIMESTAMP,
+                                execution_time TIMESTAMP);")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+                                pid INTEGER,
+                                start_time TIMESTAMP,
+                                last_update TIMESTAMP,
+                                hostname TEXT,
+                                username TEXT,
+                               CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
        (patch-db))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))

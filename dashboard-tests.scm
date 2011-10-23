@@ -113,7 +113,7 @@
 			 (iup:label (db:testmeta-get-tags testmeta) #:expand "HORIZONTAL")
 			 (lambda (testmeta)(db:testmeta-get-tags testmeta)))
 	    (store-meta "description" 
-			 (iup:label (db:testmeta-get-description testmeta) #:expand "HORIZONTAL")
+			 (iup:label (db:testmeta-get-description testmeta) #:size "x50"); #:expand "HORIZONTAL")
 			 (lambda (testmeta)(db:testmeta-get-description testmeta)))
 	    )))))
 
@@ -202,12 +202,12 @@
 					(db:test-set-state-status-by-id *db* test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
-			     #:expand "YES"))
+			     #:expand "HORIZONTAL"))
       (apply iup:hbox
 	     (iup:label "STATE:" #:size "30x")
 	     (let* ((btns  (map (lambda (state)
 				  (let ((btn (iup:button state
-							 #:expand "YES" #:size "50x" #:font "Courier New, -10"
+							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    (db:test-set-state-status-by-id *db* test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
@@ -227,7 +227,7 @@
 	     (iup:label "STATUS:" #:size "30x")
 	     (let* ((btns  (map (lambda (status)
 				  (let ((btn (iup:button status
-							 #:expand "YES" #:size "50x" #:font "Courier New, -10"
+							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    (db:test-set-state-status-by-id *db* test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
@@ -327,7 +327,7 @@
 						    )))))
 			 lbl))
 	 (store-button store-label)
-	 (command-text-box (iup:textbox #:expand "YES" #:font "Courier New, -10"))
+	 (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
 	 (command-launch-button (iup:button "Execute!" #:action (lambda (x)
 								  (let ((cmd (iup:attribute command-text-box "VALUE")))
 								    (system (conc cmd "  &"))))))

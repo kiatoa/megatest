@@ -28,6 +28,7 @@ k;;======================================================================
 (declare (uses launch))
 (declare (uses runs))
 (declare (uses dashboard-tests))
+(declare (uses dashboard-guimonitor))
 (declare (uses megatest-version))
 
 (include "common_records.scm")
@@ -41,8 +42,8 @@ k;;======================================================================
 
 Usage: dashboard [options]
   -h              : this help
-  -run runid      : control run identified by runid
   -test testid    : control test identified by testid
+  -guimonitor     : control panel for runs
 
 Misc
   -rows N         : set number of rows
@@ -57,6 +58,7 @@ Misc
 			"-debug"
 			) 
 		 (list  "-h"
+			"-guimonitor"
 			"-v"
 			"-q"
 		       )
@@ -461,6 +463,7 @@ Misc
 				      (update-search "item-name" val)))))
 	    (iup:hbox
 	     (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	     (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &"))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
@@ -660,6 +663,8 @@ Misc
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
+ ((args:get-arg "-guimonitor")
+  (gui-monitor *db*))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*

@@ -23,10 +23,11 @@
 (define-inline (tasks:task-get-execution_time   vec)    (vector-ref  vec 9))
 
 
-;; make-vector-record tasks monitor pid start_time last_update hostname username
+;; make-vector-record tasks monitor id pid start_time last_update hostname username
 (define (make-tasks:monitor)(make-vector 5))
-(define-inline (tasks:monitor-get-pid           vec)    (vector-ref  vec 0))
-(define-inline (tasks:monitor-get-start_time    vec)    (vector-ref  vec 1))
-(define-inline (tasks:monitor-get-last_update   vec)    (vector-ref  vec 2))
-(define-inline (tasks:monitor-get-hostname      vec)    (vector-ref  vec 3))
-(define-inline (tasks:monitor-get-username      vec)    (vector-ref  vec 4))
+(define-inline (tasks:monitor-get-id            vec)    (vector-ref  vec 0))
+(define-inline (tasks:monitor-get-pid           vec)    (vector-ref  vec 1))
+(define-inline (tasks:monitor-get-start_time    vec)    (vector-ref  vec 2))
+(define-inline (tasks:monitor-get-last_update   vec)    (vector-ref  vec 3))
+(define-inline (tasks:monitor-get-hostname      vec)    (vector-ref  vec 4))
+(define-inline (tasks:monitor-get-username      vec)    (vector-ref  vec 5))

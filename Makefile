@@ -4,9 +4,9 @@ PREFIX=.
 SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
-           process.scm runs.scm
+           process.scm runs.scm tasks.scm
 
-GUISRCF  = dashboard.scm dashboard-tests.scm
+GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
@@ -25,6 +25,7 @@ dboard : $(OFILES) $(GOFILES)
 db.o launch.o runs.o dashboard-tests.o dashboard.o megatest.o : db_records.scm
 runs.o dashboard.o dashboard-tests.o   : run_records.scm
 keys.o db.o runs.o launch.o megatest.o : key_records.scm
+tasks.o dashboard-tasks.o : task_records.scm
 
 $(OFILES) $(GOFILES) : common_records.scm 
 

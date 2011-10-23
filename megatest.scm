@@ -88,14 +88,15 @@ Misc
   -rebuild-db             : bring the database schema up to date
   -rollup                 : fill run (set by :runname)  with latest test(s) from
                             prior runs with same keys
-  -rename-run <runb>      : rename run (set by :runname) to <runb>, requires keys
   -update-meta            : update the tests metadata for all tests
+  -env2file fname         : write the environment to fname.csh and fname.sh
+
+Spreadsheet generation
   -extract-ods            : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
                             will clear the field if no rundir/testname/itempath/logfile
                             if it contains forward slashes the path will be converted
                             to windows style
-  -env2file fname         : write the environment to fname.csh and fname.sh
 
 Helpers
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
