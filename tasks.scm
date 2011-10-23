@@ -229,4 +229,8 @@
 		   (get-host-name)))
 
 (define (tasks:start-run db task)
+  ;; Starting run #(3 run matt reset ubuntu/afs/tmp ww44 % % 1319368208.0 1319386680.0)
+  ;; Starting run #(5 run matt reset centos/nfs/nada ww42 all all 1319371306.0 1319386801.0)
+
+
   (print "Starting run " task))
