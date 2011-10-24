@@ -33,7 +33,7 @@
 (include "run_records.scm")
 (include "task_records.scm")
 
-(define (control-panel db keys)
+(define (control-panel db tdb keys)
   (let* ((var-params (make-hash-table)) ;; register all the widgets here for querying on run, rollup, remove?
 	 (key-params (make-hash-table))
 	 (monitordat '()) ;; list of monitor records
@@ -66,7 +66,7 @@
 			 (iup:button "Start"  
 				     #:expand "HORIZONTAL"
 				     #:action (lambda (obj)
-						(tasks:add-from-params db "run" keys key-params var-params)
+						(tasks:add-from-params tdb "run" keys key-params var-params)
 						(print "Launch Run")))
 			 (iup:button "Remove" 
 				     #:expand "HORIZONTAL"
@@ -79,6 +79,7 @@
 				     #:expand "HORIZONTAL"
 				     #:action (lambda (obj)
 						(sqlite3:finalize! db)
+						(sqlite3:finalize! tdb)
 						(exit))))))))
 	 (monitors     (iup:textbox 
 			#:expand "YES" ; HORIZONTAL"
@@ -94,26 +95,29 @@
 	 (lastmodtime 0)
 	 (next-touch  0) ;; the last time the "last_update" field was updated
 	 (refreshdat (lambda ()
-		       (let ((modtime (file-modification-time (conc *toppath* "/megatest.db")))
-			     (megatestdbpath (conc *toppath* "/megatest.db")))
+		       (let* ((monitordbpath  (conc *toppath* "/monitor.db"))
+			      (megatestdbpath (conc *toppath* "/megatest.db"))
+			      (modtime        (max (file-modification-time megatestdbpath)
+						   (file-modification-time monitordbpath))))
 			 ;; do stuff here when the db is updated by some other process
 			 (if (> modtime lastmodtime)
-			     (let ((tlst (tasks:get-tasks db '() '()))
-				   (mlst (tasks:get-monitors db)))
+			     (let ((tlst (tasks:get-tasks tdb '() '()))
+				   (mlst (tasks:get-monitors tdb)))
 			       (set! tasksdat tlst)
 			       (set! monitorsdat mlst)
 			       (iup:attribute-set! monitors "VALUE" (tasks:monitors->text-table mlst))
 			       (iup:attribute-set! actions  "VALUE" (tasks:tasks->text tlst))
-			       (tasks:process-queue db megatestdbpath)
-			       (set! lastmodtime modtime)
-			       (tasks:reset-stuck-tasks db)))
+			       (tasks:process-queue db tdb)
+			       (set! lastmodtime (max (file-modification-time megatestdbpath)
+						      (file-modification-time monitordbpath)))
+			       (tasks:reset-stuck-tasks tdb)))
 			 ;; stuff to do every 10 seconds
 			 (if (> (current-seconds) next-touch)
 			     (begin
-			       ;; (tasks:process-queue db megatestdbpath)
-			       ;; (tasks:monitors-update db)
-			       (tasks:reset-stuck-tasks db)
-			       (set! monitorsdat (tasks:get-monitors db))
+			       ;; (tasks:process-queue db tdb monitordbpath)
+			       (tasks:monitors-update tdb)
+			       (tasks:reset-stuck-tasks tdb)
+			       (set! monitorsdat (tasks:get-monitors tdb))
 			       (set! next-touch (+ (current-seconds) 10))
 			       )))))
 	 (topdialog  #f))
@@ -153,15 +157,16 @@
                  tabtop))))
 
 (on-exit (lambda ()
-	   (let ((db (open-db)))
+	   (let ((tdb (tasks:open-db)))
 	     (print "On-exit called")
-	     (tasks:remove-monitor-record db)
-	     (sqlite3:finalize! db))))
+	     (tasks:remove-monitor-record tdb)
+	     (sqlite3:finalize! tdb))))
 
 (define (gui-monitor db)
-  (let ((keys (get-keys db)))
-    (tasks:register-monitor db) ;;; let the other monitors know we are here
-    (control-panel db keys)
+  (let ((keys (get-keys db))
+	(tdb  (tasks:open-db)))
+    (tasks:register-monitor db tdb) ;;; let the other monitors know we are here
+    (control-panel db tdb keys)
     ;(tasks:remove-monitor-record db)
     ;(sqlite3:finalize! db)
    ))
