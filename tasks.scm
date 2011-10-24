@@ -231,6 +231,13 @@
 (define (tasks:start-run db task)
   ;; Starting run #(3 run matt reset ubuntu/afs/tmp ww44 % % 1319368208.0 1319386680.0)
   ;; Starting run #(5 run matt reset centos/nfs/nada ww42 all all 1319371306.0 1319386801.0)
-
-
-  (print "Starting run " task))
+  (print "Starting run " task)
+  ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
+  (runs:run-tests db
+		  (tasks:task-get-target task)
+		  (tasks:task-get-name   task)
+		  (tasks:task-get-test   task)
+		  (tasks:task-get-item   task)
+		  (tasks:task-get-owner  task)
+		  (make-hash-table))
+  )

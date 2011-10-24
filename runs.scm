@@ -779,14 +779,73 @@
 ;; based code.
 ;;======================================================================
 
+;; register a test run with the db
+(define (runs:register-run db keys keyvallst runname state status user)
+  (let* ((keystr    (keys->keystr keys))
+	 (comma     (if (> (length keys) 0) "," ""))
+	 (andstr    (if (> (length keys) 0) " AND " ""))
+	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
+	 (keyvals   (map cadr keyvallst))
+	 (allvals   (append (list runname state status user) keyvals))
+	 (qryvals   (append (list runname) keyvals))
+	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
+    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
+    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
+    (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
+	(let ((res #f))
+	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
+		 allvals)
+	  (apply sqlite3:for-each-row 
+	   (lambda (id)
+	     (set! res id))
+	   db
+	   (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
+	     ;(debug:print 4 "qry: " qry) 
+	     qry)
+	   qryvals)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
+	  res) 
+	(begin
+	  (debug:print 0 "ERROR: Called without all necessary keys")
+	  #f))))
+
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals
-(define (runs:run-tests db target runname testpatts itempatts flags)
+(define (runs:run-tests db target runname test-patts item-patts user flags)
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (register-run db keys))  ;;  test-name)))
+	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 (keepgoing   (hash-table-ref/default flags "-keepgoing")))
+	 (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
+	 (test-names  '()))
+    ;; look up all tests matching the comma separated list of globs in
+    ;; test-patts (using % as wildcard)
+    (for-each 
+     (lambda (patt)
+       (let ((tests (glob (conc *toppath* "/tests/" (string-translate patt "%" "*")))))
+	 (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+	 (set! test-names (append test-names 
+				  (map (lambda (testp)
+					 (last (string-split testp "/")))
+				       tests)))))
+     (string-split test-patts ","))
+
+    ;; now remove duplicates
+    (set! test-names (delete-duplicates test-names))
+
+    (debug:print 0 "INFO: test names " test-names)
+
+    ;; now add non-directly referenced dependencies (i.e. waiton)
+    ;; could cache all these since they need to be read again ...
+    ;; FIXME SOMEDAY
+    (for-each 
+     (lambda (test-name)
+       (let* ((config (test:get-testconfig test-name #f))
+	      (waiton (config-lookup config "requirements" "waiton")))
+	 (if (and waiton (not (member waiton test-names)))
+	     (set! test-names (append test-names (list waiton))))))
+     test-names)
+
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
     (if (and (eq? *passnum* 0)
@@ -803,9 +862,7 @@
       (for-each 
        (lambda (test-name)
 	 (if (runs:can-run-more-tests db)
-	     (run-one-test db run-id test-name keyvallst)
-	     ;; add some delay 
-	     ;(sleep 2)
+	     (run:test db run-id runname test-name keyvallst item-patts flags)
 	     ))
        (tests:sort-by-priority-and-waiton test-names))
       ;; (run-waiting-tests db)
@@ -819,7 +876,7 @@
 		  (run-waiting-tests db)
 		  (loop (+ numtimes 1)))))))))
 
-(define (run-one-test db run-id runname test-name keyvallst item-patts flags)
+(define (run:test db run-id runname test-name keyvallst item-patts flags)
   (debug:print 1 "Launching test " test-name)
   ;; All these vars might be referenced by the testconfig file reader
   (setenv "MT_TEST_NAME" test-name) ;; 
@@ -832,8 +889,9 @@
 	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))
 	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
 			 (if (string? w)(string-split w)'())))
-	 (force        (hash-table-ref/default flags "-force"))
-	 (rerun        (hash-table-ref/default flags "-rerun"))
+	 (force        (hash-table-ref/default flags "-force" #f))
+	 (rerun        (hash-table-ref/default flags "-rerun" #f))
+	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
 	 ;; Are these tags still used? I don't think so...
 	 ;;(tags         (let ((t (config-lookup test-conf "setup" "tags")))
 	 ;;       	 ;; we want our tags to be separated by commas and fully delimited by commas
@@ -919,7 +977,7 @@
 			(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
 			(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 		    (debug:print 4 "run-id: " run-id " test-name: " test-name " item-path: " item-path " testdat: " (test:get-status testdat) " test-state: " (test:get-state testdat))
-		    (case (if force-run ;; (args:get-arg "-force")
+		    (case (if force ;; (args:get-arg "-force")
 			      'NOT_STARTED
 			      (if testdat
 				  (string->symbol (test:get-state testdat))

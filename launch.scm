@@ -366,7 +366,16 @@
 	(memory     (config-lookup test-conf   "requirements" "memory"))
 	(hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
 	(remote-megatest (config-lookup *configdat* "setup" "executable"))
-	(local-megatest  (car (argv)))
+	;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
+	;;                allow running from dashboard 
+	(local-megatest  (let* ((lm  (car (argv)))
+				(dir (pathname-directory lm))
+				(exe (pathname-strip-directory lm)))
+			   (conc dir "/"
+				 (case (string->symbol exe)
+				   ((dboard) "megatest")
+				   ((dashboard) "megatest")
+				   (else exe)))))
 	(test-sig   (conc "=" test-name ":" (item-list->path itemdat) "=")) ;; test-path is the full path including the item-path
 	(work-area  #f)
 	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
