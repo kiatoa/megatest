@@ -207,25 +207,7 @@
       ((< mver 1.29)
        (db:set-var db "MEGATEST_VERSION" 1.29)
        (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT;")
-       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
-                                action TEXT DEFAULT '',
-                                owner TEXT,
-                                state TEXT DEFAULT 'new',
-                                target TEXT DEFAULT '',
-                                name TEXT DEFAULT '',
-                                test TEXT DEFAULT '',
-                                item TEXT DEFAULT '',
-                                creation_time TIMESTAMP,
-                                execution_time TIMESTAMP);")
-       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
-                                pid INTEGER,
-                                start_time TIMESTAMP,
-                                last_update TIMESTAMP,
-                                hostname TEXT,
-                                username TEXT,
-                               CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-       (patch-db))
+       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
