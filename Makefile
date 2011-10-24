@@ -22,7 +22,7 @@ dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
 
 # Special dependencies for the includes
-db.o launch.o runs.o dashboard-tests.o dashboard.o megatest.o : db_records.scm
+db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o monitor.o dashboard.o megatest.o : db_records.scm
 runs.o dashboard.o dashboard-tests.o   : run_records.scm
 keys.o db.o runs.o launch.o megatest.o : key_records.scm
 tasks.o dashboard-tasks.o : task_records.scm

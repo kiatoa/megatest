@@ -222,14 +222,14 @@
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
     ;; :first_err
-    (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-
-    ;; :first_warn
-    (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
-      (if val
-	  (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
+    ;;   (if val
+    ;;       (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
+    ;; 
+    ;; ;; :first_warn
+    ;; (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
+    ;;   (if val
+    ;;       (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
 
     (let ((category (hash-table-ref/default otherdat ":category" ""))
 	  (variable (hash-table-ref/default otherdat ":variable" ""))
@@ -640,7 +640,7 @@
 		   (item-test   (not (equal? item-path "")))
 		   (item-patt   (args:get-arg "-itempatt"))
 		   (patt-match  (if item-patt
-				    (string-match (glob->regexp
+				    (string-search (glob->regexp
 						   (string-translate item-patt "%" "*"))
 						  item-path)
 				    #t)))
@@ -946,12 +946,13 @@
 				     (let ((res #f))
 				       (for-each 
 					(lambda (patt)
-					  (if (string-match (glob->regexp
-							     (string-translate patt "%" "*"))
-							    item-path)
+					  (if (string-search (glob->regexp
+							      (string-translate patt "%" "*"))
+							     item-path)
 					      (set! res #t)))
-					(string-split item-patts ",")))
-				    #t)))
+					(string-split item-patts ","))
+				       res)
+				     #t)))
 	      (debug:print 3 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
 	      (if (and item-matches (runs:can-run-more-tests db))
 		  (begin
@@ -1248,8 +1249,8 @@
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
 		db 
-		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn) "
-		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
+		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
+		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
 	 (set! new-testdat (car (db-get-tests-for-run db new-run-id testname item-path '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?

@@ -92,13 +92,13 @@
 	(lambda (id . rem)
 	  (set! res (apply vector id rem)))
 	db
-	"SELECT id,action,owner,state,target,name,test,item,creation_time,execution_time 
+	"SELECT id,action,owner,state,target,name,test,item,creation_time,execution_time
            FROM tasks_queue
              WHERE 
                 state='new' OR
-                (state='waiting' AND execution_time+10 > strftime('%s','now')) OR
+                (state='waiting' AND (strftime('%s','now')-execution_time) > 10) OR
                 state='reset'
-             ORDER BY state ASC LIMIT 1;")
+             ORDER BY execution_time ASC LIMIT 1;")
        (if res ;; yep, have work to be done
 	   (begin
 	     (sqlite3:execute db "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
@@ -156,6 +156,7 @@
 (define (tasks:process-queue db megatestdbpath)
   (let* ((task   (tasks:snag-a-task db))
 	 (action (if task (tasks:task-get-action task) #f)))
+    (print "tasks:process-queue task: " task)
     (if action
 	(case (string->symbol action)
 	  ((run)       (tasks:start-run   db task))
@@ -234,16 +235,15 @@
 		   task-id))
 
 (define (tasks:start-run db task)
-  ;; Starting run #(3 run matt reset ubuntu/afs/tmp ww44 % % 1319368208.0 1319386680.0)
-  ;; Starting run #(5 run matt reset centos/nfs/nada ww42 all all 1319371306.0 1319386801.0)
-  (print "Starting run " task)
-  ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
-  (runs:run-tests db
-		  (tasks:task-get-target task)
-		  (tasks:task-get-name   task)
-		  (tasks:task-get-test   task)
-		  (tasks:task-get-item   task)
-		  (tasks:task-get-owner  task)
-		  (make-hash-table))
-  (tasks:set-state db (tasks:task-get-id task) "waiting")
-  )
+  (let ((flags (make-hash-table)))
+    (hash-table-set! flags "-rerun" "NOT_STARTED")
+    (print "Starting run " task)
+    ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
+    (runs:run-tests db
+		    (tasks:task-get-target task)
+		    (tasks:task-get-name   task)
+		    (tasks:task-get-test   task)
+		    (tasks:task-get-item   task)
+		    (tasks:task-get-owner  task)
+		    flags)
+    (tasks:set-state db (tasks:task-get-id task) "waiting")))

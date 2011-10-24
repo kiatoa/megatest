@@ -15,10 +15,10 @@ test :
 
 dashboard :
 	cd ../;make dboard
-	../dboard &
+	$(BINPATH)/dboard &
 
 remove :
-	(cd ../;make);../megatest -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
+	(cd ../;make);$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 
 runforever :
-	while(ls); do runname=`date +%F-%R:%S`;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;done
+	while(ls); do runname=`date +%F-%R:%S`;$(MEGATEST) -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;done

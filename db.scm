@@ -284,7 +284,7 @@
 (define db:get-keys db-get-keys)
 
 (define (db:get-value-by-header row header field)
-  (debug:print 0 "db:get-value-by-header row: " row " header: " header " field: " field)
+  ;; (debug:print 2 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -367,7 +367,7 @@
 			    remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
-    (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    ;; (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (apply vector a x)))
