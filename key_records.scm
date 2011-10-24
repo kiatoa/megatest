@@ -16,7 +16,9 @@
   (string-intersperse (map (lambda (x) "?") keys) ","))
 
 (define-inline (keys->key/field keys . additional)
-  (string-join (map (lambda (k)(conc (key:get-fieldname k) " " (key:get-fieldtype k)))(append keys additional)) ","))
+  (string-join (map (lambda (k)(conc (key:get-fieldname k) " " 
+				     (key:get-fieldtype k)))
+		    (append keys additional)) ","))
 
 (define-inline (item-list->path itemdat)
   (string-intersperse  (map cadr itemdat) "/"))

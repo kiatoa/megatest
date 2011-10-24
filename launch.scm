@@ -356,7 +356,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test db run-id test-conf keyvallst test-name test-path itemdat)
+(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat)
   (change-directory *toppath*)
   (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
@@ -407,7 +407,7 @@
 						   (list 'megatest  remote-megatest)
 						   (list 'ezsteps   ezsteps)
 						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '()))
-						   (list 'runname   (args:get-arg ":runname"))
+						   (list 'runname   runname)
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
     (db:delete-test-step-records db run-id test-name itemdat)
@@ -433,7 +433,7 @@
 	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
 			    (append (list (list "MT_TEST_NAME" test-name)
 					  (list "MT_ITEM_INFO" (conc itemdat)) 
-					  (list "MT_RUNNAME"   (args:get-arg ":runname")))
+					  (list "MT_RUNNAME"   runname))
 				    itemdat)))
 	   (launch-results (apply cmd-run-proc-each-line
 				  (if useshell

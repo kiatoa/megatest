@@ -228,6 +228,11 @@
 		   (current-process-id)
 		   (get-host-name)))
 
+(define (tasks:set-state db task-id state)
+  (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE id=?;" 
+		   state 
+		   task-id))
+
 (define (tasks:start-run db task)
   ;; Starting run #(3 run matt reset ubuntu/afs/tmp ww44 % % 1319368208.0 1319386680.0)
   ;; Starting run #(5 run matt reset centos/nfs/nada ww42 all all 1319371306.0 1319386801.0)
@@ -240,4 +245,5 @@
 		  (tasks:task-get-item   task)
 		  (tasks:task-get-owner  task)
 		  (make-hash-table))
+  (tasks:set-state db (tasks:task-get-id task) "waiting")
   )

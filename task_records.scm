@@ -22,6 +22,8 @@
 (define-inline (tasks:task-get-creation_time    vec)    (vector-ref  vec 8))
 (define-inline (tasks:task-get-execution_time   vec)    (vector-ref  vec 9))
 
+(define-inline (tasks:task-set-state!  vec val)(vector-set! vec 3 val))
+
 
 ;; make-vector-record tasks monitor id pid start_time last_update hostname username
 (define (make-tasks:monitor)(make-vector 5))

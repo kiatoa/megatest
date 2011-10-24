@@ -711,7 +711,7 @@
 			     (let* ((get-prereqs-cmd (lambda ()
 						       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
 				    (launch-cmd      (lambda ()
-						       (launch-test db run-id test-conf keyvallst test-name test-path itemdat)))
+						       (launch-test db run-id (args:get-arg ":runname") test-conf keyvallst test-name test-path itemdat)))
 				    (testrundat      (list get-prereqs-cmd launch-cmd)))
 			       (if (or (args:get-arg "-force")
 				       (let ((preqs-not-yet-met ((car testrundat))))
@@ -1020,7 +1020,7 @@
 			     (let* ((get-prereqs-cmd (lambda ()
 						       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
 				    (launch-cmd      (lambda ()
-						       (launch-test db run-id test-conf keyvallst test-name test-path itemdat)))
+						       (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat)))
 				    (testrundat      (list get-prereqs-cmd launch-cmd)))
 			       (if (or force
 				       (let ((preqs-not-yet-met ((car testrundat))))

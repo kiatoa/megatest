@@ -128,7 +128,7 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS task_queue (id INTEGER PRIMARY KEY,
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -137,7 +137,7 @@
                                 test TEXT DEFAULT '',
                                 item TEXT DEFAULT '',
                                 creation_time TIMESTAMP,
-                                execution_time TIMESTAMP;")
+                                execution_time TIMESTAMP);")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
@@ -192,13 +192,13 @@
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
        (db:set-var db "MEGATEST_VERSION" 1.21) ;; set before, just in case the changes are already applied
        (sqlite3:execute db test-meta-def)
-       (for-each 
-	(lambda (stmt)
-	  (sqlite3:execute db stmt))
-	(list 
-	 "ALTER TABLE tests ADD COLUMN first_err TEXT;"
-	 "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
-	 ))
+       ;(for-each 
+       ; (lambda (stmt)
+       ;   (sqlite3:execute db stmt))
+       ; (list 
+       ;  "ALTER TABLE tests ADD COLUMN first_err TEXT;"
+       ;  "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
+       ;  ))
        (patch-db))
       ((< mver 1.24)
        (db:set-var db "MEGATEST_VERSION" 1.24)
@@ -284,6 +284,7 @@
 (define db:get-keys db-get-keys)
 
 (define (db:get-value-by-header row header field)
+  (debug:print 0 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -366,6 +367,7 @@
 			    remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
+    (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (apply vector a x)))
@@ -397,10 +399,10 @@
 	(statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
 	)
     (sqlite3:for-each-row 
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn)
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment first-err first-warn) res)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
-     (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn "
+     (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
 	   " AND NOT (state in " states-str " AND status IN " statuses-str ") "
 	   " ORDER BY id DESC;")
@@ -464,10 +466,10 @@
 (define (db:get-test-info db run-id testname item-path)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
     res))
 
@@ -475,10 +477,10 @@
 (define (db:get-test-data-by-id db test-id)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment first-err first-warn)))
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,first_err,first_warn FROM tests WHERE id=?;"
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
      test-id)
     res))
 
@@ -759,8 +761,7 @@
 				   "Rundir"            ; 18
 				   "Host"              ; 19
 				   "Cpu Load"          ; 20
-                                   "Warn"              ; 21
-                                   "Error")))          ; 22
+				   )))
 	 (results (list runsheader))			 
 	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
     (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist))
@@ -811,7 +812,7 @@
               author,
               tm.owner,reviewed,
               diskfree,uname,rundir,
-              host,cpuload,first_err,first_warn
+              host,cpuload
             FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id INNER JOIN test_meta AS tm ON tm.testname=t.testname
             WHERE runname LIKE ? AND " keyqry ";")
      runspatt (map cadr keypatt-alist))
