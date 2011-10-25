@@ -127,7 +127,17 @@
 		     (iup:vbox
 		      (iup:hbox keyentries othervars)
 		      controls
-		      (let ((tabtop (iup:tabs monitors actions)))
+		      (let ((tabtop (iup:tabs 
+				     monitors
+				     (iup:vbox 
+				       (let* ((tb (iup:textbox #:expand "HORIZONTAL"))
+					      (bt (iup:button "Remove tasks by id"
+							      #:action (lambda (obj)
+									 (let ((val (iup:attribute tb "VALUE")))
+									   (tasks:remove-queue-entries tdb val)))))
+					      (lb (iup:label "(comma separated)")))
+					 (iup:hbox bt tb lb))
+				      actions))))
 			(iup:attribute-set! tabtop "TABTITLE0" "Monitors")
 			(iup:attribute-set! tabtop "TABTITLE1" "Actions")
 			tabtop)
