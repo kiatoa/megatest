@@ -103,6 +103,8 @@ Misc
 (define *please-update-buttons* #t)
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
+(define *tests-sort-reverse* #f)
+
 (define *verbosity* (cond
 		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
 		     ((args:get-arg "-v")    2)
@@ -223,7 +225,7 @@ Misc
 			      (set! result (cons (vector run tests key-vals) result)))); )
 		      runs)
 	    (set! *header*  header)
-	    (set! *allruns* result)
+	    (set! *allruns* (if *tests-sort-reverse* (reverse result) result))
 	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
 	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
 	    maxtests))
@@ -471,7 +473,8 @@ Misc
 				      (update-search "item-name" val)))))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort Order" #:acton (lambda (obj)(toggle-sort-order))))
+	      (iup:button "Sort" #:acton (lambda (obj)
+					   (set! *tests-sort-order* (not *tests-sort-order*)))))
 	     (iup:hbox
 	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
