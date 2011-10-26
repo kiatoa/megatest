@@ -217,7 +217,8 @@ Misc
 		  (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses))
+			       (tests    (let ((tsts (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+					   (if *tests-sort-reverse* (reverse tsts) tsts)))
 			       (key-vals (get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
@@ -225,7 +226,7 @@ Misc
 			      (set! result (cons (vector run tests key-vals) result)))); )
 		      runs)
 	    (set! *header*  header)
-	    (set! *allruns* (if *tests-sort-reverse* (reverse result) result))
+	    (set! *allruns* result)
 	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
 	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
 	    maxtests))
@@ -473,8 +474,10 @@ Misc
 				      (update-search "item-name" val)))))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort" #:acton (lambda (obj)
-					   (set! *tests-sort-order* (not *tests-sort-order*)))))
+	      (iup:button "Sort" #:action (lambda (obj)
+					    (set! *tests-sort-reverse* (not *tests-sort-reverse*))
+					    (iup:attribute-set! obj "TITLE" (if *tests-sort-reverse* "+Sort" "-Sort"))
+					    (set! *last-db-update-time* 0))))
 	     (iup:hbox
 	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))

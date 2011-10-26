@@ -370,7 +370,9 @@
      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
 	   " AND NOT (state in " states-str " AND status IN " statuses-str ") "
-	   " ORDER BY id DESC;")
+	   ;; " ORDER BY id DESC;"
+	   " ORDER BY event_time ASC;" ;; POTENTIAL ISSUE! CHECK ME! Does anyting depend on this being sorted by id?
+	   )
      run-id
      (if testpatt testpatt "%")
      (if itempatt itempatt "%"))
