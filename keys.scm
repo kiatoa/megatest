@@ -99,6 +99,7 @@
 	   (list (vector-ref key 0) targ))
 	 keys targtweaked)))
 
+
 ;;======================================================================
 ;; key <=> args routines
 ;;======================================================================
@@ -111,7 +112,12 @@
   (let* ((keynames   (map key:get-fieldname keys))
 	 (argkeys    (map (lambda (k)(conc ":" k)) keynames))
 	 (withkey    (not (null? withkey)))
-	 (newremargs (args:get-args (cons "blah" remargs) argkeys '() args:arg-hash 0))) ;; the cons blah works around a bug in args [args assumes ("calling-prog-name" .... ) ]
+	 (newremargs (args:get-args 
+		      (cons "blah" remargs) ;; the cons blah works around a bug in args [args assumes ("calling-prog-name" .... ) ]
+		      argkeys 
+		      '()
+		      args:arg-hash 
+		      0)))
     ;;(debug:print 0 "remargs: " remargs " newremargs: " newremargs)
     (apply append (map (lambda (x)
 			 (let ((val (args:get-arg x)))

@@ -781,6 +781,7 @@
 
 ;; register a test run with the db
 (define (runs:register-run db keys keyvallst runname state status user)
+  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
   (let* ((keystr    (keys->keystr keys))
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
@@ -1219,10 +1220,12 @@
 	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
 	 (runs:update-test_meta db test-name test-conf)))
      test-names)))
-	 
+
 ;; This could probably be refactored into one complex query ...
-(define (runs:rollup-run db keys)
-  (let* ((new-run-id      (register-run db keys))
+(define (runs:rollup-run db keys keyvallst runname user) ;; was target, now keyvallst
+  (debug:print 4 "runs:rollup-run, keys: " keys " keyvallst: " keyvallst " :runname " runname " user: " user)
+  (let* (; (keyvalllst      (keys:target->keyval keys target))
+	 (new-run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))
 	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
 	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))

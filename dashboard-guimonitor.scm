@@ -71,7 +71,14 @@
 			 (iup:button "Remove" 
 				     #:expand "HORIZONTAL"
 				     #:action (lambda (obj)
-						(print "Remove Run")))))
+						(print "Remove Run")
+						(tasks:add-from-params tdb "remove" keys key-params var-params)
+						))
+			 (iup:button "Rollup" 
+				     #:expand "HORIZONTAL"
+				     #:action (lambda (obj)
+						(print "Rollup Run")
+						(tasks:add-from-params tdb "rollup" keys key-params var-params)))))
 		       (iup:frame 
 			#:title "Misc"
 			(iup:hbox
@@ -128,7 +135,6 @@
 		      (iup:hbox keyentries othervars)
 		      controls
 		      (let ((tabtop (iup:tabs 
-				     monitors
 				     (iup:vbox 
 				       (let* ((tb (iup:textbox #:expand "HORIZONTAL"))
 					      (bt (iup:button "Remove tasks by id"
@@ -137,9 +143,11 @@
 									   (tasks:remove-queue-entries tdb val)))))
 					      (lb (iup:label "(comma separated)")))
 					 (iup:hbox bt tb lb))
-				      actions))))
-			(iup:attribute-set! tabtop "TABTITLE0" "Monitors")
-			(iup:attribute-set! tabtop "TABTITLE1" "Actions")
+				       actions)
+				     monitors
+				     )))
+			(iup:attribute-set! tabtop "TABTITLE0" "Actions")
+			(iup:attribute-set! tabtop "TABTITLE1" "Monitors")
 			tabtop)
 		      )))
 		      ; (iup:frame

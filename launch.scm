@@ -371,7 +371,7 @@
 	(local-megatest  (let* ((lm  (car (argv)))
 				(dir (pathname-directory lm))
 				(exe (pathname-strip-directory lm)))
-			   (conc dir "/"
+			   (conc (if dir (conc dir "/") "")
 				 (case (string->symbol exe)
 				   ((dboard) "megatest")
 				   ((dashboard) "megatest")

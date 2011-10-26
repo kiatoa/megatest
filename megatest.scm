@@ -338,7 +338,11 @@ Called as " (string-intersperse (argv) " ")))
      "-rollup" 
      "rollup tests" 
      (lambda (db keys keynames keyvallst)
-       (runs:rollup-run db keys))))
+       (runs:rollup-run db
+			keys
+			(keys->alist keys "na")
+			(args:get-arg ":runname") 
+			user))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database

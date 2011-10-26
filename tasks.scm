@@ -197,7 +197,7 @@
 (define (tasks:process-queue db tdb)
   (let* ((task   (tasks:snag-a-task tdb))
 	 (action (if task (tasks:task-get-action task) #f)))
-    (print "tasks:process-queue task: " task)
+    (if action (print "tasks:process-queue task: " task))
     (if action
 	(case (string->symbol action)
 	  ((run)       (tasks:start-run   db tdb task))
@@ -275,6 +275,13 @@
 		   state 
 		   task-id))
 
+;;======================================================================
+;; The routines to process tasks
+;;======================================================================
+
+;; NOTE: It might be good to add one more layer of checking to ensure
+;;       that no task gets run in parallel.
+
 (define (tasks:start-run db tdb task)
   (let ((flags (make-hash-table)))
     (hash-table-set! flags "-rerun" "NOT_STARTED")
@@ -287,4 +294,18 @@
 		    (tasks:task-get-item   task)
 		    (tasks:task-get-owner  task)
 		    flags)
+    (tasks:set-state tdb (tasks:task-get-id task) "waiting")))
+
+(define (tasks:rollup-runs db tdb task)
+  (let* ((flags (make-hash-table))
+	 (keys  (db:get-keys db))
+	 (keyvallst (keys:target->keyval keys (tasks:task-get-target task))))
+    ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
+    (print "Starting rollup " task)
+    ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
+    (runs:rollup-run db
+		     keys 
+		     keyvallst
+		     (tasks:task-get-name  task)
+		     (tasks:task-get-owner  task))
     (tasks:set-state tdb (tasks:task-get-id task) "waiting")))
