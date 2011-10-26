@@ -104,6 +104,7 @@ Misc
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
 (define *tests-sort-reverse* #f)
+(define *hide-empty-runs* #f)
 
 (define *verbosity* (cond
 		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
@@ -222,8 +223,9 @@ Misc
 			       (key-vals (get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
-			  ;(if (not (null? tests))
-			      (set! result (cons (vector run tests key-vals) result)))); )
+			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
+				  (not (null? tests)))
+			      (set! result (cons (vector run tests key-vals) result)))))
 		      runs)
 	    (set! *header*  header)
 	    (set! *allruns* result)
@@ -362,11 +364,13 @@ Misc
 	   (if (vector? rundat)
 	       (let* ((testdat   (vector-ref rundat 1))
 		      (testnames (map test:test-get-fullname testdat)))
-		 (for-each (lambda (testname)
-			     (if (not (member testname *alltestnamelst*))
-				 (begin
-				   (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
-			   testnames))))
+		 (if (not (and *hide-empty-runs*
+			       (null? testnames)))
+		     (for-each (lambda (testname)
+				 (if (not (member testname *alltestnamelst*))
+				     (begin
+				       (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
+			       testnames)))))
 	 runs)
 
 	(set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
@@ -477,7 +481,11 @@ Misc
 	      (iup:button "Sort" #:action (lambda (obj)
 					    (set! *tests-sort-reverse* (not *tests-sort-reverse*))
 					    (iup:attribute-set! obj "TITLE" (if *tests-sort-reverse* "+Sort" "-Sort"))
-					    (set! *last-db-update-time* 0))))
+					    (set! *last-db-update-time* 0)))
+	      (iup:button "HideEmpty" #:action (lambda (obj)
+						 (set! *hide-empty-runs* (not *hide-empty-runs*))
+						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
+						 (set! *last-db-update-time* 0))))
 	     (iup:hbox
 	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
