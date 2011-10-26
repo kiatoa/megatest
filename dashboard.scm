@@ -103,6 +103,9 @@ Misc
 (define *please-update-buttons* #t)
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
+(define *tests-sort-reverse* #f)
+(define *hide-empty-runs* #f)
+
 (define *verbosity* (cond
 		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
 		     ((args:get-arg "-v")    2)
@@ -110,6 +113,12 @@ Misc
 		     (else                   1)))
 
 (define uidat #f)
+
+(define-inline (dboard:uidat-get-keycol  vec)(vector-ref vec 0))
+(define-inline (dboard:uidat-get-lftcol  vec)(vector-ref vec 1))
+(define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
+(define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
+
 ;; (megatest-dashboard)
 
 ;(define img1 (iup:image/palette 16 16 (u8vector->blob (u8vector
@@ -209,12 +218,14 @@ Misc
 		  (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses))
+			       (tests    (let ((tsts (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+					   (if *tests-sort-reverse* (reverse tsts) tsts)))
 			       (key-vals (get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
-			  ;(if (not (null? tests))
-			      (set! result (cons (vector run tests key-vals) result)))); )
+			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
+				  (not (null? tests)))
+			      (set! result (cons (vector run tests key-vals) result)))))
 		      runs)
 	    (set! *header*  header)
 	    (set! *allruns* result)
@@ -227,7 +238,7 @@ Misc
 ; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
 
 (define (toggle-hide lnum) ; fulltestname)
-  (let* ((btn (vector-ref (vector-ref uidat 0) lnum))
+  (let* ((btn (vector-ref (dboard:uidat-get-lftcol uidat) lnum))
 	 (fulltestname (iup:attribute btn "TITLE"))
 	 (parts        (string-split fulltestname "("))
 	 (basetestname (if (null? parts) "" (car parts))))
@@ -294,25 +305,26 @@ Misc
 			     
 (define (update-labels uidat)
   (let* ((rown    0)
-	 (lftcol  (vector-ref uidat 0))
+	 (keycol  (dboard:uidat-get-keycol uidat))
+	 (lftcol  (dboard:uidat-get-lftcol uidat))
 	 (numcols (vector-length lftcol))
 	 (maxn    (- numcols 1))
 	 (allvals (make-vector numcols "")))
     (for-each (lambda (name)
 		(if (<= rown maxn)
-		    (let ((labl (vector-ref lftcol rown)))
-		      (vector-set! allvals rown name)))
+		    (vector-set! allvals rown name)) ;)
 		(set! rown (+ 1 rown)))
 	      *alltestnamelst*)
-	;      (if (> (length *alltestnamelst*) *start-test-offset*)
-	;	  (drop *alltestnamelst* *start-test-offset*)
-	;	  '()))
     (let loop ((i 0))
       (let* ((lbl    (vector-ref lftcol i))
+	     (keyval (vector-ref keycol i))
 	     (oldval (iup:attribute lbl "TITLE"))
 	     (newval (vector-ref allvals i)))
 	(if (not (equal? oldval newval))
-	    (iup:attribute-set! lbl "TITLE" newval))
+	    (let ((munged-val (let ((parts (string-split newval "(")))
+				(if (> (length parts) 1)(conc "  " (car (string-split (cadr parts) ")"))) newval))))
+	      (vector-set! keycol i newval)
+	      (iup:attribute-set! lbl "TITLE" munged-val)))
 	(iup:attribute-set! lbl "FGCOLOR" (if (hash-table-ref/default *collapsed* newval #f) "0 112 112" "0 0 0"))
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
@@ -340,9 +352,9 @@ Misc
       (let* ((runs        (if (> (length *allruns*) numruns)
 			      (take-right *allruns* numruns)
 			      (pad-list *allruns* numruns)))
-	     (lftcol      (vector-ref uidat 0))
-	     (tableheader (vector-ref uidat 1))
-	     (table       (vector-ref uidat 2))
+	     (lftcol      (dboard:uidat-get-lftcol uidat))
+	     (tableheader (dboard:uidat-get-header uidat))
+	     (table       (dboard:uidat-get-runsvec uidat))
 	     (coln        0))
 	(set! *please-update-buttons* #f)
 	(set! *alltestnamelst* '())
@@ -352,11 +364,13 @@ Misc
 	   (if (vector? rundat)
 	       (let* ((testdat   (vector-ref rundat 1))
 		      (testnames (map test:test-get-fullname testdat)))
-		 (for-each (lambda (testname)
-			     (if (not (member testname *alltestnamelst*))
-				 (begin
-				   (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
-			   testnames))))
+		 (if (not (and *hide-empty-runs*
+			       (null? testnames)))
+		     (for-each (lambda (testname)
+				 (if (not (member testname *alltestnamelst*))
+				     (begin
+				       (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
+			       testnames)))))
 	 runs)
 
 	(set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
@@ -440,6 +454,7 @@ Misc
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
 	 (lftcol  (make-vector ntests))
+	 (keycol  (make-vector ntests))
 	 (controls '())
 	 (lftlst  '())
 	 (hdrlst  '())
@@ -461,9 +476,19 @@ Misc
 			   #:action (lambda (obj unk val)
 				      (set! *last-db-update-time* 0)
 				      (update-search "item-name" val)))))
-	    (iup:hbox
-	     (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
-	     (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &"))))
+	    (iup:vbox
+	     (iup:hbox
+	      (iup:button "Sort" #:action (lambda (obj)
+					    (set! *tests-sort-reverse* (not *tests-sort-reverse*))
+					    (iup:attribute-set! obj "TITLE" (if *tests-sort-reverse* "+Sort" "-Sort"))
+					    (set! *last-db-update-time* 0)))
+	      (iup:button "HideEmpty" #:action (lambda (obj)
+						 (set! *hide-empty-runs* (not *hide-empty-runs*))
+						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
+						 (set! *last-db-update-time* 0))))
+	     (iup:hbox
+	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
@@ -541,6 +566,7 @@ Misc
        (else
 	(let ((labl  (iup:button "" 
 				 #:flat "YES" 
+				 #:alignment "ALEFT"
 				 ; #:image img1
 				 ; #:impress img2
 				 #:size "100x15"
@@ -605,7 +631,7 @@ Misc
 		       (apply iup:hbox (reverse hdrlst))
 		       (apply iup:hbox (reverse bdylst))))))
        controls)))
-    (vector lftcol header runsvec)))
+    (vector keycol lftcol header runsvec)))
 
 (if (or (args:get-arg "-rows")
 	(get-environment-variable "DASHBOARDROWS" ))
