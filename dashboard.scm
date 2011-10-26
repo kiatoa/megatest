@@ -461,9 +461,12 @@ Misc
 			   #:action (lambda (obj unk val)
 				      (set! *last-db-update-time* 0)
 				      (update-search "item-name" val)))))
-	    (iup:hbox
-	     (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
-	     (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &"))))
+	    (iup:vbox
+	     (iup:hbox
+	      (iup:button "Sort Order" #:acton (lambda (obj)(toggle-sort-order))))
+	     (iup:hbox
+	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
