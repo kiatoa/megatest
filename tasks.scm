@@ -39,6 +39,7 @@
                                 test TEXT DEFAULT '',
                                 item TEXT DEFAULT '',
                                 keylock TEXT,
+                                params TEXT,
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP);")
 	  (sqlite3:execute tdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
@@ -86,15 +87,16 @@
     res))
 
 ;; register a task
-(define (tasks:add tdb action owner target runname test item)
-  (sqlite3:execute tdb "INSERT INTO tasks_queue (action,owner,state,target,name,test,item,creation_time,execution_time)
+(define (tasks:add tdb action owner target runname test item params)
+  (sqlite3:execute tdb "INSERT INTO tasks_queue (action,owner,state,target,name,test,item,params,creation_time,execution_time)
                        VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
 		   action
 		   owner
 		   target
 		   runname
 		   test
-		   item))
+		   item
+		   (if params params "")))
 
 (define (keys:key-vals-hash->target keys key-params)
   (let ((tmp (hash-table-ref/default key-params (vector-ref (car keys) 0) "")))
@@ -133,7 +135,7 @@
      (lambda (id . rem)
        (set! res (apply vector id rem)))
      tdb
-     "SELECT id,action,owner,state,target,name,test,item,creation_time,execution_time FROM tasks_queue WHERE keylock=? ORDER BY execution_time ASC LIMIT 1;" keytxt)
+     "SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time FROM tasks_queue WHERE keylock=? ORDER BY execution_time ASC LIMIT 1;" keytxt)
     (if res ;; yep, have work to be done
 	(begin
 	  (sqlite3:execute tdb "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
@@ -160,7 +162,7 @@
      (lambda (id . rem)
        (set! res (cons (apply vector id rem) res)))
      tdb
-     (conc "SELECT id,action,owner,state,target,name,test,item,creation_time,execution_time 
+     (conc "SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time 
                FROM tasks_queue "
                ;; WHERE  
                ;;   state IN " statesstr " AND 
@@ -219,8 +221,8 @@
     ))
 
 (define (tasks:tasks->text tasks)
-  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~12a"))
-    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "itempatts") "\n"
+  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~12a~10a"))
+    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "itempatts" "params") "\n"
 	  (string-intersperse 
 	   (map (lambda (task)
 		  (format #f fmtstr
@@ -231,7 +233,8 @@
 			  (tasks:task-get-target task)
 			  (tasks:task-get-name   task)
 			  (tasks:task-get-test   task)
-			  (tasks:task-get-item   task)))
+			  (tasks:task-get-item   task)
+			  (tasks:task-get-params task)))
 		tasks) "\n"))))
    
 (define (tasks:monitors->text-table monitors)
@@ -285,6 +288,8 @@
 (define (tasks:start-run db tdb task)
   (let ((flags (make-hash-table)))
     (hash-table-set! flags "-rerun" "NOT_STARTED")
+    (if (not (string=? (tasks:task-get-params task) ""))
+	(hash-table-set! flags "-
     (print "Starting run " task)
     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
     (runs:run-tests db

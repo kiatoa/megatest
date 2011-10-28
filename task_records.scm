@@ -9,8 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-;; make-vector-record tasks task id action owner state target name test item creation_time execution_time 
-(define (make-tasks:task)(make-vector 10))
+;; make-vector-record tasks task id action owner state target name test item params creation_time execution_time 
+(define (make-tasks:task)(make-vector 11))
 (define-inline (tasks:task-get-id               vec)    (vector-ref  vec 0))
 (define-inline (tasks:task-get-action           vec)    (vector-ref  vec 1))
 (define-inline (tasks:task-get-owner            vec)    (vector-ref  vec 2))
@@ -19,8 +19,9 @@
 (define-inline (tasks:task-get-name             vec)    (vector-ref  vec 5))
 (define-inline (tasks:task-get-test             vec)    (vector-ref  vec 6))
 (define-inline (tasks:task-get-item             vec)    (vector-ref  vec 7))
-(define-inline (tasks:task-get-creation_time    vec)    (vector-ref  vec 8))
-(define-inline (tasks:task-get-execution_time   vec)    (vector-ref  vec 9))
+(define-inline (tasks:task-get-params           vec)    (vector-ref  vec 8))
+(define-inline (tasks:task-get-creation_time    vec)    (vector-ref  vec 9))
+(define-inline (tasks:task-get-execution_time   vec)    (vector-ref  vec 10))
 
 (define-inline (tasks:task-set-state!  vec val)(vector-set! vec 3 val))
 

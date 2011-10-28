@@ -284,7 +284,7 @@ Misc
 				 (if (string=? astr "") #f #t)))))
 			;; (>= (string-length (vector-ref a 1))(string-length (vector-ref b 1))))))
 	 (vlst-s2 (sort vlst-s1 (lambda (a b)
-				  (string>= (vector-ref a 0)(vector-ref b 0))))))
+			   	  (string>= (vector-ref a 0)(vector-ref b 0))))))
     (map (lambda (x)
 	   (if (equal? (vector-ref x 1) "")
 	       (vector-ref x 0)
