@@ -89,7 +89,7 @@
 ;; register a task
 (define (tasks:add tdb action owner target runname test item params)
   (sqlite3:execute tdb "INSERT INTO tasks_queue (action,owner,state,target,name,test,item,params,creation_time,execution_time)
-                       VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
+                       VALUES (?,?,'new',?,?,?,?,?,strftime('%s','now'),0);" 
 		   action
 		   owner
 		   target
@@ -112,8 +112,9 @@
 	(owner     (car (user-information (current-user-id))))
 	(runname   (hash-table-ref/default var-params "runname" #f))
 	(testpatts (hash-table-ref/default var-params "testpatts" "%"))
-	(itempatts (hash-table-ref/default var-params "itempatts" "%")))
-    (tasks:add tdb action owner target runname testpatts itempatts)))
+	(itempatts (hash-table-ref/default var-params "itempatts" "%"))
+	(params    (hash-table-ref/default var-params "params"    "")))
+    (tasks:add tdb action owner target runname testpatts itempatts params)))
 
 ;; return one task from those who are 'new' OR 'waiting' AND more than 10sec old
 ;;
@@ -289,7 +290,7 @@
   (let ((flags (make-hash-table)))
     (hash-table-set! flags "-rerun" "NOT_STARTED")
     (if (not (string=? (tasks:task-get-params task) ""))
-	(hash-table-set! flags "-
+	(hash-table-set! flags "-setvars" (tasks:task-get-params task)))
     (print "Starting run " task)
     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
     (runs:run-tests db
