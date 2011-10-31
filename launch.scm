@@ -56,6 +56,7 @@
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (env-ovrd  (assoc/default 'env-ovrd  cmdinfo))
+	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
@@ -63,6 +64,19 @@
 	       (db        #f))
 	  (debug:print 2 "Exectuing " test-name " on " (get-host-name))
 	  (change-directory testpath)
+	  ;; apply pre-overrides before other variables. The pre-override vars must not
+	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
+	  (if (string? set-vars)
+	      (let ((varpairs (string-split set-vars ",")))
+		(debug:print 4 "varpairs: " varpairs)
+		(map (lambda (varpair)
+		       (let ((varval (string-split varpair "=")))
+			 (if (eq? (length varval) 2)
+			     (let ((var (car varval))
+				   (val (cadr varval)))
+			       (debug:print 1 "Adding pre-var/val " var " = " val " to the environment")
+			       (setenv var val)))))
+		     varpairs)))
 	  (setenv "MT_TEST_RUN_DIR" work-area)
 	  (setenv "MT_TEST_NAME" test-name)
 	  (setenv "MT_ITEM_INFO" (conc itemdat))
@@ -356,7 +370,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat)
+(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
@@ -394,8 +408,9 @@
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat)))
 	(begin
-	  (set! work-area test-path)
-	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory")))
+	  (set! work-area (conc test-path "/tmp_run"))
+	  (create-directory work-area #t)
+	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory under tmp_run")))
     (set! cmdparms (base64:base64-encode (with-output-to-string
 				    (lambda () ;; (list 'hosts     hosts)
 				      (write (list (list 'testpath  test-path)
@@ -405,8 +420,9 @@
 						   (list 'run-id    run-id   )
 						   (list 'itemdat   itemdat  )
 						   (list 'megatest  remote-megatest)
-						   (list 'ezsteps   ezsteps)
-						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '()))
+						   (list 'ezsteps   ezsteps) 
+ 						   (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
+						   (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 						   (list 'runname   runname)
 						   (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist

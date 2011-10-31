@@ -90,7 +90,8 @@ Misc
                             prior runs with same keys
   -update-meta            : update the tests metadata for all tests
   -env2file fname         : write the environment to fname.csh and fname.sh
-
+  -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
+                                 overwritten by values set in config files.
 Spreadsheet generation
   -extract-ods            : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
@@ -147,6 +148,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
+			"-setvars"
 			"-debug" ;; for *verbosity* > 2
 			) 
 		 (list  "-h"

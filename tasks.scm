@@ -303,7 +303,7 @@
     (tasks:set-state tdb (tasks:task-get-id task) "waiting")))
 
 (define (tasks:rollup-runs db tdb task)
-  (let* ((flags (make-hash-table))
+  (let* ((flags (make-hash-table)) 
 	 (keys  (db:get-keys db))
 	 (keyvallst (keys:target->keyval keys (tasks:task-get-target task))))
     ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
