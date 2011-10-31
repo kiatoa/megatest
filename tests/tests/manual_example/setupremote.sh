@@ -14,7 +14,7 @@ megatest -step runtest :state end :status $?
 megatest -step gatherdata :state start :status n/a
 rsync -avz $TARGETUSER@$TARGETHOST:$TARGETDIR/results/ $MT_TEST_RUN_DIR/results/
 if [[ -e $MT_TEST_RUN_DIR/results/results.csv ]]; then
-    megatest -load-data < $MT_TEST_RUN_DIR/results/results.csv
+    megatest -load-test-data < $MT_TEST_RUN_DIR/results/results.csv
 fi
 
 if [[ -e $MT_TEST_RUN_DIR/results/final_results.log && $MT_TEST_RUN_DIR/final_results.logpro ]]; then
