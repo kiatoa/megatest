@@ -587,7 +587,7 @@
       WHERE id=?;"
    test-id test-id test-id)
   ;; if the test is not FAIL then set status based on the fail and pass counts.
-  (sleep 1)
+  (thread-sleep! 1)
   (sqlite3:execute
    db
    "UPDATE tests

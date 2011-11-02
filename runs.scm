@@ -545,9 +545,15 @@
   (let* ((keys        (db-get-keys db))
 	 (keyvallst   (keys->vallist keys #t))
 	 (run-id      (register-run db keys))  ;;  test-name)))
-	 (deferred    '())) ;; delay running these since they have a waiton clause
+	 (deferred    '()) ;; delay running these since they have a waiton clause
+	 (runconfigf   (conc  *toppath* "/runconfigs.config")))
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
+
+    (if (file-exists? runconfigf)
+	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+
     (if (and (eq? *passnum* 0)
 	     (args:get-arg "-keepgoing"))
 	(begin
@@ -574,7 +580,7 @@
 		     (eq? *globalexitstatus* 0))
 		(begin
 		  (debug:print 1 "Keep going, estimated " estrem " tests remaining to run, will continue in 3 seconds ...")
-		  (sleep 3)
+		  (thread-sleep! 3)
 		  (run-waiting-tests db)
 		  (loop (+ numtimes 1)))))))))
 	  
@@ -609,8 +615,8 @@
 	       (allitems    (if (or (not (null? items))(not (null? itemstable)))
 				(append (item-assoc->item-list items)
 					(item-table->item-list itemstable))
-				'(()))) ;; a list with one null list is a test with no items
-	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
+				'(())))) ;; a list with one null list is a test with no items
+;; 	  (runconfigf  (conc  *toppath* "/runconfigs.config")))
 	  (debug:print 1 "items: ")
 	  (if (>= *verbosity* 1)(pp allitems))
 	  (if (>= *verbosity* 5)
@@ -664,9 +670,12 @@
 				    (loop (car tal)(cdr tal)))))))
 		    (change-directory test-path)
 		    ;; this block is here only to inform the user early on
-		    (if (file-exists? runconfigf)
-			(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
-			(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+		    
+		    ;; NB// Moving the setting of runconfig.config vars to *before* the 
+		    ;; the calling of each test.
+		    ;; (if (file-exists? runconfigf)
+		    ;;     (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+		    ;;     (debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 		    (debug:print 4 "run-id: " run-id " test-name: " test-name " item-path: " item-path " testdat: " (test:get-status testdat) " test-state: " (test:get-state testdat))
 		    (case (if (args:get-arg "-force")
 			      'NOT_STARTED
@@ -750,7 +759,7 @@
     (let loop ((waiting-test-names (hash-table-keys *waiting-queue*)))
       (cond
        ((not (runs:can-run-more-tests db))
-	(sleep 2)
+	(thread-sleep! 2)
 	(loop waiting-test-names))
        ((null? waiting-test-names)
 	(debug:print 1 "All tests launched"))
@@ -873,7 +882,7 @@
 		     (eq? *globalexitstatus* 0))
 		(begin
 		  (debug:print 1 "Keep going, estimated " estrem " tests remaining to run, will continue in 3 seconds ...")
-		  (sleep 3)
+		  (thread-sleep! 3)
 		  (run-waiting-tests db)
 		  (loop (+ numtimes 1)))))))))
 
@@ -911,8 +920,8 @@
 	       (allitems    (if (or (not (null? items))(not (null? itemstable)))
 				(append (item-assoc->item-list items)
 					(item-table->item-list itemstable))
-				'(()))) ;; a list with one null list is a test with no items
-	       (runconfigf  (conc  *toppath* "/runconfigs.config")))
+				'(())))) ;; a list with one null list is a test with no items
+	  ;; (runconfigf  (conc  *toppath* "/runconfigs.config")))
 	  (debug:print 1 "items: ")
 	  (if (>= *verbosity* 1)(pp allitems))
 	  (if (>= *verbosity* 5)
@@ -975,9 +984,9 @@
 				    (loop (car tal)(cdr tal)))))))
 		    (change-directory test-path)
 		    ;; this block is here only to inform the user early on
-		    (if (file-exists? runconfigf)
-			(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
-			(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+		    ;; (if (file-exists? runconfigf)
+		    ;;     (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+		    ;;     (debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 		    (debug:print 4 "run-id: " run-id " test-name: " test-name " item-path: " item-path " testdat: " (test:get-status testdat) " test-state: " (test:get-state testdat))
 		    (case (if force ;; (args:get-arg "-force")
 			      'NOT_STARTED
