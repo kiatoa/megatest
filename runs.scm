@@ -827,7 +827,14 @@
 	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
-	 (test-names  '()))
+	 (test-names  '())
+	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
+	 (required-tests '()))
+
+    (if (file-exists? runconfigf)
+	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+    
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
     (for-each 
@@ -840,7 +847,7 @@
 				       tests)))))
      (string-split test-patts ","))
 
-    ;; now remove duplicates
+     ;; now remove duplicates
     (set! test-names (delete-duplicates test-names))
 
     (debug:print 0 "INFO: test names " test-names)
@@ -848,13 +855,25 @@
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;; could cache all these since they need to be read again ...
     ;; FIXME SOMEDAY
-    (for-each 
-     (lambda (test-name)
-       (let* ((config (test:get-testconfig test-name #f))
-	      (waiton (config-lookup config "requirements" "waiton")))
-	 (if (and waiton (not (member waiton test-names)))
-	     (set! test-names (append test-names (list waiton))))))
-     test-names)
+    (if (not (null? test-names))
+	(let loop ((hed (car test-names))
+		   (tal (cdr test-names)))
+	  (let* ((config  (test:get-testconfig hed #f))
+		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
+					  (if w w "")))))
+	    (for-each 
+	     (lambda (waiton)
+	       (if (and waiton (not (member waiton test-names)))
+		   (begin
+		     (set! required-tests (cons waiton required-tests))
+		     (set! test-names (append test-names (list waiton))))))
+	     waitons)
+	    (let ((remtests (delete-duplicates (append waitons tal))))
+	      (if (not (null? remtests))
+		  (loop (car remtests)(cdr remtests)))))))
+
+    (if (not (null? required-tests))
+	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
@@ -984,6 +1003,9 @@
 				    (loop (car tal)(cdr tal)))))))
 		    (change-directory test-path)
 		    ;; this block is here only to inform the user early on
+		    
+		    ;; Moving this to the run calling block
+
 		    ;; (if (file-exists? runconfigf)
 		    ;;     (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
 		    ;;     (debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
