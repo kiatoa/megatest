@@ -141,7 +141,7 @@
 				 ;; then, if runscript ran ok (or did not get called)
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
-				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t)) ;; FIXME??? is allow-system ok here?
+				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
 					    (db         (open-db)))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))

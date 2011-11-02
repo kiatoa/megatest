@@ -506,7 +506,9 @@
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
     (if testexists
-	(read-config test-configf #f system-allowed)
+	(read-config test-configf #f system-allowed environ-patt: (if system-allowed
+								      "pre-launch-env-vars"
+								      #f))
 	#f)))
   
 ;; sort tests by priority and waiton
@@ -1195,8 +1197,8 @@
 	(set! keys (db-get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
-	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config"))
-		   (runconfig  (read-config runconfigf #f #f)))
+	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; evaluate all 
+		   (runconfig  (read-config runconfigf #f #f environ-patt: ".*"))) 
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		  (begin

@@ -37,9 +37,17 @@
   (let ((newalist (filter (lambda (x)(not (equal? key (car x)))) alist)))
     (append newalist (list (list key val)))))
 
+(define (config:eval-string-in-environment str)
+  (let ((cmdres (cmd-run->list (conc "echo " str))))
+    (if (null? cmdres) ""
+	(car cmdres))))
+
 ;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
-(define (read-config path ht allow-system)
+;; envion-patt is a regex spec that identifies sections that will be eval'd
+;; in the environment on the fly
+
+(define (read-config path ht allow-system #!key (environ-patt #f))
   (if (not (file-exists? path))
       (if (not ht)(make-hash-table) ht)
       (let ((inp        (open-input-file path))
@@ -64,7 +72,7 @@
 	       (comment-rx _                  (loop (read-line inp) curr-section-name #f #f))
 	       (blank-l-rx _                  (loop (read-line inp) curr-section-name #f #f))
 	       (include-rx ( x include-file ) (begin
-						(read-config include-file res allow-system)
+						(read-config include-file res allow-system environ-patt: environ-patt)
 						(loop (read-line inp) curr-section-name #f #f)))
 	       (section-rx ( x section-name ) (loop (read-line inp) section-name #f #f))
 	       (key-sys-pr ( x key cmd      ) (if allow-system
@@ -83,9 +91,12 @@
 								     (config:assoc-safe-add alist key val))
 						    (loop (read-line inp) curr-section-name #f #f))
 						  (loop (read-line inp) curr-section-name #f #f)))
-	       (key-val-pr ( x key val      ) (let ((alist (hash-table-ref/default res curr-section-name '())))
+	       (key-val-pr ( x key val      ) (let ((alist   (hash-table-ref/default res curr-section-name '()))
+						    (realval (if (and environ-patt (string-match (regexp environ-patt) curr-section-name))
+								 (config:eval-string-in-environment val)
+								 val)))
 						(hash-table-set! res curr-section-name 
-								 (config:assoc-safe-add alist key val))
+								 (config:assoc-safe-add alist key realval))
 						(loop (read-line inp) curr-section-name key #f)))
 	       ;; if a continued line
 	       (cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
@@ -106,13 +117,13 @@
 		     (set! var-flag #f)
 		     (loop (read-line inp) curr-section-name #f #f))))))))
   
-(define (find-and-read-config fname)
+(define (find-and-read-config fname #!key (environ-patt #f))
   (let* ((curr-dir   (current-directory))
          (configinfo (find-config fname))
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo)))
     (if toppath (change-directory toppath)) 
-    (let ((configdat  (if configfile (read-config configfile #f #t) #f))) ;; (make-hash-table))))
+    (let ((configdat  (if configfile (read-config configfile #f #t environ-patt: environ-patt) #f))) ;; (make-hash-table))))
       (if toppath (change-directory curr-dir))
       (list configdat toppath configfile fname))))
 
