@@ -552,8 +552,10 @@
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
 
+    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* environ-patt: ".*")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 
     (if (and (eq? *passnum* 0)
@@ -592,7 +594,9 @@
   ;; All these vars might be referenced by the testconfig file reader
   (setenv "MT_TEST_NAME" test-name) ;; 
   (setenv "MT_RUNNAME"   (args:get-arg ":runname"))
-  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
+  ;; (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
   (change-directory *toppath*)
   (let* ((test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
 	 (test-configf (conc test-path "/testconfig"))
@@ -833,8 +837,10 @@
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '()))
 
+    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
+	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
     
     ;; look up all tests matching the comma separated list of globs in
@@ -1197,8 +1203,8 @@
 	(set! keys (db-get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
-	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; evaluate all 
-		   (runconfig  (read-config runconfigf #f #f environ-patt: ".*"))) 
+	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
+		   (runconfig  (read-config runconfigf #f #f environ-patt: #f))) 
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		  (begin
