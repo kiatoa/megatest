@@ -552,6 +552,8 @@
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
 
+    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    
     (if (file-exists? runconfigf)
 	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* environ-patt: ".*")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
@@ -592,7 +594,9 @@
   ;; All these vars might be referenced by the testconfig file reader
   (setenv "MT_TEST_NAME" test-name) ;; 
   (setenv "MT_RUNNAME"   (args:get-arg ":runname"))
-  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
+  ;; (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
   (change-directory *toppath*)
   (let* ((test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
 	 (test-configf (conc test-path "/testconfig"))
@@ -832,6 +836,8 @@
 	 (test-names  '())
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '()))
+
+    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
 	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")

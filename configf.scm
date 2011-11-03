@@ -92,11 +92,15 @@
 								     (config:assoc-safe-add alist key val))
 						    (loop (read-line inp) curr-section-name #f #f))
 						  (loop (read-line inp) curr-section-name #f #f)))
-	       (key-val-pr ( x key val      ) (let ((alist   (hash-table-ref/default res curr-section-name '()))
-						    (realval (if (and environ-patt (string-match (regexp environ-patt) curr-section-name))
+	       (key-val-pr ( x key val      ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
+						     (envar   (and environ-patt (string-match (regexp environ-patt) curr-section-name)))
+						     (realval (if envar
 								 (config:eval-string-in-environment val)
 								 val)))
-						(setenv key realval)
+						(if envar
+						    (begin
+						      (debug:print 4 "INFO: read-config key=" key ", val=" val ", realval=" realval)
+						      (setenv key realval)))
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key realval))
 						(loop (read-line inp) curr-section-name key #f)))

@@ -62,6 +62,7 @@
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
 	       (db        #f))
+	  
 	  (debug:print 2 "Exectuing " test-name " on " (get-host-name))
 	  (change-directory testpath)
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -90,6 +91,7 @@
 		(exit 1)))
 	  ;; now can find our db
 	  (set! db (open-db))
+	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 	  (set-run-config-vars db run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
