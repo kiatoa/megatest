@@ -10,14 +10,16 @@
 
 (include "common_records.scm")
 
-(define (setup-env-defaults db fname run-id . already-seen)
+(define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f))
   (let* ((keys    (get-keys db))
 	 (keyvals (get-key-vals db run-id))
+	 (keyval
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
-	 (confdat (read-config fname #f #f))
+	 (confdat (read-config fname #f #f environ-patt: environ-patt))
 	 (whatfound (make-hash-table))
 	 (sections (list "default" thekey)))
     (debug:print 4 "Using key=\"" thekey "\"")
+    
     (for-each 
      (lambda (section)
        (let ((section-dat (hash-table-ref/default confdat section #f)))
@@ -28,8 +30,7 @@
 		(setenv envvar (cadr (assoc envvar section-dat))))
 	      (map car section-dat)))))
      sections)
-    (if (and (not (null? already-seen))
-	     (not (car already-seen)))
+    (if already-seen
 	(begin
 	  (debug:print 2 "Key settings found in runconfig.config:")
 	  (for-each (lambda (fullkey)
@@ -41,6 +42,6 @@
 (define (set-run-config-vars db run-id)
   (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id)
+	(setup-env-defaults db runconfigf run-id #f environ-patt: ".*")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))))
   

@@ -40,7 +40,7 @@
 (define (config:eval-string-in-environment str)
   (let ((cmdres (cmd-run->list (conc "echo " str))))
     (if (null? cmdres) ""
-	(car cmdres))))
+	(caar cmdres))))
 
 ;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
@@ -48,6 +48,7 @@
 ;; in the environment on the fly
 
 (define (read-config path ht allow-system #!key (environ-patt #f))
+  (debug:print 4 "INFO: read-config " path " allow-system " allow-system " environ-patt " environ-patt)
   (if (not (file-exists? path))
       (if (not ht)(make-hash-table) ht)
       (let ((inp        (open-input-file path))
@@ -95,6 +96,7 @@
 						    (realval (if (and environ-patt (string-match (regexp environ-patt) curr-section-name))
 								 (config:eval-string-in-environment val)
 								 val)))
+						(setenv key realval)
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key realval))
 						(loop (read-line inp) curr-section-name key #f)))

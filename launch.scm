@@ -289,8 +289,9 @@
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
+;; set up the very basics needed for doing anything here.
 (define (setup-for-run)
-  (set! *configinfo* (find-and-read-config (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")))
+  (set! *configinfo* (find-and-read-config (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config") environ-patt: "env-override"))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*
