@@ -6,6 +6,6 @@ tags non important,dumb junk
 waiton    runfirst
 
 [items]
-MANYITEMS [system (env > envfile.txt;echo aa ab ac ad ae af ag ah ai aj ak al am an ao ap aq ar as at au)]
+MANYITEMS [system (env > envfile.txt;echo aa ab ac ad ae af ag ah ai)]
 # BORKED  
 
