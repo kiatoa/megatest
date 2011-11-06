@@ -1,14 +1,12 @@
-;; (require-library iup canvas-draw)
-;; 
-;; (module cells-test
-;; 	(cells-dialog)
-;; 	(import
-;; 	 scheme chicken extras
-;; 	 iup canvas-draw
-;; 	 (only canvas-draw-base pointer->canvas))
-;; 
+(require-library iup canvas-draw canvas-draw-iup)
 
-(use iup canvas-draw canvas-draw-base)
+(module cells-test
+ 	(cells-dialog)
+ 	(import
+ 	 scheme chicken extras
+ 	 iup canvas-draw canvas-draw-iup
+ 	 (only canvas-draw-base pointer->canvas))
+ 
 (define ncols  8)
 (define nlins  8)
 (define width  32)
@@ -29,17 +27,12 @@
     #:ncols-cb (lambda _ ncols) #:width-cb (lambda _ width)
     #:nlines-cb (lambda _ nlins) #:height-cb (lambda _ height)
     #:draw-cb
-    ;; (make-cells-draw-cb render-cell))))
+    (make-cells-draw-cb render-cell))))
+)
 
-    (let ([wrap (pointer->canvas #t)])
-      (lambda (handle i j x-min x-max y-min y-max canvas)
-	(render-cell handle i j x-min x-max y-min y-max (wrap canvas)))))))
-
-;; )
-
-;; (import
-;;  (only iup show main-loop)
-;;  cells-test)
+(import
+ (only iup show main-loop)
+  cells-test)
 
 (show cells-dialog)
 (main-loop)

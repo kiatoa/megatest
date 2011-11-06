@@ -73,19 +73,22 @@
 ;;======================================================================
 ;; Run steps
 ;; make-vector-record "Run steps" db step id test_id stepname step_complete step_pass event_time    
-(define (make-db:step)(make-vector 6))
+(define (make-db:step)(make-vector 7))
 (define-inline (db:step-get-id              vec)    (vector-ref  vec 0))
 (define-inline (db:step-get-test_id         vec)    (vector-ref  vec 1))
 (define-inline (db:step-get-stepname        vec)    (vector-ref  vec 2))
 (define-inline (db:step-get-state           vec)    (vector-ref  vec 3))
 (define-inline (db:step-get-status          vec)    (vector-ref  vec 4))
 (define-inline (db:step-get-event_time      vec)    (vector-ref  vec 5))
+(define-inline (db:step-get-logfile         vec)    (vector-ref  vec 6))
 (define-inline (db:step-set-id!             vec val)(vector-set! vec 0 val))
 (define-inline (db:step-set-test_id!        vec val)(vector-set! vec 1 val))
 (define-inline (db:step-set-stepname!       vec val)(vector-set! vec 2 val))
 (define-inline (db:step-set-state!          vec val)(vector-set! vec 3 val))
 (define-inline (db:step-set-status!         vec val)(vector-set! vec 4 val))
 (define-inline (db:step-set-event_time!     vec val)(vector-set! vec 5 val))
+(define-inline (db:step-set-logfile!        vec val)(vector-set! vec 6 val))
+
 
 ;; The steps table
 (define (make-db:steps-table)(make-vector 5))

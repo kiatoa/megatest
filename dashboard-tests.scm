@@ -391,13 +391,13 @@
 		   (hash-table-set! widgets "Test Steps" 
 				    (lambda (testdat)
 				      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
-					     (fmtstr  "~20a~10a~10a~12a~15a")
+					     (fmtstr  "~20a~10a~10a~12a~15a~20a")
 					     (comprsteps (db:get-steps-table db test-id))
 					     (newval  (string-intersperse 
 						       (append
 							(list 
-							 (format #f fmtstr "Stepname" "Start" "End" "Status" "Time")
-							 (format #f fmtstr "========" "=====" "===" "======" "===="))
+							 (format #f fmtstr "Stepname" "Start" "End" "Status" "Time" "Logfile")
+							 (format #f fmtstr "========" "=====" "===" "======" "====" "======="))
 							(map (lambda (x)
 							       ;; take advantage of the \n on time->string
 							       (format #f fmtstr
@@ -407,7 +407,8 @@
 								       (let ((s (vector-ref x 2)))
 									 (if (number? s)(seconds->time-string s) s))
 								       (vector-ref x 3)    ;; status
-								       (vector-ref x 4)))  ;; time delta
+								       (vector-ref x 4)
+								       (vector-ref x 5)))  ;; time delta
 							     (sort (hash-table-values comprsteps)
 								   (lambda (a b)
 								     (let ((time-a (vector-ref a 1))

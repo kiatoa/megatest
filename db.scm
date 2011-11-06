@@ -614,10 +614,10 @@
 (define (db:get-steps-for-test db test-id)
   (let ((res '()))
     (sqlite3:for-each-row 
-     (lambda (id test-id stepname state status event-time)
-       (set! res (cons (vector id test-id stepname state status event-time) res)))
+     (lambda (id test-id stepname state status event-time logfile)
+       (set! res (cons (vector id test-id stepname state status event-time logfile) res)))
      db
-     "SELECT id,test_id,stepname,state,status,event_time FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
     (reverse res)))
 
@@ -634,7 +634,7 @@
 			res 
 			(db:step-get-stepname step) 
 			;;        stepname                start end status    
-			(vector (db:step-get-stepname step) ""   "" ""     ""))))
+			(vector (db:step-get-stepname step) ""   "" ""     "" ""))))
 	   (debug:print 6 "record(before) = " record 
 			"\nid:       " (db:step-get-id step)
 			"\nstepname: " (db:step-get-stepname step)
@@ -644,7 +644,10 @@
 	   (case (string->symbol (db:step-get-state step))
 	     ((start)(vector-set! record 1 (db:step-get-event_time step))
 	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(db:step-get-status step))))
+					(db:step-get-status step)))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
 	     ((end)  
 	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
 	      (vector-set! record 3 (db:step-get-status step))
@@ -654,7 +657,10 @@
 						   ", startt=" startt ", endt=" endt
 						   ", get-status: " (db:step-get-status step))
 				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1"))))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
 	     (else
 	        (vector-set! record 2 (db:step-get-state step))
 	        (vector-set! record 3 (db:step-get-status step))
