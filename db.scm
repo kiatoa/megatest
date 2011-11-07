@@ -99,7 +99,7 @@
                                status TEXT DEFAULT 'n/a',
                                event_time TIMESTAMP,
                                comment TEXT DEFAULT '',
-                               logfile TEXT,
+                               logfile TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
@@ -206,7 +206,7 @@
        (patch-db))
       ((< mver 1.29)
        (db:set-var db "MEGATEST_VERSION" 1.29)
-       (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT;")
+       (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT DEFAULT '';")
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
@@ -615,7 +615,7 @@
   (let ((res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
-       (set! res (cons (vector id test-id stepname state status event-time logfile) res)))
+       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
      db
      "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
