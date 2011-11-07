@@ -3,8 +3,8 @@
 ;;   License GPL.
 
 
+(expect:warning  in "LogFileBody"  = 0 "Any warning" #/.*/)
 (expect:required in "LogFileBody" > 0 "Must be some files in the dir" #/.*/)
 
 (expect:ignore   in "LogFileBody"  < 99 "Ignore the word error in comments" #/^\/\/.*error/)
-(expect:warning  in "LogFileBody"  = 0 "Any warning" #/WARNING/)
 (expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/error/)) ;; but disallow any other errors

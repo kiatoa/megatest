@@ -195,11 +195,12 @@
 						     (teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
 						     (if logpro-used
 							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
+						     (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used)
 						     (cond
 						      ;; WARN from logpro
-						      ((and (eq? (vector-ref exit-info 1) 2) logpro-used)
+						      ((and (eq? (vector-ref exit-info 2) 2) logpro-used)
 						       (test-set-status! db run-id test-name "COMPLETE" "WARN" itemdat "Logpro warning found" #f))
-						      ((eq? (vector-ref exit-info 1) 0)
+						      ((eq? (vector-ref exit-info 2) 0)
 						       (test-set-status! db run-id test-name "COMPLETE" "PASS" itemdat #f #f))
 						      (else
 						       (test-set-status! db run-id test-name "COMPLETE" "FAIL" itemdat (conc "Failed at step " stepname) #f)))

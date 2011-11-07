@@ -9,8 +9,8 @@
    (let ((t1 (treebox
                  #:selection_cb (lambda (obj id state)
                                     (print "selection_db with id=" id " state=" state)
-                                    (print "Userdata: " (attribute obj "USERDATA"))
-                                    (attribute-set! obj "USERDATA" "Testvalue")))))
+                                    (print "SPECIALDATA: " (attribute obj "SPECIALDATA"))
+                                    ))))
      (set! t t1)
      t1)))
 
@@ -18,7 +18,7 @@
 (map (lambda (elname el)
        (print "Adding " elname " with value " el)
        (attribute-set! t elname el)
-       (attribute-set! t "USERDATA" el))
+       (attribute-set! t "SPECIALDATA" el))
      '("VALUE" "NAME"    "ADDLEAF" "ADDBRANCH1" "ADDLEAF2"    "VALUE")
      '("0"     "Figures" "Other"   "triangle"   "equilateral" "4")
      )
