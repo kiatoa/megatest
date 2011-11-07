@@ -2,12 +2,12 @@
 
 [ezsteps]
 lookittmp   ls /tmp
-lookithome  ls /home;echo warn
+lookithome  ls /home
 
 [test_meta]
 author matt
 owner  bob
-description This test runs a single ezstep which is expected to pass using a simple logpro file.
+description This test runs two ezsteps the first of which is expected to fail using a simple logpro file.
 
 tags first,single
 reviewed 09/10/2011, by Matt

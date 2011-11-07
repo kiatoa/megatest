@@ -61,7 +61,8 @@
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
-	       (db        #f))
+	       (db        #f)
+	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " on " (get-host-name))
 	  (change-directory testpath)
@@ -134,6 +135,7 @@
 					  (vector-set! exit-info 0 pid)
 					  (vector-set! exit-info 1 exit-status)
 					  (vector-set! exit-info 2 exit-code)
+					  (set! rollup-status exit-code) 
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
@@ -160,7 +162,7 @@
 							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
 							(stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
 							(stepcmd   (list-ref stepparts 3))
-							(script   "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!
+							(script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!
 							(logpro-used #f))
 						   ;; NB// can safely assume we are in test-area directory
 						   (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
@@ -169,11 +171,12 @@
 						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
 
 						   ;; first source the previous environment
-						   (if (and prevstep (file-exists? prevstep))
-						       (set! script (conc script "source .ezsteps/" prevstep ".sh")))
+						   (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") (get-environment-variable "SHELL")) ".csh" ".sh"))))
+						     (if (and prevstep (file-exists? prev-env))
+							 (set! script (conc script "source " prev-env))))
 						   
 						   ;; call the command using mt_ezstep
-						   (set! script (conc script "mt_ezstep " stepname " " stepcmd "\n"))
+						   (set! script (conc script ";mt_ezstep " stepname " " stepcmd))
 
 						   (debug:print 4 "script: " script)
 
@@ -195,16 +198,34 @@
 						     (teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
 						     (if logpro-used
 							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
-						     (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used)
-						     (cond
-						      ;; WARN from logpro
-						      ((and (eq? (vector-ref exit-info 2) 2) logpro-used)
-						       (test-set-status! db run-id test-name "COMPLETE" "WARN" itemdat "Logpro warning found" #f))
-						      ((eq? (vector-ref exit-info 2) 0)
-						       (test-set-status! db run-id test-name "COMPLETE" "PASS" itemdat #f #f))
-						      (else
-						       (test-set-status! db run-id test-name "COMPLETE" "FAIL" itemdat (conc "Failed at step " stepname) #f)))
-						     )
+						     ;; set the test final status
+						     (let* ((this-step-status (cond
+									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
+									       ((eq? (vector-ref exit-info 2) 0)                   'pass)
+									       (else 'fail)))
+							    (overall-status   (cond
+									       ((eq? rollup-status 2) 'warn)
+									       ((eq? rollup-status 0) 'pass)
+									       (else 'fail)))
+							    (next-status      (cond 
+									       ((eq? overall-status 'pass) this-step-status)
+									       ((eq? overall-status 'warn)
+										(if (eq? this-step-status 'fail) 'fail 'warn))
+									       (else 'fail))))
+						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+								    " this-step-status: " this-step-status " overall-status: " overall-status 
+								    " next-status: " next-status " rollup-status: " rollup-status)
+						       (case next-status
+							 ((warn)
+							  (set! rollup-status 2)
+							  (test-set-status! db run-id test-name "COMPLETED" "WARN" itemdat 
+									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
+									    #f))
+							 ((pass)
+							  (test-set-status! db run-id test-name "COMPLETED" "PASS" itemdat #f #f))
+							 (else ;; 'fail
+							  (set! rollup-status 1) ;; force fail
+							  (test-set-status! db run-id test-name "COMPLETED" "FAIL" itemdat (conc "Failed at step " stepname) #f)))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
@@ -270,15 +291,24 @@
 		   (testinfo  (db:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
-		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result")
+		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
 		    (test-set-status! db run-id test-name
 				      (if kill-job? "KILLED" "COMPLETED")
-				      (if (vector-ref exit-info 1) ;; look at the exit-status
-					  (if (and (not kill-job?) 
-						   (eq? (vector-ref exit-info 2) 0))
-					      "PASS"
-					      "FAIL")
-					  "FAIL") itemdat (args:get-arg "-m") #f)))
+				      ;; Old logic:
+				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
+				      ;;     (if (and (not kill-job?) 
+				      ;;         (eq? (vector-ref exit-info 2) 0)) ;; we can now use rollup-status instead
+				      ;;         "PASS"
+				      ;;         "FAIL")
+				      ;;     "FAIL") 
+				      ;; New logic based on rollup-status
+				      (cond
+				       ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
+				       ((eq? rollup-status 0) "PASS")
+				       ((eq? rollup-status 1) "FAIL")
+				       ((eq? rollup-status 2) "WARN")
+				       (else "FAIL"))
+				      itemdat (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no

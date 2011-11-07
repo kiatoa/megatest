@@ -18,6 +18,8 @@ allstatus=99
 runstatus=99
 logpropstatus=99
 
+# source the environment from the previous step if it exists
+
 # if a logpro file exists then use it otherwise just run the command, nb// was using 2>&1
 if [ -e ${stepname}.logpro ];then
    $command 2>&1| logpro ${stepname}.logpro ${stepname}.html &> ${stepname}.log 
