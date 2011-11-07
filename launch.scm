@@ -324,6 +324,9 @@
 
 ;; set up the very basics needed for doing anything here.
 (define (setup-for-run)
+  ;; would set values for KEYS in the environment here for better support of env-override but 
+  ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
+  ;; pass on that idea for now.
   (set! *configinfo* (find-and-read-config (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config") environ-patt: "env-override"))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))

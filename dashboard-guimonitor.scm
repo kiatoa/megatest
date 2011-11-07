@@ -176,7 +176,7 @@
 
 (on-exit (lambda ()
 	   (let ((tdb (tasks:open-db)))
-	     (print "On-exit called")
+	     ;; (print "On-exit called")
 	     (tasks:remove-monitor-record tdb)
 	     (sqlite3:finalize! tdb))))
 
