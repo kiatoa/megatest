@@ -548,7 +548,33 @@
 	 (keyvallst   (keys->vallist keys #t))
 	 (run-id      (register-run db keys))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 (runconfigf   (conc  *toppath* "/runconfigs.config")))
+	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
+	 (required-tests '()))
+
+    ;; now add non-directly referenced dependencies (i.e. waiton)
+    ;; could cache all these since they need to be read again ...
+    ;; FIXME SOMEDAY
+    (if (not (null? test-names))
+	(let loop ((hed (car test-names))
+		   (tal (cdr test-names)))
+	  (let* ((config  (test:get-testconfig hed #f))
+		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
+					  (if w w "")))))
+	    (for-each 
+	     (lambda (waiton)
+	       (if (and waiton (not (member waiton test-names)))
+		   (begin
+		     (set! required-tests (cons waiton required-tests))
+		     (set! test-names (append test-names (list waiton))))))
+	     waitons)
+	    (let ((remtests (delete-duplicates (append waitons tal))))
+	      (if (not (null? remtests))
+		  (loop (car remtests)(cdr remtests)))))))
+
+    (if (not (null? required-tests))
+	(debug:print 1 "INFO: Adding " required-tests " to the run queue")
+	(debug:print 1 "INFO: No prerequisites added"))
+
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
 
