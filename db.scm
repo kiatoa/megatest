@@ -197,8 +197,9 @@
 	                        tol REAL,
                                 units TEXT,
                                 comment TEXT DEFAULT '',
-                                status TEXT DEFAULT 'n/a',foss
+                                status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+       (print "WARNING: Table test_data and test_meta where recreated. Please do megatest -update-meta")
        (patch-db))
       ((< mver 1.27)
        (db:set-var db "MEGATEST_VERSION" 1.27)
