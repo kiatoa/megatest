@@ -571,14 +571,15 @@
 		(db:csv->test-data db test-id lin)
 		(loop (read-line))))))
     ;; roll up the current results.
-    (db:test-data-rollup db test-id)))
+    ;; FIXME: Add the status to 
+    (db:test-data-rollup db test-id #f)))
   
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
 ;; look at the test_data status field, 
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id)
+(define (db:test-data-rollup db test-id status)
   (sqlite3:execute 
    db 
    "UPDATE tests 
@@ -593,7 +594,8 @@
    "UPDATE tests
       SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                          THEN 'FAIL'
-                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0
+                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                           (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
                          THEN 'PASS'
                       ELSE status
                   END WHERE id=?;"

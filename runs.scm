@@ -216,8 +216,8 @@
 			 state real-status run-id test-name item-path))
 
     ;; if status is "AUTO" then call rollup
-    (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup db test-id))
+    (if (and test-id state status (or (equal? status "AUTO")(equal? status "AUTO-WARN"))) 
+	(db:test-data-rollup db test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
