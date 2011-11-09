@@ -485,6 +485,8 @@ Misc
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
 						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
+						 (set! *last-db-update-time* 0)))
+	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (set! *last-db-update-time* 0))))
 	     (iup:hbox
 	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
