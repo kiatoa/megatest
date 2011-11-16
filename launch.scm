@@ -170,13 +170,14 @@
 						   
 						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
 
-						   ;; first source the previous environment
-						   (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") (get-environment-variable "SHELL")) ".csh" ".sh"))))
-						     (if (and prevstep (file-exists? prev-env))
-							 (set! script (conc script "source " prev-env))))
+						   ;; ;; first source the previous environment
+						   ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
+						   ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
+						   ;;   (if (and prevstep (file-exists? prev-env))
+						   ;;       (set! script (conc script "source " prev-env))))
 						   
 						   ;; call the command using mt_ezstep
-						   (set! script (conc script ";mt_ezstep " stepname " " stepcmd))
+						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
 
