@@ -50,13 +50,11 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	cp dboard $(PREFIX)/bin/dboard
 	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
-	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
-	chmod a+x $(PREFIX)/bin/dashboard
 
 install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake
 
 bin : 
-	mkdir $(PREFIX)/bin
+	mkdir -p $(PREFIX)/bin
 
 test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
