@@ -455,7 +455,8 @@ Misc
 
 (define (mark-for-update)
   (set! *last-db-update-time* 0)
-  (set! *delayed-update* 1))
+  (set! *delayed-update* 1)
+  )
 
 (define (make-dashboard-buttons nruns ntests keynames)
   (let* ((nkeys   (length keynames))
