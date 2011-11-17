@@ -24,6 +24,7 @@
 (include "key_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+(include "test_records.scm")
 
 ;; stuff to be deprecated then removed
 (include "old-runs.scm")
@@ -159,7 +160,8 @@
 	 (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (test-names  '())
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
-	 (required-tests '()))
+	 (required-tests '())
+	 (test-records (make-hash-table)))
 
     (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 
@@ -184,15 +186,29 @@
 
     (debug:print 0 "INFO: test names " test-names)
 
+    ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
+    ;; -keepgoing is specified
+    (if (and (eq? *passnum* 0)
+	     keepgoing)
+	(begin
+	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
+	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
+	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
+	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
+	  (db:delete-tests-in-state db run-id "NOT_STARTED")
+	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+
+    (set! *passnum* (+ *passnum* 1))
+
     ;; now add non-directly referenced dependencies (i.e. waiton)
-    ;; could cache all these since they need to be read again ...
-    ;; FIXME SOMEDAY
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))
 	  (let* ((config  (test:get-testconfig hed #f))
 		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
 					  (if w w "")))))
+	    (if (not (hash-table-ref/default test-records hed #f))
+		(hash-table-set! test-records hed (vector hed config waitons (config-lookup "requirements" "priority") #f)))
 	    (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
@@ -207,25 +223,24 @@
     (if (not (null? required-tests))
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
 
-    ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
-    ;; -keepgoing is specified
-    (if (and (eq? *passnum* 0)
-	     keepgoing)
-	(begin
-	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
-	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
-	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
-	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
-    (set! *passnum* (+ *passnum* 1))
+    ;; At this point the list of parent tests is expanded 
+    ;; NB// Should expand items here and then insert into the run queue.
     (let loop ((numtimes 0))
       (for-each 
-       (lambda (test-name)
-	 (if (runs:can-run-more-tests db)
+       (lambda (test-record)
+	 ;; need to inspect the items field tests:testqueue-get-items
+	 ;;
+	 ;;  if #f then no items for this test, check prereqs and launch
+	 ;; 
+	 ;;  else if list, then have items
+	 ;;
+	 ;; if proc then eval it.
+	 ;;
+	 (let ((items (items:get-items-from-config tconfig)))
+	 (if (runs:can-run-more-tests db test-record) ;; now needs to look at the test group
 	     (run:test db run-id runname test-name keyvallst item-patts flags)
 	     ))
-       (tests:sort-by-priority-and-waiton test-names))
+       (tests:sort-by-priority-and-waiton test-records))
       ;; (run-waiting-tests db)
       (if keepgoing
 	  (let ((estrem (db:estimated-tests-remaining db run-id)))

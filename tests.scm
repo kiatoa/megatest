@@ -323,29 +323,26 @@
   
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days
-(define (tests:sort-by-priority-and-waiton test-names)
-  (let ((testdetails   (make-hash-table))
-	(mungepriority (lambda (priority)
+(define (tests:sort-by-priority-and-waiton test-records)
+  (let ((mungepriority (lambda (priority)
 			 (if priority
 			     (let ((tmp (any->number priority)))
 			       (if tmp tmp (begin (debug:print 0 "ERROR: bad priority value " priority ", using 0") 0)))
 			     0))))
-    (for-each (lambda (test-name)
-		(let ((test-config (test:get-testconfig test-name #f)))
-		  (if test-config (hash-table-set! testdetails test-name test-config))))
-	      test-names)
     (sort 
-     (hash-table-keys testdetails) ;; avoid dealing with deleted tests, look at the hash table
+     (hash-table-keys test-records) ;; avoid dealing with deleted tests, look at the hash table
      (lambda (a b)
-       (let* ((tconf-a   (hash-table-ref testdetails a))
-	      (tconf-b   (hash-table-ref testdetails b))
-	      (a-waiton   (config-lookup tconf-a "requirements" "waiton"))
-	      (b-waiton   (config-lookup tconf-b "requirements" "waiton"))
+       (let* ((a-record   (hash-table-ref test-records a))
+	      (b-record   (hash-table-ref test-records b))
+	      (a-waitons  (tests:testqueue-get-waitons a-record))
+	      (b-waitons  (tests:testqueue-get-waitons a-record))
 	      (a-priority (mungepriority (config-lookup tconf-a "requirements" "priority")))
 	      (b-priority (mungepriority (config-lookup tconf-b "requirements" "priority"))))
-	 (if (and a-waiton (equal? a-waiton b))
+	 (tests:testqueue-set-priority! a-record a-priority)
+	 (tests:testqueue-set-priority! b-record b-priority)
+	 (if (and a-waiton (member? (tests:testqueue-get-testname b) a-waitons))
 	     #f ;; cannot have a which is waiting on b happening before b
-	     (if (and b-waiton (equal? b-waiton a))
+	     (if (and b-waiton (member? (tests:testqueue-get-testname a) b-waitons))
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go

@@ -127,6 +127,15 @@
 	    item #f)
 	item)))
 
+(define (items:get-items-from-config tconfig)
+  (let* (;; db is always at *toppath*/db/megatest.db
+	 (items       (hash-table-ref/default test-conf "items" '()))
+	 (itemstable  (hash-table-ref/default test-conf "itemstable" '()))
+	 (allitems    (if (or (not (null? items))(not (null? itemstable)))
+			  (append (item-assoc->item-list items)
+				  (item-table->item-list itemstable))
+			  '(()))))
+    allitems))
 
 ;; (pp (item-assoc->item-list itemdat))
 

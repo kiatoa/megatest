@@ -26,7 +26,7 @@ db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o monitor.o dashboar
 runs.o dashboard.o dashboard-tests.o   : run_records.scm
 keys.o db.o runs.o launch.o megatest.o : key_records.scm
 tasks.o dashboard-tasks.o : task_records.scm
-runs.o : old-runs.scm
+runs.o : old-runs.scm test_records.scm
 
 $(OFILES) $(GOFILES) : common_records.scm 
 
