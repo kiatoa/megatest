@@ -119,7 +119,15 @@
       res)))
             ;; Nope, not now, return null as of 6/6/2011
 		
-  
+(define (check-valid-items class item)
+  (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))
+			(if s (string-split s) #f))))
+    (if valid-values
+	(if (member item valid-values)
+	    item #f)
+	item)))
+
+
 ;; (pp (item-assoc->item-list itemdat))
 
 
