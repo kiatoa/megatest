@@ -201,8 +201,7 @@
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
-    (if (and (eq? *passnum* 0)
-	     keepgoing)
+    (if (eq? *passnum* 0)
 	(begin
 	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
@@ -217,10 +216,10 @@
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (let* ((config  (test:get-testconfig hed 'return-procs))
 		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
-					  (if w w ""))))
-		 (items   (items:get-items-from-config config)))
+					  (if w w "")))))
+;;		 (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
-		(hash-table-set! test-records hed (vector hed config waitons (config-lookup "requirements" "priority") #f)))
+		(hash-table-set! test-records hed (vector hed config waitons (config-lookup config "requirements" "priority") #f)))
 	    (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
@@ -235,7 +234,7 @@
     (if (not (null? required-tests))
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
-    (runs:run-tests-queue test-records)))
+    (runs:run-tests-queue test-records keyvallist)))
 
 (define (runs:run-tests-queue  test-records keyvallist)
     ;; At this point the list of parent tests is expanded 
@@ -244,7 +243,7 @@
       (let loop (; (numtimes 0) ;; shouldn't need this
 		 (hed         (car sorted-test-names))
 		 (tal         (cdr sorted-test-names)))
-	(let* ((test-record (hash-table-ref test-records hed))
+	(let* ((test-record (hash-table-ref test-records hed))                         WHERE TO DO: (items:get-items-from-config config)
 	       (tconfig     (tests:testqueue-get-testconfig test-record))
 	       (waitons     (tests:testqueue-get-waitons    test-record))
 	       (priority    (tests:testqueue-get-priority   test-record))
@@ -301,6 +300,7 @@
 	   ((procedure? items)
 	    (if (runs:can-run-more-tests db test-record)
 		(let ((items-list (items)))
+		      
 		  (if (list? items-list)
 		      (begin
 			(tests:testqueue-set-items test-record items-list)

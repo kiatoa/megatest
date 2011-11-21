@@ -93,8 +93,8 @@
 								     (config:assoc-safe-add alist
 											    key 
 											    (if (eq? allow-system 'return-procs)
-												val
-												(val))))
+												val-proc
+												(val-proc))))
 						    (loop (read-line inp) curr-section-name #f #f))
 						  (loop (read-line inp) curr-section-name #f #f)))
 	       (key-val-pr ( x key val      ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
