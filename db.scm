@@ -115,6 +115,7 @@
                                      avg_runtime REAL,
                                      avg_disk    REAL,
                                      tags        TEXT DEFAULT '',
+                                     jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
@@ -209,6 +210,9 @@
        (db:set-var db "MEGATEST_VERSION" 1.29)
        (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT DEFAULT '';")
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
+      ((< mver 1.36)
+       (db:set-var db "MEGATEST_VERSION" 1.36)
+       (sqlite3:execute db "ALTER TABLER test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
@@ -418,6 +422,19 @@
      db
      "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
     res))
+
+(define (db:get-count-tests-running-in-jobgroup db jobgroup)
+  (if (not jobgroup)
+      0 ;; 
+      (let ((res 0))
+	(sqlite3:for-each-row
+	 (lambda (count)
+	   (set! res count))
+	 db
+	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
+             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?;"
+	 jobgroup)
+	res)))
 
 ;; done with run when:
 ;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
@@ -695,6 +712,34 @@
 					(set! ever-seen #t)
 					(if (not (and (equal? (db:test-get-state test) "COMPLETED")
 						      (member (db:test-get-status test) '("PASS" "WARN" "CHECK"))))
+					    (set! result (cons waitontest-name result))))))
+				tests)
+		      (if (not ever-seen)(set! result (cons waitontest-name result)))))
+		  waiton)
+	(delete-duplicates result))))
+
+;; the new prereqs calculation, looks also at itempath if specified
+;; all prereqs must be met:
+;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
+;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
+(define (db:get-prereqs-not-met db run-id waiton ref-item-path)
+  (if (null? waiton)
+      '()
+      (let* ((unmet-pre-reqs '())
+	     (tests           (db-get-tests-for-run db run-id #f #f '() '()))
+	     (result         '()))
+	(for-each (lambda (waitontest-name)
+		    (let ((ever-seen #f))
+		      (for-each (lambda (test)
+				  (if (equal? waitontest-name (db:test-get-testname test))
+				      (let* ((state         (db:test-get-state test))
+					     (status        (db:test-get-status test))
+					     (item-path     (db:test-get-item-path test))
+					     (is-completed  (equal? state "COMPLETED"))
+					     (is-ok         (member status '("PASS" "WARN" "CHECK" "WAIVED")))
+					     (same-itempath (equal? ref-item-path item-path)))
+					(set! ever-seen #t)
+					(if (or (
 					    (set! result (cons waitontest-name result))))))
 				tests)
 		      (if (not ever-seen)(set! result (cons waitontest-name result)))))
