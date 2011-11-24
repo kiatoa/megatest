@@ -243,13 +243,14 @@
       (let loop (; (numtimes 0) ;; shouldn't need this
 		 (hed         (car sorted-test-names))
 		 (tal         (cdr sorted-test-names)))
-	(let* ((test-record (hash-table-ref test-records hed))                         WHERE TO DO: (items:get-items-from-config config)
+	(let* ((test-record (hash-table-ref test-records hed))
 	       (tconfig     (tests:testqueue-get-testconfig test-record))
 	       (waitons     (tests:testqueue-get-waitons    test-record))
 	       (priority    (tests:testqueue-get-priority   test-record))
 	       (itemdat     (tests:testqueue-get-itemdat    test-record))
 	       (items       (tests:testqueue-get-items      test-record))
 	       (item-path   (item-list->path itemdat)))
+	  (debug:print 0 "WHERE TO DO: (items:get-items-from-config config)")
 	  (cond
 	   ((not items) ;; when false the test is ok to be handed off to launch
 	    (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
