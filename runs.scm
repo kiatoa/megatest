@@ -267,7 +267,6 @@
 	     (itemdat     (tests:testqueue-get-itemdat    test-record))
 	     (items       (tests:testqueue-get-items      test-record))
 	     (item-path   (item-list->path itemdat)))
-	(debug:print 0 "WHERE TO DO: (items:get-items-from-config config)")
 	(debug:print 6
 		     "itemdat:     " itemdat
 		     "\n  items:     " items
@@ -357,14 +356,16 @@
 	 (test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
-	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f)))
-    (debug:print 1 "Launching test " test-name)
+	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
+	 (item-path     ""))
     (debug:print 5
 		 "test-config: " (hash-table->alist test-conf)
 		 "\n   itemdat: " itemdat
 		 )
     ;; setting itemdat to a list if it is #f
     (if (not itemdat)(set! itemdat '()))
+    (set! item-path (item-list->path itemdat))
+    (debug:print 1 "Attempting to launch test " test-name "/" item-path)
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
     (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
@@ -374,8 +375,7 @@
     (runs:update-test_meta db test-name test-conf)
     
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
-    (let* ((item-path     (item-list->path itemdat)) ;; (string-intersperse (map cadr itemdat) "/"))
-	   (new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
+    (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
 	   (testdat       (db:get-test-info db run-id test-name item-path)))
       (if (not testdat)
