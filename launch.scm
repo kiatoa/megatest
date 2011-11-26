@@ -373,9 +373,13 @@
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))
 	 (toptest-path (conc disk-path "/" key-str "/" runname "/" testname))
-	 (runsdir  (config-lookup *configdat* "setup" "runsdir"))
-	 (lnkpath  (conc (if runsdir runsdir (conc *toppath* "/runs"))
-			 "/" key-str "/" runname item-path)))
+	 (runsdir  (let ((rd (config-lookup *configdat* "setup" "runsdir")))
+		     (if rd rd (conc *toppath* "/runs"))))
+	 (lnkpath  (conc runsdir "/" key-str "/" runname item-path)))
+    (if (not (file-exists? runsdir))
+	(begin
+	  (debug:print 0 "WARNING: runsdir did not exist! Creating it now at " runsdir)
+	  (system (conc "mkdir -p " runsdir))))
     ;; since this is an iterated test this is as good a place as any to
     ;; update the toptest record with its location rundir
     (if (not (equal? item-path ""))
@@ -386,11 +390,11 @@
     (debug:print 2 " - creating link from " dfullp "/" testname " to " lnkpath)
     (system  (conc "mkdir -p " lnkpath))
 
-;; I suspect this section was deleting test directories under some 
-;; wierd sitations
+    ;; I suspect this section was deleting test directories under some 
+    ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
 
-;;    (if (file-exists? (conc lnkpath "/" testname))
-;;	(system (conc "rm -f " lnkpath "/" testname)))
+    (if (file-exists? (conc lnkpath "/" testname))
+    	(system (conc "rm -f " lnkpath "/" testname)))
     (system  (conc "ln -sf " dfullp " " lnkpath "/" testname))
     (if (directory? dfullp)
 	(begin
