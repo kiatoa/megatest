@@ -722,8 +722,9 @@
 ;; all prereqs must be met:
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
-(define (db:get-prereqs-not-met db run-id waiton ref-item-path)
-  (if (null? waiton)
+(define (db:get-prereqs-not-met db run-id waitons ref-item-path)
+  (if (or (not waitons)
+	  (null? waitons))
       '()
       (let* ((unmet-pre-reqs '())
 	     (result         '()))
@@ -750,17 +751,17 @@
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
 			 is-ok)
-		    (set! waiton-met #t))
+		    (set! parent-waiton-met #t))
 		   ((and same-itempath
 			 is-completed
 			 is-ok)
 		    (set! item-waiton-met #t)))))
 	      tests)
-	     (if (not (or waiton-met item-waiton-met))
+	     (if (not (or parent-waiton-met item-waiton-met))
 		 (set! result (cons waitontest-name result)))
 	     ;; if the test is not found then clearly the waiton is not met...
 	     (if (not ever-seen)(set! result (cons waitontest-name result)))))
-	waiton)
+	waitons)
       (delete-duplicates result))))
 
 ;;======================================================================

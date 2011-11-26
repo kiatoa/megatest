@@ -327,10 +327,21 @@ Called as " (string-intersperse (argv) " ")))
      "-runall"
      "run all tests"
      (lambda (db keys keynames keyvallst)
-       (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
-	 (debug:print 1 "INFO: Attempting to start the following tests...")
-	 (debug:print 1 "     " (string-intersperse test-names ","))
-	 (run-tests db test-names)))))
+       (let* (;; (test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
+	      (runname   (args:get-arg ":runname"))
+	      (target    (args:get-arg "-target")))
+	 (if (not target)
+	     (begin
+	       (debug:print 0 "ERROR: -target is a required parameter")
+	       (exit 0)))
+	 (runs:run-tests db
+			 target
+			 runname
+			 (args:get-arg "-testpatt")
+			 (args:get-arg "-itempatt")
+			 user
+			 (make-hash-table))))))
+;;	 (run-tests db test-names)))))
 
 ;;======================================================================
 ;; Rollup into a run

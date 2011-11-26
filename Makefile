@@ -1,5 +1,6 @@
 
 PREFIX=.
+CSCOPTS= 
 
 SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
@@ -16,22 +17,22 @@ HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
 all : megatest dboard
 
 megatest: $(OFILES) megatest.o
-	csc $(OFILES) megatest.o -o megatest
+	csc $(CSCOPTS) $(OFILES) megatest.o -o megatest
 
 dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
 
 # Special dependencies for the includes
-db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o monitor.o dashboard.o megatest.o : db_records.scm
-runs.o dashboard.o dashboard-tests.o   : run_records.scm
-keys.o db.o runs.o launch.o megatest.o : key_records.scm
-tasks.o dashboard-tasks.o : task_records.scm
+tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o monitor.o dashboard.o megatest.o : db_records.scm
+tests.o runs.o dashboard.o dashboard-tests.o   : run_records.scm
+db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
+tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : old-runs.scm test_records.scm
 
 $(OFILES) $(GOFILES) : common_records.scm 
 
 %.o : %.scm
-	csc -c $<
+	csc $(CSCOPTS) -c $<
 
 $(PREFIX)/bin/megatest : megatest
 	@echo Installing to PREFIX=$(PREFIX)

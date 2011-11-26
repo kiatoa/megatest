@@ -11,6 +11,7 @@
 (include "key_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+(include "test_records.scm")
 
 
 (define (register-test db run-id test-name item-path)
@@ -335,14 +336,29 @@
        (let* ((a-record   (hash-table-ref test-records a))
 	      (b-record   (hash-table-ref test-records b))
 	      (a-waitons  (tests:testqueue-get-waitons a-record))
-	      (b-waitons  (tests:testqueue-get-waitons a-record))
-	      (a-priority (mungepriority (config-lookup tconf-a "requirements" "priority")))
-	      (b-priority (mungepriority (config-lookup tconf-b "requirements" "priority"))))
+	      (b-waitons  (tests:testqueue-get-waitons b-record))
+	      (a-config   (tests:testqueue-get-testconfig  a-record))
+	      (b-config   (tests:testqueue-get-testconfig  b-record))
+	      (a-raw-pri  (config-lookup a-config "requirements" "priority"))
+	      (b-raw-pri  (config-lookup b-config "requirements" "priority"))
+	      (a-priority (mungepriority a-raw-pri))
+	      (b-priority (mungepriority b-raw-pri)))
+	;;  (debug:print 5 "sort-by-priority-and-waiton, a: " a " b: " b
+	;; 	      "\n     a-record:   " a-record 
+	;; 	      "\n     b-record:   " b-record
+	;; 	      "\n     a-waitons:  " a-waitons
+	;; 	      "\n     b-waitons:  " b-waitons
+	;; 	      "\n     a-config:   " (hash-table->alist a-config)
+	;; 	      "\n     b-config:   " (hash-table->alist b-config)
+	;; 	      "\n     a-raw-pri:  " a-raw-pri
+	;; 	      "\n     b-raw-pri:  " b-raw-pri
+	;; 	      "\n     a-priority: " a-priority
+	;; 	      "\n     b-priority: " b-priority)
 	 (tests:testqueue-set-priority! a-record a-priority)
 	 (tests:testqueue-set-priority! b-record b-priority)
-	 (if (and a-waiton (member? (tests:testqueue-get-testname b) a-waitons))
+	 (if (and a-waitons (member (tests:testqueue-get-testname b-record) a-waitons))
 	     #f ;; cannot have a which is waiting on b happening before b
-	     (if (and b-waiton (member? (tests:testqueue-get-testname a) b-waitons))
+	     (if (and b-waitons (member (tests:testqueue-get-testname a-record) b-waitons))
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go

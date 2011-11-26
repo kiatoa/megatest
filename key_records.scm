@@ -21,5 +21,7 @@
 		    (append keys additional)) ","))
 
 (define-inline (item-list->path itemdat)
-  (string-intersperse  (map cadr itemdat) "/"))
+  (if (list? itemdat)
+      (string-intersperse  (map cadr itemdat) "/")
+      ""))
 
