@@ -326,11 +326,44 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (db keys keynames keyvallst)
-       (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
-	 (debug:print 1 "INFO: Attempting to start the following tests...")
-	 (debug:print 1 "     " (string-intersperse test-names ","))
-	 (run-tests db test-names)))))
+     (lambda (db target runname keys keynames keyvallst)
+       (runs:run-tests db
+		       target
+		       runname
+		       (args:get-arg "-testpatt")
+		       (args:get-arg "-itempatt")
+		       user
+		       (make-hash-table)))))
+
+;;======================================================================
+;; run one test
+;;======================================================================
+
+;; 1. find the config file
+;; 2. change to the test directory
+;; 3. update the db with "test started" status, set running host
+;; 4. process launch the test
+;;    - monitor the process, update stats in the db every 2^n minutes
+;; 5. as the test proceeds internally it calls megatest as each step is
+;;    started and completed
+;;    - step started, timestamp
+;;    - step completed, exit status, timestamp
+;; 6. test phone home
+;;    - if test run time > allowed run time then kill job
+;;    - if cannot access db > allowed disconnect time then kill job
+
+(if (args:get-arg "-runtests")
+  (general-run-call 
+   "-runtests" 
+   "run a test" 
+   (lambda (db target runname keys keynames keyvallst)
+     (runs:run-tests db
+		     target
+		     runname
+		     (args:get-arg "-runtests")
+		     (args:get-arg "-itempatt")
+		     user
+		     (make-hash-table)))))
 
 ;;======================================================================
 ;; Rollup into a run
@@ -360,31 +393,6 @@ Called as " (string-intersperse (argv) " ")))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
 	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
-
-;;======================================================================
-;; run one test
-;;======================================================================
-
-;; 1. find the config file
-;; 2. change to the test directory
-;; 3. update the db with "test started" status, set running host
-;; 4. process launch the test
-;;    - monitor the process, update stats in the db every 2^n minutes
-;; 5. as the test proceeds internally it calls megatest as each step is
-;;    started and completed
-;;    - step started, timestamp
-;;    - step completed, exit status, timestamp
-;; 6. test phone home
-;;    - if test run time > allowed run time then kill job
-;;    - if cannot access db > allowed disconnect time then kill job
-
-(if (args:get-arg "-runtests")
-  (general-run-call 
-   "-runtests" 
-   "run a test" 
-   (lambda (db keys keynames keyvallst)
-     (let ((test-names (string-split (args:get-arg "-runtests") ",")))
-       (run-tests db test-names)))))
 
 ;;======================================================================
 ;; execute the test

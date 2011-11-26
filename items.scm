@@ -127,6 +127,25 @@
 	    item #f)
 	item)))
 
+(define (items:get-items-from-config tconfig)
+  (let* (;; db is always at *toppath*/db/megatest.db
+	 (items       (hash-table-ref/default tconfig "items" '()))
+	 (itemstable  (hash-table-ref/default tconfig "itemstable" '())))
+    (debug:print 5 "items: " items " itemstable: " itemstable)
+    (set! items (map (lambda (item)
+		       (if (procedure? (cadr item))
+			   (list (car item)((cadr item)))
+			   item))
+		     items))
+    (set! itemstable (map (lambda (item)
+			    (if (procedure? (cadr item))
+				(list (car item)((cadr item)))
+				item))
+			  itemstable))
+    (if (or (not (null? items))(not (null? itemstable)))
+	(append (item-assoc->item-list items)
+		(item-table->item-list itemstable))
+	'(()))))
 
 ;; (pp (item-assoc->item-list itemdat))
 

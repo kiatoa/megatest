@@ -287,8 +287,7 @@ Web: www.kiatoa.com/fossils/megatest
 \end_inset
 
 This document is believed to be acurate at the time of writing but as with
- any opensource project the source code itself is the final arbiter of the
- softwares behaviour.
+ any opensource project the source code itself is the reference.
  It is the responsibility of the end user to validate that the code will
  perform as they expect.
  The author assumes no responsibility for any inaccuracies that this document
@@ -301,10 +300,10 @@ This document is believed to be acurate at the time of writing but as with
 \end_layout
 
 \begin_layout Standard
-This document is a snapshot in time and the Megatest software has likely
- been changed since publication.
- This document and the product that it describes may be improved at any
- time, without notice or obligation.
+This document is a snapshot in time and Megatest software has likely changed
+ since publication.
+ This document and Megatest may be improved at any time, without notice
+ or obligation.
  
 \end_layout
 
@@ -461,14 +460,13 @@ Megatest design philosophy
 
 \begin_layout Standard
 Megatest is intended to provide the minimum needed resources to make writing
- a suite of tests for software, design engineering or process control (via
- owlfs for example) without being specialized for any specific problem space.
+ a suite of tests and implementing continuous build for software, design
+ engineering or process control (via owlfs for example) without being specialize
+d for any specific problem space.
  Megatest in of itself does not know what constitutes a PASS or FAIL of
  a test.
  In most cases megatest is best used in conjunction with logpro or a similar
  tool to parse, analyze and decide on the test outcome.
- A call to megatest can then be made to record the result.
- 
 \end_layout
 
 \begin_layout Subsection
@@ -1679,6 +1677,19 @@ Monitor logic
 \end_layout
 
 \begin_layout Standard
+Note: The monitor is usable but incomplete as of Megatest v1.31.
+ Click on the 
+\begin_inset Quotes eld
+\end_inset
+
+Monitor
+\begin_inset Quotes erd
+\end_inset
+
+ button on the dashboard to start the monitor and give it a try.
+\end_layout
+
+\begin_layout Standard
 \begin_inset Graphics
 	filename monitor-state-diagram.svg
 
@@ -1693,6 +1704,12 @@ Reference
 
 \begin_layout Subsection
 Configuration file Syntax
+\end_layout
+
+\begin_layout Standard
+Note: whitespace is preserved including at the end of line.
+ Ensure your entries only have whitespace at the end of line when needed
+ to avoid problems.
 \end_layout
 
 \begin_layout Subsubsection
@@ -2010,7 +2027,7 @@ megatest.config
 
 \begin_layout Standard
 \begin_inset Tabular
-<lyxtabular version="3" rows="9" columns="5">
+<lyxtabular version="3" rows="10" columns="5">
 <features tabularvalignment="middle" tabularwidth="80page%">
 <column alignment="left" valignment="top" width="10page%">
 <column alignment="left" valignment="top" width="15page%">
@@ -2344,6 +2361,54 @@ n/a
 
 \begin_layout Plain Layout
 
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+[jobgroups]
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+string of letters, numbers and underscore
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+number
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+no
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Control number of jobs allowed to concurrently run in categories.
+ See [jobgroup] in testconfig
 \end_layout
 
 \end_inset
@@ -2745,7 +2810,7 @@ testconfig file
 
 \begin_layout Standard
 \begin_inset Tabular
-<lyxtabular version="3" rows="4" columns="5">
+<lyxtabular version="3" rows="6" columns="5">
 <features tabularvalignment="middle" tabularwidth="80page%">
 <column alignment="left" valignment="top" width="8page%">
 <column alignment="left" valignment="top" width="6page%">
@@ -2896,7 +2961,54 @@ This test will not run until the named tests are state completed and status
 </cell>
 </row>
 <row>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+jobgroup
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2905,7 +3017,7 @@ This test will not run until the named tests are state completed and status
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2914,7 +3026,7 @@ any valid
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2923,7 +3035,7 @@ list of values
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2932,7 +3044,7 @@ no
 
 \end_inset
 </cell>
-<cell alignment="left" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+<cell alignment="left" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
 \begin_inset Text
 
 \begin_layout Plain Layout
@@ -2940,6 +3052,55 @@ The test will be repeated once for each item with the variable name set
  to the value.
  If there is more than one variable then the test will be run against all
  unique combinations of the values
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+[eztests]
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+any valid
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+stepname command
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+no
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Use in addition to or instead of runscript for easy implementation of steps.
+ If <stepname>.logpro exists it will be applied to the <stepname>.log and
+ resulting exit code will be used to determine PASS/FAIL/WARN
 \end_layout
 
 \end_inset
@@ -3872,7 +4033,7 @@ Used inside a test to run a step, record the start and end of the step and
 \begin_inset Text
 
 \begin_layout Plain Layout
-If using logpro to asses the PASS/FAIL status of the step you specify the
+If using logpro to acess the PASS/FAIL status of the step you specify the
  logpro file with this parameter.
 \end_layout
 
