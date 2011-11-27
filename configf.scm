@@ -148,10 +148,180 @@
 	      #f))
 	)))
 
+(define (configf:section-vars cfgdat section)
+  (let ((sectdat (hash-table-ref/default cfgdat section '())))
+    (if (null? sectdat)
+	'()
+	(map car sectdat))))
+
 (define (setup)
   (let* ((configf (find-config))
 	 (config  (if configf (read-config configf #f #t) #f)))
     (if config
 	(setenv "RUN_AREA_HOME" (pathname-directory configf)))
     config))
+
+;;======================================================================
+;; Non destructive writing of config file
+;;======================================================================
+
+(define (configf:compress-multi-lines fdat)
+  ;; step 1.5 - compress any continued lines
+  (if (null? fdat) fdat
+	(let loop ((hed (car fdat))
+		   (tal (cdr fdat))
+		   (cur "")
+		   (led #f)
+		   (res '()))
+	  ;; ALL WHITESPACE LEADING LINES ARE TACKED ON!!
+	  ;;  1. remove led whitespace
+	  ;;  2. tack on to hed with "\n"
+	  (let ((match (string-match cont-ln-rx hed)))
+	    (if match ;; blast! have to deal with a multiline
+		(let* ((lead (cadr match))
+		       (lval (caddr match))
+		       (newl (conc cur "\n" lval)))
+		  (if (not led)(set! led lead))
+		  (if (null? tal) 
+		      (set! fdat (append fdat (list newl)))
+		      (loop (car tal)(cdr tal) newl led res))) ;; NB// not tacking newl onto res
+		(let ((newres (if led 
+				  (append res (list cur hed))
+				  (append res (list hed)))))
+		  ;; prev was a multiline
+		  (if (null? tal)
+		      newres
+		      (loop (car tal)(cdr tal) "" #f newres))))))))
+
+(define (configf:expand-multi-lines fdat)
+  ;; step 1.5 - compress any continued lines
+  (if (null? fdat) fdat
+	(let loop ((hed (car fdat))
+		   (tal (cdr fdat))
+		   (cur "")
+		   (led #f)
+		   (res '()))
+	  ;; ALL WHITESPACE LEADING LINES ARE TACKED ON!!
+	  ;;  1. remove led whitespace
+	  ;;  2. tack on to hed with "\n"
+	  (let ((match (string-match cont-ln-rx hed)))
+	    (if match ;; blast! have to deal with a multiline
+		(let* ((lead (cadr match))
+		       (lval (caddr match))
+		       (newl (conc cur "\n" lval)))
+		  (if (not led)(set! led lead))
+		  (if (null? tal) 
+		      (set! fdat (append fdat (list newl)))
+		      (loop (car tal)(cdr tal) newl led res))) ;; NB// not tacking newl onto res
+		(let ((newres (if led 
+				  (append res (list cur hed))
+				  (append res (list hed)))))
+		  ;; prev was a multiline
+		  (if (null? tal)
+		      newres
+		      (loop (car tal)(cdr tal) "" #f newres))))))))
+
+(define (configf:file->list fname)
+  (if (file-exists? fname)
+      (let ((inp (open-input-file fname)))
+	(let loop ((inl (read-line inp))
+		   (res '()))
+	  (if (eof-object? inl)
+	      (begin
+		(close-input-port inp)
+		(reverse res))
+	      (loop (read-line inp)(cons inl)))))
+      '()))
+
+;;======================================================================
+;; Write a config
+;;   0. Given a refererence data structure "indat"
+;;   1. Open the output file and read it into a list
+;;   2. Flatten any multiline entries
+;;   3. Modify values per contents of "indat" and remove absent values
+;;   4. Append new values to the section (immediately after last legit entry)
+;;   5. Write out the new list 
+;;======================================================================
+
+(define (configf:write-config indat fname #!key (required-sections '()))
+  (let* ((include-rx (regexp "^\\[include\\s+(.*)\\]\\s*$"))
+	 (section-rx (regexp "^\\[(.*)\\]\\s*$"))
+	 (blank-l-rx (regexp "^\\s*$"))
+	 (key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
+	 (key-val-pr (regexp "^(\\S+)\\s+(.*)$"))
+	 (comment-rx (regexp "^\\s*#.*"))
+	 (cont-ln-rx (regexp "^(\\s+)(\\S+.*)$"))
+	 ;; step 1: Open the output file and read it into a list
+	 (fdat       (configf:file->list fname))
+	 (refdat  (make-hash-table))
+	 (sechash (make-hash-table)) ;; current section hash, init with hash for "default" section
+	 (new     #f)) ;; put the line to be used in new, if it is to be deleted the set new to #f
+
+    ;; step 2: Flatten multiline entries
+    (if (not (null? fdat))(set! fdat (configf:compress-multi-line fdat)))
+
+    ;; step 3: Modify values per contents of "indat" and remove absent values
+    (if (not (null? fdat))
+	(let loop ((hed  (car fdat))
+		   (tal  (cadr fdat))
+		   (res  '())
+		   (sec  #f) ;; section
+		   (lnum 0))
+	  (regex-case 
+	   hed
+	   (comment-rx _                  (set! res (append res (list hed)))) ;; (loop (read-line inp) curr-section-name #f #f))
+	   (blank-l-rx _                  (set! res (append res (list hed)))) ;; (loop (read-line inp) curr-section-name #f #f))
+	   (section-rx ( x section-name ) (let ((section-hash (hash-table-ref/default refdat section-name #f)))
+					    (if (not section-hash)
+						(let ((newhash (make-hash-table)))
+						  (hash-table-set! refhash section-name newhash)
+						  (set! sechash newhash))
+						(set! sechash section-hash))
+					    (set! new hed) ;; will append this at the bottom of the loop
+					    (set! sec section-name)
+					    ))
+	   ;; No need to process key cmd, let it fall though to key val
+	   (key-val-pr ( x key val      )
+		       (let ((newval (config-lookup indat sec key)))
+			 ;; can handle newval == #f here => that means key is removed
+			 (cond 
+			  ((equal? newval val)
+			   (set! res (append res (list hed))))
+			  ((not newval) ;; key has been removed
+			   (set! new #f))
+			  ((not (equal? newval val))
+			     (hash-table-set! sechash key newval)
+			     (set! new (conc key " " newval)))
+			  (else
+			   (debug:print 0 "ERROR: problem parsing line number " lnum "\"" hed "\"")))))
+	   (else
+	    (debug:print 0 "ERROR: Problem parsing line num " lnum " :\n   " hed )))
+	  (if (not (null? tal))
+	      (loop (car tal)(cdr tal)(if new (append res (list new)) res)(+ lnum 1)))
+	  ;; drop to here when done processing, res contains modified list of lines
+	  (set! fdat res)))
+
+    ;; step 4: Append new values to the section
+    (for-each 
+     (lambda (section)
+       (let ((sdat   '()) ;; append needed bits here
+	     (svars  (configf:section-vars indat section)))
+	 (for-each 
+	  (lambda (var)
+	    (let ((val (config-lookup refdat section var)))
+	      (if (not val) ;; this one is new
+		  (begin
+		    (if (null? sdat)(set! sdat (list (conc "[" section "]"))))
+		    (set! sdat (append sdat (list (conc var " " val))))))))
+	  svars)
+	 (set! fdat (append fdat sdat))))
+     (delete-duplicates (append require-sections (hash-table-keys indat))))
+
+    ;; step 5: Write out new file
+    (with-output-to-file fname 
+      (lambda ()
+	(for-each 
+	 (lambda (line)
+	   (print line))
+	 (configf:expand-multi-lines fdat))))))
 
