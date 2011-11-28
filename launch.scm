@@ -373,13 +373,13 @@
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))
 	 (toptest-path (conc disk-path "/" key-str "/" runname "/" testname))
-	 (runsdir  (let ((rd (config-lookup *configdat* "setup" "runsdir")))
+	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		     (if rd rd (conc *toppath* "/runs"))))
-	 (lnkpath  (conc runsdir "/" key-str "/" runname item-path)))
-    (if (not (file-exists? runsdir))
+	 (lnkpath  (conc linktree "/" key-str "/" runname item-path)))
+    (if (not (file-exists? linktree))
 	(begin
-	  (debug:print 0 "WARNING: runsdir did not exist! Creating it now at " runsdir)
-	  (system (conc "mkdir -p " runsdir))))
+	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
+	  (system (conc "mkdir -p " linktree))))
     ;; since this is an iterated test this is as good a place as any to
     ;; update the toptest record with its location rundir
     (if (not (equal? item-path ""))

@@ -57,7 +57,7 @@
   (let* ((curr-row-num     0)
 	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
 	 (keys-matrix      (iup:matrix
-		            #:expand "YES"
+		            #:expand "VERTICAL"
 		            ;; #:scrollbar "YES"
 		            #:numcol 1
 		            #:numlin 20
@@ -80,7 +80,7 @@
 	 (validvals-matrix (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
-			    #:numlin 5
+			    #:numlin 2
 			    #:numcol-visible 1
 			    #:numlin-visible 2))
 	 (envovrd-matrix   (iup:matrix
@@ -97,16 +97,11 @@
 			    #:numlin-visible 8)))
     (iup:attribute-set! keys-matrix "0:0" "Field Num")
     (iup:attribute-set! keys-matrix "0:1" "Field Name")
-    (for-each
-     (lambda (mat)
-       (iup:attribute-set! mat "0:1" "Value")
-       (iup:attribute-set! mat "0:0" "Var")
-       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
-       (iup:attribute-set! mat "FIXTOTEXT" "C1")
-       (iup:attribute-set! mat "RESIZEMATRIX" "YES"))
-     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix))
+    (iup:attribute-set! keys-matrix "WIDTH1" "100")
     (iup:attribute-set! disks-matrix "0:0" "Disk Name")
     (iup:attribute-set! disks-matrix "0:1" "Disk Path")
+    (iup:attribute-set! disks-matrix "WIDTH1" "120")
+    (iup:attribute-set! disks-matrix "WIDTH0" "100")
     (iup:attribute-set! disks-matrix "ALIGNMENT1" "ALEFT")
     (iup:attribute-set! disks-matrix "FIXTOTEXT" "C1")
     (iup:attribute-set! disks-matrix "RESIZEMATRIX" "YES")
@@ -132,34 +127,58 @@
      (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
      (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
 
+    (for-each
+     (lambda (mat)
+       (iup:attribute-set! mat "0:1" "Value")
+       (iup:attribute-set! mat "0:0" "Var")
+       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
+       (iup:attribute-set! mat "FIXTOTEXT" "C1")
+       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
+       (iup:attribute-set! mat "WIDTH1" "120")
+       (iup:attribute-set! mat "WIDTH0" "100")
+       )
+     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix))
+
     (iup:vbox
      (iup:hbox
-      ;; The keys
-      (iup:frame 
-       #:title "Keys"
-       keys-matrix)
-      (iup:vbox
-       ;; The setup section
-       (iup:frame
-	#:title "Setup"
-	setup-matrix)
-       ;; The jobtools
-       (iup:frame
-	#:title "Jobtools"
-	jobtools-matrix)
-       ;; The valid values
-       (iup:frame
-	#:title "Validvalues"
-	validvals-matrix))
-      (iup:vbox
-       ;; The Environment Overrides
+       ;; The keys
        (iup:frame 
-	#:title "Env override"
-	envovrd-matrix)
-       ;; The disks
-       (iup:frame
-	#:title "Disks"
-	disks-matrix))
+	#:title "Keys (required)"
+	(iup:vbox
+	 (iup:label (conc "Set the fields for organising your runs\n"
+			  "here. Note: can only be changed before\n"
+			  "running the first run when megatest.db\n"
+			  "is created."))
+	 keys-matrix))
+      (iup:vbox
+       (let ((tabs (iup:tabs 
+		    ;; The required tab
+		    (iup:vbox
+		     ;; The setup section
+		     (iup:frame
+		      #:title "Setup"
+		      setup-matrix)
+		     ;; The jobtools
+		     (iup:frame
+		      #:title "Jobtools"
+		      jobtools-matrix)
+		     ;; The valid values
+		     ;; The disks
+		     (iup:frame
+		      #:title "Disks"
+		      disks-matrix))
+		    (iup:vbox
+		     ;; The Environment Overrides
+		     (iup:frame 
+		      #:title "Env override"
+		      envovrd-matrix)
+		     (iup:frame
+		      #:title "Validvalues"
+		      validvals-matrix)
+		     ))))
+	 (iup:attribute-set! tabs "TABTITLE0" "Required settings")
+	 (iup:attribute-set! tabs "TABTITLE1" "Optional settings")
+	 tabs))
        ))))
 
 (define (rconfig)

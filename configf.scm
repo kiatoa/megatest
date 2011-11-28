@@ -82,26 +82,27 @@
 						(loop (read-line inp) curr-section-name #f #f)))
 	       (configf:section-rx ( x section-name ) (loop (read-line inp) section-name #f #f))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
-						  (let ((alist (hash-table-ref/default res curr-section-name '()))
-							(val-proc (lambda ()
-								    (let* ((cmdres  (cmd-run->list cmd))
-									   (status  (cadr cmdres))
-									   (res     (car  cmdres)))
-								      (if (not (eq? status 0))
-									  (begin
-									    (debug:print 0 "ERROR: problem with " inl ", return code " status)
-									    (exit 1)))
-								      (if (null? res)
-									  ""
-									  (string-intersperse res " "))))))
-						    (hash-table-set! res curr-section-name 
-								     (config:assoc-safe-add alist
-											    key 
-											    (if (eq? allow-system 'return-procs)
-												val-proc
-												(val-proc))))
-						    (loop (read-line inp) curr-section-name #f #f))
-						  (loop (read-line inp) curr-section-name #f #f)))
+							  (let ((alist (hash-table-ref/default res curr-section-name '()))
+								(val-proc (lambda ()
+									    (let* ((cmdres  (cmd-run->list cmd))
+										   (status  (cadr cmdres))
+										   (res     (car  cmdres)))
+									      (if (not (eq? status 0))
+										  (begin
+										    (debug:print 0 "ERROR: problem with " inl ", return code " status)
+										    (exit 1)))
+									      (if (null? res)
+										  ""
+										  (string-intersperse res " "))))))
+							    (hash-table-set! res curr-section-name 
+									     (config:assoc-safe-add alist
+												    key 
+												    (case allow-system
+												      ((return-procs) val-proc)
+												      ((return-string) cmd)
+												      (else (val-proc)))))
+							    (loop (read-line inp) curr-section-name #f #f))
+							  (loop (read-line inp) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key val      ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 						     (envar   (and environ-patt (string-match (regexp environ-patt) curr-section-name)))
 						     (realval (if envar
