@@ -7,7 +7,7 @@ SRCFILES = common.scm items.scm launch.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm
 
-GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm
+GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm dashboard-main.scm
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
@@ -23,8 +23,8 @@ dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
 
 # Special dependencies for the includes
-tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o monitor.o dashboard.o megatest.o : db_records.scm
-tests.o runs.o dashboard.o dashboard-tests.o   : run_records.scm
+tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o megatest.o : db_records.scm
+tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
