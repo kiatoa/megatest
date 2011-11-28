@@ -6,7 +6,7 @@ PATH := $(BINPATH):$(PATH)
 
 runall :
 	cd ../;make install 
-	$(BINPATH)/dboard &
+	$(BINPATH)/dboard -rows 15 &
 	$(MEGATEST) -keepgoing -runall -target ubuntu/nfs/none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v
 
 test :
