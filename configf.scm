@@ -149,7 +149,7 @@
     (if (null? sectdat)
 	#f
 	(let ((match (assoc var sectdat)))
-	  (if match
+	  (if match ;; (and match (list? match)(> (length match) 1))
 	      (cadr match)
 	      #f))
 	)))

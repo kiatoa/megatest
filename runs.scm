@@ -291,7 +291,7 @@
 		(let ((newtal (append tal (list hed))))
 		  ;; couldn't run, take a breather
 		  (thread-sleep! 1)
-		  (loop (car tal)(cdr tal))))))
+		  (loop (car newtal)(cdr newtal))))))
 	 
 	 ;; case where an items came in as a list been processed
 	 ((and (list? items)     ;; thus we know our items are already calculated
