@@ -283,6 +283,8 @@
 	 ((not items) ;; when false the test is ok to be handed off to launch (but not before)
 	  (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
 		(prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
+	    ;; Don't know at this time if the test have been launched at some time in the past
+	    ;; i.e. is this a re-launch?
 	    (if (and have-resources
 		     (null? prereqs-not-met))
 		;; no loop - drop though and use the loop at the bottom 
@@ -373,7 +375,7 @@
     ;; setting itemdat to a list if it is #f
     (if (not itemdat)(set! itemdat '()))
     (set! item-path (item-list->path itemdat))
-    (debug:print 1 "Attempting to launch test " test-name "/" item-path)
+    (debug:print 2 "Attempting to launch test " test-name "/" item-path)
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
     (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
@@ -409,7 +411,9 @@
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
-		  (member (test:get-status testdat) '("PASS" "WARN" "CHECK")))
+		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
+		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
+		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (set! runflag #f))
 	    ;; -rerun and status is one of the specifed, run it
 	    ((and rerun
@@ -427,7 +431,8 @@
 	   (debug:print 6 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
 	   (if (not runflag)
 	       (if (not parent-test)
-		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status testdat) "\", use -force to override"))
+		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
+				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-state testdat) "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
