@@ -84,7 +84,15 @@
 		 db 
 		 (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
 		 run-id))
-	      keys)))
+	      keys)
+    ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
+    (sqlite3:for-each-row
+     (lambda (runname)
+       (setenv "MT_RUNNAME" runname))
+     db
+     "SELECT runname FROM runs WHERE id=?;"
+     run-id)
+    ))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -213,7 +221,7 @@
 	  (let* ((config  (test:get-testconfig hed 'return-procs))
 		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
 					  (if w w "")))))
-;;		 (items   (items:get-items-from-config config)))
+	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
 		(hash-table-set! test-records
 				 hed (vector hed     ;; 0
