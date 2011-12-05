@@ -139,39 +139,54 @@
        )
      (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix))
 
+    (iup:attribute-set! validvals-matrix "WIDTH1" "290")
+    (iup:attribute-set! envovrd-matrix   "WIDTH1" "290")
+
     (iup:vbox
      (iup:hbox
-       ;; The keys
-       (iup:frame 
-	#:title "Keys (required)"
-	(iup:vbox
-	 (iup:label (conc "Set the fields for organising your runs\n"
-			  "here. Note: can only be changed before\n"
-			  "running the first run when megatest.db\n"
-			  "is created."))
-	 keys-matrix))
+       
       (iup:vbox
        (let ((tabs (iup:tabs 
 		    ;; The required tab
-		    (iup:vbox
-		     ;; The setup section
-		     (iup:frame
-		      #:title "Setup"
-		      setup-matrix)
-		     ;; The jobtools
-		     (iup:frame
-		      #:title "Jobtools"
-		      jobtools-matrix)
-		     ;; The valid values
-		     ;; The disks
-		     (iup:frame
-		      #:title "Disks"
-		      disks-matrix))
+		    (iup:hbox
+		     ;; The keys
+		     (iup:frame 
+		      #:title "Keys (required)"
+		      (iup:vbox
+		       (iup:label (conc "Set the fields for organising your runs\n"
+					"here. Note: can only be changed before\n"
+					"running the first run when megatest.db\n"
+					"is created."))
+		       keys-matrix))
+		     (iup:vbox
+		      ;; The setup section
+		      (iup:frame
+		       #:title "Setup"
+		       (iup:vbox
+			(iup:label (conc "max_concurrent_jobs : limits total concurrent jobs (optional)\n"
+					 "linktree : directory where linktree will be created."))
+			setup-matrix))
+		      ;; The jobtools
+		      (iup:frame
+		       #:title "Jobtools"
+		       (iup:vbox 
+			(iup:label (conc "launcher : tool or script to run jobs (try nbfake)\n"
+					 "useshell : use system to run your launcher\n"
+					 "workhosts : spread jobs out on these hosts"))
+			jobtools-matrix))
+		      ;; The disks
+		      (iup:frame
+		       #:title "Disks"
+		       (iup:vbox
+			(iup:label (conc "Enter names and existing paths of locations to run tests")) 
+			disks-matrix))))
+		    ;; The optional tab
 		    (iup:vbox
 		     ;; The Environment Overrides
 		     (iup:frame 
 		      #:title "Env override"
 		      envovrd-matrix)
+		     ;; The valid values
 		     (iup:frame
 		      #:title "Validvalues"
 		      validvals-matrix)

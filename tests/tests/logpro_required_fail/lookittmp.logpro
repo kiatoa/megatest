@@ -1,0 +1,8 @@
+;; (c) 2006,2007,2008,2009 Matthew Welland matt@kiatoa.com
+;;  
+;;   License GPL.
+
+(expect:required in "LogFileBody" > 0 "A file name that should never exist!" #/This is a awfully stupid file name that should never be found in the temp dir/)
+
+;; (expect:warning  in "LogFileBody"  = 0 "Any warning" #/WARNING/)
+;; (expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/.*/)) ;; force an error
