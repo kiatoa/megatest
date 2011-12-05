@@ -142,7 +142,7 @@
 
     ;; if status is "AUTO" then call rollup
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup db test-id))
+	(db:test-data-rollup db test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -162,6 +162,7 @@
 	  (expected (hash-table-ref/default otherdat ":expected" #f))
 	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
 	  (units    (hash-table-ref/default otherdat ":units"    ""))
+	  (type     (hash-table-ref/default otherdat ":type"     ""))
 	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
       (debug:print 4 
 		   "category: " category ", variable: " variable ", value: " value
@@ -174,7 +175,8 @@
 				   expected ","
 				   tol      ","
 				   units    ","
-				   dcomment ","))))
+				   dcomment ",," ;; extra comma for status
+				   type     ))))
 				   
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (and (not (equal? item-path ""))

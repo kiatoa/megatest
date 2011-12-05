@@ -517,7 +517,7 @@
 			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
-       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f)) 8))
+       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
 	      (category    (list-ref padded-row 0))
 	      (variable    (list-ref padded-row 1))
 	      (value       (any->number-if-possible (list-ref padded-row 2)))
@@ -529,10 +529,11 @@
 			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
 						     (string-match (regexp "^n/a$") s)))
 				 #f
-				 s)))) ;; if specified on the input then use, else calculate
+				 s))) ;; if specified on the input then use, else calculate
+	      (type        (list-ref padded-row 8)))
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
 	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
 
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
@@ -561,18 +562,18 @@
 			 (else (conc "ERROR: bad tol comparator " tol))))))
 	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
-			  test-id category variable value expected tol units (if comment comment "") status)))
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt)
   (let ((res '()))
     (sqlite3:for-each-row 
-     (lambda (id test_id category variable value expected tol units comment status)
-       (set! res (cons (vector id test_id category variable value expected tol units comment status) res)))
+     (lambda (id test_id category variable value expected tol units comment status type)
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
      db
-     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
 
 (define (db:load-test-data db run-id test-name itemdat)
@@ -589,14 +590,15 @@
 		(db:csv->test-data db test-id lin)
 		(loop (read-line))))))
     ;; roll up the current results.
-    (db:test-data-rollup db test-id)))
+    ;; FIXME: Add the status to 
+    (db:test-data-rollup db test-id #f)))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
 ;; look at the test_data status field, 
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id)
+(define (db:test-data-rollup db test-id status)
   (sqlite3:execute 
    db 
    "UPDATE tests 
@@ -607,15 +609,16 @@
   ;; if the test is not FAIL then set status based on the fail and pass counts.
   (thread-sleep! 1)
   (sqlite3:execute
-   db
+   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
    "UPDATE tests
       SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                          THEN 'FAIL'
-                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0
+                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                           (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
                          THEN 'PASS'
                       ELSE status
                   END WHERE id=?;"
-   test-id test-id test-id))
+   test-id test-id test-id test-id))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?

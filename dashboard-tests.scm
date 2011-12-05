@@ -433,12 +433,12 @@
 		   (hash-table-set! widgets "Test Data"
 				    (lambda (testdat) ;; 
 				      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~a") ;; category,variable,value,expected,tol,units,comment
+					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
 					     (newval  (string-intersperse 
 						       (append
 							(list 
-							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Comment")
-							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "======="))
+							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Type" "Comment")
+							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "====" "======="))
 							(map (lambda (x)
 							       (format #f fmtstr
 								       (db:test-data-get-category x)
@@ -448,6 +448,7 @@
 								       (db:test-data-get-tol      x)
 								       (db:test-data-get-status   x)
 								       (db:test-data-get-units    x)
+								       (db:test-data-get-type     x)
 								       (db:test-data-get-comment  x)))
 							     (db:read-test-data db test-id "%")))
 						       "\n")))
