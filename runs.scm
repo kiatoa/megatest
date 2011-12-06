@@ -269,7 +269,8 @@
     (if (not (null? required-tests))
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
-    (runs:run-tests-queue db run-id runname test-records keyvallst flags)))
+    (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+    (debug:print 4 "INFO: All done by here")))
 
 (define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
     ;; At this point the list of parent tests is expanded 
@@ -365,7 +366,10 @@
 	
       ;; we get here on "drop through" - loop for next test in queue
       (if (null? tal)
-	  (debug:print 1 "INFO: All tests launched")
+	  (begin
+	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
+	    (debug:print 1 "INFO: All tests launched, exiting")
+	    (exit 0))
 	  (loop (car tal)(cdr tal))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
