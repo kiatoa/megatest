@@ -5,6 +5,8 @@
 # megatest -step wasting_time :state end :status $?
 
 touch ../I_was_here
+mkdir -p $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME
+echo 1 2 3 4 5 > $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/the_ans
 
 $MT_MEGATEST -runstep wasting_time -logpro wasting_time.logpro "sleep 8;echo all done eh?" -m "This is a test step comment"
 

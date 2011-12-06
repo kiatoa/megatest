@@ -235,9 +235,21 @@
 					       ;; if either is a list and none is a proc go ahead and call get-items
 					       ;; otherwise return #f - this is not an iterated test
 					       (cond
-						((procedure? items)      items)            ;; calc later
-						((procedure? itemstable) itemstable)       ;; calc later
+						((procedure? items)      
+						 (debug:print 4 "INFO: items is a procedure, will calc later")
+						 items)            ;; calc later
+						((procedure? itemstable)
+						 (debug:print 4 "INFO: itemstable is a procedure, will calc later")
+						 itemstable)       ;; calc later
+						((filter (lambda (x)
+							   (let ((val (car x)))
+							     (if (procedure? val) val #f)))
+							 (append (if (list? items) items '())
+								 (if (list? itemstable) itemstable '())))
+						 'have-procedure)
 						((or (list? items)(list? itemstable)) ;; calc now
+						 (debug:print 4 "INFO: items and itemstable are lists, calc now\n"
+							      "    items: " items " itemstable: " itemstable)
 						 (items:get-items-from-config config))
 						(else #f)))                           ;; not iterated
 					     #f      ;; itemsdat 5
@@ -331,12 +343,12 @@
 
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
-	 ((procedure? items)
+	 ((or (procedure? items)(eq? items 'have-procedure))
 	  (if (runs:can-run-more-tests db test-record)
 	      (let ((items-list (items:get-items-from-config tconfig)))
 		(if (list? items-list)
 		    (begin
-		      (tests:testqueue-set-items test-record items-list)
+		      (tests:testqueue-set-items! test-record items-list)
 		      (loop hed tal))
 		    (begin
 		      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
@@ -349,12 +361,12 @@
 	 ;; this case should not happen, added to help catch any bugs
 	 ((and (list? items) itemdat)
 	  (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
-	  (exit 1)))
+	  (exit 1))))
 	
-	;; we get here on "drop through" - loop for next test in queue
-	(if (null? tal)
-	    (debug:print 1 "INFO: All tests launched")
-	    (loop (car tal)(cdr tal)))))))
+      ;; we get here on "drop through" - loop for next test in queue
+      (if (null? tal)
+	  (debug:print 1 "INFO: All tests launched")
+	  (loop (car tal)(cdr tal))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test db run-id runname keyvallst test-record flags parent-test)

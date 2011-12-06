@@ -1,0 +1,20 @@
+[setup]
+
+[ezsteps]
+lookittmp   ls /tmp
+lookithome  ls /home
+
+[requirements]
+waiton runfirst
+priority 0
+
+[items]
+NUMNUM [system cat $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/the_ans]
+
+[test_meta]
+author matt
+owner  bob
+description This test runs a single ezstep which is expected to pass, no logpro file.
+
+tags first,single
+reviewed 09/10/2011, by Matt
