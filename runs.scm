@@ -260,7 +260,7 @@
 	       (if (and waiton (not (member waiton test-names)))
 		   (begin
 		     (set! required-tests (cons waiton required-tests))
-		     (set! test-names (append test-names (list waiton))))))
+		     (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
 	     waitons)
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
@@ -305,7 +305,7 @@
 		;; else the run is stuck, temporarily or permanently
 		(let ((newtal (append tal (list hed))))
 		  ;; couldn't run, take a breather
-		  (thread-sleep! 1)
+		  (thread-sleep! 4)
 		  (loop (car newtal)(cdr newtal))))))
 	 
 	 ;; case where an items came in as a list been processed
@@ -345,15 +345,20 @@
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
 	 ((or (procedure? items)(eq? items 'have-procedure))
-	  (if (runs:can-run-more-tests db test-record)
-	      (let ((items-list (items:get-items-from-config tconfig)))
-		(if (list? items-list)
-		    (begin
-		      (tests:testqueue-set-items! test-record items-list)
-		      (loop hed tal))
-		    (begin
-		      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
-		      (exit 1))))
+	  (if (and (runs:can-run-more-tests db test-record)
+		   (null? (db:get-prereqs-not-met db run-id waitons item-path)))
+	      (let ((test-name (tests:testqueue-get-testname test-record)))
+		(setenv "MT_TEST_NAME" test-name) ;; 
+		(setenv "MT_RUNNAME"   runname)
+		(set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+		(let ((items-list (items:get-items-from-config tconfig)))
+		  (if (list? items-list)
+		      (begin
+			(tests:testqueue-set-items! test-record items-list)
+			(loop hed tal))
+		      (begin
+			(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+			(exit 1)))))
 	      (let ((newtal (append tal (list hed))))
 		;; if can't run more tests, lets take a breather
 		(thread-sleep! 1)
