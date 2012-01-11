@@ -803,8 +803,21 @@
 				   "Cpu Load"          ; 20
 				   )))
 	 (results (list runsheader))			 
-	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
-    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist))
+	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment"))
+	 (mainqry (conc "SELECT
+              t.testname,r.id,runname," keysstr ",t.testname,
+              t.item_path,tm.description,t.state,t.status,
+              final_logf,run_duration, 
+              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime'),
+              tm.tags,r.owner,t.comment,
+              author,
+              tm.owner,reviewed,
+              diskfree,uname,rundir,
+              host,cpuload
+            FROM tests AS t JOIN runs AS r ON t.run_id=r.id JOIN test_meta AS tm ON tm.testname=t.testname
+            WHERE runname LIKE ? AND " keyqry ";")))
+    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist)
+		 "\n      mainqry: " mainqry)
     ;; "Expected Value"
     ;; "Value Found"
     ;; "Tolerance"
@@ -843,19 +856,9 @@
 					  (vector->list vb))
 					b)))))
 	   db
-	   (conc "SELECT
-              t.testname,r.id,runname," keysstr ",t.testname,
-              t.item_path,tm.description,t.state,t.status,
-              final_logf,run_duration, 
-              strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime'),
-              tm.tags,r.owner,t.comment,
-              author,
-              tm.owner,reviewed,
-              diskfree,uname,rundir,
-              host,cpuload
-            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id INNER JOIN test_meta AS tm ON tm.testname=t.testname
-            WHERE runname LIKE ? AND " keyqry ";")
+	   mainqry
 	   runspatt (map cadr keypatt-alist))
+    (debug:print 2 "Found " (length test-ids) " records")
     (set! results (list (cons "Runs" results)))
     ;; now, for each test, collect the test_data info and add a new sheet
     (for-each
@@ -883,6 +886,8 @@
 	 (begin
 	   (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
 	   (conc (current-directory) "/" outputfile)))
-     results)))
+     results)
+    ;; brutal clean up
+    (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")

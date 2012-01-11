@@ -93,7 +93,7 @@ Misc
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
 Spreadsheet generation
-  -extract-ods            : extract an open document spreadsheet from the database
+  -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
                             will clear the field if no rundir/testname/itempath/logfile
                             if it contains forward slashes the path will be converted
@@ -387,11 +387,12 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (db keys keynames keyvallst)
+     (lambda (db target runname keys keynames keyvallst)
        (let ((outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
+	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
 	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
