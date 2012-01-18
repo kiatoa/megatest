@@ -194,7 +194,7 @@
              WHERE run_id=? AND testname=? AND item_path='';"
 	   run-id test-name run-id test-name run-id test-name)
 	  (if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
-	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" run-id test-name)
+	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
 	      (sqlite3:execute
 	       db
 	       "UPDATE tests
