@@ -235,7 +235,11 @@ Called as " (string-intersperse (argv) " ")))
       (set! *didsomething* #t)))))
 	  
 (if (args:get-arg "-remove-runs")
-    (remove-runs))
+    (general-run-call 
+     "-remove-runs"
+     "remove runs"
+     (lambda (db target runname keys keynames keyvallst)
+       (remove-runs))))
 
 ;;======================================================================
 ;; Query runs
