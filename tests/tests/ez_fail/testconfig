@@ -4,10 +4,11 @@
 priority 10
 
 [ezsteps]
-lookittmp   ls /tmp
-lookithome  ls /home
-lookitnada  ls /nada
-lookitusr   ls /usr
+lookittmp   sleep 5s;ls /tmp
+lookithome  sleep 2;ls /home
+# should fail on next step
+lookitnada  sleep 3;ls /nada
+lookitusr   sleep 2;ls /usr
 
 [test_meta]
 author matt

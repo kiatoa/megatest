@@ -268,9 +268,10 @@
 
 	 (keystring  (string-intersperse 
 		      (map (lambda (keyval)
-			     (conc ":" (car keyval) " " (cadr keyval)))
+			     ;; (conc ":" (car keyval) " " (cadr keyval)))
+			     (cadr keyval))
 			   keydat)
-		      " "))
+		      "/"))
 	 (item-path  (db:test-get-item-path testdat))
 	 (viewlog    (lambda (x)
 		       (if (file-exists? logfile)
@@ -334,19 +335,19 @@
 	 (run-test  (lambda (x)
 		      (iup:attribute-set! 
 		       command-text-box "VALUE"
-		       (conc "megatest -runtests " testname " " keystring " :runname " runname 
+		       (conc "megatest -runtests " testname " -target " keystring " :runname " runname 
 			     " -itempatt " (if (equal? item-path "")
 					       "%" 
 					       item-path)
-			     " -keepgoing > run.log" ))))
+			     "" ))))
 	 (remove-test (lambda (x)
 			(iup:attribute-set!
 			 command-text-box "VALUE"
-			 (conc "megatest -remove-runs " keystring " :runname " runname " -testpatt " testname " -itempatt "
+			 (conc "megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
 			       (if (equal? item-path "")
 				   "%"
 				   item-path)
-			       " > clean.log")))))
+			       " -v ")))))
     (cond
      ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
      ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))

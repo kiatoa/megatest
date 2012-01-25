@@ -219,14 +219,18 @@
 						       (case next-status
 							 ((warn)
 							  (set! rollup-status 2)
-							  (test-set-status! db run-id test-name "COMPLETED" "WARN" itemdat 
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "WARN" itemdat 
+							  (test-set-status! db run-id test-name "RUNNING" "WARN" itemdat 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (test-set-status! db run-id test-name "COMPLETED" "PASS" itemdat #f #f))
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "PASS" itemdat #f #f))
+							  (test-set-status! db run-id test-name "RUNNING" "PASS" itemdat #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db run-id test-name "COMPLETED" "FAIL" itemdat (conc "Failed at step " stepname) #f)))))
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  (test-set-status! db run-id test-name "RUNNING" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
