@@ -309,9 +309,13 @@
 				      ;; New logic based on rollup-status
 				      (cond
 				       ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
-				       ((eq? rollup-status 0) "PASS")
+				       ((eq? rollup-status 0)
+					;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
 				       ((eq? rollup-status 1) "FAIL")
-				       ((eq? rollup-status 2) "WARN")
+				       ((eq? rollup-status 2)
+					;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
+					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				       (else "FAIL"))
 				      itemdat (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
