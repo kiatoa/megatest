@@ -268,9 +268,10 @@
 
 	 (keystring  (string-intersperse 
 		      (map (lambda (keyval)
-			     (conc ":" (car keyval) " " (cadr keyval)))
+			     ;; (conc ":" (car keyval) " " (cadr keyval)))
+			     (cadr keyval))
 			   keydat)
-		      " "))
+		      "/"))
 	 (item-path  (db:test-get-item-path testdat))
 	 (viewlog    (lambda (x)
 		       (if (file-exists? logfile)
@@ -334,19 +335,19 @@
 	 (run-test  (lambda (x)
 		      (iup:attribute-set! 
 		       command-text-box "VALUE"
-		       (conc "megatest -runtests " testname " " keystring " :runname " runname 
+		       (conc "megatest -runtests " testname " -target " keystring " :runname " runname 
 			     " -itempatt " (if (equal? item-path "")
 					       "%" 
 					       item-path)
-			     " -keepgoing > run.log" ))))
+			     "" ))))
 	 (remove-test (lambda (x)
 			(iup:attribute-set!
 			 command-text-box "VALUE"
-			 (conc "megatest -remove-runs " keystring " :runname " runname " -testpatt " testname " -itempatt "
+			 (conc "megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
 			       (if (equal? item-path "")
 				   "%"
 				   item-path)
-			       " > clean.log")))))
+			       " -v ")))))
     (cond
      ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
      ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -433,12 +434,12 @@
 		   (hash-table-set! widgets "Test Data"
 				    (lambda (testdat) ;; 
 				      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~a") ;; category,variable,value,expected,tol,units,comment
+					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
 					     (newval  (string-intersperse 
 						       (append
 							(list 
-							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Comment")
-							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "======="))
+							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Type" "Comment")
+							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "====" "======="))
 							(map (lambda (x)
 							       (format #f fmtstr
 								       (db:test-data-get-category x)
@@ -448,6 +449,7 @@
 								       (db:test-data-get-tol      x)
 								       (db:test-data-get-status   x)
 								       (db:test-data-get-units    x)
+								       (db:test-data-get-type     x)
 								       (db:test-data-get-comment  x)))
 							     (db:read-test-data db test-id "%")))
 						       "\n")))

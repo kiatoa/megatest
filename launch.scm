@@ -170,13 +170,14 @@
 						   
 						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
 
-						   ;; first source the previous environment
-						   (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") (get-environment-variable "SHELL")) ".csh" ".sh"))))
-						     (if (and prevstep (file-exists? prev-env))
-							 (set! script (conc script "source " prev-env))))
+						   ;; ;; first source the previous environment
+						   ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
+						   ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
+						   ;;   (if (and prevstep (file-exists? prev-env))
+						   ;;       (set! script (conc script "source " prev-env))))
 						   
 						   ;; call the command using mt_ezstep
-						   (set! script (conc script ";mt_ezstep " stepname " " stepcmd))
+						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
 
@@ -218,14 +219,18 @@
 						       (case next-status
 							 ((warn)
 							  (set! rollup-status 2)
-							  (test-set-status! db run-id test-name "COMPLETED" "WARN" itemdat 
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "WARN" itemdat 
+							  (test-set-status! db run-id test-name "RUNNING" "WARN" itemdat 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (test-set-status! db run-id test-name "COMPLETED" "PASS" itemdat #f #f))
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "PASS" itemdat #f #f))
+							  (test-set-status! db run-id test-name "RUNNING" "PASS" itemdat #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db run-id test-name "COMPLETED" "FAIL" itemdat (conc "Failed at step " stepname) #f)))))
+							  ;; (test-set-status! db run-id test-name "COMPLETED" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  (test-set-status! db run-id test-name "RUNNING" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
@@ -376,9 +381,13 @@
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))
 	 (toptest-path (conc disk-path "/" key-str "/" runname "/" testname))
-	 (runsdir  (config-lookup *configdat* "setup" "runsdir"))
-	 (lnkpath  (conc (if runsdir runsdir (conc *toppath* "/runs"))
-			 "/" key-str "/" runname item-path)))
+	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
+		     (if rd rd (conc *toppath* "/runs"))))
+	 (lnkpath  (conc linktree "/" key-str "/" runname item-path)))
+    (if (not (file-exists? linktree))
+	(begin
+	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
+	  (system (conc "mkdir -p " linktree))))
     ;; since this is an iterated test this is as good a place as any to
     ;; update the toptest record with its location rundir
     (if (not (equal? item-path ""))
@@ -389,11 +398,11 @@
     (debug:print 2 " - creating link from " dfullp "/" testname " to " lnkpath)
     (system  (conc "mkdir -p " lnkpath))
 
-;; I suspect this section was deleting test directories under some 
-;; wierd sitations
+    ;; I suspect this section was deleting test directories under some 
+    ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
 
-;;    (if (file-exists? (conc lnkpath "/" testname))
-;;	(system (conc "rm -f " lnkpath "/" testname)))
+    (if (file-exists? (conc lnkpath "/" testname))
+    	(system (conc "rm -f " lnkpath "/" testname)))
     (system  (conc "ln -sf " dfullp " " lnkpath "/" testname))
     (if (directory? dfullp)
 	(begin

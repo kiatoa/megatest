@@ -40,8 +40,8 @@
 	  (for-each (lambda (key)
 		      (let ((keyn (vector-ref key 0)))
 			(if (member (string-downcase keyn)
-				     (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
-					   "pass_count"))
+				    (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
+					  "pass_count"))
 			    (begin
 			      (print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table")
 			      (system (conc "rm -f " dbpath))
@@ -53,20 +53,20 @@
 		      (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
 		    keys)
 	  (sqlite3:execute db (conc 
-			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
-			    fieldstr (if havekeys "," "")
-			    "runname TEXT,"
-			    "state TEXT DEFAULT '',"
-			    "status TEXT DEFAULT '',"
-			    "owner TEXT DEFAULT '',"
-			    "event_time TIMESTAMP,"
-			    "comment TEXT DEFAULT '',"
-			    "fail_count INTEGER DEFAULT 0,"
-			    "pass_count INTEGER DEFAULT 0,"
-			    "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
+			       "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
+			       fieldstr (if havekeys "," "")
+			       "runname TEXT,"
+			       "state TEXT DEFAULT '',"
+			       "status TEXT DEFAULT '',"
+			       "owner TEXT DEFAULT '',"
+			       "event_time TIMESTAMP,"
+			       "comment TEXT DEFAULT '',"
+			       "fail_count INTEGER DEFAULT 0,"
+			       "pass_count INTEGER DEFAULT 0,"
+			       "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
 	  (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
 	  (sqlite3:execute db 
-                 "CREATE TABLE IF NOT EXISTS tests 
+			   "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
@@ -115,6 +115,7 @@
                                      avg_runtime REAL,
                                      avg_disk    REAL,
                                      tags        TEXT DEFAULT '',
+                                     jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
@@ -175,13 +176,13 @@
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
        (db:set-var db "MEGATEST_VERSION" 1.21) ;; set before, just in case the changes are already applied
        (sqlite3:execute db test-meta-def)
-       ;(for-each 
-       ; (lambda (stmt)
-       ;   (sqlite3:execute db stmt))
-       ; (list 
-       ;  "ALTER TABLE tests ADD COLUMN first_err TEXT;"
-       ;  "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
-       ;  ))
+					;(for-each 
+					; (lambda (stmt)
+					;   (sqlite3:execute db stmt))
+					; (list 
+					;  "ALTER TABLE tests ADD COLUMN first_err TEXT;"
+					;  "ALTER TABLE tests ADD COLUMN first_warn TEXT;"
+					;  ))
        (patch-db))
       ((< mver 1.24)
        (db:set-var db "MEGATEST_VERSION" 1.24)
@@ -197,8 +198,9 @@
 	                        tol REAL,
                                 units TEXT,
                                 comment TEXT DEFAULT '',
-                                status TEXT DEFAULT 'n/a',foss
+                                status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
+       (print "WARNING: Table test_data and test_meta where recreated. Please do megatest -update-meta")
        (patch-db))
       ((< mver 1.27)
        (db:set-var db "MEGATEST_VERSION" 1.27)
@@ -208,6 +210,9 @@
        (db:set-var db "MEGATEST_VERSION" 1.29)
        (sqlite3:execute db "ALTER TABLE test_steps ADD COLUMN logfile TEXT DEFAULT '';")
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
+      ((< mver 1.36)
+       (db:set-var db "MEGATEST_VERSION" 1.36)
+       (sqlite3:execute db "ALTER TABLER test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
@@ -257,7 +262,7 @@
 	(if (equal? hed field)
 	    (vector-ref row n)
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
-	    
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
@@ -364,8 +369,8 @@
 	(statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
 	)
     (sqlite3:for-each-row 
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+     (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+       (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
@@ -394,9 +399,9 @@
 (define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
-					(if currstate  (conc "state='" currstate "' AND ") "")
-					(if currstatus (conc "status='" currstatus "' AND ") "")
-					" run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+			       (if currstate  (conc "state='" currstate "' AND ") "")
+			       (if currstatus (conc "status='" currstatus "' AND ") "")
+			       " run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
 		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
@@ -417,6 +422,19 @@
      db
      "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
     res))
+
+(define (db:get-count-tests-running-in-jobgroup db jobgroup)
+  (if (not jobgroup)
+      0 ;; 
+      (let ((res 0))
+	(sqlite3:for-each-row
+	 (lambda (count)
+	   (set! res count))
+	 db
+	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
+             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?;"
+	 jobgroup)
+	res)))
 
 ;; done with run when:
 ;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
@@ -456,14 +474,14 @@
   (sqlite3:execute 
    db 
    "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-     comment run-id testname item-path))
+   comment run-id testname item-path))
 
 ;;
 (define (db:test-set-rundir! db run-id testname item-path rundir)
   (sqlite3:execute 
    db 
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
-     rundir run-id testname item-path))
+   rundir run-id testname item-path))
 
 ;;======================================================================
 ;; Tests meta data
@@ -499,7 +517,7 @@
 			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
-       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f)) 8))
+       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
 	      (category    (list-ref padded-row 0))
 	      (variable    (list-ref padded-row 1))
 	      (value       (any->number-if-possible (list-ref padded-row 2)))
@@ -511,18 +529,19 @@
 			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
 						     (string-match (regexp "^n/a$") s)))
 				 #f
-				 s)))) ;; if specified on the input then use, else calculate
+				 s))) ;; if specified on the input then use, else calculate
+	      (type        (list-ref padded-row 8)))
 	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
 	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
 
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
 		  (or (not units)   (equal? expected "")))
 	     (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
-	       (set! expected new-expected)
-	       (set! tol      new-tol)
-	       (set! units    new-units)))
+			 (set! expected new-expected)
+			 (set! tol      new-tol)
+			 (set! units    new-units)))
 
 	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
@@ -543,18 +562,18 @@
 			 (else (conc "ERROR: bad tol comparator " tol))))))
 	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status) VALUES (?,?,?,?,?,?,?,?,?);"
-	      test-id category variable value expected tol units (if comment comment "") status)))
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt)
   (let ((res '()))
     (sqlite3:for-each-row 
-     (lambda (id test_id category variable value expected tol units comment status)
-       (set! res (cons (vector id test_id category variable value expected tol units comment status) res)))
+     (lambda (id test_id category variable value expected tol units comment status type)
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
      db
-     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
 
 (define (db:load-test-data db run-id test-name itemdat)
@@ -573,7 +592,7 @@
     ;; roll up the current results.
     ;; FIXME: Add the status to 
     (db:test-data-rollup db test-id #f)))
-  
+
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
 ;; look at the test_data status field, 
@@ -590,7 +609,7 @@
   ;; if the test is not FAIL then set status based on the fail and pass counts.
   (thread-sleep! 1)
   (sqlite3:execute
-   db
+   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
    "UPDATE tests
       SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                          THEN 'FAIL'
@@ -599,7 +618,7 @@
                          THEN 'PASS'
                       ELSE status
                   END WHERE id=?;"
-   test-id test-id test-id))
+   test-id test-id test-id test-id))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?
@@ -610,7 +629,7 @@
 ;;======================================================================
 
 (define (db:step-get-time-as-string vec)
-    (seconds->time-string (db:step-get-event_time vec)))
+  (seconds->time-string (db:step-get-event_time vec)))
 
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test db test-id)
@@ -664,9 +683,9 @@
 		     0)
 		  (vector-set! record 5 (db:step-get-logfile step))))
 	     (else
-	        (vector-set! record 2 (db:step-get-state step))
-	        (vector-set! record 3 (db:step-get-status step))
-	        (vector-set! record 4 (db:step-get-event_time step))))
+	      (vector-set! record 2 (db:step-get-state step))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (db:step-get-event_time step))))
 	   (hash-table-set! res (db:step-get-stepname step) record)
 	   (debug:print 6 "record(after)  = " record 
 			"\nid:       " (db:step-get-id step)
@@ -701,6 +720,52 @@
 		      (if (not ever-seen)(set! result (cons waitontest-name result)))))
 		  waiton)
 	(delete-duplicates result))))
+
+;; the new prereqs calculation, looks also at itempath if specified
+;; all prereqs must be met:
+;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
+;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
+(define (db:get-prereqs-not-met db run-id waitons ref-item-path)
+  (if (or (not waitons)
+	  (null? waitons))
+      '()
+      (let* ((unmet-pre-reqs '())
+	     (result         '()))
+	(for-each 
+	 (lambda (waitontest-name)
+	   ;; by getting the tests with matching name we are looking only at the matching test 
+	   ;; and related sub items
+	   (let ((tests             (db-get-tests-for-run db run-id waitontest-name #f '() '()))
+		 (ever-seen         #f)
+		 (parent-waiton-met #f)
+		 (item-waiton-met   #f))
+	     (for-each 
+	      (lambda (test)
+		;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
+		(let* ((state             (db:test-get-state test))
+		       (status            (db:test-get-status test))
+		       (item-path         (db:test-get-item-path test))
+		       (is-completed      (equal? state "COMPLETED"))
+		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED")))
+		       (same-itempath     (equal? ref-item-path item-path)))
+		  (set! ever-seen #t)
+		  (cond
+		   ;; case 1, non-item (parent test) is 
+		   ((and (equal? item-path "") ;; this is the parent test
+			 is-completed
+			 is-ok)
+		    (set! parent-waiton-met #t))
+		   ((and same-itempath
+			 is-completed
+			 is-ok)
+		    (set! item-waiton-met #t)))))
+	      tests)
+	     (if (not (or parent-waiton-met item-waiton-met))
+		 (set! result (cons waitontest-name result)))
+	     ;; if the test is not found then clearly the waiton is not met...
+	     (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	waitons)
+      (delete-duplicates result))))
 
 ;;======================================================================
 ;; Extract ods file from the db
@@ -738,47 +803,8 @@
 				   "Cpu Load"          ; 20
 				   )))
 	 (results (list runsheader))			 
-	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment")))
-    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist))
-    ;; "Expected Value"
-    ;; "Value Found"
-    ;; "Tolerance"
-    (apply sqlite3:for-each-row
-     (lambda (test-id . b)
-       (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
-       (set! results (append results ;; note, drop the test-id
-			     (list
-			      (if pathmod
-				  (let* ((vb        (apply vector b))
-					 (keyvals   (let loop ((i    0)
-							       (res '()))
-						      (if (>= i numkeys)
-							  res
-							  (loop (+ i 1)
-								(append res (list (vector-ref vb (+ i 2))))))))
-					 (runname   (vector-ref vb 1))
-					 (testname  (vector-ref vb (+  2 numkeys)))
-					 (item-path (vector-ref vb (+  3 numkeys)))
-					 (final-log (vector-ref vb (+  7 numkeys)))
-					 (run-dir   (vector-ref vb (+ 18 numkeys)))
-					 (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
-				    (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
-				    (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
-								      (let ((newpath (conc pathmod "/"
-											   (string-intersperse keyvals "/")
-											   "/" runname "/" testname "/"
-											   (if (string=? item-path "") "" (conc "/" item-path))
-											   final-log)))
-									;; for now throw away newpath and use the log-fpath conc'd with pathmod
-									(set! newpath (conc pathmod log-fpath))
-									(if windows (string-translate newpath "/" "\\") newpath))
-								      (if (> *verbosity* 1)
-									  (conc final-log " not-found")
-									  "")))
-				    (vector->list vb))
-				  b)))))
-     db
-     (conc "SELECT
+	 (testdata-header (list "Run Id" "Testname" "Item Path" "Category" "Variable" "Value" "Expected" "Tol" "Units" "Status" "Comment"))
+	 (mainqry (conc "SELECT
               t.testname,r.id,runname," keysstr ",t.testname,
               t.item_path,tm.description,t.state,t.status,
               final_logf,run_duration, 
@@ -788,9 +814,51 @@
               tm.owner,reviewed,
               diskfree,uname,rundir,
               host,cpuload
-            FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id INNER JOIN test_meta AS tm ON tm.testname=t.testname
-            WHERE runname LIKE ? AND " keyqry ";")
-     runspatt (map cadr keypatt-alist))
+            FROM tests AS t JOIN runs AS r ON t.run_id=r.id JOIN test_meta AS tm ON tm.testname=t.testname
+            WHERE runname LIKE ? AND " keyqry ";")))
+    (debug:print 2 "Using " tempdir " for constructing the ods file. keyqry: " keyqry " keystr: " keysstr " with keys: " (map cadr keypatt-alist)
+		 "\n      mainqry: " mainqry)
+    ;; "Expected Value"
+    ;; "Value Found"
+    ;; "Tolerance"
+    (apply sqlite3:for-each-row
+	   (lambda (test-id . b)
+	     (set! test-ids (cons test-id test-ids))   ;; test-id is now testname
+	     (set! results (append results ;; note, drop the test-id
+				   (list
+				    (if pathmod
+					(let* ((vb        (apply vector b))
+					       (keyvals   (let loop ((i    0)
+								     (res '()))
+							    (if (>= i numkeys)
+								res
+								(loop (+ i 1)
+								      (append res (list (vector-ref vb (+ i 2))))))))
+					       (runname   (vector-ref vb 1))
+					       (testname  (vector-ref vb (+  2 numkeys)))
+					       (item-path (vector-ref vb (+  3 numkeys)))
+					       (final-log (vector-ref vb (+  7 numkeys)))
+					       (run-dir   (vector-ref vb (+ 18 numkeys)))
+					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
+					  (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
+					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)
+									    (let ((newpath (conc pathmod "/"
+												 (string-intersperse keyvals "/")
+												 "/" runname "/" testname "/"
+												 (if (string=? item-path "") "" (conc "/" item-path))
+												 final-log)))
+									      ;; for now throw away newpath and use the log-fpath conc'd with pathmod
+									      (set! newpath (conc pathmod log-fpath))
+									      (if windows (string-translate newpath "/" "\\") newpath))
+									    (if (> *verbosity* 1)
+										(conc final-log " not-found")
+										"")))
+					  (vector->list vb))
+					b)))))
+	   db
+	   mainqry
+	   runspatt (map cadr keypatt-alist))
+    (debug:print 2 "Found " (length test-ids) " records")
     (set! results (list (cons "Runs" results)))
     ;; now, for each test, collect the test_data info and add a new sheet
     (for-each
@@ -818,6 +886,8 @@
 	 (begin
 	   (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
 	   (conc (current-directory) "/" outputfile)))
-     results)))
+     results)
+    ;; brutal clean up
+    (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")

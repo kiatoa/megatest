@@ -4,8 +4,8 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <meta name="generator" content="http://www.nongnu.org/elyxer/"/>
-<meta name="create-date" content="2011-09-24"/>
-<link rel="stylesheet" href="http://www.nongnu.org/elyxer/lyx.css" type="text/css" media="screen"/>
+<meta name="create-date" content="2011-12-15"/>
+<link rel="stylesheet" href="http://elyxer.nongnu.org/lyx.css" type="text/css" media="all"/>
 <title>Megatest User Manual</title>
 </head>
 <body>
@@ -29,33 +29,27 @@ Matthew Welland
 Sept. 20, 
 </h2>
 <div class="Standard">
-
+<span class="unknown">\thispagestyle</span>empty
 </div>
 <div class="Standard">
 <p><br/>
 </p>
-2011 Matthew Welland. All rights reserved. 
+©2011 Matthew Welland. All rights reserved. 
 </div>
 <div class="Standard">
 Megatest is free software released under the General Public License v2.0. Please see the file COPYING in the source distribution for details. 
 </div>
 <div class="Standard">
-<div class="medskip">
-
-</div>
-Email: matt@kiatoa.com. 
+<div class="medskip"> </div>Email: matt@kiatoa.com. 
 </div>
 <div class="Standard">
 Web: www.kiatoa.com/fossils/megatest
 </div>
 <div class="Standard">
-<div class="medskip">
-
-</div>
-This document is believed to be acurate at the time of writing but as with any opensource project the source code itself is the final arbiter of the softwares behaviour. It is the responsibility of the end user to validate that the code will perform as they expect. The author assumes no responsibility for any inaccuracies that this document may contain. In no event will Matthew Welland be liable for direct, indirect, special, exemplary, incidental, or consequential damages resulting from any defect or omission in this document, even if advised of the possibility of such damages. 
+<div class="medskip"> </div>This document is believed to be acurate at the time of writing but as with any opensource project the source code itself is the reference. It is the responsibility of the end user to validate that the code will perform as they expect. The author assumes no responsibility for any inaccuracies that this document may contain. In no event will Matthew Welland be liable for direct, indirect, special, exemplary, incidental, or consequential damages resulting from any defect or omission in this document, even if advised of the possibility of such damages. 
 </div>
 <div class="Standard">
-This document is a snapshot in time and the Megatest software has likely been changed since publication. This document and the product that it describes may be improved at any time, without notice or obligation. 
+This document is a snapshot in time and Megatest software has likely changed since publication. This document and Megatest may be improved at any time, without notice or obligation. 
 </div>
 <div class="Standard">
 <p><br/>
@@ -72,35 +66,32 @@ This document is a snapshot in time and the Megatest software has likely been ch
 <div class="center">
 <table>
 <tr>
-<td align="center" valign="top">
+<td align="center" valign="top" style="width: 0.5in;">
 Version
 </td>
-<td align="center" valign="top">
+<td align="center" valign="top" style="width: 0.5in;">
 Author
 </td>
-<td align="justify" valign="top">
+<td align="justify" valign="top" style="width: 3in;">
 Description
 </td>
-<td align="center" valign="top">
+<td align="center" valign="top" style="width: 1in;">
 Date
 </td>
 
 </tr>
 <tr>
-<td align="center" valign="top">
+<td align="center" valign="top" style="width: 0.5in;">
 v1.25
 </td>
-<td align="center" valign="top">
+<td align="center" valign="top" style="width: 0.5in;">
 matt
 </td>
-<td align="justify" valign="top">
+<td align="justify" valign="top" style="width: 3in;">
 converted to new document template
 </td>
-<td align="center" valign="top">
-<div class="PlainVisible">
-
-</div>
-
+<td align="center" valign="top" style="width: 1in;">
+<span class="unknown">\thedate</span>
 </td>
 
 </tr>
@@ -110,6 +101,9 @@ converted to new document template
 </div>
 
 </div>
+<div class="Standard">
+<p><br/>
+</p>
 <div class="fulltoc">
 <div class="tocheader">
 Table of Contents
@@ -164,110 +158,137 @@ Table of Contents
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-4">Section 4: How to Write Tests</a>
+<a class="Link" href="#toc-Section-4">Section 4: Choose Flow or Unstructured Run?</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-5">Section 5: How to Write Tests</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-4.1">Subsection 4.1: A Simple Test with one Step</a>
+<a class="Link" href="#toc-Subsection-5.1">Subsection 5.1: A Simple Test with one Step</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-4.2">Subsection 4.2: Create your testconfig file</a>
+<a class="Link" href="#toc-Subsection-5.2">Subsection 5.2: Create your testconfig file</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-4.3">Subsection 4.3: Create the main.csh script</a>
+<a class="Link" href="#toc-Subsection-5.3">Subsection 5.3: Create the main.csh script</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-4.4">Subsection 4.4: Simple Test with Multiple Steps </a>
+<a class="Link" href="#toc-Subsection-5.4">Subsection 5.4: Simple Test with Multiple Steps </a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-5">Section 5: Simple Test with Multiple Steps, Some in Parallel</a>
+<a class="Link" href="#toc-Section-6">Section 6: Simple Test with Multiple Steps, Some in Parallel</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-5.1">Subsection 5.1: The Makefile</a>
+<a class="Link" href="#toc-Subsection-6.1">Subsection 6.1: The Makefile</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-5.2">Subsection 5.2: The main.csh file</a>
+<a class="Link" href="#toc-Subsection-6.2">Subsection 6.2: The main.csh file</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-6">Section 6: Simple Test with Iteration</a>
+<a class="Link" href="#toc-Section-7">Section 7: Simple Test with Iteration</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-6.1">Subsection 6.1: Update your testconfig file for iteration</a>
+<a class="Link" href="#toc-Subsection-7.1">Subsection 7.1: Update your testconfig file for iteration</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-6.2">Subsection 6.2: Rewrite your main.csh for iteration</a>
+<a class="Link" href="#toc-Subsection-7.2">Subsection 7.2: Rewrite your main.csh for iteration</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-6.3">Subsection 6.3: Tests with Inter-test dependencies</a>
+<a class="Link" href="#toc-Subsection-7.3">Subsection 7.3: Tests with Inter-test dependencies</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-6.4">Subsection 6.4: Rolling up Miscellaneous Data</a>
+<a class="Link" href="#toc-Subsection-7.4">Subsection 7.4: Rolling up Miscellaneous Data</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-6.5">Subsection 6.5: Rolling up Runs</a>
+<a class="Link" href="#toc-Subsection-7.5">Subsection 7.5: Rolling up Runs</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-7">Section 7: Dashboard</a>
+<a class="Link" href="#toc-Section-8">Section 8: Dashboard</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-8">Section 8: Generating an OpenDocument Spreadsheet from the Database</a>
+<a class="Link" href="#toc-Section-9">Section 9: Generating an OpenDocument Spreadsheet from the Database</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-9">Section 9: Reference</a>
+<a class="Link" href="#toc-Section-10">Section 10: Flows</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-11">Section 11: Flow Specification and Running (Not released yet)</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-9.1">Subsection 9.1: Configuration file Syntax</a>
+<a class="Link" href="#toc-Subsection-11.1">Subsection 11.1: Write your flow file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-11.2">Subsection 11.2: Run the flow</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-12">Section 12: Monitor based running</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.1.1">Subsubsection 9.1.1: Sections</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.1.2">Subsubsection 9.1.2: Variables</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.1.3">Subsubsection 9.1.3: Includes</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.1.4">Subsubsection 9.1.4: Setting a variable by running a command</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.1.5">Subsubsection 9.1.5: Notes</a>
+<a class="Link" href="#toc-Subsection-12.1">Subsection 12.1: Monitor logic</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsection-9.2">Subsection 9.2: Environment variables</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-9.3">Subsection 9.3: megatest.config</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-9.4">Subsection 9.4: runconfigs.config file</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-9.5">Subsection 9.5: Writing tests</a>
+<a class="Link" href="#toc-Section-13">Section 13: Reference</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.5.1">Subsubsection 9.5.1: testconfig file</a>
+<a class="Link" href="#toc-Subsection-13.1">Subsection 13.1: Configuration file Syntax</a>
+</div>
+<div class="tocindent">
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.1.1">Subsubsection 13.1.1: Sections</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-9.5.2">Subsubsection 9.5.2: Command line</a>
+<a class="Link" href="#toc-Subsubsection-13.1.2">Subsubsection 13.1.2: Variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.1.3">Subsubsection 13.1.3: Includes</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.1.4">Subsubsection 13.1.4: Setting a variable by running a command</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.1.5">Subsubsection 13.1.5: Notes</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-13.2">Subsection 13.2: Environment variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-13.3">Subsection 13.3: megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-13.4">Subsection 13.4: runconfigs.config file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-13.5">Subsection 13.5: Writing tests</a>
+</div>
+<div class="tocindent">
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.5.1">Subsubsection 13.5.1: testconfig file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-13.5.2">Subsubsection 13.5.2: Command line</a>
 </div>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-A">Section A: Data</a>
+<a class="Link" href="#toc-Appendix-A">Appendix A: Data</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-B">Section B: References</a>
+<a class="Link" href="#toc-Appendix-B">Appendix B: References</a>
 </div>
+</div>
+
 </div>
 
 </div>
@@ -283,13 +304,13 @@ Table of Contents
 <a class="toc" name="toc-Subsection-1.1">1.1</a> Megatest design philosophy
 </h2>
 <div class="Standard">
-Megatest is intended to provide the minimum needed resources to make writing a suite of tests for software, design engineering or process control (via owlfs for example) without being specialized for any specific problem space. Megatest in of itself does not know what constitutes a PASS or FAIL of a test. In most cases megatest is best used in conjunction with logpro or a similar tool to parse, analyze and decide on the test outcome. A call to megatest can then be made to record the result. 
+Megatest is intended to provide the minimum needed resources to make writing a suite of tests and implementing continuous build for software, design engineering or process control (via owlfs for example) without being specialized for any specific problem space. Megatest in of itself does not know what constitutes a PASS or FAIL of a test. In most cases megatest is best used in conjunction with logpro or a similar tool to parse, analyze and decide on the test outcome.
 </div>
 <h2 class="Subsection">
 <a class="toc" name="toc-Subsection-1.2">1.2</a> Megatest architecture
 </h2>
 <div class="Standard">
-All data to specify the tests and configure the system is stored in plain text files. All system state is stored in an sqlite3 database. Tests are launched using the launching system available for the distributed compute platform in use. A template script is provided which can launch jobs on local and remote Linux hosts. Currently megatest uses the network filesystem to “call home” to your master sqlite3 database.
+All data to specify the tests and configure the system is stored in plain text files. All system state is stored in an sqlite3 database. Tests are launched using the launching system available for the distributed compute platform in use. A template script is provided which can launch jobs on local and remote Linux hosts. Currently megatest uses the network filesystem to &ldquo;call home&rdquo; to your master sqlite3 database.
 </div>
 <h1 class="Section">
 <a class="toc" name="toc-Section-2">2</a> Installation
@@ -298,7 +319,7 @@ All data to specify the tests and configure the system is stored in plain text f
 <a class="toc" name="toc-Subsection-2.1">2.1</a> Dependencies
 </h2>
 <div class="Standard">
-Chicken scheme and a number of “eggs” are required for building megatest. See the file utils/installall.sh for an automated way to install the dependencies on Linux.
+Chicken scheme and a number of &ldquo;eggs&rdquo; are required for building megatest. See the file utils/installall.sh for an automated way to install the dependencies on Linux.
 </div>
 <h2 class="Subsection">
 <a class="toc" name="toc-Subsection-2.2">2.2</a> Build and Install
@@ -410,10 +431,16 @@ dashboard &amp;
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-4">4</a> How to Write Tests
+<a class="toc" name="toc-Section-4">4</a> Choose Flow or Unstructured Run?
+</h1>
+<div class="Standard">
+A flow is a structured and specifically sequenced set of tests. See the Flows chapter to understand the difference.
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-5">5</a> How to Write Tests
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-4.1">4.1</a> A Simple Test with one Step
+<a class="toc" name="toc-Subsection-5.1">5.1</a> A Simple Test with one Step
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -424,7 +451,7 @@ cd simpletest
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-4.2">4.2</a> Create your testconfig file
+<a class="toc" name="toc-Subsection-5.2">5.2</a> Create your testconfig file
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -437,7 +464,7 @@ runscript main.csh
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-4.3">4.3</a> Create the main.csh script
+<a class="toc" name="toc-Subsection-5.3">5.3</a> Create the main.csh script
 </h2>
 <div class="Standard">
 Note: Using csh is NOT recommended. Use bash, perl, ruby, zsh or anything other than csh. We use csh here because it is popular in the EDA industry for which Megatest was originally created. 
@@ -464,7 +491,7 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 You can now run megatest and the created test directory will contain the new files “run_simulation.html” and “run_simulation.log”. If you are using the dashboard you can click on the run and then push the “View log” button to view the log file in firefox.
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-4.4">4.4</a> Simple Test with Multiple Steps 
+<a class="toc" name="toc-Subsection-5.4">5.4</a> Simple Test with Multiple Steps 
 </h2>
 <div class="Standard">
 To run multiple steps simply add them to the main.csh file. Here we add a step to test “cpu2”. The second step that tests cpu2 will only run after the step that tested “cpu1” completes.
@@ -486,10 +513,10 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-5">5</a> Simple Test with Multiple Steps, Some in Parallel
+<a class="toc" name="toc-Section-6">6</a> Simple Test with Multiple Steps, Some in Parallel
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-5.1">5.1</a> The Makefile
+<a class="toc" name="toc-Subsection-6.1">6.1</a> The Makefile
 </h2>
 <div class="Standard">
 A good way to run steps in parallel within a single test, especially when there are following steps, is to use the Unix Make utility. Writing Makefiles is beyond the scope of this document but here is a minimal example that will run “runsim cpu1” and “runsim cpu2” in parallel. For more information on make try “info make” at the Linux command prompt.
@@ -508,7 +535,7 @@ run_simulation_$(CPUS).html : $(RTLDIR)/$(CPUS)
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-5.2">5.2</a> The main.csh file
+<a class="toc" name="toc-Subsection-6.2">6.2</a> The main.csh file
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -527,13 +554,13 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-6">6</a> Simple Test with Iteration
+<a class="toc" name="toc-Section-7">7</a> Simple Test with Iteration
 </h1>
 <div class="Standard">
 Since no jobs run after the cpu1 and cpu2 simulations in this test it is possible to use iterated mode.
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-6.1">6.1</a> Update your testconfig file for iteration
+<a class="toc" name="toc-Subsection-7.1">7.1</a> Update your testconfig file for iteration
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -550,7 +577,7 @@ CPU cpu1 cpu2
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-6.2">6.2</a> Rewrite your main.csh for iteration
+<a class="toc" name="toc-Subsection-7.2">7.2</a> Rewrite your main.csh for iteration
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -569,7 +596,7 @@ $MT_MEGATEST -test-status :state COMPLETED :status $?
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-6.3">6.3</a> Tests with Inter-test dependencies
+<a class="toc" name="toc-Subsection-7.3">7.3</a> Tests with Inter-test dependencies
 </h2>
 <div class="Standard">
 Sometimes a test depends on the output from a previous test or it may not make sense to run a test is another test does not complete with status “PASS”. In either of these scenarios you can use the “waiton” keyword in your testconfig file to indicate that this test must wait on one or more tests to complete before being launched. In this example there is no point in running the “system” test if the “cpu” and “mem” tests either do not complete or complete but with status “FAIL”.
@@ -585,7 +612,7 @@ waiton cpu mem
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-6.4">6.4</a> Rolling up Miscellaneous Data
+<a class="toc" name="toc-Subsection-7.4">7.4</a> Rolling up Miscellaneous Data
 </h2>
 <div class="Standard">
 Use the -load-test-data switch to roll up arbitrary data from a test into the test_data table.
@@ -628,7 +655,7 @@ If status is specified its value overrides the above calculations.
 
 </ul>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-6.5">6.5</a> Rolling up Runs
+<a class="toc" name="toc-Subsection-7.5">7.5</a> Rolling up Runs
 </h2>
 <div class="Standard">
 To roll up a number of tests in a sequence of runs to a single run use the -rollup command. 
@@ -644,7 +671,7 @@ To roll up a number of tests in a sequence of runs to a single run use the -roll
 All keys must be specified and the runname is the name of the run that will be created. All paths are kept original inside the database. When -remove-runs is used to delete runs the data is not deleted if there are rollups that refer to the data. 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-7">7</a> Dashboard
+<a class="toc" name="toc-Section-8">8</a> Dashboard
 </h1>
 <div class="Standard">
 <div class="listing">
@@ -654,18 +681,18 @@ All keys must be specified and the runname is the name of the run that will be c
 
 </div>
 <div class="Standard">
-<img class="embedded" src="dashboard.png" alt="figure dashboard.png" style="width: 730px; max-width: 913px; height: 626px; max-height: 783px; "/>
+<img class="embedded" src="dashboard.png" alt="figure dashboard.png" style="width: 730px; max-width: 913px; height: 626px; max-height: 783px;"/>
 
 </div>
 <div class="Standard">
 Pushing one of the buttons on the main dashboard will bring up the test specific dashboard. Values are updated in semi-real time as the test runs.
 </div>
 <div class="Standard">
-<img class="embedded" src="dashboard-test.png" alt="figure dashboard-test.png" style="width: 643px; max-width: 804px; height: 571px; max-height: 714px; "/>
+<img class="embedded" src="dashboard-test.png" alt="figure dashboard-test.png" style="width: 643px; max-width: 804px; height: 571px; max-height: 714px;"/>
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-8">8</a> Generating an OpenDocument Spreadsheet from the Database
+<a class="toc" name="toc-Section-9">9</a> Generating an OpenDocument Spreadsheet from the Database
 </h1>
 <div class="Standard">
 And OpenDocument multi-paned spreadsheet can be generated from the megatest.db file by running -extract-ods
@@ -681,13 +708,78 @@ And OpenDocument multi-paned spreadsheet can be generated from the megatest.db f
 You can optionally specify the keys for your database to limit further the runs to extract into the spreadsheet. The first sheet contains all the run data and subsequent sheets contain data rolled up for the individual tests.
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-9">9</a> Reference
+<a class="toc" name="toc-Section-10">10</a> Flows
+</h1>
+<div class="Standard">
+A flow specifies the tests to run, the order and dependencies and is managed by a running megatest process.
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-11">11</a> Flow Specification and Running (Not released yet)
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-9.1">9.1</a> Configuration file Syntax
+<a class="toc" name="toc-Subsection-11.1">11.1</a> Write your flow file
 </h2>
+<div class="Standard">
+flows/&lt;flowname&gt;.config
+</div>
+<div class="Standard">
+<div class="listing">
+<pre class="listing"># Flow: &lt;flowname&gt;
+[flowconfig]
+# turn on item level dependencies
+itemdeps on
+​
+[flowsteps]
+# &lt;testname&gt;[,&lt;predecessor&gt;]
+​
+# Run the test "copydata"
+copydata
+​
+# Run the test "setup" after copydata completes with PASS, WARN or WAIVE
+setup,copydata
+​
+# once the test "setup" completes successfully run sim1, sim2 and sim3
+sim1,setup
+sim2,setup
+sim3,setup
+</pre>
+</div>
+
+</div>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-11.2">11.2</a> Run the flow
+</h2>
+<div class="Standard">
+<div class="listing">
+<pre class="listing">megatest -runflow &lt;flowname&gt; :FIELD1 val1 :FIELD2 val2 :runname wk32.4
+</pre>
+</div>
+
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-12">12</a> Monitor based running
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-12.1">12.1</a> Monitor logic
+</h2>
+<div class="Standard">
+Note: The monitor is usable but incomplete as of Megatest v1.31. Click on the &ldquo;Monitor&rdquo; button on the dashboard to start the monitor and give it a try.
+</div>
+<div class="Standard">
+<img class="embedded" src="monitor-state-diagram.png" alt="figure monitor-state-diagram.png" style="max-width: 383px; max-height: 335px;"/>
+
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-13">13</a> Reference
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-13.1">13.1</a> Configuration file Syntax
+</h2>
+<div class="Standard">
+Note: whitespace is preserved including at the end of line. Ensure your entries only have whitespace at the end of line when needed to avoid problems.
+</div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.1.1">9.1.1</a> Sections
+<a class="toc" name="toc-Subsubsection-13.1.1">13.1.1</a> Sections
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -700,7 +792,7 @@ You can optionally specify the keys for your database to limit further the runs 
 This creates a section named “section name”
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.1.2">9.1.2</a> Variables
+<a class="toc" name="toc-Subsubsection-13.1.2">13.1.2</a> Variables
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -713,7 +805,7 @@ This creates a section named “section name”
 The variable “VARX” will have the value “has this value”
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.1.3">9.1.3</a> Includes
+<a class="toc" name="toc-Subsubsection-13.1.3">13.1.3</a> Includes
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -726,7 +818,7 @@ The variable “VARX” will have the value “has this value”
 The file named “filename” will be included as if part of the calling file. NOTE: This means no section can be named “include “ (with the whitespace).
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.1.4">9.1.4</a> Setting a variable by running a command
+<a class="toc" name="toc-Subsubsection-13.1.4">13.1.4</a> Setting a variable by running a command
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -739,7 +831,7 @@ The file named “filename” will be included as if part of the calling file. N
 The variable “VARNAME” will get a value created by the Unix command “ls /tmp”. All lines of output from the command will be joined with a space.
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.1.5">9.1.5</a> Notes
+<a class="toc" name="toc-Subsubsection-13.1.5">13.1.5</a> Notes
 </h3>
 <ul>
 <li>
@@ -751,87 +843,87 @@ Comments (lines starting with #) and blank lines are ignored.
 
 </ul>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-9.2">9.2</a> Environment variables
+<a class="toc" name="toc-Subsection-13.2">13.2</a> Environment variables
 </h2>
 <div class="Standard">
 <table>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 Variable
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Purpose
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_CMDINFO
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Conveys test variables to the megatest test runner.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_TEST_RUN_DIR
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Directory assigned by megatest for the test to run.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_TEST_NAME
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Name of the test, corrosponds to the directory name under tests.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_ITEM_INFO
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Iterated tests will set this to a sequence of key/values ((KEY val) ...) 
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_RUN_AREA_HOME
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Directory where megatest was launched from and where the tests code can be found
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_RUNNAME
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Name of this run as set by the :runname parameter
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 MT_MEGATEST
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 Path/Filename to megatest executable. Found either from called path or but using the “exectuable” keyword in the [setup] section.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 &lt;field1&gt; ....
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 50%;">
 The field values as set on the megatest -runall command line (e.g. :field1 abc)
 </td>
 
@@ -841,168 +933,186 @@ The field values as set on the megatest -runall command line (e.g. :field1 abc)
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-9.3">9.3</a> megatest.config
+<a class="toc" name="toc-Subsection-13.3">13.3</a> megatest.config
 </h2>
 <div class="Standard">
 <table>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 section
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 variable
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 value
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 required
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 comment
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 [setup]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 max_concurrent_jobs
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 if variable is not defined no limit on jobs
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 executable
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 full path to megatest binary
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 Use only if necessary, megatest will extract the location from where it used to launch and add append that to the PATH for test runs.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 runsdir
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 full path to where the link tree to all runs will be created
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 Because your runs may be spread out over several disk partitions a central link tree is created to make finding all the runs easy.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 [fields]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 at least one
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 [jobtools]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 launcher
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 command line used to launch jobs - the job command (megatest -execute) will be appended to this
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 workhosts
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 list of hostnames to run jobs on NOT SUPPORTED RIGHT NOW
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 n/a
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
-[env-override]
+<td align="left" valign="top" style="width: 10%;">
+[jobgroups]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
-any string
+<td align="left" valign="top" style="width: 20%;">
+number
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
+Control number of jobs allowed to concurrently run in categories. See [jobgroup] in testconfig
+</td>
+
+</tr>
+<tr>
+<td align="left" valign="top" style="width: 10%;">
+[env-override]
+</td>
+<td align="left" valign="top" style="width: 15%;">
+string of letters, numbers and underscore
+</td>
+<td align="left" valign="top" style="width: 20%;">
+any string
+</td>
+<td align="left" valign="top" style="width: 6%;">
+no
+</td>
+<td align="left" valign="top" style="width: 20%;">
 These are set on the test launching machine, not the test running machine. Typical usage is to control the host or run queue for launching tests. These values will not be seen by the test when it runs.
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 10%;">
 [disks]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 15%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 a valid path writable by the test launching process and by the test process
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 yes
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 The disk usage balancing algorithm is to choose the disk with the least space for each test run. 
 </td>
 
@@ -1012,60 +1122,60 @@ The disk usage balancing algorithm is to choose the disk with the least space fo
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-9.4">9.4</a> runconfigs.config file
+<a class="toc" name="toc-Subsection-13.4">13.4</a> runconfigs.config file
 </h2>
 <div class="Standard">
 <table>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 section
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 variable
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 3%;">
 value
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 4%;">
 required?
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 comment
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 [default]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 3%;">
 any
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 4%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 variables set in this section will be available for all runs, defining the same variable in another section will override the value from the default section
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 20%;">
 [field1value/field2value...]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 string of letters, numbers and underscore
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 3%;">
 any
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 4%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 the values in this section will be set for any run where field1 is field1value, field2 is field2value and fieldN is fieldNvalue. 
 </td>
 
@@ -1115,82 +1225,118 @@ ENCRYPTION true
 TESTPATH /nfs/testing/megacorp_runs
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-9.5">9.5</a> Writing tests
+<a class="toc" name="toc-Subsection-13.5">13.5</a> Writing tests
 </h2>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.5.1">9.5.1</a> testconfig file
+<a class="toc" name="toc-Subsubsection-13.5.1">13.5.1</a> testconfig file
 </h3>
 <div class="Standard">
 <table>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 8%;">
 section
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 variable
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 value
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 required?
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 comments
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 8%;">
 [setup]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 runscript
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 name of script to execute for this test
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 yes
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 The script must be executable and either provide the full path or put a copy at the top of your test directory
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 8%;">
 [requirements]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 waiton
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 list of valid test names
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 This test will not run until the named tests are state completed and status PASS
 </td>
 
 </tr>
 <tr>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 8%;">
+
+</td>
+<td align="left" valign="top" style="width: 6%;">
+jobgroup
+</td>
+<td align="left" valign="top" style="width: 12%;">
+
+</td>
+<td align="left" valign="top" style="width: 6%;">
+
+</td>
+<td align="left" valign="top" style="width: 30%;">
+
+</td>
+
+</tr>
+<tr>
+<td align="left" valign="top" style="width: 8%;">
 [items]
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 any valid
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 12%;">
 list of values
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 6%;">
 no
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 The test will be repeated once for each item with the variable name set to the value. If there is more than one variable then the test will be run against all unique combinations of the values
+</td>
+
+</tr>
+<tr>
+<td align="left" valign="top" style="width: 8%;">
+[eztests]
+</td>
+<td align="left" valign="top" style="width: 6%;">
+any valid
+</td>
+<td align="left" valign="top" style="width: 12%;">
+stepname command
+</td>
+<td align="left" valign="top" style="width: 6%;">
+no
+</td>
+<td align="left" valign="top" style="width: 30%;">
+Use in addition to or instead of runscript for easy implementation of steps. If &lt;stepname&gt;.logpro exists it will be applied to the &lt;stepname&gt;.log and resulting exit code will be used to determine PASS/FAIL/WARN
 </td>
 
 </tr>
@@ -1199,7 +1345,7 @@ The test will be repeated once for each item with the variable name set to the v
 
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-9.5.2">9.5.2</a> Command line
+<a class="toc" name="toc-Subsubsection-13.5.2">13.5.2</a> Command line
 </h3>
 <div class="Standard">
 <table>
@@ -1210,7 +1356,7 @@ switch or param
 <td align="left" valign="top">
 parameter
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 purpose
 </td>
 <td align="left" valign="top">
@@ -1225,7 +1371,7 @@ comments
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 brief help
 </td>
 <td align="left" valign="top">
@@ -1240,7 +1386,7 @@ brief help
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 run all tests
 </td>
 <td align="left" valign="top">
@@ -1255,7 +1401,7 @@ run all tests
 <td align="left" valign="top">
 test1,test2,...
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 run one or more tests
 </td>
 <td align="left" valign="top">
@@ -1270,7 +1416,7 @@ run one or more tests
 <td align="left" valign="top">
 stepname
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 record a step
 </td>
 <td align="left" valign="top">
@@ -1285,7 +1431,7 @@ requires :state and :status
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 record the test status
 </td>
 <td align="left" valign="top">
@@ -1300,7 +1446,7 @@ requires :state and :status
 <td align="left" valign="top">
 logfilename
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 set the logfile name for a test
 </td>
 <td align="left" valign="top">
@@ -1315,7 +1461,7 @@ path is assumed to be relative to the test run directory
 <td align="left" valign="top">
 logfilename
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 set the logfile name for the top test in an iterated test run
 </td>
 <td align="left" valign="top">
@@ -1328,9 +1474,9 @@ each sub test can have its own logfile set
 -m
 </td>
 <td align="left" valign="top">
-“comment”
+&ldquo;comment&rdquo;
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 sets a comment for the step, test or run
 </td>
 <td align="left" valign="top">
@@ -1345,7 +1491,7 @@ sets a comment for the step, test or run
 <td align="left" valign="top">
 [a-zA-Z0-9_-]+
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 directory in which this run will be stored in the test run area 
 </td>
 <td align="left" valign="top">
@@ -1360,11 +1506,11 @@ directory in which this run will be stored in the test run area
 <td align="left" valign="top">
 any value
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Set the step or test state, this is stored in the state field in the steps or tests table respectively
 </td>
 <td align="left" valign="top">
-For tests Megatest recognises “INCOMPLETE”, “COMPLETE”
+For tests Megatest recognises &ldquo;INCOMPLETE&rdquo;, &ldquo;COMPLETE&rdquo;
 </td>
 
 </tr>
@@ -1375,11 +1521,11 @@ For tests Megatest recognises “INCOMPLETE”, “COMPLETE”
 <td align="left" valign="top">
 any value
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Set the step or test status, this is stored in the status field in the steps or tests table respectively
 </td>
 <td align="left" valign="top">
-For tests Megatest recognises “PASS”, “FAIL”, and “CHECK”
+For tests Megatest recognises &ldquo;PASS&rdquo;, &ldquo;FAIL&rdquo;, and &ldquo;CHECK&rdquo;
 </td>
 
 </tr>
@@ -1390,7 +1536,7 @@ For tests Megatest recognises “PASS”, “FAIL”, and “CHECK”
 <td align="left" valign="top">
 any value, % is wildcard
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Respects -itempatt and -testpatt for filters
 </td>
 <td align="left" valign="top">
@@ -1405,7 +1551,7 @@ Respects -itempatt and -testpatt for filters
 <td align="left" valign="top">
 any value, % is wildcard
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 
 </td>
 <td align="left" valign="top">
@@ -1420,7 +1566,7 @@ any value, % is wildcard
 <td align="left" valign="top">
 any value, % is wildcard
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 
 </td>
 <td align="left" valign="top">
@@ -1435,7 +1581,7 @@ any value, % is wildcard
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Print the keys being used for this database
 </td>
 <td align="left" valign="top">
@@ -1450,11 +1596,11 @@ Print the keys being used for this database
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
-Test will not re-run if in the “PASS”, “CHECK” or “KILLED”, using -force will force the run to be launched.
+<td align="left" valign="top" style="width: 30%;">
+Test will not re-run if in the &ldquo;PASS&rdquo;, &ldquo;CHECK&rdquo; or &ldquo;KILLED&rdquo;, using -force will force the run to be launched.
 </td>
 <td align="left" valign="top">
-WARNING: The -force switch will bypass any “waiton” dependencies.
+WARNING: The -force switch will bypass any &ldquo;waiton&rdquo; dependencies.
 </td>
 
 </tr>
@@ -1465,7 +1611,7 @@ WARNING: The -force switch will bypass any “waiton” dependencies.
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Launch an xterm instead of run the test. The xterm will have the environment that the test would see.
 </td>
 <td align="left" valign="top">
@@ -1480,7 +1626,7 @@ Launch an xterm instead of run the test. The xterm will have the environment tha
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Remove a run, test or subtest from the database and the disk. Cannot be undone. Requires -testpatt, -itempatt, :runname and all keys be specified.
 </td>
 <td align="left" valign="top">
@@ -1495,7 +1641,7 @@ Remove a run, test or subtest from the database and the disk. Cannot be undone. 
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 
 </td>
 <td align="left" valign="top">
@@ -1510,7 +1656,7 @@ Remove a run, test or subtest from the database and the disk. Cannot be undone. 
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
+<td align="left" valign="top" style="width: 30%;">
 Used inside a test to run a step, record the start and end of the step and optionally analyze the output using logpro.
 </td>
 <td align="left" valign="top">
@@ -1525,8 +1671,8 @@ Used inside a test to run a step, record the start and end of the step and optio
 <td align="left" valign="top">
 
 </td>
-<td align="left" valign="top">
-If using logpro to asses the PASS/FAIL status of the step you specify the logpro file with this parameter.
+<td align="left" valign="top" style="width: 30%;">
+If using logpro to acess the PASS/FAIL status of the step you specify the logpro file with this parameter.
 </td>
 <td align="left" valign="top">
 
@@ -1538,15 +1684,15 @@ If using logpro to asses the PASS/FAIL status of the step you specify the logpro
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-A">A</a> Data
+<a class="toc" name="toc-Appendix-A">A</a> Data
 </h1>
 <h1 class="Section">
-<a class="toc" name="toc-Section-B">B</a> References
+<a class="toc" name="toc-Appendix-B">B</a> References
 </h1>
 
 <hr class="footer"/>
 <div class="footer" id="generated-by">
-Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.0.0 (2010-07-21)</a> on <span class="create-date">2011-09-24T12:41:26.767975</span>
+Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.2.2 (2011-06-12)</a> on <span class="create-date">2011-12-15T21:53:21.527506</span>
 </div>
 </div>
 </body>

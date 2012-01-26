@@ -2,7 +2,5 @@
 ;;  
 ;;   License GPL.
 
-
-(expect:ignore   in "LogFileBody"  < 99 "Ignore the word error in comments" #/^\/\/.*error/)
 (expect:warning  in "LogFileBody"  = 0 "Any warning" #/WARNING/)
 (expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/.*/)) ;; force an error

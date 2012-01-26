@@ -29,6 +29,7 @@ k;;======================================================================
 (declare (uses runs))
 (declare (uses dashboard-tests))
 (declare (uses dashboard-guimonitor))
+(declare (uses dashboard-main))
 (declare (uses megatest-version))
 
 (include "common_records.scm")
@@ -59,6 +60,7 @@ Misc
 			) 
 		 (list  "-h"
 			"-guimonitor"
+			"-main"
 			"-v"
 			"-q"
 		       )
@@ -101,6 +103,8 @@ Misc
 
 (define *last-db-update-time* 0)
 (define *please-update-buttons* #t)
+(define *delayed-update* 0)
+
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
 (define *tests-sort-reverse* #f)
@@ -199,10 +203,12 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
   (let ((modtime (file-modification-time *db-file-path*)))
-    (if (> modtime *last-db-update-time*)
+    (if (or (> modtime *last-db-update-time*)
+	    (> *delayed-update* 0))
 	(begin
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
+	  (set! *delayed-update* (- *delayed-update* 1))
 	  (let* ((allruns     (db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
@@ -449,6 +455,11 @@ Misc
   ;; (print "Setting search for " x " to " val)
   (hash-table-set! *searchpatts* x val))
 
+(define (mark-for-update)
+  (set! *last-db-update-time* 0)
+  (set! *delayed-update* 1)
+  )
+
 (define (make-dashboard-buttons nruns ntests keynames)
   (let* ((nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
@@ -470,24 +481,24 @@ Misc
 	     (iup:hbox
 	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
-				      (set! *last-db-update-time* 0)
+				      (mark-for-update)
 				      (update-search "test-name" val)))
 	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
-				      (set! *last-db-update-time* 0)
+				      (mark-for-update)
 				      (update-search "item-name" val)))))
 	    (iup:vbox
 	     (iup:hbox
 	      (iup:button "Sort" #:action (lambda (obj)
 					    (set! *tests-sort-reverse* (not *tests-sort-reverse*))
 					    (iup:attribute-set! obj "TITLE" (if *tests-sort-reverse* "+Sort" "-Sort"))
-					    (set! *last-db-update-time* 0)))
+					    (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
 						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
-						 (set! *last-db-update-time* 0)))
+						 (mark-for-update)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
-						 (set! *last-db-update-time* 0))))
+						 (mark-for-update))))
 	     (iup:hbox
 	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
@@ -503,7 +514,7 @@ Misc
 	      iup:hbox
 	      (map (lambda (status)
 		     (iup:toggle status  #:action   (lambda (obj val)
-						      (set! *last-db-update-time* 0)
+						      (mark-for-update)
 						      (if (eq? val 1)
 							  (hash-table-set! *status-ignore-hash* status #t)
 							  (hash-table-delete! *status-ignore-hash* status)))))
@@ -512,7 +523,7 @@ Misc
 	      iup:hbox
 	      (map (lambda (state)
 		     (iup:toggle state   #:action   (lambda (obj val)
-						      (set! *last-db-update-time* 0)
+						      (mark-for-update)
 						      (if (eq? val 1)
 							  (hash-table-set! *state-ignore-hash* state #t)
 							  (hash-table-delete! *state-ignore-hash* state)))))
@@ -522,7 +533,7 @@ Misc
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
 						     (maxruns  *tot-run-count*))
 						 (set! *start-run-offset* val)
-						 (set! *last-db-update-time* 0)
+						 (mark-for-update)
 						 (debug:print 6 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "YES"
@@ -541,7 +552,7 @@ Misc
 						  (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
 						  (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
 							       #:action (lambda (obj unk val)
-									  (set! *last-db-update-time* 0)
+									  (mark-for-update)
 									  (update-search x val))))))
 					(set! i (+ i 1))
 					res))
@@ -574,7 +585,7 @@ Misc
 				 #:size "100x15"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
-					    (set! *last-db-update-time* 0)
+					    (mark-for-update)
 					    (toggle-hide testnum))))) ;; (iup:attribute obj "TITLE"))))
 	  (vector-set! lftcol testnum labl)
 	  (loop (+ testnum 1)(cons labl res))))))
@@ -693,6 +704,8 @@ Misc
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))
+ ((args:get-arg "-main")
+  (iup:show (main-panel)))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*

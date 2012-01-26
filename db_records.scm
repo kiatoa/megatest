@@ -67,6 +67,7 @@
 (define-inline (db:test-data-get-units            vec)    (vector-ref  vec 7))
 (define-inline (db:test-data-get-comment          vec)    (vector-ref  vec 8))
 (define-inline (db:test-data-get-status           vec)    (vector-ref  vec 9))
+(define-inline (db:test-data-get-type             vec)    (vector-ref  vec 10))
 
 ;;======================================================================
 ;; S T E P S 

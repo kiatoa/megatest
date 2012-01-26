@@ -93,7 +93,7 @@ Misc
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
 Spreadsheet generation
-  -extract-ods            : extract an open document spreadsheet from the database
+  -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
                             will clear the field if no rundir/testname/itempath/logfile
                             if it contains forward slashes the path will be converted
@@ -235,7 +235,11 @@ Called as " (string-intersperse (argv) " ")))
       (set! *didsomething* #t)))))
 	  
 (if (args:get-arg "-remove-runs")
-    (remove-runs))
+    (general-run-call 
+     "-remove-runs"
+     "remove runs"
+     (lambda (db target runname keys keynames keyvallst)
+       (remove-runs))))
 
 ;;======================================================================
 ;; Query runs
@@ -326,11 +330,44 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (db keys keynames keyvallst)
-       (let* ((test-names (get-all-legal-tests))) ;; "PROD" is ignored for now
-	 (debug:print 1 "INFO: Attempting to start the following tests...")
-	 (debug:print 1 "     " (string-intersperse test-names ","))
-	 (run-tests db test-names)))))
+     (lambda (db target runname keys keynames keyvallst)
+       (runs:run-tests db
+		       target
+		       runname
+		       (args:get-arg "-testpatt")
+		       (args:get-arg "-itempatt")
+		       user
+		       (make-hash-table)))))
+
+;;======================================================================
+;; run one test
+;;======================================================================
+
+;; 1. find the config file
+;; 2. change to the test directory
+;; 3. update the db with "test started" status, set running host
+;; 4. process launch the test
+;;    - monitor the process, update stats in the db every 2^n minutes
+;; 5. as the test proceeds internally it calls megatest as each step is
+;;    started and completed
+;;    - step started, timestamp
+;;    - step completed, exit status, timestamp
+;; 6. test phone home
+;;    - if test run time > allowed run time then kill job
+;;    - if cannot access db > allowed disconnect time then kill job
+
+(if (args:get-arg "-runtests")
+  (general-run-call 
+   "-runtests" 
+   "run a test" 
+   (lambda (db target runname keys keynames keyvallst)
+     (runs:run-tests db
+		     target
+		     runname
+		     (args:get-arg "-runtests")
+		     (args:get-arg "-itempatt")
+		     user
+		     (make-hash-table)))))
 
 ;;======================================================================
 ;; Rollup into a run
@@ -354,37 +391,13 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (db keys keynames keyvallst)
+     (lambda (db target runname keys keynames keyvallst)
        (let ((outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
+	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
 	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
-
-;;======================================================================
-;; run one test
-;;======================================================================
-
-;; 1. find the config file
-;; 2. change to the test directory
-;; 3. update the db with "test started" status, set running host
-;; 4. process launch the test
-;;    - monitor the process, update stats in the db every 2^n minutes
-;; 5. as the test proceeds internally it calls megatest as each step is
-;;    started and completed
-;;    - step started, timestamp
-;;    - step completed, exit status, timestamp
-;; 6. test phone home
-;;    - if test run time > allowed run time then kill job
-;;    - if cannot access db > allowed disconnect time then kill job
-
-(if (args:get-arg "-runtests")
-  (general-run-call 
-   "-runtests" 
-   "run a test" 
-   (lambda (db keys keynames keyvallst)
-     (let ((test-names (string-split (args:get-arg "-runtests") ",")))
-       (run-tests db test-names)))))
 
 ;;======================================================================
 ;; execute the test

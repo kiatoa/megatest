@@ -9,14 +9,21 @@ fi
 #   DO NOT USE IN YOUR SCRIPTS!
 #
 # Call like this:
-# mt_ezstep stepname command ....
+# mt_ezstep stepname prevstepname command ....
 # 
 stepname=$1;shift
+prevstepname=$1;shift
+
 command=$*
 
 allstatus=99
 runstatus=99
 logpropstatus=99
+
+prev_env=.ezsteps/${prevstepname}.sh
+if [ -e $prev_env ];then
+    source $prev_env
+fi
 
 # source the environment from the previous step if it exists
 

@@ -18,44 +18,13 @@
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
+(declare (uses tests))
 
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
-
-;; register a test run with the db
-(define (register-run db keys) ;; test-name)
-  (let* ((keystr    (keys->keystr keys))
-	 (comma     (if (> (length keys) 0) "," ""))
-	 (andstr    (if (> (length keys) 0) " AND " ""))
-	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvallst (keys->vallist keys)) ;; extracts the values from remainder of (argv)
-	 (runname   (get-with-default ":runname" #f))
-	 (state     (get-with-default ":state" "no"))
-	 (status    (get-with-default ":status" "n/a"))
-	 (allvals   (append (list runname state status user) keyvallst))
-	 (qryvals   (append (list runname) keyvallst))
-	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvallst: " keyvallst)
-    (debug:print 2 "NOTE: using key " (string-intersperse keyvallst "/") " for this run")
-    (if (and runname (null? (filter (lambda (x)(not x)) keyvallst))) ;; there must be a better way to "apply and"
-	(let ((res #f))
-	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
-		 allvals)
-	  (apply sqlite3:for-each-row 
-	   (lambda (id)
-	     (set! res id))
-	   db
-	   (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
-	     ;(debug:print 4 "qry: " qry) 
-	     qry)
-	   qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
-	  res) 
-	(begin
-	  (debug:print 0 "ERROR: Called without all necessary keys")
-	  #f))))
+(include "test_records.scm")
 
 ;; runs:get-runs-by-patt
 ;; get runs by list of criteria
@@ -89,294 +58,6 @@
      runnamepatt)
     (vector header res)))
 
-(define (register-test db run-id test-name item-path)
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (for-each 
-     (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth 
-			;; (conc "," (string-intersperse tags ",") ",")
-			))
-     item-paths )))
-
-;; get the previous record for when this test was run where all keys match but runname
-;; returns #f if no such test found, returns a single test record if found
-(define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
-	 (keyvals #f))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	#f
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; for each run starting with the most recent look to see if there is a matching test
-	  ;; if found then return that matching test record
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) #f
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db-get-tests-for-run db hed test-name item-path '() '())))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
-		  (if (and (null? results)
-			   (not (null? tal)))
-		      (loop (car tal)(cdr tal))
-		      (if (null? results) #f
-			  (car results))))))))))
-    
-;; get the previous records for when these tests were run where all keys match but runname
-;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
-;; can use wildcards. 
-(define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
-	 (keyvals #f)
-	 (tests-hash (make-hash-table)))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	'()
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; collect all matching tests for the runs then
-	  ;; extract the most recent test and return that.
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
-		       ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db-get-tests-for-run db hed test-name item-path '() '())))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
-			       ", item-path " item-path " results: " (intersperse results "\n"))
-		  ;; Keep only the youngest of any test/item combination
-		  (for-each 
-		   (lambda (testdat)
-		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
-			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
-		       (if (or (not stored-test)
-			       (and stored-test
-				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
-			   ;; this test is younger, store it in the hash
-			   (hash-table-set! tests-hash full-testname testdat))))
-		   results)
-		  (if (null? tal)
-		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
-		      (loop (car tal)(cdr tal))))))))))
-
-(define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
-  (let* ((real-status status)
-	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	 (testdat     (db:get-test-info db run-id test-name item-path))
-	 (test-id     (if testdat (db:test-get-id testdat) #f))
-	 (otherdat    (if dat dat (make-hash-table)))
-	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
-	 ;; was WAIVED if this test is FAIL
-	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (test:get-previous-test-run-record db run-id test-name item-path)))
-			 (if prev-test ;; true if we found a previous test in this run series
-			     (let ((prev-status (db:test-get-status   prev-test))
-				   (prev-state  (db:test-get-state    prev-test))
-				   (prev-comment (db:test-get-comment prev-test)))
-			       (debug:print 4 "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
-			       (if (and (equal? prev-state  "COMPLETED")
-					(equal? prev-status "WAIVED"))
-				   prev-comment ;; waived is either the comment or #f
-				   #f))
-			     #f))
-		       #f)))
-    (if waived (set! real-status "WAIVED"))
-    (debug:print 4 "real-status " real-status ", waived " waived ", status " status)
-
-    ;; update the primary record IF state AND status are defined
-    (if (and state status)
-	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-			 state real-status run-id test-name item-path))
-
-    ;; if status is "AUTO" then call rollup
-    (if (and test-id state status (or (equal? status "AUTO")(equal? status "AUTO-WARN"))) 
-	(db:test-data-rollup db test-id status))
-
-    ;; add metadata (need to do this way to avoid SQL injection issues)
-
-    ;; :first_err
-    ;; (let ((val (hash-table-ref/default otherdat ":first_err" #f)))
-    ;;   (if val
-    ;;       (sqlite3:execute db "UPDATE tests SET first_err=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-    ;; 
-    ;; ;; :first_warn
-    ;; (let ((val (hash-table-ref/default otherdat ":first_warn" #f)))
-    ;;   (if val
-    ;;       (sqlite3:execute db "UPDATE tests SET first_warn=? WHERE run_id=? AND testname=? AND item_path=?;" val run-id test-name item-path)))
-
-    (let ((category (hash-table-ref/default otherdat ":category" ""))
-	  (variable (hash-table-ref/default otherdat ":variable" ""))
-	  (value    (hash-table-ref/default otherdat ":value"    #f))
-	  (expected (hash-table-ref/default otherdat ":expected" #f))
-	  (tol      (hash-table-ref/default otherdat ":tol"      #f))
-	  (units    (hash-table-ref/default otherdat ":units"    ""))
-	  (dcomment (hash-table-ref/default otherdat ":comment"  "")))
-      (debug:print 4 
-		   "category: " category ", variable: " variable ", value: " value
-		   ", expected: " expected ", tol: " tol ", units: " units)
-      (if (and value expected tol) ;; all three required
-	  (db:csv->test-data db test-id 
-			     (conc category ","
-				   variable ","
-				   value    ","
-				   expected ","
-				   tol      ","
-				   units    ","
-				   dcomment ","))))
-				   
-    ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (if (and (not (equal? item-path ""))
-	     (or (equal? status "PASS")
-		 (equal? status "WARN")
-		 (equal? status "FAIL")
-		 (equal? status "WAIVED")
-		 (equal? status "RUNNING")))
-	(begin
-	  (sqlite3:execute 
-	   db
-	   "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-             WHERE run_id=? AND testname=? AND item_path='';"
-	   run-id test-name run-id test-name run-id test-name)
-	  (if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
-	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" run-id test-name)
-	      (sqlite3:execute
-	       db
-	       "UPDATE tests
-                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
-                          'RUNNING'
-                       ELSE 'COMPLETED' END,
-                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
-                       WHERE run_id=? AND testname=? AND item_path='';"
-	       run-id test-name run-id test-name))))
-    (if (or (and (string? comment)
-		 (string-match (regexp "\\S+") comment))
-	    waived)
-	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (if waived waived comment) run-id test-name item-path))
-    ))
-
-(define (test-set-log! db run-id test-name itemdat logf) 
-  (let ((item-path (item-list->path itemdat)))
-    (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
-		     logf run-id test-name item-path)))
-
-(define (test-set-toplog! db run-id test-name logf) 
-  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
-		   logf run-id test-name))
-
-(define (tests:summarize-items db run-id test-name force)
-  ;; if not force then only update the record if one of these is true:
-  ;;   1. logf is "log/final.log
-  ;;   2. logf is same as outputfilename
-  (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
-	(orig-dir       (current-directory))
-	(logf           #f))
-    (sqlite3:for-each-row 
-     (lambda (path final_logf)
-       (set! logf final_logf)
-       (if (directory? path)
-	   (begin
-	     (print "Found path: " path)
-	     (change-directory path))
-	     ;; (set! outputfilename (conc path "/" outputfilename)))
-	   (print "No such path: " path)))
-     db 
-     "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
-     run-id test-name)
-    (print "summarize-items with logf " logf)
-    (if (or (equal? logf "logs/final.log")
-	    (equal? logf outputfilename)
-	    force)
-	(begin
-	  (if (obtain-dot-lock outputfilename 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-	      (print "Obtained lock for " outputfilename)
-	      (print "Failed to obtain lock for " outputfilename))
-	  (let ((oup    (open-output-file outputfilename))
-		(counts (make-hash-table))
-		(statecounts (make-hash-table))
-		(outtxt "")
-		(tot    0))
-	    (with-output-to-port
-		oup
-	      (lambda ()
-		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
-				   "</title><body><h2>Summary for " test-name "</h2>"))
-		(sqlite3:for-each-row 
-		 (lambda (id itempath state status run_duration logf comment)
-		   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-		   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-		   (set! outtxt (conc outtxt "<tr>"
-				      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-				      "<td>" state    "</td>" 
-				      "<td><font color=" (common:get-color-from-status status)
-				      ">"   status   "</font></td>"
-				      "<td>" (if (equal? comment "")
-						 "&nbsp;"
-						 comment) "</td>"
-						 "</tr>")))
-		 db
-		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
-		 run-id test-name)
-
-		(print "<table><tr><td valign=\"top\">")
-		;; Print out stats for status
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
-		(for-each (lambda (state)
-			    (set! tot (+ tot (hash-table-ref statecounts state)))
-			    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
-			  (hash-table-keys statecounts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td><td valign=\"top\">")
-		;; Print out stats for state
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
-		(for-each (lambda (status)
-			    (set! tot (+ tot (hash-table-ref counts status)))
-			    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
-				   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
-			  (hash-table-keys counts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td></td></tr></table>")
-
-		(print "<table cellspacing=\"0\" border=\"1\">" 
-		       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
-		       outtxt "</table></body></html>")
-		(release-dot-lock outputfilename)))
-	    (close-output-port oup)
-	    (change-directory orig-dir)
-	    (test-set-toplog! db run-id test-name outputfilename)
-	    )))))
-
 ;; ;; TODO: Converge this with db:get-test-info
 ;; (define (runs:get-test-info db run-id test-name item-path)
 ;;   (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
@@ -392,70 +73,6 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
-(define (check-valid-items class item)
-  (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))
-			(if s (string-split s) #f))))
-    (if valid-values
-	(if (member item valid-values)
-	    item #f)
-	item)))
-
-(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
-  (debug:print 4 "run-id: " run-id " test-name: " test-name)
-  (let* ((state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in))
-	 (item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (debug:print 5 "testdat: " testdat)
-    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
-	     (or (not state)(not status)))
-	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if testdat
-	(let ((test-id (test:get-id testdat)))
-	  ;; FIXME - this should not update the logfile unless it is specified.
-	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
-			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile "")))
-	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
-
-(define (test-get-kill-request db run-id test-name itemdat)
-  (let* ((item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (equal? (test:get-state testdat) "KILLREQ")))
-
-(define (test-set-meta-info db run-id testname itemdat)
-  (let ((item-path (item-list->path itemdat))
-	(cpuload  (get-cpu-load))
-	(hostname (get-host-name))
-	(diskfree (get-df (current-directory)))
-	(uname    (get-uname "-srvpio"))
-	(runpath  (current-directory)))
-    (sqlite3:execute db "UPDATE tests SET host=?,cpuload=?,diskfree=?,uname=?,rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
-		  hostname
-		  cpuload
-		  diskfree
-		  uname
-		  runpath
-		  run-id
-		  testname
-		  item-path)))
-
-(define (test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
-  (let ((item-path (item-list->path itemdat)))
-    (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
-    ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
-    ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))
-    ;;            (not (equal? (db:test-get-status testinfo) "KILLREQ"))
-    (sqlite3:execute
-     db
-     "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
-     cpuload
-     diskfree
-     minutes
-     run-id
-     testname
-     item-path)))
 
 (define (set-megatest-env-vars db run-id)
   (let ((keys (db-get-keys db)))
@@ -467,7 +84,15 @@
 		 db 
 		 (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
 		 run-id))
-	      keys)))
+	      keys)
+    ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
+    (sqlite3:for-each-row
+     (lambda (runname)
+       (setenv "MT_RUNNAME" runname))
+     db
+     "SELECT runname FROM runs WHERE id=?;"
+     run-id)
+    ))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -475,344 +100,34 @@
 	      (setenv (car item) (cadr item)))
 	    itemdat))
 
-(define (get-all-legal-tests)
-  (let* ((tests  (glob (conc *toppath* "/tests/*")))
-	 (res    '()))
-    (debug:print 4 "INFO: Looking at tests " (string-intersperse tests ","))
-    (for-each (lambda (testpath)
-		(if (file-exists? (conc testpath "/testconfig"))
-		    (set! res (cons (last (string-split testpath "/")) res))))
-	      tests)
-    res))
-
-(define (runs:can-run-more-tests db)
-  (let ((num-running (db:get-count-tests-running db))
-	(max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs")))
+(define (runs:can-run-more-tests db test-record)
+  (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
+	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
+	 (num-running             (db:get-count-tests-running db))
+	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
+	 (max-concurrent-jobs     (config-lookup *configdat* "setup"     "max_concurrent_jobs"))
+	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
     (if (not (eq? 0 *globalexitstatus*))
 	#f
-	(if (or (not max-concurrent-jobs)
-		(and max-concurrent-jobs
-		     (string->number max-concurrent-jobs)
-		     (not (>= num-running (string->number max-concurrent-jobs)))))
-	    #t
-	    (begin 
-	      (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
-			   ", max_concurrent_jobs: " max-concurrent-jobs)
-	      #f)))))
-
-(define (test:get-testconfig test-name system-allowed)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name))
-	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
-    (if testexists
-	(read-config test-configf #f system-allowed environ-patt: (if system-allowed
-								      "pre-launch-env-vars"
-								      #f))
-	#f)))
-  
-;; sort tests by priority and waiton
-;; Move test specific stuff to a test unit FIXME one of these days
-(define (tests:sort-by-priority-and-waiton test-names)
-  (let ((testdetails   (make-hash-table))
-	(mungepriority (lambda (priority)
-			 (if priority
-			     (let ((tmp (any->number priority)))
-			       (if tmp tmp (begin (debug:print 0 "ERROR: bad priority value " priority ", using 0") 0)))
-			     0))))
-    (for-each (lambda (test-name)
-		(let ((test-config (test:get-testconfig test-name #f)))
-		  (if test-config (hash-table-set! testdetails test-name test-config))))
-	      test-names)
-    (sort 
-     (hash-table-keys testdetails) ;; avoid dealing with deleted tests, look at the hash table
-     (lambda (a b)
-       (let* ((tconf-a   (hash-table-ref testdetails a))
-	      (tconf-b   (hash-table-ref testdetails b))
-	      (a-waiton   (config-lookup tconf-a "requirements" "waiton"))
-	      (b-waiton   (config-lookup tconf-b "requirements" "waiton"))
-	      (a-priority (mungepriority (config-lookup tconf-a "requirements" "priority")))
-	      (b-priority (mungepriority (config-lookup tconf-b "requirements" "priority"))))
-	 (if (and a-waiton (equal? a-waiton b))
-	     #f ;; cannot have a which is waiting on b happening before b
-	     (if (and b-waiton (equal? b-waiton a))
-		 #t ;; this is the correct order, b is waiting on a and b is before a
-		 (if (> a-priority b-priority)
-		     #t ;; if a is a higher priority than b then we are good to go
-		     #f))))))))
-
-;; This is original run-tests, this routine is deprecated and we will transition to using runs:run-tests (see below)
-;;
-(define (run-tests db test-names)
-  (let* ((keys        (db-get-keys db))
-	 (keyvallst   (keys->vallist keys #t))
-	 (run-id      (register-run db keys))  ;;  test-name)))
-	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
-	 (required-tests '()))
-
-    ;; now add non-directly referenced dependencies (i.e. waiton)
-    ;; could cache all these since they need to be read again ...
-    ;; FIXME SOMEDAY
-    (if (not (null? test-names))
-	(let loop ((hed (car test-names))
-		   (tal (cdr test-names)))
-	  (let* ((config  (test:get-testconfig hed #f))
-		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
-					  (if w w "")))))
-	    (for-each 
-	     (lambda (waiton)
-	       (if (and waiton (not (member waiton test-names)))
-		   (begin
-		     (set! required-tests (cons waiton required-tests))
-		     (set! test-names (append test-names (list waiton))))))
-	     waitons)
-	    (let ((remtests (delete-duplicates (append waitons tal))))
-	      (if (not (null? remtests))
-		  (loop (car remtests)(cdr remtests)))))))
-
-    (if (not (null? required-tests))
-	(debug:print 1 "INFO: Adding " required-tests " to the run queue")
-	(debug:print 1 "INFO: No prerequisites added"))
-
-    ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
-    ;; -keepgoing is specified
-
-    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-    
-    (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* environ-patt: ".*")
-	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
-
-    (if (and (eq? *passnum* 0)
-	     (args:get-arg "-keepgoing"))
-	(begin
-	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
-	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
-	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
-	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
-    (set! *passnum* (+ *passnum* 1))
-    (let loop ((numtimes 0))
-      (for-each 
-       (lambda (test-name)
-	 (if (runs:can-run-more-tests db)
-	     (run-one-test db run-id test-name keyvallst)
-	     ;; add some delay 
-	     ;(sleep 2)
-	     ))
-       (tests:sort-by-priority-and-waiton test-names))
-      ;; (run-waiting-tests db)
-      (if (args:get-arg "-keepgoing")
-	  (let ((estrem (db:estimated-tests-remaining db run-id)))
-	    (if (and (> estrem 0)
-		     (eq? *globalexitstatus* 0))
-		(begin
-		  (debug:print 1 "Keep going, estimated " estrem " tests remaining to run, will continue in 3 seconds ...")
-		  (thread-sleep! 3)
-		  (run-waiting-tests db)
-		  (loop (+ numtimes 1)))))))))
-	  
-;; VERY INEFFICIENT! Move stuff that should be done once up to calling proc
-(define (run-one-test db run-id test-name keyvallst)
-  (debug:print 1 "Launching test " test-name)
-  ;; All these vars might be referenced by the testconfig file reader
-  (setenv "MT_TEST_NAME" test-name) ;; 
-  (setenv "MT_RUNNAME"   (args:get-arg ":runname"))
-
-  ;; (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-
-  (change-directory *toppath*)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
-	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))
-	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
-			 (if (string? w)(string-split w)'())))
-	 (tags         (let ((t (config-lookup test-conf "setup" "tags")))
-			 ;; we want our tags to be separated by commas and fully delimited by commas
-			 ;; so that queries with "like" can tie to the commas at either end of each tag
-			 ;; while also allowing the end user to freely use spaces and commas to separate tags
-			 (if (string? t)(string-substitute (regexp "[,\\s]+") "," (conc "," t ",") #t)
-			     '()))))
-    (if (not testexists)
-	(begin
-	  (debug:print 0 "ERROR: Can't find config file " test-configf)
-	  (exit 2))
-	;; put top vars into convenient variables and open the db
-	(let* (;; db is always at *toppath*/db/megatest.db
-	       (items       (hash-table-ref/default test-conf "items" '()))
-	       (itemstable  (hash-table-ref/default test-conf "itemstable" '()))
-	       (allitems    (if (or (not (null? items))(not (null? itemstable)))
-				(append (item-assoc->item-list items)
-					(item-table->item-list itemstable))
-				'(())))) ;; a list with one null list is a test with no items
-;; 	  (runconfigf  (conc  *toppath* "/runconfigs.config")))
-	  (debug:print 1 "items: ")
-	  (if (>= *verbosity* 1)(pp allitems))
-	  (if (>= *verbosity* 5)
-	      (begin
-		(print "items: ")(pp (item-assoc->item-list items))
-		(print "itestable: ")(pp (item-table->item-list itemstable))))
-	  (if (args:get-arg "-m")
-	      (db:set-comment-for-run db run-id (args:get-arg "-m")))
-
-	  ;; Here is where the test_meta table is best updated
-	  (runs:update-test_meta db test-name test-conf)
-
-	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
-	  (if (null? allitems)(set! allitems '(())))
-	  (let loop ((itemdat (car allitems))
-		     (tal     (cdr allitems)))
-	    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
-	    ;; Handle lists of items
-	    (let* ((item-path     (item-list->path itemdat)) ;; (string-intersperse (map cadr itemdat) "/"))
-		   (new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-		   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-		   (testdat   #f)
-		   (num-running (db:get-count-tests-running db))
-		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs"))
-		   (parent-test (and (not (null? items))(equal? item-path "")))
-		   (single-test (and (null? items) (equal? item-path "")))
-		   (item-test   (not (equal? item-path "")))
-		   (item-patt   (args:get-arg "-itempatt"))
-		   (patt-match  (if item-patt
-				    (string-search (glob->regexp
-						   (string-translate item-patt "%" "*"))
-						  item-path)
-				    #t)))
-	      (debug:print 3 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	      (if (and patt-match (runs:can-run-more-tests db))
-		  (begin
-		    (let loop2 ((ts (db:get-test-info db run-id test-name item-path)) ;; #f)
-				(ct 0))
-		      (if (and (not ts)
-			       (< ct 10))
-			  (begin
-			    (register-test db run-id test-name item-path)
-			    (db:test-set-comment db run-id test-name item-path "")
-			    (loop2 (db:get-test-info db run-id test-name item-path)
-				   (+ ct 1)))
-			  (if ts
-			      (set! testdat ts)
-			      (begin
-				(debug:print 0 "WARNING: Couldn't register test " test-name " with item path " item-path ", skipping")
-				(if (not (null? tal))
-				    (loop (car tal)(cdr tal)))))))
-		    (change-directory test-path)
-		    ;; this block is here only to inform the user early on
-		    
-		    ;; NB// Moving the setting of runconfig.config vars to *before* the 
-		    ;; the calling of each test.
-		    ;; (if (file-exists? runconfigf)
-		    ;;     (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
-		    ;;     (debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
-		    (debug:print 4 "run-id: " run-id " test-name: " test-name " item-path: " item-path " testdat: " (test:get-status testdat) " test-state: " (test:get-state testdat))
-		    (case (if (args:get-arg "-force")
-			      'NOT_STARTED
-			      (if testdat
-				  (string->symbol (test:get-state testdat))
-				  'failed-to-insert))
-		      ((failed-to-insert)
-		       (debug:print 0 "ERROR: Failed to insert the record into the db"))
-		      ((NOT_STARTED COMPLETED)
-		       (debug:print 6 "Got here, " (test:get-state testdat))
-		       (let ((runflag #f))
-			 (cond
-			  ;; i.e. this is the parent test to a suite of items, never "run" it
-			  (parent-test
-			   (set! runflag #f))
-			  ;; -force, run no matter what
-			  ((args:get-arg "-force")(set! runflag #t))
-			  ;; NOT_STARTED, run no matter what
-			  ((equal? (test:get-state testdat) "NOT_STARTED")(set! runflag #t))
-			  ;; not -rerun and PASS, WARN or CHECK, do no run
-			  ((and (or (not (args:get-arg "-rerun"))
-				    (args:get-arg "-keepgoing"))
-				(member (test:get-status testdat) '("PASS" "WARN" "CHECK")))
-			   (set! runflag #f))
-			  ;; -rerun and status is one of the specifed, run it
-			  ((and (args:get-arg "-rerun")
-				(let ((rerunlst (string-split (args:get-arg "-rerun") ","))) ;; FAIL,
-				  (member (test:get-status testdat) rerunlst)))
-			   (set! runflag #t))
-			  ;; -keepgoing, do not rerun FAIL
-			  ((and (args:get-arg "-keepgoing")
-				(member (test:get-status testdat) '("FAIL")))
-			   (set! runflag #f))
-			  ((and (not (args:get-arg "-rerun"))
-				(member (test:get-status testdat) '("FAIL" "n/a")))
-			   (set! runflag #t))
-			  (else (set! runflag #f)))
-			 (debug:print 6 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
-			 (if (not runflag)
-			     (if (not parent-test)
-				 (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status testdat) "\", use -force to override"))
-			     (let* ((get-prereqs-cmd (lambda ()
-						       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
-				    (launch-cmd      (lambda ()
-						       (launch-test db run-id (args:get-arg ":runname") test-conf keyvallst test-name test-path itemdat args:arg-hash)))
-				    (testrundat      (list get-prereqs-cmd launch-cmd)))
-			       (if (or (args:get-arg "-force")
-				       (let ((preqs-not-yet-met ((car testrundat))))
-					 (debug:print 2 "Preqrequesites for " test-name ": " preqs-not-yet-met)
-					 (null? preqs-not-yet-met))) ;; are there any tests that must be run before this one...
-				   (if (not ((cadr testrundat))) ;; this is the line that launches the test to the remote host
-				       (begin
-					 (print "ERROR: Failed to launch the test. Exiting as soon as possible")
-					 (set! *globalexitstatus* 1) ;; 
-					 (process-signal (current-process-id) signal/kill)
-					 ;(exit 1)
-					 ))
-				   (if (not (args:get-arg "-keepgoing"))
-				       (hash-table-set! *waiting-queue* new-test-name testrundat)))))))
-		      ((KILLED) 
-		       (debug:print 1 "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
-		      ((LAUNCHED REMOTEHOSTSTART RUNNING)  
-		       (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-						     (db:test-get-run_duration testdat)))
-			      100) ;; i.e. no update for more than 100 seconds
-			   (begin
-			     (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
-			   (debug:print 2 "NOTE: " test-name " is already running")))
-		      (else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat))))))
-	      (if (not (null? tal))
-		  (loop (car tal)(cdr tal)))))))))
-
-(define (run-waiting-tests db)
-  (let ((numtries           0)
-	(last-try-time      (current-seconds))
-	(times              (list 1))) ;; minutes to wait before trying again to kick off runs
-    ;; BUG this hack of brute force retrying works quite well for many cases but 
-    ;;     what is needed is to check the db for tests that have failed less than
-    ;;     N times or never been started and kick them off again
-    (let loop ((waiting-test-names (hash-table-keys *waiting-queue*)))
-      (cond
-       ((not (runs:can-run-more-tests db))
-	(thread-sleep! 2)
-	(loop waiting-test-names))
-       ((null? waiting-test-names)
-	(debug:print 1 "All tests launched"))
-       (else
-	(set! numtries (+ numtries 1))
-	(for-each (lambda (testname)
-		    (if (runs:can-run-more-tests db)
-			(let* ((testdat (hash-table-ref *waiting-queue* testname))
-			       (prereqs ((car testdat)))
-			       (ldb     (if db db (open-db))))
-			  (debug:print 2 "prereqs remaining: " prereqs)
-			  (if (null? prereqs)
-			      (begin
-				(debug:print 2 "Prerequisites met, launching " testname)
-				((cadr testdat))
-				(hash-table-delete! *waiting-queue* testname)))
-			  (if (not db)
-			      (sqlite3:finalize! ldb)))))
-		  waiting-test-names)
-	;; (sleep 10) ;; no point in rushing things at this stage?
-	(loop (hash-table-keys *waiting-queue*)))))))
+	(let ((can-not-run-more (cond
+				 ;; if max-concurrent-jobs is set and the number running is greater 
+				 ;; than it than cannot run more jobs
+				 ((and max-concurrent-jobs
+				       (string->number max-concurrent-jobs)
+				       (>= num-running (string->number max-concurrent-jobs)))
+				  (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
+					       ", max_concurrent_jobs: " max-concurrent-jobs)
+				  #t)
+				 ;; if job-group-limit is set and number of jobs in the group is greater
+				 ;; than the limit then cannot run more jobs of this kind
+				 ((and job-group-limit
+				       (>= num-running-in-jobgroup job-group-limit))
+				  (debug:print 1 "WARNING: number of jobs " num-running-in-jobgroup 
+					       " in " jobgroup " exceeded, will not run " (tests:testqueue-get-testname test-record))
+				  #t)
+				 (else #f))))
+	  (not can-not-run-more)))))
 
 ;;======================================================================
 ;; New methodology. These routines will replace the above in time. For
@@ -858,10 +173,12 @@
 	 (keyvallst   (keys:target->keyval keys target))
 	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
+	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
+	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (test-names  '())
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
-	 (required-tests '()))
+	 (required-tests '())
+	 (test-records (make-hash-table)))
 
     (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 
@@ -879,40 +196,16 @@
 				  (map (lambda (testp)
 					 (last (string-split testp "/")))
 				       tests)))))
-     (string-split test-patts ","))
+     (if test-patts (string-split test-patts ",")(list "%")))
 
      ;; now remove duplicates
     (set! test-names (delete-duplicates test-names))
 
     (debug:print 0 "INFO: test names " test-names)
 
-    ;; now add non-directly referenced dependencies (i.e. waiton)
-    ;; could cache all these since they need to be read again ...
-    ;; FIXME SOMEDAY
-    (if (not (null? test-names))
-	(let loop ((hed (car test-names))
-		   (tal (cdr test-names)))
-	  (let* ((config  (test:get-testconfig hed #f))
-		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
-					  (if w w "")))))
-	    (for-each 
-	     (lambda (waiton)
-	       (if (and waiton (not (member waiton test-names)))
-		   (begin
-		     (set! required-tests (cons waiton required-tests))
-		     (set! test-names (append test-names (list waiton))))))
-	     waitons)
-	    (let ((remtests (delete-duplicates (append waitons tal))))
-	      (if (not (null? remtests))
-		  (loop (car remtests)(cdr remtests)))))))
-
-    (if (not (null? required-tests))
-	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
-
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
-    (if (and (eq? *passnum* 0)
-	     keepgoing)
+    (if (eq? *passnum* 0)
 	(begin
 	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
@@ -920,201 +213,265 @@
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
 	  (db:delete-tests-in-state db run-id "NOT_STARTED")
 	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
-    (set! *passnum* (+ *passnum* 1))
-    (let loop ((numtimes 0))
-      (for-each 
-       (lambda (test-name)
-	 (if (runs:can-run-more-tests db)
-	     (run:test db run-id runname test-name keyvallst item-patts flags)
-	     ))
-       (tests:sort-by-priority-and-waiton test-names))
-      ;; (run-waiting-tests db)
-      (if keepgoing
-	  (let ((estrem (db:estimated-tests-remaining db run-id)))
-	    (if (and (> estrem 0)
-		     (eq? *globalexitstatus* 0))
-		(begin
-		  (debug:print 1 "Keep going, estimated " estrem " tests remaining to run, will continue in 3 seconds ...")
-		  (thread-sleep! 3)
-		  (run-waiting-tests db)
-		  (loop (+ numtimes 1)))))))))
 
-(define (run:test db run-id runname test-name keyvallst item-patts flags)
-  (debug:print 1 "Launching test " test-name)
+    ;; now add non-directly referenced dependencies (i.e. waiton)
+    (if (not (null? test-names))
+	(let loop ((hed (car test-names))
+		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	  (let* ((config  (test:get-testconfig hed 'return-procs))
+		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
+					  (if w w "")))))
+	    ;; (items   (items:get-items-from-config config)))
+	    (if (not (hash-table-ref/default test-records hed #f))
+		(hash-table-set! test-records
+				 hed (vector hed     ;; 0
+					     config  ;; 1
+					     waitons ;; 2
+					     (config-lookup config "requirements" "priority")     ;; priority 3
+					     (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
+						   (itemstable (hash-table-ref/default config "itemstable" #f))) 
+					       ;; if either items or items table is a proc return it so test running
+					       ;; process can know to call items:get-items-from-config
+					       ;; if either is a list and none is a proc go ahead and call get-items
+					       ;; otherwise return #f - this is not an iterated test
+					       (cond
+						((procedure? items)      
+						 (debug:print 4 "INFO: items is a procedure, will calc later")
+						 items)            ;; calc later
+						((procedure? itemstable)
+						 (debug:print 4 "INFO: itemstable is a procedure, will calc later")
+						 itemstable)       ;; calc later
+						((filter (lambda (x)
+							   (let ((val (car x)))
+							     (if (procedure? val) val #f)))
+							 (append (if (list? items) items '())
+								 (if (list? itemstable) itemstable '())))
+						 'have-procedure)
+						((or (list? items)(list? itemstable)) ;; calc now
+						 (debug:print 4 "INFO: items and itemstable are lists, calc now\n"
+							      "    items: " items " itemstable: " itemstable)
+						 (items:get-items-from-config config))
+						(else #f)))                           ;; not iterated
+					     #f      ;; itemsdat 5
+					     ;; #f      ;; spare
+					     )))
+	    (for-each 
+	     (lambda (waiton)
+	       (if (and waiton (not (member waiton test-names)))
+		   (begin
+		     (set! required-tests (cons waiton required-tests))
+		     (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+	     waitons)
+	    (let ((remtests (delete-duplicates (append waitons tal))))
+	      (if (not (null? remtests))
+		  (loop (car remtests)(cdr remtests)))))))
+
+    (if (not (null? required-tests))
+	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
+    ;; NOTE: these are all parent tests, items are not expanded yet.
+    (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+    (debug:print 4 "INFO: All done by here")))
+
+(define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+    ;; At this point the list of parent tests is expanded 
+    ;; NB// Should expand items here and then insert into the run queue.
+  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst)
+  (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
+	(item-patts        (hash-table-ref/default flags "-itempatt" #f)))
+    (let loop (; (numtimes 0) ;; shouldn't need this
+	       (hed         (car sorted-test-names))
+	       (tal         (cdr sorted-test-names)))
+      (let* ((test-record (hash-table-ref test-records hed))
+	     (tconfig     (tests:testqueue-get-testconfig test-record))
+	     (waitons     (tests:testqueue-get-waitons    test-record))
+	     (priority    (tests:testqueue-get-priority   test-record))
+	     (itemdat     (tests:testqueue-get-itemdat    test-record))
+	     (items       (tests:testqueue-get-items      test-record))
+	     (item-path   (item-list->path itemdat)))
+	(debug:print 6
+		     "itemdat:     " itemdat
+		     "\n  items:     " items
+		     "\n  item-path: " item-path)
+	(cond
+	 ((not items) ;; when false the test is ok to be handed off to launch (but not before)
+	  (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
+		(prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
+	    ;; Don't know at this time if the test have been launched at some time in the past
+	    ;; i.e. is this a re-launch?
+	    (if (and have-resources
+		     (null? prereqs-not-met))
+		;; no loop - drop though and use the loop at the bottom 
+		(run:test db run-id runname keyvallst test-record flags #f)
+		;; else the run is stuck, temporarily or permanently
+		(let ((newtal (append tal (list hed))))
+		  ;; couldn't run, take a breather
+		  (thread-sleep! 4)
+		  (loop (car newtal)(cdr newtal))))))
+	 
+	 ;; case where an items came in as a list been processed
+	 ((and (list? items)     ;; thus we know our items are already calculated
+	       (not   itemdat)) ;; and not yet expanded into the list of things to be done
+	  (if (>= *verbosity* 1)(pp items))
+	  ;; (if (>= *verbosity* 5)
+	  ;;     (begin
+	  ;;       (print "items: ")     (pp (item-assoc->item-list items))
+	  ;;       (print "itemstable: ")(pp (item-table->item-list itemstable))))
+	  (for-each
+	   (lambda (my-itemdat)
+	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
+				       (vector-copy! test-record newrec)
+				       newrec))
+		    (my-item-path (item-list->path my-itemdat))
+		    (item-matches (if item-patts       ;; here we are filtering for matches with -itempatt
+				      (let ((res #f))	 ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
+					(for-each 
+					 (lambda (patt)
+					   (if (string-search (glob->regexp
+							       (string-translate patt "%" "*"))
+							      item-path)
+					       (set! res #t)))
+					 (string-split item-patts ","))
+					res)
+				      #t)))
+	       (if item-matches ;; yes, we want to process this item
+		   (let ((newtestname (conc hed "/" my-item-path))) 
+		     (tests:testqueue-set-items!   new-test-record #f)
+		     (tests:testqueue-set-itemdat! new-test-record my-itemdat)
+		     (hash-table-set! test-records newtestname new-test-record)
+		     (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
+	   items)
+	  (loop (car tal)(cdr tal)))
+
+	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
+	 ;;    - but only do that if resources exist to kick off the job
+	 ((or (procedure? items)(eq? items 'have-procedure))
+	  (if (and (runs:can-run-more-tests db test-record)
+		   (null? (db:get-prereqs-not-met db run-id waitons item-path)))
+	      (let ((test-name (tests:testqueue-get-testname test-record)))
+		(setenv "MT_TEST_NAME" test-name) ;; 
+		(setenv "MT_RUNNAME"   runname)
+		(set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+		(let ((items-list (items:get-items-from-config tconfig)))
+		  (if (list? items-list)
+		      (begin
+			(tests:testqueue-set-items! test-record items-list)
+			(loop hed tal))
+		      (begin
+			(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+			(exit 1)))))
+	      (let ((newtal (append tal (list hed))))
+		;; if can't run more tests, lets take a breather
+		(thread-sleep! 1)
+		(loop (car newtal)(cdr newtal)))))
+
+	 ;; this case should not happen, added to help catch any bugs
+	 ((and (list? items) itemdat)
+	  (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
+	  (exit 1))))
+	
+      ;; we get here on "drop through" - loop for next test in queue
+      (if (null? tal)
+	  (begin
+	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
+	    (debug:print 1 "INFO: All tests launched, exiting")
+	    (exit 0))
+	  (loop (car tal)(cdr tal))))))
+
+;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
+(define (run:test db run-id runname keyvallst test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
-  (setenv "MT_TEST_NAME" test-name) ;; 
-  (setenv "MT_RUNNAME"   runname)
-  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-  (change-directory *toppath*)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
-	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	 (test-conf    (if testexists (read-config test-configf #f #t) (make-hash-table)))
-	 (waiton       (let ((w (config-lookup test-conf "requirements" "waiton")))
-			 (if (string? w)(string-split w)'())))
+  (let* ((test-name    (tests:testqueue-get-testname   test-record))
+	 (test-waitons (tests:testqueue-get-waitons    test-record))
+	 (test-conf    (tests:testqueue-get-testconfig test-record))
+	 (itemdat      (tests:testqueue-get-itemdat    test-record))
+	 (test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
-	 ;; Are these tags still used? I don't think so...
-	 ;;(tags         (let ((t (config-lookup test-conf "setup" "tags")))
-	 ;;       	 ;; we want our tags to be separated by commas and fully delimited by commas
-	 ;;       	 ;; so that queries with "like" can tie to the commas at either end of each tag
-	 ;;       	 ;; while also allowing the end user to freely use spaces and commas to separate tags
-	 ;;       	 (if (string? t)(string-substitute (regexp "[,\\s]+") "," (conc "," t ",") #t)
-	 ;;       	     '()))))
-	 )
-    (if (not testexists)
-	;; if the test is ill defined spit out an error but keep going (different from how done previously
-	(debug:print 0 "ERROR: Can't find config file " test-configf)
-	;; put top vars into convenient variables and open the db
-	(let* (;; db is always at *toppath*/db/megatest.db
-	       (items       (hash-table-ref/default test-conf "items" '()))
-	       (itemstable  (hash-table-ref/default test-conf "itemstable" '()))
-	       (allitems    (if (or (not (null? items))(not (null? itemstable)))
-				(append (item-assoc->item-list items)
-					(item-table->item-list itemstable))
-				'(())))) ;; a list with one null list is a test with no items
-	  ;; (runconfigf  (conc  *toppath* "/runconfigs.config")))
-	  (debug:print 1 "items: ")
-	  (if (>= *verbosity* 1)(pp allitems))
-	  (if (>= *verbosity* 5)
-	      (begin
-		(print "items: ")(pp (item-assoc->item-list items))
-		(print "itemstable: ")(pp (item-table->item-list itemstable))))
+	 (item-path     ""))
+    (debug:print 5
+		 "test-config: " (hash-table->alist test-conf)
+		 "\n   itemdat: " itemdat
+		 )
+    ;; setting itemdat to a list if it is #f
+    (if (not itemdat)(set! itemdat '()))
+    (set! item-path (item-list->path itemdat))
+    (debug:print 2 "Attempting to launch test " test-name "/" item-path)
+    (setenv "MT_TEST_NAME" test-name) ;; 
+    (setenv "MT_RUNNAME"   runname)
+    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (change-directory *toppath*)
 
-	  ;; Comments are loaded by the test run, not at launch time (in general)
-	  ;;(if (args:get-arg "-m")
-	  ;;    (db:set-comment-for-run db run-id (args:get-arg "-m")))
-
-	  ;; Here is where the test_meta table is best updated
-	  (runs:update-test_meta db test-name test-conf)
-
-	  ;; braindead work-around for poorly specified allitems list BUG!!! FIXME
-	  (if (null? allitems)(set! allitems '(())))
-	  (let loop ((itemdat (car allitems))
-		     (tal     (cdr allitems)))
-	    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
-	    ;; Handle lists of items
-	    (let* ((item-path     (item-list->path itemdat)) ;; (string-intersperse (map cadr itemdat) "/"))
-		   (new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-		   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-		   (testdat   #f)
-		   (num-running (db:get-count-tests-running db))
-		   (max-concurrent-jobs (config-lookup *configdat* "setup" "max_concurrent_jobs"))
-		   (parent-test (and (not (null? items))(equal? item-path "")))
-		   (single-test (and (null? items) (equal? item-path "")))
-		   (item-test   (not (equal? item-path "")))
-		   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
-		   (item-matches (if item-patts
-				     (let ((res #f))
-				       (for-each 
-					(lambda (patt)
-					  (if (string-search (glob->regexp
-							      (string-translate patt "%" "*"))
-							     item-path)
-					      (set! res #t)))
-					(string-split item-patts ","))
-				       res)
-				     #t)))
-	      (debug:print 3 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
-	      (if (and item-matches (runs:can-run-more-tests db))
-		  (begin
-		    (let loop2 ((ts (db:get-test-info db run-id test-name item-path)) ;; #f)
-				(ct 0))
-		      (if (and (not ts)
-			       (< ct 10))
-			  (begin
-			    (register-test db run-id test-name item-path)
-			    ;; Why did I set the comment here?!? POSSIBLE BUG BUT I'M REMOVING IT FOR NOW 10/23/2011
-			    ;; (db:test-set-comment db run-id test-name item-path "")
-			    (loop2 (db:get-test-info db run-id test-name item-path)
-				   (+ ct 1)))
-			  (if ts
-			      (set! testdat ts)
-			      (begin
-				(debug:print 0 "WARNING: Couldn't register test " test-name " with item path " item-path ", skipping")
-				(if (not (null? tal))
-				    (loop (car tal)(cdr tal)))))))
-		    (change-directory test-path)
-		    ;; this block is here only to inform the user early on
-		    
-		    ;; Moving this to the run calling block
-
-		    ;; (if (file-exists? runconfigf)
-		    ;;     (setup-env-defaults db runconfigf run-id *already-seen-runconfig-info*)
-		    ;;     (debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
-		    (debug:print 4 "run-id: " run-id " test-name: " test-name " item-path: " item-path " testdat: " (test:get-status testdat) " test-state: " (test:get-state testdat))
-		    (case (if force ;; (args:get-arg "-force")
-			      'NOT_STARTED
-			      (if testdat
-				  (string->symbol (test:get-state testdat))
-				  'failed-to-insert))
-		      ((failed-to-insert)
-		       (debug:print 0 "ERROR: Failed to insert the record into the db"))
-		      ((NOT_STARTED COMPLETED)
-		       (debug:print 6 "Got here, " (test:get-state testdat))
-		       (let ((runflag #f))
-			 (cond
-			  ;; i.e. this is the parent test to a suite of items, never "run" it
-			  (parent-test
-			   (set! runflag #f))
-			  ;; -force, run no matter what
-			  (force (set! runflag #t))
-			  ;; NOT_STARTED, run no matter what
-			  ((equal? (test:get-state testdat) "NOT_STARTED")(set! runflag #t))
-			  ;; not -rerun and PASS, WARN or CHECK, do no run
-			  ((and (or (not rerun)
-				    keepgoing)
-				(member (test:get-status testdat) '("PASS" "WARN" "CHECK")))
-			   (set! runflag #f))
-			  ;; -rerun and status is one of the specifed, run it
-			  ((and rerun
-				(let ((rerunlst (string-split rerun ","))) ;; FAIL,
-				  (member (test:get-status testdat) rerunlst)))
-			   (set! runflag #t))
-			  ;; -keepgoing, do not rerun FAIL
-			  ((and keepgoing
-				(member (test:get-status testdat) '("FAIL")))
-			   (set! runflag #f))
-			  ((and (not rerun)
-				(member (test:get-status testdat) '("FAIL" "n/a")))
-			   (set! runflag #t))
-			  (else (set! runflag #f)))
-			 (debug:print 6 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
-			 (if (not runflag)
-			     (if (not parent-test)
-				 (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"COMPLETED\" and status \"" (test:get-status testdat) "\", use -force to override"))
-			     (let* ((get-prereqs-cmd (lambda ()
-						       (db-get-prereqs-not-met db run-id waiton))) ;; check before running ....
-				    (launch-cmd      (lambda ()
-						       (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags)))
-				    (testrundat      (list get-prereqs-cmd launch-cmd)))
-			       (if (or force
-				       (let ((preqs-not-yet-met ((car testrundat))))
-					 (debug:print 2 "Preqrequesites for " test-name ": " preqs-not-yet-met)
-					 (null? preqs-not-yet-met))) ;; are there any tests that must be run before this one...
-				   (if (not ((cadr testrundat))) ;; this is the line that launches the test to the remote host
-				       (begin
-					 (print "ERROR: Failed to launch the test. Exiting as soon as possible")
-					 (set! *globalexitstatus* 1) ;; 
-					 (process-signal (current-process-id) signal/kill)
-					 ;(exit 1)
-					 ))
-				   (if (not keepgoing)
-				       (hash-table-set! *waiting-queue* new-test-name testrundat)))))))
-		      ((KILLED) 
-		       (debug:print 1 "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
-		      ((LAUNCHED REMOTEHOSTSTART RUNNING)  
-		       (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-						     (db:test-get-run_duration testdat)))
-			      100) ;; i.e. no update for more than 100 seconds
-			   (begin
-			     (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-			     (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
-			   (debug:print 2 "NOTE: " test-name " is already running")))
-		      (else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat))))))
-	      (if (not (null? tal))
-		  (loop (car tal)(cdr tal)))))))))
+    ;; Here is where the test_meta table is best updated
+    (runs:update-test_meta db test-name test-conf)
+    
+    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
+    (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
+	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
+	   (testdat       (db:get-test-info db run-id test-name item-path)))
+      (if (not testdat)
+	  (begin
+	    (register-test db run-id test-name item-path)
+	    (set! testdat (db:get-test-info db run-id test-name item-path))))
+      (change-directory test-path)
+      (case (if force ;; (args:get-arg "-force")
+		'NOT_STARTED
+		(if testdat
+		    (string->symbol (test:get-state testdat))
+		    'failed-to-insert))
+	((failed-to-insert)
+	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
+	((NOT_STARTED COMPLETED)
+	 (debug:print 6 "Got here, " (test:get-state testdat))
+	 (let ((runflag #f))
+	   (cond
+	    ;; -force, run no matter what
+	    (force (set! runflag #t))
+	    ;; NOT_STARTED, run no matter what
+	    ((equal? (test:get-state testdat) "NOT_STARTED")(set! runflag #t))
+	    ;; not -rerun and PASS, WARN or CHECK, do no run
+	    ((and (or (not rerun)
+		      keepgoing)
+		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
+		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
+		      (member (test:get-state  testdat) '("COMPLETED")))) 
+	     (set! runflag #f))
+	    ;; -rerun and status is one of the specifed, run it
+	    ((and rerun
+		  (let ((rerunlst (string-split rerun ","))) ;; FAIL,
+		    (member (test:get-status testdat) rerunlst)))
+	     (set! runflag #t))
+	    ;; -keepgoing, do not rerun FAIL
+	    ((and keepgoing
+		  (member (test:get-status testdat) '("FAIL")))
+	     (set! runflag #f))
+	    ((and (not rerun)
+		  (member (test:get-status testdat) '("FAIL" "n/a")))
+	     (set! runflag #t))
+	    (else (set! runflag #f)))
+	   (debug:print 6 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
+	   (if (not runflag)
+	       (if (not parent-test)
+		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
+				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-state testdat) "\" or -force to override"))
+	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
+	       ;;       already met.
+	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
+		   (begin
+		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
+		     (set! *globalexitstatus* 1) ;; 
+		     (process-signal (current-process-id) signal/kill))))))
+	((KILLED) 
+	 (debug:print 1 "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
+	((LAUNCHED REMOTEHOSTSTART RUNNING)  
+	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+				       (db:test-get-run_duration testdat)))
+		600) ;; i.e. no update for more than 600 seconds
+	     (begin
+	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
+	       (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
+	     (debug:print 2 "NOTE: " test-name " is already running")))
+	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
 ;;======================================================================
 ;; END OF NEW STUFF
@@ -1215,10 +572,18 @@
 ;; Since many calls to a run require pretty much the same setup 
 ;; this wrapper is used to reduce the replication of code
 (define (general-run-call switchname action-desc proc)
-  (if (not (args:get-arg ":runname"))
-      (begin
-	(debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
-	(exit 2))
+  (let ((runname (args:get-arg ":runname"))
+	(target  (if (args:get-arg "-target")
+		     (args:get-arg "-target")
+		     (args:get-arg "-reqtarg"))))
+    (cond
+     ((not target)
+      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
+      (exit 3))
+     ((not runname)
+      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
+      (exit 3))
+     (else
       (let ((db   #f)
 	    (keys #f))
 	(if (not (setup-for-run))
@@ -1247,9 +612,9 @@
 	    ;; here then call proc
 	    (let* ((keynames   (map key:get-fieldname keys))
 		   (keyvallst  (keys->vallist keys #t)))
-	      (proc db keys keynames keyvallst)))
+	      (proc db target runname keys keynames keyvallst)))
 	(sqlite3:finalize! db)
-	(set! *didsomething* #t))))
+	(set! *didsomething* #t))))))
 
 ;;======================================================================
 ;; Rollup runs
@@ -1267,6 +632,7 @@
        (let* ((idx (cadr key))
 	      (fld (car  key))
 	      (val (config-lookup test-conf "test_meta" fld)))
+	 ;; (debug:print 5 "idx: " idx " fld: " fld " val: " val)
 	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
@@ -1295,7 +661,7 @@
 	 (curr-tests      (db-get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     (db:update-run-event_time db new-run-id)
-    ;; index the already saved tests by testname and itempath in curr-tests-hash
+    ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
        (let* ((testname  (db:test-get-testname testdat))

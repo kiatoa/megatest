@@ -1,0 +1,12 @@
+[setup]
+
+[ezsteps]
+lookittmp   ls /tmp
+
+[test_meta]
+author matt
+owner  bob
+description This test runs two ezstep, the first of which is expected to fail using a simple logpro file.
+
+tags logpro
+reviewed 09/10/2011, by Matt

@@ -6,11 +6,11 @@ PATH := $(BINPATH):$(PATH)
 
 runall :
 	cd ../;make install 
-	$(BINPATH)/dboard &
-	$(MEGATEST) -keepgoing -runall :sysname ubuntu :fsname nfs :datapath none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v
+	$(BINPATH)/dboard -rows 15 &
+	$(MEGATEST) -keepgoing -runall -target ubuntu/nfs/none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v
 
 test :
-	csi -b -I .. ../megatest.scm -- -runall :sysname ubuntu :fsname afs :datapath tmp :runname blah
+	csi -b -I .. ../megatest.scm -- -runall -target ubuntu/afs/tmp :runname blah
 	cd ../;make test
 	make runall
 
@@ -22,4 +22,4 @@ remove :
 	(cd ../;make);$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 
 runforever :
-	while(ls); do runname=`date +%F-%R:%S`;$(MEGATEST) -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;/home/matt/data/megatest/megatest -runall :sysname ubuntu :fsname nfs :datapath none :runname $$runname;done
+	while(ls); do runname=`date +%F-%R:%S`;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;done
