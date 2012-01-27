@@ -483,6 +483,30 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id testname item-path))
 
+;; Misc. test related queries
+(define (db:test-get-paths-matching db keyvallst runname keys keynames target)
+  ;; (print "keyvallst: " keyvallst ", runname: " runname)
+  ;; (print "keys: " keys " keynames: " keynames)
+  (let ((res '())
+	(itempatt (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
+	(testpatt (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	(qrystr (string-intersperse 
+		 (map (lambda (key val)
+			(conc "r." key " like '" val "'"))
+		      keynames 
+		      (string-split target "/"))
+		 " AND ")))
+    ;; (print "qrystr: " qrystr)
+    (sqlite3:for-each-row 
+     (lambda (p)
+       (set! res (cons p res)))
+     db 
+     (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
+	   qrystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
+	   testpatt "' ORDER BY t.event_time ASC;"))
+    res))
+
+
 ;;======================================================================
 ;; Tests meta data
 ;;======================================================================

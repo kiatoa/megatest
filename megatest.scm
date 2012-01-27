@@ -74,15 +74,14 @@ Queries
   -testpatt patt          : in list-runs show only these tests, % is the wildcard
   -itempatt patt          : in list-runs show only tests with items that match patt
   -showkeys               : show the keys used in this megatest setup
+  -test-paths targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
+                            returns list sorted by age ascending, see examples below
 
 Misc 
   -force                  : override some checks
-  -xterm                  : start an xterm instead of launching the test
   -remove-runs            : remove the data for a run, requires all fields be specified
                             and :runname ,-testpatt and -itempatt
                             and -testpatt
-  -keepgoing              : continue running until no jobs are \"LAUNCHED\" or
-                            \"NOT_STARTED\"
   -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
                             if -keepgoing is also specified)
   -rebuild-db             : bring the database schema up to date
@@ -99,12 +98,17 @@ Spreadsheet generation
                             if it contains forward slashes the path will be converted
                             to windows style
 
-Helpers
+Helpers (these only apply in test run mode)
   -runstep stepname  ...  : take remaining params as comand and execute as stepname
                             log will be in stepname.log. Best to put command in quotes
   -logpro file            : with -exec apply logpro file to stepname.log, creates
                             stepname.html and sets log to same
                             If using make use stepname_logpro.log as your target
+
+Examples
+
+# Get test paths 
+megatest -test-paths -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ")))
 
@@ -160,6 +164,9 @@ Called as " (string-intersperse (argv) " ")))
 			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
+			;; queries
+			"-test-paths" ;; get path(s) to a test, ordered by youngest first
+
 			"-runall"    ;; run all tests
 			"-remove-runs"
 			"-keepgoing"
@@ -382,6 +389,21 @@ Called as " (string-intersperse (argv) " ")))
 			(keys->alist keys "na")
 			(args:get-arg ":runname") 
 			user))))
+
+;;======================================================================
+;; Get paths to tests
+;;======================================================================
+;; run all tests are are Not COMPLETED and PASS or CHECK
+(if (args:get-arg "-test-paths")
+    (general-run-call 
+     "-test-paths"
+     "Get paths to tests"
+     (lambda (db target runname keys keynames keyvallst)
+       (let* ((itempatt (args:get-arg "-itempatt"))
+	      (paths    (db:test-get-paths-matching db keyvallst runname keys keynames target)))
+	 (for-each (lambda (path)
+		     (print path))
+		   paths)))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
