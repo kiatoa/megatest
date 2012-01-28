@@ -484,9 +484,7 @@
    rundir run-id testname item-path))
 
 ;; Misc. test related queries
-(define (db:test-get-paths-matching db keyvallst runname keys keynames target)
-  ;; (print "keyvallst: " keyvallst ", runname: " runname)
-  ;; (print "keys: " keys " keynames: " keynames)
+(define (db:test-get-paths-matching db runname keynames target)
   (let ((res '())
 	(itempatt (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
 	(testpatt (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))

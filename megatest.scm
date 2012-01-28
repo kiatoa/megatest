@@ -395,15 +395,40 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 ;; run all tests are are Not COMPLETED and PASS or CHECK
 (if (args:get-arg "-test-paths")
-    (general-run-call 
-     "-test-paths"
-     "Get paths to tests"
-     (lambda (db target runname keys keynames keyvallst)
-       (let* ((itempatt (args:get-arg "-itempatt"))
-	      (paths    (db:test-get-paths-matching db keyvallst runname keys keynames target)))
-	 (for-each (lambda (path)
-		     (print path))
-		   paths)))))
+    ;; if we are in a test use the MT_CMDINFO data
+    (if (getenv "MT_CMDINFO")
+	(let* ((startingdir (current-directory))
+	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
+	       (testpath  (assoc/default 'testpath  cmdinfo))
+	       (test-name (assoc/default 'test-name cmdinfo))
+	       (runscript (assoc/default 'runscript cmdinfo))
+	       (db-host   (assoc/default 'db-host   cmdinfo))
+	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (itemdat   (assoc/default 'itemdat   cmdinfo))
+	       (db        #f)
+	       (state     (args:get-arg ":state"))
+	       (status    (args:get-arg ":status")))
+	  (change-directory testpath)
+	  (if (not (setup-for-run))
+	      (begin
+		(debug:print 0 "Failed to setup, giving up on -test-paths, exiting")
+		(exit 1)))
+	  (set! db (open-db))    
+	  (let* ((itempatt (args:get-arg "-itempatt"))
+		 (paths    (db:test-get-paths-matching db keyvallst runname keys keynames target)))
+	    (for-each (lambda (path)
+			(print path))
+		      paths)))
+	;; else do a general-run-call
+	(general-run-call 
+	 "-test-paths"
+	 "Get paths to tests"
+	 (lambda (db target runname keys keynames keyvallst)
+	   (let* ((itempatt (args:get-arg "-itempatt"))
+		  (paths    (db:test-get-paths-matching db keyvallst runname keys keynames target)))
+	     (for-each (lambda (path)
+			 (print path))
+		       paths))))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
