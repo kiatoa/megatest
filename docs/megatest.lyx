@@ -523,6 +523,7 @@ Create the file megatest.config using the megatest.config template from the
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -638,6 +639,7 @@ This file is used to set environment variables that are run specific.
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -657,42 +659,43 @@ Create the tests directory and your first test
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
 \begin_layout Plain Layout
 
-../tests
+mt
 \end_layout
 
 \begin_layout Plain Layout
 
-  ├── megatest.config
+|-- megatest.config
 \end_layout
 
 \begin_layout Plain Layout
 
-  ├── runconfigs.config
+|-- runconfigs.config
 \end_layout
 
 \begin_layout Plain Layout
 
-  └── tests
+`-- tests
 \end_layout
 
 \begin_layout Plain Layout
 
-     └── mytest
+    `-- mytest
 \end_layout
 
 \begin_layout Plain Layout
 
-           ├── main.sh
+        |-- main.sh
 \end_layout
 
 \begin_layout Plain Layout
 
-           └── testconfig
+        `-- testconfig
 \end_layout
 
 \end_inset
@@ -706,6 +709,7 @@ Create the testconfig file for your test
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -730,6 +734,7 @@ Create your test running script, main.sh
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -763,6 +768,7 @@ Run megatest and watch your run progress
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -822,6 +828,7 @@ A Simple Test with one Step
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -889,6 +896,7 @@ Note: Using csh is NOT recommended.
 \noindent
 \align left
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -960,6 +968,7 @@ To run multiple steps simply add them to the main.csh file.
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1037,6 +1046,7 @@ A good way to run steps in parallel within a single test, especially when
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1085,6 +1095,7 @@ The main.csh file
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1144,6 +1155,7 @@ Update your testconfig file for iteration
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1184,6 +1196,7 @@ Rewrite your main.csh for iteration
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1267,6 +1280,7 @@ g file to indicate that this test must wait on one or more tests to complete
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1310,6 +1324,7 @@ Use the -load-test-data switch to roll up arbitrary data from a test into
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1418,6 +1433,7 @@ To roll up a number of tests in a sequence of runs to a single run use the
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1446,6 +1462,7 @@ Dashboard
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1496,6 +1513,7 @@ And OpenDocument multi-paned spreadsheet can be generated from the megatest.db
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1526,6 +1544,7 @@ Getting previous test paths
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1563,6 +1582,7 @@ flows/<flowname>.config
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1663,6 +1683,7 @@ Run the flow
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
@@ -1726,6 +1747,7 @@ Sections
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily}"
 inline false
 status open
 
@@ -1749,6 +1771,7 @@ Variables
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily}"
 inline false
 status open
 
@@ -1796,6 +1819,7 @@ Setting a variable by running a command
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily}"
 inline false
 status open
 
@@ -2703,6 +2727,7 @@ Example: a test suite that checks that a piece of software works correctly
 
 \begin_layout Standard
 \begin_inset listings
+lstparams "basicstyle={\small\ttfamily},language=sh"
 inline false
 status open
 
