@@ -484,24 +484,29 @@
    rundir run-id testname item-path))
 
 ;; Misc. test related queries
-(define (db:test-get-paths-matching db runname keynames target)
-  (let ((res '())
-	(itempatt (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
-	(testpatt (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
-	(qrystr (string-intersperse 
-		 (map (lambda (key val)
-			(conc "r." key " like '" val "'"))
-		      keynames 
-		      (string-split target "/"))
-		 " AND ")))
-    ;; (print "qrystr: " qrystr)
+(define (db:test-get-paths-matching db keynames target)
+  (let* ((res '())
+	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
+	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (keystr (string-intersperse 
+		  (map (lambda (key val)
+			 (conc "r." key " like '" val "'"))
+		       keynames 
+		       (string-split target "/"))
+		  " AND "))
+	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
+		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
+		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       "'ORDER BY t.event_time ASC;")))
+    (debug:print 3 "qrystr: " qrystr)
     (sqlite3:for-each-row 
      (lambda (p)
        (set! res (cons p res)))
      db 
-     (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
-	   qrystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
-	   testpatt "' ORDER BY t.event_time ASC;"))
+     qrystr)
     res))
 
 
