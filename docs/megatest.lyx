@@ -205,7 +205,7 @@ status open
 \backslash
 renewcommand{
 \backslash
-revisionNumber}{v1.25}
+revisionNumber}{v1.36}
 \end_layout
 
 \end_inset
@@ -222,24 +222,8 @@ Matthew Welland
 \end_layout
 
 \begin_layout Date
-Sept.
- 20, 
-\end_layout
-
-\begin_layout Standard
-\begin_inset ERT
-status open
-
-\begin_layout Plain Layout
-
-
-\backslash
-thispagestyle{empty}
-\end_layout
-
-\end_inset
-
-
+Jan.
+ 29, 2012 
 \end_layout
 
 \begin_layout Standard
@@ -406,7 +390,7 @@ converted to new document template
 
 \begin_layout Plain Layout
 \begin_inset ERT
-status collapsed
+status open
 
 \begin_layout Plain Layout
 
@@ -1530,6 +1514,30 @@ You can optionally specify the keys for your database to limit further the
  runs to extract into the spreadsheet.
  The first sheet contains all the run data and subsequent sheets contain
  data rolled up for the individual tests.
+\end_layout
+
+\begin_layout Section
+Introspection
+\end_layout
+
+\begin_layout Subsection
+Getting previous test paths
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+megatest -test-paths -target %/%/% :runname % -testpatt % -itempatt % :status
+ PASS 
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section

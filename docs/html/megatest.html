@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <meta name="generator" content="http://www.nongnu.org/elyxer/"/>
-<meta name="create-date" content="2011-12-15"/>
+<meta name="create-date" content="2012-01-29"/>
 <link rel="stylesheet" href="http://elyxer.nongnu.org/lyx.css" type="text/css" media="all"/>
 <title>Megatest User Manual</title>
 </head>
@@ -26,11 +26,8 @@ Megatest User Manual
 Matthew Welland
 </h2>
 <h2 class="Date">
-Sept. 20, 
+Jan. 29, 2012 
 </h2>
-<div class="Standard">
-<span class="unknown">\thispagestyle</span>empty
-</div>
 <div class="Standard">
 <p><br/>
 </p>
@@ -215,69 +212,77 @@ Table of Contents
 <a class="Link" href="#toc-Section-9">Section 9: Generating an OpenDocument Spreadsheet from the Database</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-10">Section 10: Flows</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Section-11">Section 11: Flow Specification and Running (Not released yet)</a>
+<a class="Link" href="#toc-Section-10">Section 10: Introspection</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-11.1">Subsection 11.1: Write your flow file</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-11.2">Subsection 11.2: Run the flow</a>
+<a class="Link" href="#toc-Subsection-10.1">Subsection 10.1: Getting previous test paths</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-12">Section 12: Monitor based running</a>
+<a class="Link" href="#toc-Section-11">Section 11: Flows</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-12">Section 12: Flow Specification and Running (Not released yet)</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-12.1">Subsection 12.1: Monitor logic</a>
+<a class="Link" href="#toc-Subsection-12.1">Subsection 12.1: Write your flow file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-12.2">Subsection 12.2: Run the flow</a>
 </div>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Section-13">Section 13: Reference</a>
+<a class="Link" href="#toc-Section-13">Section 13: Monitor based running</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsection-13.1">Subsection 13.1: Configuration file Syntax</a>
+<a class="Link" href="#toc-Subsection-13.1">Subsection 13.1: Monitor logic</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Section-14">Section 14: Reference</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.1.1">Subsubsection 13.1.1: Sections</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.1.2">Subsubsection 13.1.2: Variables</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.1.3">Subsubsection 13.1.3: Includes</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.1.4">Subsubsection 13.1.4: Setting a variable by running a command</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.1.5">Subsubsection 13.1.5: Notes</a>
-</div>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-13.2">Subsection 13.2: Environment variables</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-13.3">Subsection 13.3: megatest.config</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-13.4">Subsection 13.4: runconfigs.config file</a>
-</div>
-<div class="toc">
-<a class="Link" href="#toc-Subsection-13.5">Subsection 13.5: Writing tests</a>
+<a class="Link" href="#toc-Subsection-14.1">Subsection 14.1: Configuration file Syntax</a>
 </div>
 <div class="tocindent">
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.5.1">Subsubsection 13.5.1: testconfig file</a>
+<a class="Link" href="#toc-Subsubsection-14.1.1">Subsubsection 14.1.1: Sections</a>
 </div>
 <div class="toc">
-<a class="Link" href="#toc-Subsubsection-13.5.2">Subsubsection 13.5.2: Command line</a>
+<a class="Link" href="#toc-Subsubsection-14.1.2">Subsubsection 14.1.2: Variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-14.1.3">Subsubsection 14.1.3: Includes</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-14.1.4">Subsubsection 14.1.4: Setting a variable by running a command</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-14.1.5">Subsubsection 14.1.5: Notes</a>
+</div>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-14.2">Subsection 14.2: Environment variables</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-14.3">Subsection 14.3: megatest.config</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-14.4">Subsection 14.4: runconfigs.config file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsection-14.5">Subsection 14.5: Writing tests</a>
+</div>
+<div class="tocindent">
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-14.5.1">Subsubsection 14.5.1: testconfig file</a>
+</div>
+<div class="toc">
+<a class="Link" href="#toc-Subsubsection-14.5.2">Subsubsection 14.5.2: Command line</a>
 </div>
 </div>
 </div>
@@ -708,16 +713,29 @@ And OpenDocument multi-paned spreadsheet can be generated from the megatest.db f
 You can optionally specify the keys for your database to limit further the runs to extract into the spreadsheet. The first sheet contains all the run data and subsequent sheets contain data rolled up for the individual tests.
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-10">10</a> Flows
+<a class="toc" name="toc-Section-10">10</a> Introspection
+</h1>
+<h2 class="Subsection">
+<a class="toc" name="toc-Subsection-10.1">10.1</a> Getting previous test paths
+</h2>
+<div class="Standard">
+<div class="listing">
+<pre class="listing">megatest -test-paths -target %/%/% :runname % -testpatt % -itempatt % :status PASS 
+</pre>
+</div>
+
+</div>
+<h1 class="Section">
+<a class="toc" name="toc-Section-11">11</a> Flows
 </h1>
 <div class="Standard">
 A flow specifies the tests to run, the order and dependencies and is managed by a running megatest process.
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-11">11</a> Flow Specification and Running (Not released yet)
+<a class="toc" name="toc-Section-12">12</a> Flow Specification and Running (Not released yet)
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-11.1">11.1</a> Write your flow file
+<a class="toc" name="toc-Subsection-12.1">12.1</a> Write your flow file
 </h2>
 <div class="Standard">
 flows/&lt;flowname&gt;.config
@@ -747,7 +765,7 @@ sim3,setup
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-11.2">11.2</a> Run the flow
+<a class="toc" name="toc-Subsection-12.2">12.2</a> Run the flow
 </h2>
 <div class="Standard">
 <div class="listing">
@@ -757,10 +775,10 @@ sim3,setup
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-12">12</a> Monitor based running
+<a class="toc" name="toc-Section-13">13</a> Monitor based running
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-12.1">12.1</a> Monitor logic
+<a class="toc" name="toc-Subsection-13.1">13.1</a> Monitor logic
 </h2>
 <div class="Standard">
 Note: The monitor is usable but incomplete as of Megatest v1.31. Click on the &ldquo;Monitor&rdquo; button on the dashboard to start the monitor and give it a try.
@@ -770,16 +788,16 @@ Note: The monitor is usable but incomplete as of Megatest v1.31. Click on the &l
 
 </div>
 <h1 class="Section">
-<a class="toc" name="toc-Section-13">13</a> Reference
+<a class="toc" name="toc-Section-14">14</a> Reference
 </h1>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-13.1">13.1</a> Configuration file Syntax
+<a class="toc" name="toc-Subsection-14.1">14.1</a> Configuration file Syntax
 </h2>
 <div class="Standard">
 Note: whitespace is preserved including at the end of line. Ensure your entries only have whitespace at the end of line when needed to avoid problems.
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.1.1">13.1.1</a> Sections
+<a class="toc" name="toc-Subsubsection-14.1.1">14.1.1</a> Sections
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -792,7 +810,7 @@ Note: whitespace is preserved including at the end of line. Ensure your entries 
 This creates a section named “section name”
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.1.2">13.1.2</a> Variables
+<a class="toc" name="toc-Subsubsection-14.1.2">14.1.2</a> Variables
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -805,7 +823,7 @@ This creates a section named “section name”
 The variable “VARX” will have the value “has this value”
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.1.3">13.1.3</a> Includes
+<a class="toc" name="toc-Subsubsection-14.1.3">14.1.3</a> Includes
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -818,7 +836,7 @@ The variable “VARX” will have the value “has this value”
 The file named “filename” will be included as if part of the calling file. NOTE: This means no section can be named “include “ (with the whitespace).
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.1.4">13.1.4</a> Setting a variable by running a command
+<a class="toc" name="toc-Subsubsection-14.1.4">14.1.4</a> Setting a variable by running a command
 </h3>
 <div class="Standard">
 <div class="listing">
@@ -831,7 +849,7 @@ The file named “filename” will be included as if part of the calling file. N
 The variable “VARNAME” will get a value created by the Unix command “ls /tmp”. All lines of output from the command will be joined with a space.
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.1.5">13.1.5</a> Notes
+<a class="toc" name="toc-Subsubsection-14.1.5">14.1.5</a> Notes
 </h3>
 <ul>
 <li>
@@ -843,7 +861,7 @@ Comments (lines starting with #) and blank lines are ignored.
 
 </ul>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-13.2">13.2</a> Environment variables
+<a class="toc" name="toc-Subsection-14.2">14.2</a> Environment variables
 </h2>
 <div class="Standard">
 <table>
@@ -933,7 +951,7 @@ The field values as set on the megatest -runall command line (e.g. :field1 abc)
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-13.3">13.3</a> megatest.config
+<a class="toc" name="toc-Subsection-14.3">14.3</a> megatest.config
 </h2>
 <div class="Standard">
 <table>
@@ -1122,7 +1140,7 @@ The disk usage balancing algorithm is to choose the disk with the least space fo
 
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-13.4">13.4</a> runconfigs.config file
+<a class="toc" name="toc-Subsection-14.4">14.4</a> runconfigs.config file
 </h2>
 <div class="Standard">
 <table>
@@ -1225,10 +1243,10 @@ ENCRYPTION true
 TESTPATH /nfs/testing/megacorp_runs
 </div>
 <h2 class="Subsection">
-<a class="toc" name="toc-Subsection-13.5">13.5</a> Writing tests
+<a class="toc" name="toc-Subsection-14.5">14.5</a> Writing tests
 </h2>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.5.1">13.5.1</a> testconfig file
+<a class="toc" name="toc-Subsubsection-14.5.1">14.5.1</a> testconfig file
 </h3>
 <div class="Standard">
 <table>
@@ -1345,7 +1363,7 @@ Use in addition to or instead of runscript for easy implementation of steps. If 
 
 </div>
 <h3 class="Subsubsection">
-<a class="toc" name="toc-Subsubsection-13.5.2">13.5.2</a> Command line
+<a class="toc" name="toc-Subsubsection-14.5.2">14.5.2</a> Command line
 </h3>
 <div class="Standard">
 <table>
@@ -1692,7 +1710,7 @@ If using logpro to acess the PASS/FAIL status of the step you specify the logpro
 
 <hr class="footer"/>
 <div class="footer" id="generated-by">
-Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.2.2 (2011-06-12)</a> on <span class="create-date">2011-12-15T21:53:21.527506</span>
+Document generated by <a href="http://elyxer.nongnu.org/">eLyXer 1.2.2 (2011-06-12)</a> on <span class="create-date">2012-01-29T18:02:18.423972</span>
 </div>
 </div>
 </body>

@@ -7,5 +7,5 @@ html/megatest.html : megatest.lyx
 	fossil add html/*
 
 megatest.pdf : megatest.lyx
-	lyx -e pdf megatest.pdf
+	lyx -e pdf megatest.lyx
 
