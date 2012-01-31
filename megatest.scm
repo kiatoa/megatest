@@ -91,6 +91,8 @@ Misc
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
+  -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
+
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
@@ -164,6 +166,8 @@ Called as " (string-intersperse (argv) " ")))
 			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
+			;; misc
+			"-archive"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -393,7 +397,7 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 ;; Get paths to tests
 ;;======================================================================
-;; run all tests are are Not COMPLETED and PASS or CHECK
+;; Get test paths matching target, runname, testpatt, and itempatt
 (if (args:get-arg "-test-paths")
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
@@ -417,6 +421,54 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths, exiting")
+		(exit 1)))
+	  (set! db (open-db))    
+	  (let* ((itempatt (args:get-arg "-itempatt"))
+		 (keys     (db-get-keys db))
+		 (keynames (map key:get-fieldname keys))
+		 (paths    (db:test-get-paths-matching db keynames target)))
+	    (set! *didsomething* #t)
+	    (for-each (lambda (path)
+			(print path))
+		      paths)))
+	;; else do a general-run-call
+	(general-run-call 
+	 "-test-paths"
+	 "Get paths to tests"
+	 (lambda (db target runname keys keynames keyvallst)
+	   (let* ((itempatt (args:get-arg "-itempatt"))
+		  (paths    (db:test-get-paths-matching db keynames target)))
+	     (for-each (lambda (path)
+			 (print path))
+		       paths))))))
+
+;;======================================================================
+;; Archive tests
+;;======================================================================
+;; Archive tests matching target, runname, testpatt, and itempatt
+(if (args:get-arg "-archive")
+    ;; if we are in a test use the MT_CMDINFO data
+    (if (getenv "MT_CMDINFO")
+	(let* ((startingdir (current-directory))
+	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
+	       (testpath  (assoc/default 'testpath  cmdinfo))
+	       (test-name (assoc/default 'test-name cmdinfo))
+	       (runscript (assoc/default 'runscript cmdinfo))
+	       (db-host   (assoc/default 'db-host   cmdinfo))
+	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (itemdat   (assoc/default 'itemdat   cmdinfo))
+	       (db        #f)
+	       (state     (args:get-arg ":state"))
+	       (status    (args:get-arg ":status"))
+	       (target    (args:get-arg "-target")))
+	  (change-directory testpath)
+	  (if (not target)
+	      (begin
+		(debug:print 0 "ERROR: -target is required.")
+		(exit 1)))
+	  (if (not (setup-for-run))
+	      (begin
+		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
 	  (set! db (open-db))    
 	  (let* ((itempatt (args:get-arg "-itempatt"))

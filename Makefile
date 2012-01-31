@@ -5,7 +5,7 @@ CSCOPTS=
 SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
-           process.scm runs.scm tasks.scm tests.scm
+           process.scm runs.scm tasks.scm tests.scm archive.scm
 
 GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm dashboard-main.scm
 
@@ -28,6 +28,7 @@ tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
+
 
 $(OFILES) $(GOFILES) : common_records.scm 
 

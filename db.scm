@@ -87,6 +87,7 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
+                     archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -212,7 +213,10 @@
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
       ((< mver 1.36)
        (db:set-var db "MEGATEST_VERSION" 1.36)
-       (sqlite3:execute db "ALTER TABLER test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
+       (sqlite3:execute db "ALTER TABLE test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
+      ((< mver 1.37)
+       (db:set-var db "MEGATEST_VERSION" 1.37)
+       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN archived INTEGER DEFAULT 0;")) 
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
