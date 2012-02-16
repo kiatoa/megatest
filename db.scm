@@ -487,7 +487,10 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id testname item-path))
 
+;;======================================================================
 ;; Misc. test related queries
+;;======================================================================
+
 (define (db:test-get-paths-matching db keynames target)
   (let* ((res '())
 	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
@@ -502,6 +505,56 @@
 		       (string-split target "/"))
 		  " AND "))
 	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
+		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
+		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       "'ORDER BY t.event_time ASC;")))
+    (debug:print 3 "qrystr: " qrystr)
+    (sqlite3:for-each-row 
+     (lambda (p)
+       (set! res (cons p res)))
+     db 
+     qrystr)
+    res))
+
+(define (db:test-get-test-records-matching db keynames target)
+  (let* ((res '())
+	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
+	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (keystr (string-intersperse 
+		  (map (lambda (key val)
+			 (conc "r." key " like '" val "'"))
+		       keynames 
+		       (string-split target "/"))
+		  " AND "))
+	 (qrystr (conc "SELECT 
+                            t.id
+                            t.run_id     
+                            t.testname   
+                            t.host       
+                            t.cpuload    
+                            t.diskfree   
+                            t.uname      
+                            t.rundir     
+                            t.shortdir   
+                            t.item_path  
+                            t.state      
+                            t.status     
+                            t.attemptnum 
+                            t.final_logf 
+                            t.logdat     
+                            t.run_duratio
+                            t.comment    
+                            t.event_time 
+                            t.fail_count 
+                            t.pass_count 
+                            t.archived   
+
+
+
+ FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
 		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
 		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
 		       "'ORDER BY t.event_time ASC;")))

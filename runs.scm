@@ -411,6 +411,8 @@
 	   (testdat       (db:get-test-info db run-id test-name item-path)))
       (if (not testdat)
 	  (begin
+	    ;; ensure that the path exists before registering the test
+	    (system (conc "mkdir -p " new-test-path))
 	    (register-test db run-id test-name item-path)
 	    (set! testdat (db:get-test-info db run-id test-name item-path))))
       (change-directory test-path)

@@ -428,3 +428,12 @@
      testname
      item-path)))
 
+;;======================================================================
+;; A R C H I V I N G
+;;======================================================================
+
+(define (test:archive db test-id)
+  #f)
+
+(define (test:archive-tests db keynames target)
+  #f)
