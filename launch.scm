@@ -398,9 +398,12 @@
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
 
-    (if (file-exists? (conc lnkpath "/" testname))
-    	(system (conc "rm -f " lnkpath "/" testname)))
-    (system  (conc "ln -sf " dfullp " " lnkpath "/" testname))
+    (let ((testlink (conc lnkpath "/" testname)))
+      (if (and (file-exists? testlink)
+	       (or (regular-file? testlink)
+		   (symbolic-link? testlink)))
+	  (system (conc "rm -f " testlink)))
+      (system  (conc "ln -sf " dfullp " " testlink)))
     (if (directory? dfullp)
 	(begin
 	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-path "/ " dfullp "/"))

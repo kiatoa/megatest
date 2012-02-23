@@ -2,7 +2,7 @@
 
 [ezsteps]
 lookittmp   ls /tmp
-lookithome  ls /home
+lookithome  ls $HOME
 
 [test_meta]
 author matt
