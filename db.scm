@@ -415,26 +415,6 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
-(define (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)
-  (debug:print 4 "run-id: " run-id " test-name: " test-name)
-  (let* ((state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (debug:print 5 "testdat: " testdat)
-    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
-	     (or (not state)(not status)))
-	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if testdat
-	(let ((test-id (test:get-id testdat)))
-	  ;; FIXME - this should not update the logfile unless it is specified.
-	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
-			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile ""))
-	  #t) ;; fake out a #t - could be execute is returning something complicated
-	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
-
-
 (define (db:delete-tests-in-state db run-id state)
   (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
@@ -442,6 +422,10 @@
   (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
   (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
   (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
+
+(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+		   state status run-id test-name item-path))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
@@ -590,6 +574,21 @@
      db 
      qrystr)
     res))
+
+(define (db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree)
+  (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
+  ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
+  ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))
+  ;;            (not (equal? (db:test-get-status testinfo) "KILLREQ"))
+  (sqlite3:execute
+   db
+   "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
+   cpuload
+   diskfree
+   minutes
+   run-id
+   testname
+   item-path))
 
 
 ;;======================================================================
@@ -876,6 +875,25 @@
 	waitons)
       (delete-duplicates result))))
 
+(define (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)
+  (debug:print 4 "run-id: " run-id " test-name: " test-name)
+  (let* ((state     (check-valid-items "state" state-in))
+	 (status    (check-valid-items "status" status-in))
+	 (testdat   (db:get-test-info db run-id test-name item-path)))
+    (debug:print 5 "testdat: " testdat)
+    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
+	     (or (not state)(not status)))
+	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
+	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
+    (if testdat
+	(let ((test-id (test:get-id testdat)))
+	  ;; FIXME - this should not update the logfile unless it is specified.
+	  (sqlite3:execute db 
+			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
+			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile ""))
+	  #t) ;; fake out a #t - could be execute is returning something complicated
+	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
+
 ;;======================================================================
 ;; Extract ods file from the db
 ;;======================================================================
@@ -1006,21 +1024,6 @@
 ;; REMOTE DB ACCESS VIA RPC
 ;;======================================================================
 
-;; (define (rdb:get-var db var)
-;; (define (rdb:set-var db var val)
-;; (define (rdb-get-keys db)
-;; (define (rdb:get-value-by-header row header field)
-;; (define (rruns:get-std-run-fields keys remfields)
-;; (define (rdb:get-runs db runpatt count offset keypatts)
-;; (define (rdb:get-num-runs db runpatt)
-;; (define (rdb:get-run-info db run-id)
-;; (define (rdb:set-comment-for-run db run-id comment)
-;; (define (rdb:delete-run db run-id)
-;; (define (rdb:update-run-event_time db run-id)
-;; (define (rdb-get-tests-for-run db run-id testpatt itempatt states statuses)
-;; (define (rdb:delete-test-step-records db run-id test-name itemdat)
-;; (define (rdb:delete-test-records db test-id)
-
 (define (rdb:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
@@ -1030,38 +1033,27 @@
       (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rdb:teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
-  (print "teststep-set-status!:"  run-id test-name teststep-name state-in status-in itemdat comment logfile)
   (let ((item-path (item-list->path itemdat)))
     (if *runremote*
 	(let ((host (vector-ref *runremote* 0))
 	      (port (vector-ref *runremote* 1)))
 	  ((rpc:procedure 'rdb:teststep-set-status! host port)
-	   run-id test-name teststep-name state-in status-in item-path comment logfile)
-	  (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)))))
+	   run-id test-name teststep-name state-in status-in item-path comment logfile))
+	(db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile))))
 
+(define (rdb:test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
+  (let ((item-path (item-list->path itemdat)))
+    (if *runremote*
+	(let ((host (vector-ref *runremote* 0))
+	      (port (vector-ref *runremote* 1)))
+	  ((rpc:procedure 'rdb:test-update-meta-info host port)
+	   run-id testname itemdat minutes cpuload diskfree tmpfree))
+	(db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree))))
 
-;; (define (rdb:delete-tests-in-state db run-id state)
-;; (define (rdb:test-set-state-status-by-id db test-id newstate newstatus newcomment)
-;; (define (rdb:get-count-tests-running db)
-;; (define (rdb:get-count-tests-running-in-jobgroup db jobgroup)
-;; (define (rdb:estimated-tests-remaining db run-id)
-;; (define (rdb:get-test-info db run-id testname item-path)
-;; (define (rdb:get-test-data-by-id db test-id)
-;; (define (rdb:test-set-comment db run-id testname item-path comment)
-;; (define (rdb:test-set-rundir! db run-id testname item-path rundir)
-;; (define (rdb:test-get-paths-matching db keynames target)
-;; (define (rdb:test-get-test-records-matching db keynames target)
-;; (define (rdb:testmeta-get-record db testname)
-;; (define (rdb:testmeta-add-record db testname)
-;; (define (rdb:testmeta-update-field db testname field value)
-;; (define (rdb:csv->test-data db test-id csvdata)
-;; (define (rdb:read-test-data db test-id categorypatt)
-;; (define (rdb:load-test-data db run-id test-name itemdat)
-;; (define (rdb:test-data-rollup db test-id status)
-;; (define (rdb:get-prev-tol-for-test db test-id category variable)
-;; (define (rdb:step-get-time-as-string vec)
-;; (define (rdb:get-steps-for-test db test-id)
-;; (define (rdb:get-steps-table db test-id)
-;; (define (rdb-get-prereqs-not-met db run-id waiton)
-;; (define (rdb:get-prereqs-not-met db run-id waitons ref-item-path)
-;; (define (rdb:extract-ods-file db outputfile keypatt-alist runspatt pathmod)
+(define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-set-state-status-by-run-id-testname host port)
+	  run-id test-name item-path status state))
+      (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))

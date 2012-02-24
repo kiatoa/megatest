@@ -249,7 +249,7 @@
 				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
+				       (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

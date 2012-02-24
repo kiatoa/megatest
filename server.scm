@@ -53,14 +53,22 @@
     (rpc:publish-procedure!
      'rdb:set-tests-state-status 
      (lambda (run-id testnames currstate currstatus newstate newstatus)
-       ;; (debug:print 2 "rdb:set-tests-state-status newstate: " newstate " newstatus: " newstatus)
        (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
 
     (rpc:publish-procedure!
      'rdb:teststep-set-status!
      (lambda (run-id test-name teststep-name state-in status-in item-path comment logfile)
-       ;; (debug:print 2 "rdb:teststep-state-set-status! test-name: " test-name " teststep-name: " teststep-name)
        (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)))
+
+    (rpc:publish-procedure!
+     'rdb:test-update-meta-info
+     (lambda (run-id testname itemdat minutes cpuload diskfree tmpfree)
+       (db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree)))
+     
+    (rpc:publish-procedure!
+     'rdb:test-set-state-status-by-run-id-testname
+     (lambda (run-id test-name item-path status state)
+       (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()

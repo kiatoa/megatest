@@ -110,6 +110,7 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
+;; 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let* ((real-status status)
 	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
@@ -136,8 +137,7 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-			 state real-status run-id test-name item-path))
+	(db:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
 
     ;; if status is "AUTO" then call rollup
     (if (and test-id state status (equal? status "AUTO")) 
@@ -393,22 +393,6 @@
 		  run-id
 		  testname
 		  item-path)))
-
-(define (test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
-  (let ((item-path (item-list->path itemdat)))
-    (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
-    ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
-    ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))
-    ;;            (not (equal? (db:test-get-status testinfo) "KILLREQ"))
-    (sqlite3:execute
-     db
-     "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
-     cpuload
-     diskfree
-     minutes
-     run-id
-     testname
-     item-path)))
 
 ;;======================================================================
 ;; A R C H I V I N G
