@@ -65,7 +65,7 @@
 
     (rpc:publish-procedure!
      'rdb:test-update-meta-info
-     (lambda (run-id testname itemdat minutes cpuload diskfree tmpfree)
+     (lambda (run-id testname item-path minutes cpuload diskfree tmpfree)
        (db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree)))
      
     (rpc:publish-procedure!
