@@ -19,6 +19,7 @@
 (declare (uses margs))
 (declare (uses runs))
 (declare (uses launch))
+(declare (uses server))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -91,6 +92,10 @@ Misc
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
+  -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
+  -server -|hostname      : start the server (reduces contention on megatest.db), use
+                            - to automatically figure out hostname
+
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
   -pathmod path           : insert path, i.e. path/runame/itempath/logfile.html
@@ -149,6 +154,7 @@ Called as " (string-intersperse (argv) " ")))
 			":tol"
 			":units"
 			;; misc
+			"-server"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -164,6 +170,8 @@ Called as " (string-intersperse (argv) " ")))
 			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
+			;; misc
+			"-archive"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -174,6 +182,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
+
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -377,6 +386,16 @@ Called as " (string-intersperse (argv) " ")))
 		     (make-hash-table)))))
 
 ;;======================================================================
+;; Start the server
+;;======================================================================
+(if (args:get-arg "-server")
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (if db 
+	  (server:start db (args:get-arg "-server"))
+	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
+
+;;;======================================================================
 ;; Rollup into a run
 ;;======================================================================
 (if (args:get-arg "-rollup")
@@ -393,7 +412,7 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 ;; Get paths to tests
 ;;======================================================================
-;; run all tests are are Not COMPLETED and PASS or CHECK
+;; Get test paths matching target, runname, testpatt, and itempatt
 (if (args:get-arg "-test-paths")
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
@@ -417,6 +436,54 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths, exiting")
+		(exit 1)))
+	  (set! db (open-db))    
+	  (let* ((itempatt (args:get-arg "-itempatt"))
+		 (keys     (db-get-keys db))
+		 (keynames (map key:get-fieldname keys))
+		 (paths    (db:test-get-paths-matching db keynames target)))
+	    (set! *didsomething* #t)
+	    (for-each (lambda (path)
+			(print path))
+		      paths)))
+	;; else do a general-run-call
+	(general-run-call 
+	 "-test-paths"
+	 "Get paths to tests"
+	 (lambda (db target runname keys keynames keyvallst)
+	   (let* ((itempatt (args:get-arg "-itempatt"))
+		  (paths    (db:test-get-paths-matching db keynames target)))
+	     (for-each (lambda (path)
+			 (print path))
+		       paths))))))
+
+;;======================================================================
+;; Archive tests
+;;======================================================================
+;; Archive tests matching target, runname, testpatt, and itempatt
+(if (args:get-arg "-archive")
+    ;; if we are in a test use the MT_CMDINFO data
+    (if (getenv "MT_CMDINFO")
+	(let* ((startingdir (current-directory))
+	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
+	       (testpath  (assoc/default 'testpath  cmdinfo))
+	       (test-name (assoc/default 'test-name cmdinfo))
+	       (runscript (assoc/default 'runscript cmdinfo))
+	       (db-host   (assoc/default 'db-host   cmdinfo))
+	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (itemdat   (assoc/default 'itemdat   cmdinfo))
+	       (db        #f)
+	       (state     (args:get-arg ":state"))
+	       (status    (args:get-arg ":status"))
+	       (target    (args:get-arg "-target")))
+	  (change-directory testpath)
+	  (if (not target)
+	      (begin
+		(debug:print 0 "ERROR: -target is required.")
+		(exit 1)))
+	  (if (not (setup-for-run))
+	      (begin
+		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
 	  (set! db (open-db))    
 	  (let* ((itempatt (args:get-arg "-itempatt"))
@@ -491,7 +558,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (and state status)
-	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
+	      (rdb:teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
@@ -554,7 +621,7 @@ Called as " (string-intersperse (argv) " ")))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
+		    (rdb:teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step
@@ -576,7 +643,7 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  (test-set-log! db run-id test-name itemdat htmllogfile)))
-		    (teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
+		    (rdb:teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
 		    (sqlite3:finalize! db)
 		    (if (not (eq? exitstat 0))
 			(exit 254)) ;; (exit exitstat) doesn't work?!?

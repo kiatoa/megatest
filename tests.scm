@@ -13,7 +13,6 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-
 (define (register-test db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
@@ -111,6 +110,7 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
+;; 
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let* ((real-status status)
 	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
@@ -137,10 +137,10 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-			 state real-status run-id test-name item-path))
+	(rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
 
-    ;; if status is "AUTO" then call rollup
+    ;; if status is "AUTO" then call rollup (note, this one modifies data in test
+    ;; run area, do not rpc it (yet)
     (if (and test-id state status (equal? status "AUTO")) 
 	(db:test-data-rollup db test-id status))
 
@@ -168,7 +168,7 @@
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
       (if (and value expected tol) ;; all three required
-	  (db:csv->test-data db test-id 
+	  (rdb:csv->test-data db test-id 
 			     (conc category ","
 				   variable ","
 				   value    ","
@@ -179,42 +179,17 @@
 				   type     ))))
 				   
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (if (and (not (equal? item-path ""))
-	     (or (equal? status "PASS")
-		 (equal? status "WARN")
-		 (equal? status "FAIL")
-		 (equal? status "WAIVED")
-		 (equal? status "RUNNING")))
-	(begin
-	  (sqlite3:execute 
-	   db
-	   "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-             WHERE run_id=? AND testname=? AND item_path='';"
-	   run-id test-name run-id test-name run-id test-name)
-	  (if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
-	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
-	      (sqlite3:execute
-	       db
-	       "UPDATE tests
-                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
-                          'RUNNING'
-                       ELSE 'COMPLETED' END,
-                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
-                       WHERE run_id=? AND testname=? AND item_path='';"
-	       run-id test-name run-id test-name))))
+    (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
-	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (if waived waived comment) run-id test-name item-path))
+	(rdb:test-set-comment db  run-id test-name item-path (if waived waived comment)))
     ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 
   (let ((item-path (item-list->path itemdat)))
-    (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
-		     logf run-id test-name item-path)))
+    (rdb:test-set-log! db run-id test-name item-path logf)))
 
 (define (test-set-toplog! db run-id test-name logf) 
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
@@ -371,24 +346,7 @@
 ;; test steps
 ;;======================================================================
 
-(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
-  (debug:print 4 "run-id: " run-id " test-name: " test-name)
-  (let* ((state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in))
-	 (item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (debug:print 5 "testdat: " testdat)
-    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
-	     (or (not state)(not status)))
-	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if testdat
-	(let ((test-id (test:get-id testdat)))
-	  ;; FIXME - this should not update the logfile unless it is specified.
-	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
-			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile "")))
-	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
+;; teststep-set-status! used to be here
 
 (define (test-get-kill-request db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
@@ -412,19 +370,12 @@
 		  testname
 		  item-path)))
 
-(define (test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
-  (let ((item-path (item-list->path itemdat)))
-    (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
-    ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
-    ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))
-    ;;            (not (equal? (db:test-get-status testinfo) "KILLREQ"))
-    (sqlite3:execute
-     db
-     "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
-     cpuload
-     diskfree
-     minutes
-     run-id
-     testname
-     item-path)))
+;;======================================================================
+;; A R C H I V I N G
+;;======================================================================
 
+(define (test:archive db test-id)
+  #f)
+
+(define (test:archive-tests db keynames target)
+  #f)

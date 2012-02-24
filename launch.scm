@@ -181,7 +181,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (teststep-set-status! db run-id test-name stepname "start" "-" itemdat #f #f)
+						   (rdb:teststep-set-status! db run-id test-name stepname "start" "-" itemdat #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -196,7 +196,7 @@
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
 								   ))
-						     (teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
+						     (rdb:teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
 						     (if logpro-used
 							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
 						     ;; set the test final status
@@ -249,7 +249,7 @@
 				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
+				       (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

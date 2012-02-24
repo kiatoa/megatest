@@ -13,6 +13,9 @@
 ;; Database access
 ;;======================================================================
 
+(require-extension (srfi 18) extras tcp rpc)
+(import (prefix rpc rpc:))
+
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml)
 (import (prefix sqlite3 sqlite3:))
 
@@ -24,6 +27,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "key_records.scm")
+(include "run_records.scm")
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
@@ -87,6 +91,7 @@
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
+                     archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
 	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
@@ -132,6 +137,7 @@
 	  ;; Must do this *after* running patch db !! No more. 
 	  (db:set-var db "MEGATEST_VERSION" megatest-version)
 	  ))
+    (server:client-setup db)
     db))
 
 ;;======================================================================
@@ -212,7 +218,10 @@
        (sqlite3:execute db "ALTER TABLE tests ADD COLUMN shortdir TEXT DEFAULT '';"))
       ((< mver 1.36)
        (db:set-var db "MEGATEST_VERSION" 1.36)
-       (sqlite3:execute db "ALTER TABLER test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
+       (sqlite3:execute db "ALTER TABLE test_meta ADD COLUMN jobgroup TEXT DEFAULT 'default';"))
+      ((< mver 1.37)
+       (db:set-var db "MEGATEST_VERSION" 1.37)
+       (sqlite3:execute db "ALTER TABLE tests ADD COLUMN archived INTEGER DEFAULT 0;")) 
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
@@ -414,6 +423,10 @@
   (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
   (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
 
+(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+		   state status run-id test-name item-path))
+
 (define (db:get-count-tests-running db)
   (let ((res 0))
     (sqlite3:for-each-row
@@ -470,20 +483,27 @@
     res))
 
 
-(define (db:test-set-comment db run-id testname item-path comment)
+(define (db:test-set-comment db run-id test-name item-path comment)
   (sqlite3:execute 
    db 
    "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-   comment run-id testname item-path))
+   comment run-id test-name item-path))
 
 ;;
-(define (db:test-set-rundir! db run-id testname item-path rundir)
+(define (db:test-set-rundir! db run-id test-name item-path rundir)
   (sqlite3:execute 
    db 
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
-   rundir run-id testname item-path))
+   rundir run-id test-name item-path))
 
+(define (db:test-set-log! db run-id test-name item-path logf)
+  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
+		   logf run-id test-name item-path))
+
+;;======================================================================
 ;; Misc. test related queries
+;;======================================================================
+
 (define (db:test-get-paths-matching db keynames target)
   (let* ((res '())
 	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
@@ -508,6 +528,97 @@
      db 
      qrystr)
     res))
+
+(define (db:test-get-test-records-matching db keynames target)
+  (let* ((res '())
+	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
+	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (keystr (string-intersperse 
+		  (map (lambda (key val)
+			 (conc "r." key " like '" val "'"))
+		       keynames 
+		       (string-split target "/"))
+		  " AND "))
+	 (qrystr (conc "SELECT 
+                            t.id
+                            t.run_id     
+                            t.testname   
+                            t.host       
+                            t.cpuload    
+                            t.diskfree   
+                            t.uname      
+                            t.rundir     
+                            t.shortdir   
+                            t.item_path  
+                            t.state      
+                            t.status     
+                            t.attemptnum 
+                            t.final_logf 
+                            t.logdat     
+                            t.run_duratio
+                            t.comment    
+                            t.event_time 
+                            t.fail_count 
+                            t.pass_count 
+                            t.archived   
+
+
+
+ FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
+		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
+		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       "'ORDER BY t.event_time ASC;")))
+    (debug:print 3 "qrystr: " qrystr)
+    (sqlite3:for-each-row 
+     (lambda (p)
+       (set! res (cons p res)))
+     db 
+     qrystr)
+    res))
+
+(define (db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree)
+  (if (not item-path)
+      (begin (debug:print 0 "WARNING: ITEMPATH not set.")   
+	     (set! item-path "")))
+  (sqlite3:execute
+   db
+   "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
+   cpuload
+   diskfree
+   minutes
+   run-id
+   test-name
+   item-path))
+
+(define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (if (and (not (equal? item-path ""))
+	   (or (equal? status "PASS")
+	       (equal? status "WARN")
+	       (equal? status "FAIL")
+	       (equal? status "WAIVED")
+	       (equal? status "RUNNING")))
+      (begin
+	(sqlite3:execute 
+	 db
+	 "UPDATE tests 
+             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+             WHERE run_id=? AND testname=? AND item_path='';"
+	 run-id test-name run-id test-name run-id test-name)
+	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
+	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
+	    (sqlite3:execute
+	     db
+	     "UPDATE tests
+                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
+                          'RUNNING'
+                       ELSE 'COMPLETED' END,
+                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
+                       WHERE run_id=? AND testname=? AND item_path='';"
+	     run-id test-name run-id test-name)))))
 
 
 ;;======================================================================
@@ -794,6 +905,25 @@
 	waitons)
       (delete-duplicates result))))
 
+(define (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)
+  (debug:print 4 "run-id: " run-id " test-name: " test-name)
+  (let* ((state     (check-valid-items "state" state-in))
+	 (status    (check-valid-items "status" status-in))
+	 (testdat   (db:get-test-info db run-id test-name item-path)))
+    (debug:print 5 "testdat: " testdat)
+    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
+	     (or (not state)(not status)))
+	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
+	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
+    (if testdat
+	(let ((test-id (test:get-id testdat)))
+	  ;; FIXME - this should not update the logfile unless it is specified.
+	  (sqlite3:execute db 
+			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
+			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile ""))
+	  #t) ;; fake out a #t - could be execute is returning something complicated
+	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
+
 ;;======================================================================
 ;; Extract ods file from the db
 ;;======================================================================
@@ -918,3 +1048,74 @@
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
+
+
+;;======================================================================
+;; REMOTE DB ACCESS VIA RPC
+;;======================================================================
+
+(define (rdb:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:set-tests-state-status host port)
+	 run-id testnames currstate currstatus newstate newstatus))
+      (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
+
+(define (rdb:teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
+  (let ((item-path (item-list->path itemdat)))
+    (if *runremote*
+	(let ((host (vector-ref *runremote* 0))
+	      (port (vector-ref *runremote* 1)))
+	  ((rpc:procedure 'rdb:teststep-set-status! host port)
+	   run-id test-name teststep-name state-in status-in item-path comment logfile))
+	(db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile))))
+
+(define (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
+  (let ((item-path (item-list->path itemdat)))
+    (if *runremote*
+	(let ((host (vector-ref *runremote* 0))
+	      (port (vector-ref *runremote* 1)))
+	  ((rpc:procedure 'rdb:test-update-meta-info host port)
+	   run-id test-name item-path minutes cpuload diskfree tmpfree))
+	(db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree))))
+
+(define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-set-state-status-by-run-id-testname host port)
+	  run-id test-name item-path status state))
+      (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
+
+(define (rdb:csv->test-data db test-id csvdata)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:csv->test-data host port)
+	 test-id csvdata))
+      (db:csv->test-data db test-id csvdata)))
+
+(define (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:roll-up-pass-fail-counts host port)
+	 run-id test-name item-path status))
+      (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
+
+(define (rdb:test-set-comment db run-id test-name item-path comment)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-set-comment host port)
+	 run-id test-name item-path comment))
+      (db:test-set-comment db run-id test-name item-path comment)))
+
+(define (rdb:test-set-log! db run-id test-name item-path logf)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rpc:test-set-log! host port)
+	 run-id test-name item-path logf))
+      (db:test-set-log! db run-id test-name item-path logf)))

@@ -39,6 +39,7 @@
 (define *passnum*     0) ;; when running track calls to run-tests or similar
 (define *verbosity*   1)
 (define *rpc:listener* #f) ;; if set up for server communication this will hold the tcp port
+(define *runremote*    #f) ;; if set up for server communication this will hold <host port>
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))
