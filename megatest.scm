@@ -19,6 +19,7 @@
 (declare (uses margs))
 (declare (uses runs))
 (declare (uses launch))
+(declare (uses server))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -92,6 +93,7 @@ Misc
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
   -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
+  -server                 : start the server (reduces contention on megatest.db)
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -178,6 +180,8 @@ Called as " (string-intersperse (argv) " ")))
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
+			"-server"
+
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -381,6 +385,16 @@ Called as " (string-intersperse (argv) " ")))
 		     (make-hash-table)))))
 
 ;;======================================================================
+;; Start the server
+;;======================================================================
+(if (args:get-arg "-server")
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (if db 
+	  (server:start db)
+	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
+
+;;;======================================================================
 ;; Rollup into a run
 ;;======================================================================
 (if (args:get-arg "-rollup")
@@ -543,7 +557,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (and state status)
-	      (teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
+	      (rdb:teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
@@ -606,7 +620,7 @@ Called as " (string-intersperse (argv) " ")))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
+		    (rdb:teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; close the db
 		    (sqlite3:finalize! db)
 		    ;; run the test step
@@ -628,7 +642,7 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  (test-set-log! db run-id test-name itemdat htmllogfile)))
-		    (teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
+		    (rdb:teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
 		    (sqlite3:finalize! db)
 		    (if (not (eq? exitstat 0))
 			(exit 254)) ;; (exit exitstat) doesn't work?!?

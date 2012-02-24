@@ -18,21 +18,26 @@
 
 (include "common_records.scm")
 
-;; Mostly worked = puts out all combinations?
-(define (process-itemlist-try1 curritemkey itemlist)
-  (let loop ((hed (car itemlist))
-	     (tal (cdr itemlist)))
-    (if (null? tal)
-	(for-each (lambda (item)
-		    (debug:print 6 "curritemkey: " (append curritemkey (list item))))
-		  (cadr hed))
-	(begin
+;; Puts out all combinations
+(define (process-itemlist hierdepth curritemkey itemlist)
+  (let ((res '()))
+    (if (not hierdepth)
+	(set! hierdepth (length itemlist)))
+    (let loop ((hed (car itemlist))
+	       (tal (cdr itemlist)))
+      (if (null? tal)
 	  (for-each (lambda (item)
-		      (process-itemlist (append curritemkey (list item)) tal))
+		      (if (> (length curritemkey) (- hierdepth 2))
+			  (set! res (append res (list (append curritemkey (list (list (car hed) item))))))))
 		    (cadr hed))
-	  (loop (car tal)(cdr tal))))))
+	  (begin
+	    (for-each (lambda (item)
+			(set! res (append res (process-itemlist hierdepth (append curritemkey (list (list (car hed) item))) tal))))
+		      (cadr hed))
+	    (loop (car tal)(cdr tal)))))
+    res))
 
-;; Mostly worked = puts out all combinations?
+;; Puts out all combinations
 (define (process-itemlist hierdepth curritemkey itemlist)
   (let ((res '()))
     (if (not hierdepth)

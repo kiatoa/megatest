@@ -19,6 +19,7 @@
 (declare (uses items))
 (declare (uses runconfig))
 (declare (uses tests))
+(declare (uses server))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -212,7 +213,7 @@
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
 	  (db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+	  (rdb:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     (if (not (null? test-names))

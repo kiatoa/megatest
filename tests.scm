@@ -13,7 +13,6 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-
 (define (register-test db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
@@ -371,24 +370,7 @@
 ;; test steps
 ;;======================================================================
 
-(define (teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
-  (debug:print 4 "run-id: " run-id " test-name: " test-name)
-  (let* ((state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in))
-	 (item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (debug:print 5 "testdat: " testdat)
-    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
-	     (or (not state)(not status)))
-	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if testdat
-	(let ((test-id (test:get-id testdat)))
-	  ;; FIXME - this should not update the logfile unless it is specified.
-	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
-			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile "")))
-	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
+;; teststep-set-status! used to be here
 
 (define (test-get-kill-request db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))

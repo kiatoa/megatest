@@ -29,7 +29,6 @@ db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
 
-
 $(OFILES) $(GOFILES) : common_records.scm 
 
 %.o : %.scm
