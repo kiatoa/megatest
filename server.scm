@@ -95,7 +95,7 @@
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
-	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
+	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" ipaddr:port)
 	       (sqlite3:finalize! db)))
     (thread-start! th1)
     (thread-join! th1))) ;; rpc:server)))
