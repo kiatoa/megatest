@@ -137,9 +137,10 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(db:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
+	(rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
 
-    ;; if status is "AUTO" then call rollup
+    ;; if status is "AUTO" then call rollup (note, this one modifies data in test
+    ;; run area, do not rpc it (yet)
     (if (and test-id state status (equal? status "AUTO")) 
 	(db:test-data-rollup db test-id status))
 
@@ -167,7 +168,7 @@
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
       (if (and value expected tol) ;; all three required
-	  (db:csv->test-data db test-id 
+	  (rdb:csv->test-data db test-id 
 			     (conc category ","
 				   variable ","
 				   value    ","
@@ -178,36 +179,12 @@
 				   type     ))))
 				   
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (if (and (not (equal? item-path ""))
-	     (or (equal? status "PASS")
-		 (equal? status "WARN")
-		 (equal? status "FAIL")
-		 (equal? status "WAIVED")
-		 (equal? status "RUNNING")))
-	(begin
-	  (sqlite3:execute 
-	   db
-	   "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-             WHERE run_id=? AND testname=? AND item_path='';"
-	   run-id test-name run-id test-name run-id test-name)
-	  (if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
-	      (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
-	      (sqlite3:execute
-	       db
-	       "UPDATE tests
-                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
-                          'RUNNING'
-                       ELSE 'COMPLETED' END,
-                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
-                       WHERE run_id=? AND testname=? AND item_path='';"
-	       run-id test-name run-id test-name))))
+    (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
-	(sqlite3:execute db "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-			 (if waived waived comment) run-id test-name item-path))
+	(rdb:test-set-comment db  run-id test-name item-path (if waived waived comment)))
     ))
 
 (define (test-set-log! db run-id test-name itemdat logf) 

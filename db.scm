@@ -483,11 +483,11 @@
     res))
 
 
-(define (db:test-set-comment db run-id testname item-path comment)
+(define (db:test-set-comment db run-id test-name item-path comment)
   (sqlite3:execute 
    db 
    "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-   comment run-id testname item-path))
+   comment run-id test-name item-path))
 
 ;;
 (define (db:test-set-rundir! db run-id testname item-path rundir)
@@ -589,6 +589,33 @@
    run-id
    testname
    item-path))
+
+(define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (if (and (not (equal? item-path ""))
+	   (or (equal? status "PASS")
+	       (equal? status "WARN")
+	       (equal? status "FAIL")
+	       (equal? status "WAIVED")
+	       (equal? status "RUNNING")))
+      (begin
+	(sqlite3:execute 
+	 db
+	 "UPDATE tests 
+             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+             WHERE run_id=? AND testname=? AND item_path='';"
+	 run-id test-name run-id test-name run-id test-name)
+	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
+	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
+	    (sqlite3:execute
+	     db
+	     "UPDATE tests
+                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
+                          'RUNNING'
+                       ELSE 'COMPLETED' END,
+                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
+                       WHERE run_id=? AND testname=? AND item_path='';"
+	     run-id test-name run-id test-name)))))
 
 
 ;;======================================================================
@@ -1057,3 +1084,27 @@
 	((rpc:procedure 'rdb:test-set-state-status-by-run-id-testname host port)
 	  run-id test-name item-path status state))
       (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
+
+(define (rdb:csv->test-data db test-id csvdata)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:csv->test-data host port)
+	 test-id csvdata))
+      (db:csv->test-data db test-id csvdata)))
+
+(define (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:roll-up-pass-fail-counts host port)
+	 run-id test-name item-path status))
+      (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
+
+(define (rdb:test-set-comment db run-id test-name item-path comment)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-set-comment host port)
+	 run-id test-name item-path comment))
+      (db:test-set-comment db run-id test-name item-path comment)))

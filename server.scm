@@ -70,6 +70,21 @@
      (lambda (run-id test-name item-path status state)
        (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
 
+    (rpc:publish-procedure!
+     'rdb:csv->test-data 
+     (lambda (test-id csvdata)
+       (db:csv->data db test-id csvdata)))
+
+    (rpc:publish-procedure!
+     'rdb:roll-up-pass-fail-counts
+     (lambda (run-id test-name item-path status)
+       (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
+
+    (rpc:publish-procedure!
+     'rdb:test-set-comment 
+     (lambda (run-id test-name item-path comment)
+       (db:test-set-comment db run-id test-name item-path comment)))
+
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
 	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
