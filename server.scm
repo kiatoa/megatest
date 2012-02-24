@@ -11,7 +11,7 @@
 (require-extension (srfi 18) extras tcp rpc)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit server))
@@ -35,12 +35,15 @@
 
 (define (server:start db)
   (debug:print 0 "Attempting to start the server ...")
-  (let* ((rpc:listener (server:find-free-port-and-open (rpc:default-server-port)))
-	 (th1          (make-thread
-			(cute (rpc:make-server rpc:listener) "rpc:server")
-			'rpc:server))
-	 (host:port    (conc (get-host-name) ":" (rpc:default-server-port))))
-    (db:set-var db "SERVER" host:port)
+  (let* ((rpc:listener   (server:find-free-port-and-open (rpc:default-server-port)))
+	 (th1            (make-thread
+			  (cute (rpc:make-server rpc:listener) "rpc:server")
+			  'rpc:server))
+	 (hostname       (get-host-name))
+	 (ipaddr         (hostname->ip hostname))
+	 (ipaddrstr      (string-intersperse (map number->string (u8vector->list ipaddr)) "."))
+	 (ipaddrstr:port (conc ipaddrstr ":" (rpc:default-server-port))))
+    (db:set-var db "SERVER" ipaddrstr:port)
     (rpc:publish-procedure! 
      'remote:run 
      (lambda (procstr . params)
