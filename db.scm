@@ -490,11 +490,15 @@
    comment run-id test-name item-path))
 
 ;;
-(define (db:test-set-rundir! db run-id testname item-path rundir)
+(define (db:test-set-rundir! db run-id test-name item-path rundir)
   (sqlite3:execute 
    db 
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
-   rundir run-id testname item-path))
+   rundir run-id test-name item-path))
+
+(define (db:test-set-log! db run-id test-name item-path logf)
+  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
+		   logf run-id test-name item-path))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -575,11 +579,10 @@
      qrystr)
     res))
 
-(define (db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree)
-  (if (not item-path)(begin (debug:print 0 "WARNING: ITEMPATH not set.")   (set! item-path "")))
-  ;; (let ((testinfo (db:get-test-info db run-id testname item-path)))
-  ;;   (if (and (not (equal? (db:test-get-status testinfo) "COMPLETED"))
-  ;;            (not (equal? (db:test-get-status testinfo) "KILLREQ"))
+(define (db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree)
+  (if (not item-path)
+      (begin (debug:print 0 "WARNING: ITEMPATH not set.")   
+	     (set! item-path "")))
   (sqlite3:execute
    db
    "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
@@ -587,7 +590,7 @@
    diskfree
    minutes
    run-id
-   testname
+   test-name
    item-path))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
@@ -1068,14 +1071,14 @@
 	   run-id test-name teststep-name state-in status-in item-path comment logfile))
 	(db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile))))
 
-(define (rdb:test-update-meta-info db run-id testname itemdat minutes cpuload diskfree tmpfree)
+(define (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
   (let ((item-path (item-list->path itemdat)))
     (if *runremote*
 	(let ((host (vector-ref *runremote* 0))
 	      (port (vector-ref *runremote* 1)))
 	  ((rpc:procedure 'rdb:test-update-meta-info host port)
-	   run-id testname itemdat minutes cpuload diskfree tmpfree))
-	(db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree))))
+	   run-id test-name item-path minutes cpuload diskfree tmpfree))
+	(db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree))))
 
 (define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (if *runremote*
@@ -1108,3 +1111,11 @@
 	((rpc:procedure 'rdb:test-set-comment host port)
 	 run-id test-name item-path comment))
       (db:test-set-comment db run-id test-name item-path comment)))
+
+(define (rdb:test-set-log! db run-id test-name item-path logf)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rpc:test-set-log! host port)
+	 run-id test-name item-path logf))
+      (db:test-set-log! db run-id test-name item-path logf)))

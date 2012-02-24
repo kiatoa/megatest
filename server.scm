@@ -84,6 +84,11 @@
      'rdb:test-set-comment 
      (lambda (run-id test-name item-path comment)
        (db:test-set-comment db run-id test-name item-path comment)))
+    
+    (rpc:publish-procedure!
+     'rpc:test-set-log!
+     (lambda (run-id test-name item-path logf)
+       (db:test-set-log! db run-id test-name item-path logf)))
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
