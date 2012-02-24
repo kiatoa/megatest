@@ -33,17 +33,20 @@
        (apply (eval (string->symbol (conc "remote:" procstr))) params)
        (eval (string->symbol procstr) params))))
 
-(define (server:start db)
+(define (server:start db hostn)
   (debug:print 0 "Attempting to start the server ...")
   (let* ((rpc:listener   (server:find-free-port-and-open (rpc:default-server-port)))
 	 (th1            (make-thread
 			  (cute (rpc:make-server rpc:listener) "rpc:server")
 			  'rpc:server))
-	 (hostname       (get-host-name))
-	 (ipaddr         (hostname->ip hostname))
-	 (ipaddrstr      (string-intersperse (map number->string (u8vector->list ipaddr)) "."))
-	 (ipaddrstr:port (conc ipaddrstr ":" (rpc:default-server-port))))
-    (db:set-var db "SERVER" ipaddrstr:port)
+	 (hostname       (if (string=? "-" hostn)
+			     (get-host-name) 
+			     hostn))
+	 (ipaddrstr      (if (string=? "-" hostn)
+			     (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+			     #f))
+	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
+    (db:set-var db "SERVER" host:port)
     (rpc:publish-procedure! 
      'remote:run 
      (lambda (procstr . params)
@@ -95,7 +98,7 @@
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
-	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" ipaddrstr:port)
+	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
 	       (sqlite3:finalize! db)))
     (thread-start! th1)
     (thread-join! th1))) ;; rpc:server)))

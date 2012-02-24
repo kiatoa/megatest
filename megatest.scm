@@ -93,7 +93,8 @@ Misc
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
   -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
-  -server                 : start the server (reduces contention on megatest.db)
+  -server -|hostname      : start the server (reduces contention on megatest.db), use
+                            - to automatically figure out hostname
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -153,6 +154,7 @@ Called as " (string-intersperse (argv) " ")))
 			":tol"
 			":units"
 			;; misc
+			"-server"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -180,7 +182,6 @@ Called as " (string-intersperse (argv) " ")))
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
-			"-server"
 
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -391,7 +392,7 @@ Called as " (string-intersperse (argv) " ")))
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
       (if db 
-	  (server:start db)
+	  (server:start db (args:get-arg "-server"))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;;======================================================================
