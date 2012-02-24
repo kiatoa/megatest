@@ -249,7 +249,7 @@
 ;;
 ;;======================================================================
 (define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (db:get-test-data-by-id db test-id))
+  (let* ((testdat       (rdb:get-test-data-by-id db test-id))
 	 (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	 (keydat        (if testdat (keys:get-key-val-pairs db run-id) #f))
 	 (rundat        (if testdat (db:get-run-info db run-id) #f))

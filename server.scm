@@ -11,7 +11,8 @@
 (require-extension (srfi 18) extras tcp rpc)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+;; (use hostinfo)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit server))
@@ -95,6 +96,11 @@
      'rpc:test-set-log!
      (lambda (run-id test-name item-path logf)
        (db:test-set-log! db run-id test-name item-path logf)))
+    
+    (rpc:publish-procedure!
+     'rpc:get-test-data-by-id
+     (lambda (test-id)
+       (db:get-test-data-by-id db test-id)))
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()

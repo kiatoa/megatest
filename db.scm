@@ -1119,3 +1119,11 @@
 	((rpc:procedure 'rpc:test-set-log! host port)
 	 run-id test-name item-path logf))
       (db:test-set-log! db run-id test-name item-path logf)))
+
+(define (rdb:get-test-data-by-id db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rpc:get-test-data-by-id host port)
+	 test-id))
+      (db:get-test-data-by-id db test-id)))
