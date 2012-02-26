@@ -182,6 +182,11 @@
      (lambda (run-id testname item-path)
        (db:get-test-info db  run-id testname item-path)))
 
+    (rpc:publish-procedure!
+     'rdb:delete-test-records
+     (lambda (test-id)
+       (db:delete-test-records db test-id)))
+
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
 	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)

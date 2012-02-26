@@ -287,7 +287,7 @@ Called as " (string-intersperse (argv) " ")))
 		"/"
 		(db:get-value-by-header run header "runname"))
 	 (let ((run-id (db:get-value-by-header run header "id")))
-	   (let ((tests (db-get-tests-for-run db run-id testpatt itempatt '() '())))
+	   (let ((tests (rdb:get-tests-for-run db run-id testpatt itempatt '() '())))
 	     ;; Each test
 	     (for-each 
 	      (lambda (test)

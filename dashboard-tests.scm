@@ -249,228 +249,232 @@
 ;;
 ;;======================================================================
 (define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (db:get-test-data-by-id db test-id))
-	 (run-id        (if testdat (db:test-get-run_id testdat) #f))
-	 (keydat        (if testdat (rdb:get-key-val-pairs db run-id) #f))
-	 (rundat        (if testdat (rdb:get-run-info db run-id) #f))
-	 (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
-							    (db:get-header rundat)
-							    "runname") #f))
-	 ;(teststeps     (if testdat (db:get-steps-for-test db test-id) #f))
-	 (logfile       "/this/dir/better/not/exist")
-	 (rundir        logfile)
-	 (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
-	 (testname      (if testdat (db:test-get-testname testdat) "n/a"))
-	 (testmeta      (if testdat 
-			    (let ((tm (rdb:testmeta-get-record db testname)))
-			      (if tm tm (make-db:testmeta)))
-			    (make-db:testmeta)))
+  (let* ((testdat       (db:get-test-data-by-id db test-id)))
+    (if (not testdat)
+	(begin
+	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
+	  (exit 1))
+	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
+	       (keydat        (if testdat (rdb:get-key-val-pairs db run-id) #f))
+	       (rundat        (if testdat (rdb:get-run-info db run-id) #f))
+	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
+								  (db:get-header rundat)
+								  "runname") #f))
+					;(teststeps     (if testdat (db:get-steps-for-test db test-id) #f))
+	       (logfile       "/this/dir/better/not/exist")
+	       (rundir        logfile)
+	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
+	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
+	       (testmeta      (if testdat 
+				  (let ((tm (rdb:testmeta-get-record db testname)))
+				    (if tm tm (make-db:testmeta)))
+				  (make-db:testmeta)))
 
-	 (keystring  (string-intersperse 
-		      (map (lambda (keyval)
-			     ;; (conc ":" (car keyval) " " (cadr keyval)))
-			     (cadr keyval))
-			   keydat)
-		      "/"))
-	 (item-path  (db:test-get-item-path testdat))
-	 (viewlog    (lambda (x)
-		       (if (file-exists? logfile)
-			   ;(system (conc "firefox " logfile "&"))
-			   (iup:send-url logfile)
-			   (message-window (conc "File " logfile " not found")))))
-	 (xterm      (lambda (x)
-		       (if (directory-exists? rundir)
-			   (let ((shell (if (get-environment-variable "SHELL") 
-					    (conc "-e " (get-environment-variable "SHELL"))
-					    "")))
-			     (system (conc "cd " rundir 
-					   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
-			   (message-window  (conc "Directory " rundir " not found")))))
-	 (refreshdat (lambda ()
-		       (let ((newtestdat (rdb:get-test-data-by-id db test-id)))
-			 (if newtestdat 
-			     (begin
-			       ;(mutex-lock! mx1)
-			       (set! testdat newtestdat)
-			       (set! teststeps    (rdb:get-steps-for-test db test-id))
-			       (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
-			       (set! rundir       (db:test-get-rundir testdat))
-			       (set! testfullname (db:test-get-fullname testdat))
-			       ;(mutex-unlock! mx1)
-			       )
-			     (begin
-			       (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
-	 (widgets      (make-hash-table))
-	 (meta-widgets (make-hash-table))
-	 (self         #f)
-	 (store-label  (lambda (name lbl cmd)
-			 (hash-table-set! widgets name 
-					  (lambda (testdat)
-					    (let ((newval (cmd testdat))
-						  (oldval (iup:attribute lbl "TITLE")))
-					      (if (not (equal? newval oldval))
-						  (begin
-						    ;(mutex-lock! mx1)
-						    (iup:attribute-set! lbl "TITLE" newval)
-						    ;(mutex-unlock! mx1)
-						    )))))
-			 lbl))
-	 (store-meta  (lambda (name lbl cmd)
-			 (hash-table-set! meta-widgets name 
-					  (lambda (testmeta)
-					    (let ((newval (cmd testmeta))
-						  (oldval (iup:attribute lbl "TITLE")))
-					      (if (not (equal? newval oldval))
-						  (begin
-						    ;(mutex-lock! mx1)
-						    (iup:attribute-set! lbl "TITLE" newval)
-						    ;(mutex-unlock! mx1)
-						    )))))
-			 lbl))
-	 (store-button store-label)
-	 (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
-	 (command-launch-button (iup:button "Execute!" #:action (lambda (x)
-								  (let ((cmd (iup:attribute command-text-box "VALUE")))
-								    (system (conc cmd "  &"))))))
-	 (run-test  (lambda (x)
-		      (iup:attribute-set! 
-		       command-text-box "VALUE"
-		       (conc "megatest -runtests " testname " -target " keystring " :runname " runname 
-			     " -itempatt " (if (equal? item-path "")
-					       "%" 
-					       item-path)
-			     "" ))))
-	 (remove-test (lambda (x)
-			(iup:attribute-set!
-			 command-text-box "VALUE"
-			 (conc "megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
-			       (if (equal? item-path "")
-				   "%"
-				   item-path)
-			       " -v ")))))
-    (cond
-     ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
-     ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
-     (else
-      ;;  (test-set-status! db run-id test-name state status itemdat)
-      (set! self ; 
-	    (iup:dialog #:close_cb (lambda (a)(exit)) ; #:expand "YES"
-	     #:title testfullname
-	     (iup:vbox ; #:expand "YES"
-               ;; The run and test info
-	       (iup:hbox  ; #:expand "YES"
-		(run-info-panel keydat testdat runname)
-		(test-info-panel testdat store-label widgets)
-		(test-meta-panel testmeta store-meta))
-	       (host-info-panel testdat store-label)
-	       ;; The controls
-	       (iup:frame #:title "Actions" 
-			  (iup:vbox
-			   (iup:hbox 
-			    (iup:button "View Log"    #:action viewlog     #:size "80x")
-			    (iup:button "Start Xterm" #:action xterm       #:size "80x")
-			    (iup:button "Run Test"    #:action run-test    #:size "80x")
-			    (iup:button "Clean Test"  #:action remove-test #:size "80x")
-			    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "80x"))
-			   (apply 
-			    iup:hbox
-			    (list command-text-box command-launch-button))))
-	       (set-fields-panel test-id testdat)
-	       (iup:hbox
-		(iup:frame 
-		 #:title "Test Steps"
-		 (let ((stepsdat ;;(iup:label "Test steps ........................................." 
-			;;	   #:expand "YES" 
-			;;	   #:size "200x150"
-			;;	   #:alignment "ALEFT:ATOP")))
-			(iup:textbox ;; #:action (lambda (obj char val)
-				     ;;    	#f)
-				     #:expand "YES"
-				     #:multiline "YES"
-				     #:font "Courier New, -10"
-				     #:size "60x100")))
-		   (hash-table-set! widgets "Test Steps" 
-				    (lambda (testdat)
-				      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
-					     (fmtstr  "~20a~10a~10a~12a~15a~20a")
-					     (comprsteps (rdb:get-steps-table db test-id))
-					     (newval  (string-intersperse 
-						       (append
-							(list 
-							 (format #f fmtstr "Stepname" "Start" "End" "Status" "Time" "Logfile")
-							 (format #f fmtstr "========" "=====" "===" "======" "====" "======="))
-							(map (lambda (x)
-							       ;; take advantage of the \n on time->string
-							       (format #f fmtstr
-								       (vector-ref x 0)
-								       (let ((s (vector-ref x 1)))
-									 (if (number? s)(seconds->time-string s) s))
-								       (let ((s (vector-ref x 2)))
-									 (if (number? s)(seconds->time-string s) s))
-								       (vector-ref x 3)    ;; status
-								       (vector-ref x 4)
-								       (vector-ref x 5)))  ;; time delta
-							     (sort (hash-table-values comprsteps)
-								   (lambda (a b)
-								     (let ((time-a (vector-ref a 1))
-									   (time-b (vector-ref b 1)))
-								     (if (and (number? time-a)(number? time-b))
-									 (< time-a time-b)
-									 #t))))))
-						       "\n")))
-					(if (not (equal? currval newval))
-					    (iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
-		   stepsdat))
-		;; populate the Test Data panel
-		(iup:frame
-		 #:title "Test Data"
-		 (let ((test-data
-			(iup:textbox  ;; #:action (lambda (obj char val)
-				      ;;   	#f)
-				      #:expand "YES"
-				      #:multiline "YES"
-				      #:font "Courier New, -10"
-				      #:size "100x100")))
-		   (hash-table-set! widgets "Test Data"
-				    (lambda (testdat) ;; 
-				      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
-					     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
-					     (newval  (string-intersperse 
-						       (append
-							(list 
-							 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Type" "Comment")
-							 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "====" "======="))
-							(map (lambda (x)
-							       (format #f fmtstr
-								       (db:test-data-get-category x)
-								       (db:test-data-get-variable x)
-								       (db:test-data-get-value    x)
-								       (db:test-data-get-expected x)
-								       (db:test-data-get-tol      x)
-								       (db:test-data-get-status   x)
-								       (db:test-data-get-units    x)
-								       (db:test-data-get-type     x)
-								       (db:test-data-get-comment  x)))
-							     (db:read-test-data db test-id "%")))
-						       "\n")))
-					(if (not (equal? currval newval))
-					    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
-		   test-data)))
-		)))
-      (iup:show self)
-      (iup:callback-set! *tim* "ACTION_CB"
-			 (lambda (x)
-			   ;; Now start keeping the gui updated from the db
-			   (refreshdat) ;; update from the db here
+	       (keystring  (string-intersperse 
+			    (map (lambda (keyval)
+				   ;; (conc ":" (car keyval) " " (cadr keyval)))
+				   (cadr keyval))
+				 keydat)
+			    "/"))
+	       (item-path  (db:test-get-item-path testdat))
+	       (viewlog    (lambda (x)
+			     (if (file-exists? logfile)
+					;(system (conc "firefox " logfile "&"))
+				 (iup:send-url logfile)
+				 (message-window (conc "File " logfile " not found")))))
+	       (xterm      (lambda (x)
+			     (if (directory-exists? rundir)
+				 (let ((shell (if (get-environment-variable "SHELL") 
+						  (conc "-e " (get-environment-variable "SHELL"))
+						  "")))
+				   (system (conc "cd " rundir 
+						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+				 (message-window  (conc "Directory " rundir " not found")))))
+	       (refreshdat (lambda ()
+			     (let ((newtestdat (rdb:get-test-data-by-id db test-id)))
+			       (if newtestdat 
+				   (begin
+					;(mutex-lock! mx1)
+				     (set! testdat newtestdat)
+				     (set! teststeps    (rdb:get-steps-for-test db test-id))
+				     (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
+				     (set! rundir       (db:test-get-rundir testdat))
+				     (set! testfullname (db:test-get-fullname testdat))
+					;(mutex-unlock! mx1)
+				     )
+				   (begin
+				     (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
+	       (widgets      (make-hash-table))
+	       (meta-widgets (make-hash-table))
+	       (self         #f)
+	       (store-label  (lambda (name lbl cmd)
+			       (hash-table-set! widgets name 
+						(lambda (testdat)
+						  (let ((newval (cmd testdat))
+							(oldval (iup:attribute lbl "TITLE")))
+						    (if (not (equal? newval oldval))
+							(begin
+					;(mutex-lock! mx1)
+							  (iup:attribute-set! lbl "TITLE" newval)
+					;(mutex-unlock! mx1)
+							  )))))
+			       lbl))
+	       (store-meta  (lambda (name lbl cmd)
+			      (hash-table-set! meta-widgets name 
+					       (lambda (testmeta)
+						 (let ((newval (cmd testmeta))
+						       (oldval (iup:attribute lbl "TITLE")))
+						   (if (not (equal? newval oldval))
+						       (begin
+					;(mutex-lock! mx1)
+							 (iup:attribute-set! lbl "TITLE" newval)
+					;(mutex-unlock! mx1)
+							 )))))
+			      lbl))
+	       (store-button store-label)
+	       (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
+	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
+									(let ((cmd (iup:attribute command-text-box "VALUE")))
+									  (system (conc cmd "  &"))))))
+	       (run-test  (lambda (x)
+			    (iup:attribute-set! 
+			     command-text-box "VALUE"
+			     (conc "megatest -runtests " testname " -target " keystring " :runname " runname 
+				   " -itempatt " (if (equal? item-path "")
+						     "%" 
+						     item-path)
+				   "" ))))
+	       (remove-test (lambda (x)
+			      (iup:attribute-set!
+			       command-text-box "VALUE"
+			       (conc "megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
+				     (if (equal? item-path "")
+					 "%"
+					 item-path)
+				     " -v ")))))
+	  (cond
+	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
+	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
+	   (else
+	    ;;  (test-set-status! db run-id test-name state status itemdat)
+	    (set! self ; 
+		  (iup:dialog #:close_cb (lambda (a)(exit)) ; #:expand "YES"
+			      #:title testfullname
+			      (iup:vbox ; #:expand "YES"
+			       ;; The run and test info
+			       (iup:hbox  ; #:expand "YES"
+				(run-info-panel keydat testdat runname)
+				(test-info-panel testdat store-label widgets)
+				(test-meta-panel testmeta store-meta))
+			       (host-info-panel testdat store-label)
+			       ;; The controls
+			       (iup:frame #:title "Actions" 
+					  (iup:vbox
+					   (iup:hbox 
+					    (iup:button "View Log"    #:action viewlog     #:size "80x")
+					    (iup:button "Start Xterm" #:action xterm       #:size "80x")
+					    (iup:button "Run Test"    #:action run-test    #:size "80x")
+					    (iup:button "Clean Test"  #:action remove-test #:size "80x")
+					    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "80x"))
+					   (apply 
+					    iup:hbox
+					    (list command-text-box command-launch-button))))
+			       (set-fields-panel test-id testdat)
+			       (iup:hbox
+				(iup:frame 
+				 #:title "Test Steps"
+				 (let ((stepsdat ;;(iup:label "Test steps ........................................." 
+					;;	   #:expand "YES" 
+					;;	   #:size "200x150"
+					;;	   #:alignment "ALEFT:ATOP")))
+					(iup:textbox ;; #:action (lambda (obj char val)
+					 ;;    	#f)
+					 #:expand "YES"
+					 #:multiline "YES"
+					 #:font "Courier New, -10"
+					 #:size "60x100")))
+				   (hash-table-set! widgets "Test Steps" 
+						    (lambda (testdat)
+						      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
+							     (fmtstr  "~20a~10a~10a~12a~15a~20a")
+							     (comprsteps (rdb:get-steps-table db test-id))
+							     (newval  (string-intersperse 
+								       (append
+									(list 
+									 (format #f fmtstr "Stepname" "Start" "End" "Status" "Time" "Logfile")
+									 (format #f fmtstr "========" "=====" "===" "======" "====" "======="))
+									(map (lambda (x)
+									       ;; take advantage of the \n on time->string
+									       (format #f fmtstr
+										       (vector-ref x 0)
+										       (let ((s (vector-ref x 1)))
+											 (if (number? s)(seconds->time-string s) s))
+										       (let ((s (vector-ref x 2)))
+											 (if (number? s)(seconds->time-string s) s))
+										       (vector-ref x 3)    ;; status
+										       (vector-ref x 4)
+										       (vector-ref x 5)))  ;; time delta
+									     (sort (hash-table-values comprsteps)
+										   (lambda (a b)
+										     (let ((time-a (vector-ref a 1))
+											   (time-b (vector-ref b 1)))
+										       (if (and (number? time-a)(number? time-b))
+											   (< time-a time-b)
+											   #t))))))
+								       "\n")))
+							(if (not (equal? currval newval))
+							    (iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
+				   stepsdat))
+				;; populate the Test Data panel
+				(iup:frame
+				 #:title "Test Data"
+				 (let ((test-data
+					(iup:textbox  ;; #:action (lambda (obj char val)
+					 ;;   	#f)
+					 #:expand "YES"
+					 #:multiline "YES"
+					 #:font "Courier New, -10"
+					 #:size "100x100")))
+				   (hash-table-set! widgets "Test Data"
+						    (lambda (testdat) ;; 
+						      (let* ((currval (iup:attribute test-data "VALUE")) ;; "TITLE"))
+							     (fmtstr  "~10a~10a~10a~10a~7a~7a~6a~6a~a") ;; category,variable,value,expected,tol,units,type,comment
+							     (newval  (string-intersperse 
+								       (append
+									(list 
+									 (format #f fmtstr "Category" "Variable" "Value" "Expected" "Tol" "Status" "Units" "Type" "Comment")
+									 (format #f fmtstr "========" "========" "=====" "========" "===" "======" "=====" "====" "======="))
+									(map (lambda (x)
+									       (format #f fmtstr
+										       (db:test-data-get-category x)
+										       (db:test-data-get-variable x)
+										       (db:test-data-get-value    x)
+										       (db:test-data-get-expected x)
+										       (db:test-data-get-tol      x)
+										       (db:test-data-get-status   x)
+										       (db:test-data-get-units    x)
+										       (db:test-data-get-type     x)
+										       (db:test-data-get-comment  x)))
+									     (db:read-test-data db test-id "%")))
+								       "\n")))
+							(if (not (equal? currval newval))
+							    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
+				   test-data)))
+			       )))
+	    (iup:show self)
+	    (iup:callback-set! *tim* "ACTION_CB"
+			       (lambda (x)
+				 ;; Now start keeping the gui updated from the db
+				 (refreshdat) ;; update from the db here
 					;(thread-suspend! other-thread)
-			   ;; update the gui elements here
-			   (for-each 
-			    (lambda (key)
-			      ;; (print "Updating " key)
-			      ((hash-table-ref widgets key) testdat))
-			    (hash-table-keys widgets))
-			   (update-state-status-buttons testdat)
+				 ;; update the gui elements here
+				 (for-each 
+				  (lambda (key)
+				    ;; (print "Updating " key)
+				    ((hash-table-ref widgets key) testdat))
+				  (hash-table-keys widgets))
+				 (update-state-status-buttons testdat)
 					; (iup:refresh self)
-			   (if *exit-started*
-			       (set! *exit-started* 'ok))))))))
+				 (if *exit-started*
+				     (set! *exit-started* 'ok))))))))))
 

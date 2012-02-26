@@ -1209,21 +1209,21 @@
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:get-run-info host port) run-id))
-      (db:get-run-info run-id)))
+      (db:get-run-info db run-id)))
 
 (define (rdb:get-steps-for-test db test-id)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:get-steps-for-test host port) test-id))
-      (db:get-steps-for-test test-id)))
+      (db:get-steps-for-test db test-id)))
 
 (define (rdb:get-steps-table db test-id)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:get-steps-table host port) test-id))
-      (db:get-steps-table test-id)))
+      (db:get-steps-table db test-id)))
 
 (define (rdb:read-test-data db test-id categorypatt)
   (if *runremote*
@@ -1238,3 +1238,10 @@
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:get-test-info host port) run-id testname item-path))
       (db:get-test-info db run-id testname item-path)))
+
+(define (rdb:delete-test-records db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:delete-test-records host port) test-id))
+      (db:delete-test-records db test-id)))
