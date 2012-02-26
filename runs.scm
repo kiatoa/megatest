@@ -404,7 +404,7 @@
 	  (begin
 	    ;; ensure that the path exists before registering the test
 	    (system (conc "mkdir -p " new-test-path))
-	    (register-test db run-id test-name item-path)
+	    (rtests:register-test db run-id test-name item-path)
 	    (set! testdat (rdb:get-test-info db run-id test-name item-path))))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
@@ -584,6 +584,8 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(set! db   (open-db))
+	(if (not (args:get-arg "-server"))
+	    (server:client-setup db))
 	(set! keys (rdb:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")

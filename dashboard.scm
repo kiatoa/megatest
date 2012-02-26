@@ -78,6 +78,7 @@ Misc
       (exit 1)))
 
 (define *db* (open-db))
+(server:client-setup *db*)
 
 (define toplevel #f)
 (define dlg      #f)

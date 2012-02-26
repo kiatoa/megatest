@@ -92,6 +92,8 @@
 		(exit 1)))
 	  ;; now can find our db
 	  (set! db (open-db))
+	  (if (not (args:get-arg "-server"))
+	      (server:client-setup db))
 	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 	  (set-run-config-vars db run-id)
@@ -148,6 +150,8 @@
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
 					    (db         (open-db)))
+				       (if (not (args:get-arg "-server"))
+					   (server:client-setup db))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -246,6 +250,8 @@
 					    (cpuload  (get-cpu-load))
 					    (diskfree (get-df (current-directory)))
 					    (tmpfree  (get-df "/tmp")))
+				       (if (not (args:get-arg "-server"))
+					   (server:client-setup db))
 				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
@@ -289,6 +295,8 @@
 	    (thread-join! th2)
 	    (mutex-lock! m)
 	    (set! db (open-db))
+	    (if (not (args:get-arg "-server"))
+		(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (db:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))

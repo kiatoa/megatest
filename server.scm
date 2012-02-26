@@ -18,6 +18,7 @@
 
 (declare (uses common))
 (declare (uses db))
+(declare (uses tests))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -187,6 +188,11 @@
      (lambda (test-id)
        (db:delete-test-records db test-id)))
 
+    (rpc:publish-procedure!
+     'rtests:register-test
+     (lambda (run-id test-name item-path)
+       (tests:register-test db run-id test-name item-path)))
+
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
 	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
@@ -204,26 +210,28 @@
    (tcp-listen (rpc:default-server-port))))
 
 (define (server:client-setup db)
-  (let* ((hostinfo (db:get-var db "SERVER"))
-	 (hostdat  (if hostinfo (string-split hostinfo ":")))
-	 (host     (if hostinfo (car hostdat)))
-	 (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
-    (if (and port
-	     (string->number port))
-	(let ((portn (string->number port)))
-	  (debug:print 2 "INFO: Setting up to connect to host " host ":" port)
-	 (handle-exceptions
-	  exn
-	  (begin
-	    (print "Exception: " exn)
-	    (set! *runremote* #f))
-	   (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-		    ((rpc:procedure 'serve:login host portn) *toppath*))
+  (if *runremote*
+      (debug:print 0 "ERROR: Attempt to connect to server but already connected")
+      (let* ((hostinfo (db:get-var db "SERVER"))
+	     (hostdat  (if hostinfo (string-split hostinfo ":")))
+	     (host     (if hostinfo (car hostdat)))
+	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
+	(if (and port
+		 (string->number port))
+	    (let ((portn (string->number port)))
+	      (debug:print 2 "INFO: Setting up to connect to host " host ":" port)
+	      (handle-exceptions
+	       exn
 	       (begin
-		 (debug:print 2 "INFO: Connected to " host ":" port)
-		 (set! *runremote* (vector host portn)))
-	       (begin
-		 (debug:print 2 "INFO: Failed to connect to " host ":" port)
-		 (set! *runremote* #f)))))
-	(debug:print 2 "INFO: no server available"))))
+		 (print "Exception: " exn)
+		 (set! *runremote* #f))
+	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
+			((rpc:procedure 'serve:login host portn) *toppath*))
+		   (begin
+		     (debug:print 2 "INFO: Connected to " host ":" port)
+		     (set! *runremote* (vector host portn)))
+		   (begin
+		     (debug:print 2 "INFO: Failed to connect to " host ":" port)
+		     (set! *runremote* #f)))))
+	    (debug:print 2 "INFO: no server available")))))
 

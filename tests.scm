@@ -1,5 +1,6 @@
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp rpc)
 (import (prefix sqlite3 sqlite3:))
+(import (prefix rpc rpc:))
 
 (declare (unit tests))
 (declare (uses db))
@@ -13,7 +14,7 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (register-test db run-id test-name item-path)
+(define (tests:register-test db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
@@ -379,3 +380,14 @@
 
 (define (test:archive-tests db keynames target)
   #f)
+
+;;======================================================================
+;; R P C
+;;======================================================================
+
+(define (rtests:register-test db run-id test-name item-path)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rtests:register-test host port) run-id test-name item-path))
+      (tests:register-test db run-id test-name item-path)))

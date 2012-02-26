@@ -37,8 +37,6 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (if (not (args:get-arg "-server"))
-	(server:client-setup db))
     db))
 
 (define (db:initialize db)
