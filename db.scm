@@ -657,15 +657,18 @@
     (if (> (length data) 0)
 	(debug:print 4 "Writing cached data " data))
     (mutex-lock! *incoming-mutex*)
-    (for-each (lambda (entry)
-		(case (vector-ref entry 0)
-		  ((meta-info)
-		   (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-		  ((step-status)
-		   (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-		  (else
-		   (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-	      data)
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (for-each (lambda (entry)
+		   (case (vector-ref entry 0)
+		     ((meta-info)
+		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+		     ((step-status)
+		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+		     (else
+		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+		 data)))
     (set! *incoming-data* '())
     (mutex-unlock! *incoming-mutex*)
     (sqlite3:finalize! meta-stmt)
