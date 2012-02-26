@@ -49,6 +49,7 @@
 			     #f))
 	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
     (db:set-var db "SERVER" host:port)
+    (set! *cache-on* #t)
 
     ;; can use this to run most anything at the remote
     (rpc:publish-procedure! 
