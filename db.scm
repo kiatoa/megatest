@@ -34,6 +34,7 @@
 (define *incoming-data*      '())
 (define *incoming-last-time* (current-seconds))
 (define *incoming-mutex*     (make-mutex))
+(define *cache-on* #f)
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
@@ -646,13 +647,15 @@
 					    test-name
 					    item-path)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*))
+  (mutex-unlock! *incoming-mutex*)
+  (if (not *cache-on*)(db:write-cached-data db)))
 
 (define (db:write-cached-data db)
   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-    (debug:print 0 "Writing cached data " data)
+    ;(if (> (length data) 0)
+(debug:print 0 "Writing cached data " data);)
     (mutex-lock! *incoming-mutex*)
     (for-each (lambda (entry)
 		(case (vector-ref entry 0)
@@ -973,9 +976,10 @@
 	(let ((test-id (test:get-id testdat)))
 	  (mutex-lock! *incoming-mutex*)
 	  (set! *incoming-data* (cons (vector 'step-status
-				      (current-seconds)
-				      ;; FIXME - this should not update the logfile unless it is specified.
-				      (list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))))
+					      (current-seconds)
+					      ;; FIXME - this should not update the logfile unless it is specified.
+					      (list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+				      *incoming-data*))
 	  (mutex-unlock! *incoming-mutex*)
 	  #t)
 	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
