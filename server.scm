@@ -40,6 +40,7 @@
 	 (th1            (make-thread
 			  (cute (rpc:make-server rpc:listener) "rpc:server")
 			  'rpc:server))
+	 (th2            (make-thread (lambda ()(db:updater db))))
 	 (hostname       (if (string=? "-" hostn)
 			     (get-host-name) 
 			     hostn))
@@ -98,6 +99,11 @@
      'rdb:test-set-log!
      (lambda (run-id test-name item-path logf)
        (db:test-set-log! db run-id test-name item-path logf)))
+    
+    (rpc:publish-procedure!
+     'rpc:get-test-data-by-id
+     (lambda (test-id)
+       (db:get-test-data-by-id db test-id)))
 
     (rpc:publish-procedure!
      'serve:get-toppath
@@ -198,7 +204,8 @@
 	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
 	       (sqlite3:finalize! db)))
     (thread-start! th1)
-    (thread-join! th1))) ;; rpc:server)))
+    (thread-start! th2)
+    (thread-join!  th2))) ;; rpc:server)))
 
 (define (server:find-free-port-and-open port)
   (handle-exceptions

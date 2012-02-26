@@ -29,6 +29,12 @@
 (include "key_records.scm")
 (include "run_records.scm")
 
+;; timestamp type (val1 val2 ...)
+;; type: meta-info, step
+(define *incoming-data*      '())
+(define *incoming-last-time* (current-seconds))
+(define *incoming-mutex*     (make-mutex))
+
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
@@ -616,19 +622,51 @@
      qrystr)
     res))
 
+;;======================================================================
+;; QUEUE UP META, TEST STATUS AND STEPS
+;;======================================================================
+
+(define (db:updater db)
+  (let loop ((start-time (current-time)))
+    (thread-sleep! (+ 2 (random 10))) ;; move save time around to minimize regular collisions
+    (db:write-cached-data db)
+    (loop start-time)))
+    
 (define (db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree)
   (if (not item-path)
       (begin (debug:print 0 "WARNING: ITEMPATH not set.")   
 	     (set! item-path "")))
-  (sqlite3:execute
-   db
-   "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"
-   cpuload
-   diskfree
-   minutes
-   run-id
-   test-name
-   item-path))
+  (mutex-lock! *incoming-mutex*)
+  (set! *incoming-data* (cons (vector 'meta-info
+				      (current-seconds)
+				      (list cpuload
+					    diskfree
+					    minutes
+					    run-id
+					    test-name
+					    item-path)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+			      *incoming-data*))
+  (mutex-unlock! *incoming-mutex*))
+
+(define (db:write-cached-data db)
+  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
+    (debug:print 0 "Writing cached data " data)
+    (mutex-lock! *incoming-mutex*)
+    (for-each (lambda (entry)
+		(case (vector-ref entry 0)
+		  ((meta-info)
+		   (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+		  ((step-status)
+		   (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+		  (else
+		   (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+	      data)
+    (set! *incoming-data* '())
+    (mutex-unlock! *incoming-mutex*)
+    (sqlite3:finalize! meta-stmt)
+    (sqlite3:finalize! step-stmt)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -933,11 +971,13 @@
 	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
     (if testdat
 	(let ((test-id (test:get-id testdat)))
-	  ;; FIXME - this should not update the logfile unless it is specified.
-	  (sqlite3:execute db 
-			"INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,strftime('%s','now'),?,?);"
-			test-id teststep-name state-in status-in (if comment comment "") (if logfile logfile ""))
-	  #t) ;; fake out a #t - could be execute is returning something complicated
+	  (mutex-lock! *incoming-mutex*)
+	  (set! *incoming-data* (cons (vector 'step-status
+				      (current-seconds)
+				      ;; FIXME - this should not update the logfile unless it is specified.
+				      (list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))))
+	  (mutex-unlock! *incoming-mutex*)
+	  #t)
 	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
 
 ;;======================================================================
@@ -1152,6 +1192,14 @@
 	  run-id testpatt itempatt states statuses))
       (db:get-tests-for-run db run-id testpatt itempatt states statuses)))
 
+(define (rdb:get-test-data-by-id db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rpc:get-test-data-by-id host port)
+	 test-id))
+      (db:get-test-data-by-id db test-id)))
+      
 (define (rdb:get-keys db)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))

@@ -249,7 +249,7 @@
 ;;
 ;;======================================================================
 (define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (db:get-test-data-by-id db test-id)))
+  (let* ((testdat       (rdb:get-test-data-by-id db test-id)))
     (if (not testdat)
 	(begin
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")

@@ -78,12 +78,13 @@ Misc
       (exit 1)))
 
 (define *db* (open-db))
-(server:client-setup *db*)
+;; (server:client-setup *db*)
 
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
 (define *keys*   (rdb:get-keys   *db*))
+(define *keys*   (db:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
 (define *header*       #f)
@@ -93,6 +94,7 @@ Misc
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
 (define *tot-run-count* (rdb:get-num-runs *db* "%"))
+(define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
 (define *start-run-offset*  0)
