@@ -59,16 +59,6 @@
      runnamepatt)
     (vector header res)))
 
-;; ;; TODO: Converge this with db:get-test-info
-;; (define (runs:get-test-info db run-id test-name item-path)
-;;   (let ((res #f)) ;; (vector #f #f #f #f #f #f)))
-;;     (sqlite3:for-each-row 
-;;      (lambda (id run-id test-name state status)
-;;        (set! res (vector id run-id test-name state status item-path)))
-;;      db "SELECT id,run_id,testname,state,status FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
-;;      run-id test-name item-path)
-;;     res))
-
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
 	 (itempath (db:test-get-item-path test)))
@@ -76,7 +66,7 @@
 
 
 (define (set-megatest-env-vars db run-id)
-  (let ((keys (db-get-keys db)))
+  (let ((keys (rdb:get-keys db)))
     (for-each (lambda (key)
 		(sqlite3:for-each-row
 		 (lambda (val)
@@ -170,7 +160,7 @@
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals
 (define (runs:run-tests db target runname test-patts item-patts user flags)
-  (let* ((keys        (db-get-keys db))
+  (let* ((keys        (rdb:get-keys db))
 	 (keyvallst   (keys:target->keyval keys target))
 	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
@@ -409,13 +399,13 @@
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (testdat       (db:get-test-info db run-id test-name item-path)))
+	   (testdat       (rdb:get-test-info db run-id test-name item-path)))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
 	    (system (conc "mkdir -p " new-test-path))
 	    (register-test db run-id test-name item-path)
-	    (set! testdat (db:get-test-info db run-id test-name item-path))))
+	    (set! testdat (rdb:get-test-info db run-id test-name item-path))))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
@@ -489,7 +479,7 @@
 ;; Remove runs
 ;; fields are passing in through 
 (define (runs:remove-runs db runnamepatt testpatt itempatt)
-  (let* ((keys        (db-get-keys db))
+  (let* ((keys        (rdb:get-keys db))
 	 (rundat      (runs:get-runs-by-patt db keys runnamepatt))
 	 (header      (vector-ref rundat 0))
 	 (runs        (vector-ref rundat 1)))
@@ -512,7 +502,7 @@
 			   (test-name (db:test-get-testname test))
 			   (run-dir   (db:test-get-rundir test)))
 		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path)
-		      (db:delete-test-records db (db:test-get-id test))
+		      (rdb:delete-test-records db (db:test-get-id test))
 		      (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
 			  (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
 			    (set! lasttpath fullpath)
@@ -594,7 +584,7 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(set! db   (open-db))
-	(set! keys (db-get-keys db))
+	(set! keys (db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
@@ -625,11 +615,11 @@
 
 ;; Update the test_meta table for this test
 (define (runs:update-test_meta db test-name test-conf)
-  (let ((currrecord (db:testmeta-get-record db test-name)))
+  (let ((currrecord (rdb:testmeta-get-record db test-name)))
     (if (not currrecord)
 	(begin
 	  (set! currrecord (make-vector 10 #f))
-	  (db:testmeta-add-record db test-name)))
+	  (rdb:testmeta-add-record db test-name)))
     (for-each 
      (lambda (key)
        (let* ((idx (cadr key))

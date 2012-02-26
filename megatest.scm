@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -20,6 +20,8 @@
 (declare (uses runs))
 (declare (uses launch))
 (declare (uses server))
+
+(define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -95,6 +97,7 @@ Misc
   -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -172,6 +175,7 @@ Called as " (string-intersperse (argv) " ")))
 		        "-gui"
 			;; misc
 			"-archive"
+			"-repl"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -268,10 +272,10 @@ Called as " (string-intersperse (argv) " ")))
 	   (runpatt  (args:get-arg "-list-runs"))
 	   (testpatt (args:get-arg "-testpatt"))
 	   (itempatt (args:get-arg "-itempatt"))
-	   (runsdat  (db:get-runs db runpatt #f #f '()))
+	   (runsdat  (rdb:get-runs db runpatt #f #f '()))
 	   (runs     (db:get-rows runsdat))
 	   (header   (db:get-header runsdat))
-	   (keys     (db-get-keys db))
+	   (keys     (rdb:get-keys db))
 	   (keynames (map key:get-fieldname keys)))
       ;; Each run
       (for-each 
@@ -395,14 +399,14 @@ Called as " (string-intersperse (argv) " ")))
 	  (server:start db (args:get-arg "-server"))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
-;;;======================================================================
+;;======================================================================
 ;; Rollup into a run
 ;;======================================================================
 (if (args:get-arg "-rollup")
     (general-run-call 
      "-rollup" 
      "rollup tests" 
-     (lambda (db keys keynames keyvallst)
+     (lambda (db target runname keys keynames keyvallst)
        (runs:rollup-run db
 			keys
 			(keys->alist keys "na")
@@ -439,7 +443,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))    
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (db-get-keys db))
+		 (keys     (rdb:get-keys db))
 		 (keynames (map key:get-fieldname keys))
 		 (paths    (db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
@@ -487,7 +491,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (set! db (open-db))    
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (db-get-keys db))
+		 (keys     (rdb:get-keys db))
 		 (keynames (map key:get-fieldname keys))
 		 (paths    (db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
@@ -684,7 +688,7 @@ Called as " (string-intersperse (argv) " ")))
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
       (set! db (open-db))
-      (set! keys (db-get-keys db))
+      (set! keys (rdb:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
       (sqlite3:finalize! db)
       (set! *didsomething* #t)))
@@ -726,6 +730,27 @@ Called as " (string-intersperse (argv) " ")))
       (runs:update-all-test_meta db)
       (sqlite3:finalize! db)
       (set! *didsomething* #t)))
+
+;;======================================================================
+;; Start a repl
+;;======================================================================
+(if (args:get-arg "-repl")
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (if db
+	  (begin
+	    (set! *db* db)
+	    (import readline)
+	    (import apropos)
+	    (gnu-history-install-file-manager
+	     (string-append
+	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
+	    (current-input-port (make-gnu-readline-port "megatest> "))
+	    (repl)))))
+
+;;======================================================================
+;; Exit and clean up
+;;======================================================================
 
 (if (not *didsomething*)
     (debug:print 0 help))

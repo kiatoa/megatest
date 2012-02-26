@@ -199,7 +199,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(db:test-set-state-status-by-id *db* test-id #f #f b)
+					(rdb:test-set-state-status-by-id *db* test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -209,7 +209,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (db:test-set-state-status-by-id *db* test-id state #f #f)
+								    (rdb:test-set-state-status-by-id *db* test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
@@ -229,7 +229,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (db:test-set-state-status-by-id *db* test-id #f status #f)
+								    (rdb:test-set-state-status-by-id *db* test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
@@ -251,8 +251,8 @@
 (define (examine-test db test-id) ;; run-id run-key origtest)
   (let* ((testdat       (db:get-test-data-by-id db test-id))
 	 (run-id        (if testdat (db:test-get-run_id testdat) #f))
-	 (keydat        (if testdat (keys:get-key-val-pairs db run-id) #f))
-	 (rundat        (if testdat (db:get-run-info db run-id) #f))
+	 (keydat        (if testdat (rdb:get-key-val-pairs db run-id) #f))
+	 (rundat        (if testdat (rdb:get-run-info db run-id) #f))
 	 (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 							    (db:get-header rundat)
 							    "runname") #f))
@@ -262,7 +262,7 @@
 	 (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	 (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	 (testmeta      (if testdat 
-			    (let ((tm (db:testmeta-get-record db testname)))
+			    (let ((tm (rdb:testmeta-get-record db testname)))
 			      (if tm tm (make-db:testmeta)))
 			    (make-db:testmeta)))
 
@@ -287,12 +287,12 @@
 					   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 			   (message-window  (conc "Directory " rundir " not found")))))
 	 (refreshdat (lambda ()
-		       (let ((newtestdat (db:get-test-data-by-id db test-id)))
+		       (let ((newtestdat (rdb:get-test-data-by-id db test-id)))
 			 (if newtestdat 
 			     (begin
 			       ;(mutex-lock! mx1)
 			       (set! testdat newtestdat)
-			       (set! teststeps    (db:get-steps-for-test db test-id))
+			       (set! teststeps    (rdb:get-steps-for-test db test-id))
 			       (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 			       (set! rundir       (db:test-get-rundir testdat))
 			       (set! testfullname (db:test-get-fullname testdat))
@@ -393,7 +393,7 @@
 				    (lambda (testdat)
 				      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
 					     (fmtstr  "~20a~10a~10a~12a~15a~20a")
-					     (comprsteps (db:get-steps-table db test-id))
+					     (comprsteps (rdb:get-steps-table db test-id))
 					     (newval  (string-intersperse 
 						       (append
 							(list 

@@ -31,46 +31,52 @@
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-	 (configdat (car *configinfo*))
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
-	(let* ((keys     (config-get-fields configdat))
-	       (havekeys (> (length keys) 0))
-	       (keystr   (keys->keystr keys))
-	       (fieldstr (keys->key/field keys)))
-	  (for-each (lambda (key)
-		      (let ((keyn (vector-ref key 0)))
-			(if (member (string-downcase keyn)
-				    (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
-					  "pass_count"))
-			    (begin
-			      (print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table")
-			      (system (conc "rm -f " dbpath))
-			      (exit 1)))))
-		    keys)
-	  ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
-	  (for-each (lambda (key)
-		      (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
-		    keys)
-	  (sqlite3:execute db (conc 
-			       "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
-			       fieldstr (if havekeys "," "")
-			       "runname TEXT,"
-			       "state TEXT DEFAULT '',"
-			       "status TEXT DEFAULT '',"
-			       "owner TEXT DEFAULT '',"
-			       "event_time TIMESTAMP,"
-			       "comment TEXT DEFAULT '',"
-			       "fail_count INTEGER DEFAULT 0,"
-			       "pass_count INTEGER DEFAULT 0,"
-			       "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
-	  (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
-	  (sqlite3:execute db 
-			   "CREATE TABLE IF NOT EXISTS tests 
+	(db:initialize db))
+    (if (not (args:get-arg "-server"))
+	(server:client-setup db))
+    db))
+
+(define (db:initialize db)
+  (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
+	 (keys     (config-get-fields configdat))
+	 (havekeys (> (length keys) 0))
+	 (keystr   (keys->keystr keys))
+	 (fieldstr (keys->key/field keys)))
+    (for-each (lambda (key)
+		(let ((keyn (vector-ref key 0)))
+		  (if (member (string-downcase keyn)
+			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
+				    "pass_count"))
+		      (begin
+			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table")
+			(system (conc "rm -f " dbpath))
+			(exit 1)))))
+	      keys)
+    ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
+    (for-each (lambda (key)
+		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
+	      keys)
+    (sqlite3:execute db (conc 
+			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
+			 fieldstr (if havekeys "," "")
+			 "runname TEXT,"
+			 "state TEXT DEFAULT '',"
+			 "status TEXT DEFAULT '',"
+			 "owner TEXT DEFAULT '',"
+			 "event_time TIMESTAMP,"
+			 "comment TEXT DEFAULT '',"
+			 "fail_count INTEGER DEFAULT 0,"
+			 "pass_count INTEGER DEFAULT 0,"
+			 "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
+    (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
+    (sqlite3:execute db 
+		     "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
@@ -94,9 +100,9 @@
                      archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
-	  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
-	  (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
+    (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -106,11 +112,11 @@
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
                                      owner       TEXT DEFAULT '',
@@ -122,7 +128,7 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -134,11 +140,9 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-	  ;; Must do this *after* running patch db !! No more. 
-	  (db:set-var db "MEGATEST_VERSION" megatest-version)
-	  ))
-    (server:client-setup db)
-    db))
+    ;; Must do this *after* running patch db !! No more. 
+    (db:set-var db "MEGATEST_VERSION" megatest-version)
+    ))
 
 ;;======================================================================
 ;; TODO:
@@ -249,7 +253,7 @@
 
 (define *db-keys* #f)
 
-(define (db-get-keys db)
+(define (db:get-keys db)
   (if *db-keys* *db-keys* 
       (let ((res '()))
 	(sqlite3:for-each-row 
@@ -259,8 +263,6 @@
 	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
 	(set! *db-keys* res)
 	res)))
-
-(define db:get-keys db-get-keys)
 
 (define (db:get-value-by-header row header field)
   ;; (debug:print 2 "db:get-value-by-header row: " row " header: " header " field: " field)
@@ -293,7 +295,7 @@
 ;;
 (define (db:get-runs db runpatt count offset keypatts)
   (let* ((res      '())
-	 (keys      (db-get-keys db))
+	 (keys      (db:get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header    (append (map key:get-fieldname keys)
 			    remfields))
@@ -317,7 +319,7 @@
 			  (if (number? offset)
 			      (conc " OFFSET " offset)
 			      ""))))
-    (debug:print 4 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
+    (debug:print 8 "INFO: db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
@@ -336,11 +338,10 @@
      "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
     numruns))
 
-
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
   (let* ((res      #f)
-	 (keys      (db-get-keys db))
+	 (keys      (db:get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header    (append (map key:get-fieldname keys)
 			    remfields))
@@ -366,27 +367,65 @@
   (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)) 
 
 ;;======================================================================
+;; K E Y S
+;;======================================================================
+
+;; get key val pairs for a given run-id
+;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
+(define (db:get-key-val-pairs db run-id)
+  (let* ((keys (get-keys db))
+	 (res  '()))
+    (debug:print 6 "keys: " keys " run-id: " run-id)
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+	 ;; (debug:print 0 "qry: " qry)
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
+	  db qry run-id)))
+     keys)
+    (reverse res)))
+
+;; get key vals for a given run-id
+(define (db:get-key-vals db run-id)
+  (let* ((keys (get-keys db))
+	 (res  '()))
+    (debug:print 6 "keys: " keys " run-id: " run-id)
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+	 ;; (debug:print 0 "qry: " qry)
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons key-val res)))
+	  db qry run-id)))
+     keys)
+    (reverse res)))
+
+;;======================================================================
 ;;  T E S T S
 ;;======================================================================
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
-(define (db-get-tests-for-run db run-id testpatt itempatt states statuses)
-  (let ((res '())
-	(states-str    (conc "('" (string-intersperse states   "','") "')"))
-	(statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
-	)
+(define (db:get-tests-for-run db run-id testpatt itempatt states statuses)
+  (let* ((res '())
+	 (states-str    (conc "('" (string-intersperse states   "','") "')"))
+	 (statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
+	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+			 " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
+			 " AND NOT (state in " states-str " AND status IN " statuses-str ") "
+			 ;; " ORDER BY id DESC;"
+			 " ORDER BY event_time ASC;" ;; POTENTIAL ISSUE! CHECK ME! Does anyting depend on this being sorted by id?
+			 )))
+    (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
      (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
        (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
-     (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
-	   " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
-	   " AND NOT (state in " states-str " AND status IN " statuses-str ") "
-	   ;; " ORDER BY id DESC;"
-	   " ORDER BY event_time ASC;" ;; POTENTIAL ISSUE! CHECK ME! Does anyting depend on this being sorted by id?
-	   )
+     qry
      run-id
      (if testpatt testpatt "%")
      (if itempatt itempatt "%"))
@@ -835,34 +874,13 @@
        (sort steps (lambda (a b)(< (db:step-get-event_time a)(db:step-get-event_time b)))))
       res)))
 
-;; USE: (lset-difference string=? '("a" "b" "c") '("d" "c" "e" "a"))
-;;
-;; Return a list of prereqs that were NOT met
-;;  Tests (and all items) in waiton list must be "COMPLETED" and "PASS"
-(define (db-get-prereqs-not-met db run-id waiton)
-  (if (null? waiton)
-      '()
-      (let* ((unmet-pre-reqs '())
-	     (tests           (db-get-tests-for-run db run-id #f #f '() '()))
-	     (result         '()))
-	(for-each (lambda (waitontest-name)
-		    (let ((ever-seen #f))
-		      (for-each (lambda (test)
-				  (if (equal? waitontest-name (db:test-get-testname test))
-				      (begin
-					(set! ever-seen #t)
-					(if (not (and (equal? (db:test-get-state test) "COMPLETED")
-						      (member (db:test-get-status test) '("PASS" "WARN" "CHECK"))))
-					    (set! result (cons waitontest-name result))))))
-				tests)
-		      (if (not ever-seen)(set! result (cons waitontest-name result)))))
-		  waiton)
-	(delete-duplicates result))))
-
 ;; the new prereqs calculation, looks also at itempath if specified
 ;; all prereqs must be met:
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
+;;
+;; Note: do not convert to remote as it calls remote under the hood
+;;
 (define (db:get-prereqs-not-met db run-id waitons ref-item-path)
   (if (or (not waitons)
 	  (null? waitons))
@@ -873,7 +891,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (db-get-tests-for-run db run-id waitontest-name #f '() '()))
+	   (let ((tests             (rdb:get-tests-for-run db run-id waitontest-name #f '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
@@ -1116,6 +1134,107 @@
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rpc:test-set-log! host port)
+	((rpc:procedure 'rdb:test-set-log! host port)
 	 run-id test-name item-path logf))
       (db:test-set-log! db run-id test-name item-path logf)))
+
+(define (rdb:get-runs db runnamepatt numruns startrunoffset keypatts)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-runs host port)
+	 runnamepatt numruns startrunoffset keypatts))
+      (db:get-runs db runnamepatt numruns startrunoffset keypatts)))
+
+(define (rdb:get-tests-for-run db run-id testpatt itempatt states statuses)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-tests-for-run host port)
+	  run-id testpatt itempatt states statuses))
+      (db:get-tests-for-run db run-id testpatt itempatt states statuses)))
+
+(define (rdb:get-keys db)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-keys host port)))
+      (db:get-keys db)))
+	 
+(define (rdb:get-num-runs db runpatt)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-num-runs host port) runpatt))
+      (db:get-num-runs db runpatt)))
+
+(define (rdb:test-set-state-status-by-id db test-id newstate newstatus newcomment)
+    (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-set-state-status-by-id host port)
+	 test-id newstate newstatus newcomment))
+      (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)))
+
+(define (rdb:get-key-val-pairs db run-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-key-val-pairs host port) run-id))
+      (db:get-key-val-pairs db run-id)))
+	 
+(define (rdb:get-key-vals db run-id)
+    (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-key-vals host port) run-id))
+      (db:get-key-vals db run-id)))
+
+(define (rdb:testmeta-get-record db testname)
+   (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:testmeta-get-record host port) testname))
+      (db:testmeta-get-record db testname)))
+
+(define (rdb:get-test-data-by-id db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-test-data-by-id host port) test-id))
+      (db:get-test-data-by-id db test-id)))
+
+(define (rdb:get-run-info db run-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-run-info host port) run-id))
+      (db:get-run-info run-id)))
+
+(define (rdb:get-steps-for-test db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-steps-for-test host port) test-id))
+      (db:get-steps-for-test test-id)))
+
+(define (rdb:get-steps-table db test-id)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-steps-table host port) test-id))
+      (db:get-steps-table test-id)))
+
+(define (rdb:read-test-data db test-id categorypatt)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:read-test-data host port) test-id categorypatt))
+      (db:read-test-data db test-id categorypatt)))
+
+(define (rdb:get-test-info db run-id testname item-path)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:get-test-info host port) run-id testname item-path))
+      (db:get-test-info db run-id testname item-path)))

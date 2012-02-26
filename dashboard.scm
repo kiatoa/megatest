@@ -82,7 +82,7 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (get-keys   *db*))
+(define *keys*   (rdb:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
 (define *header*       #f)
@@ -91,7 +91,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (db:get-num-runs *db* "%"))
+(define *tot-run-count* (rdb:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
 (define *start-run-offset*  0)
@@ -123,55 +123,6 @@ Misc
 (define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
 (define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
 
-;; (megatest-dashboard)
-
-;(define img1 (iup:image/palette 16 16 (u8vector->blob (u8vector
-;				   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 
-;				   1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 0 2 0 2 2 0 2 2 2 0 0 
-;				   2 2 2 0 2 0 0 2 0 0 2 0 2 0 2 2 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 2 2 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 0 0 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 0 2 1))))
-;
-;(define img2 (iup:image/palette 16 16 (u8vector->blob (u8vector
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 1 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 1 1 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 1 1 1 
-;				   1 1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 
-;				   1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 2 2 2 2 2 2 2 2 2 2 2 
-;				   2 2 2 0 2 0 2 0 2 2 0 2 2 2 0 0 
-;				   2 2 2 0 2 0 0 2 0 0 2 0 2 0 2 2 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 2 2 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 2 0 0 
-;				   2 2 2 0 2 0 2 2 0 2 2 0 2 0 2 1))))
-;
-;(iup:handle-name-set! img1 "img1")
-;(iup:attribute-set! img1 "0" "0 0 0")
-;(iup:attribute-set! img1 "1" "BGCOLOR")
-;(iup:attribute-set! img1 "2" "255 0 0")
-;
-;(iup:handle-name-set! img2 "img2")
-;(iup:attribute-set! img2 "0" "0 0 0")
-;(iup:attribute-set! img2 "1" "BGCOLOR")
-;(iup:attribute-set! img2 "2" "255 0 0")
 
 (define (message-window msg)
   (iup:show
@@ -209,7 +160,7 @@ Misc
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
-	  (let* ((allruns     (db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	  (let* ((allruns     (rdb:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
@@ -221,12 +172,12 @@ Misc
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
 		  (set! *last-update* (current-seconds))
-		  (set! *tot-run-count* (db:get-num-runs *db* runnamepatt))))
+		  (set! *tot-run-count* (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (db-get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+			       (tests    (let ((tsts (rdb:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (get-key-vals *db* run-id)))
+			       (key-vals (rdb:get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
@@ -297,18 +248,6 @@ Misc
 	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
 	 vlst-s2)))
     
-    ;; (sort newlst (lambda (a b)
-    ;;     	   (let* ((partsa (string-split a "("))
-    ;;     		  (partsb (string-split b "("))
-    ;;     		  (lena   (length partsa))
-    ;;     		  (lenb   (length partsb)))
-    ;;     	     (if (or (and (eq? lena 1)(> lenb 1))
-    ;;     		     (and (eq? lenb 1)(> lena 1)))
-    ;;     		 (if (equal? (car partsa)(car partsb)) ;; same test
-    ;;     		     (> lenb lena)
-    ;;     		     #t)
-    ;;     		 #t))))))
-			     
 (define (update-labels uidat)
   (let* ((rown    0)
 	 (keycol  (dboard:uidat-get-keycol uidat))

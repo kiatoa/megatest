@@ -373,7 +373,7 @@
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
-	 (key-vals (get-key-vals db run-id))
+	 (key-vals (rdb:get-key-vals db run-id))
 	 (key-str  (string-intersperse key-vals "/"))
 	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
 			 item-path))

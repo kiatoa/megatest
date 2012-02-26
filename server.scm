@@ -47,6 +47,8 @@
 			     #f))
 	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
     (db:set-var db "SERVER" host:port)
+
+    ;; can use this to run most anything at the remote
     (rpc:publish-procedure! 
      'remote:run 
      (lambda (procstr . params)
@@ -92,9 +94,93 @@
        (db:test-set-comment db run-id test-name item-path comment)))
     
     (rpc:publish-procedure!
-     'rpc:test-set-log!
+     'rdb:test-set-log!
      (lambda (run-id test-name item-path logf)
        (db:test-set-log! db run-id test-name item-path logf)))
+
+    (rpc:publish-procedure!
+     'serve:get-toppath
+     (lambda ()
+       *toppath*))
+
+    (rpc:publish-procedure!
+     'serve:login
+     (lambda (toppath)
+       (if (equal? *toppath* toppath)
+	   (begin
+	     (debug:print 2 "INFO: login successful")
+	     #t)
+	   #f)))	     
+    
+    (rpc:publish-procedure!
+     'rdb:get-runs
+     (lambda (runnamepatt numruns startrunoffset keypatts)
+       (db:get-runs db runnamepatt numruns startrunoffset keypatts)))
+
+    (rpc:publish-procedure!
+     'rdb:get-tests-for-run 
+     (lambda (run-id testpatt itempatt states statuses)
+       (db:get-tests-for-run db run-id testpatt itempatt states statuses)))
+
+    (rpc:publish-procedure!
+     'rdb:get-keys
+     (lambda ()
+       (db:get-keys db)))
+
+    (rpc:publish-procedure!
+     'rdb:get-num-runs
+     (lambda (runpatt)
+       (db:get-num-runs db runpatt)))
+
+    (rpc:publish-procedure!
+     'rdb:test-set-state-status-by-id
+     (lambda (test-id newstate newstatus newcomment)
+       (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)))
+
+    (rpc:publish-procedure!
+     'rdb:get-key-val-pairs
+     (lambda (run-id)
+       (db:get-key-val-pairs db run-id)))
+
+    (rpc:publish-procedure!
+     'rdb:get-key-vals
+     (lambda (run-id)
+       (db:get-key-vals db run-id)))
+
+    (rpc:publish-procedure!
+     'rdb:testmeta-get-record
+     (lambda (run-id)
+       (db:testmeta-get-record db run-id)))
+
+    (rpc:publish-procedure!
+     'rdb:get-test-data-by-id
+     (lambda (test-id)
+       (db:get-test-data-by-id db test-id)))
+
+    (rpc:publish-procedure!
+     'rdb:get-run-info
+     (lambda (run-id)
+       (db:get-run-info db run-id)))
+
+    (rpc:publish-procedure!
+     'rdb:get-steps-for-test
+     (lambda (test-id)
+       (db:get-steps-for-test db test-id)))
+
+    (rpc:publish-procedure!
+     'rdb:get-steps-table
+     (lambda (test-id)
+       (db:get-steps-table db test-id)))
+
+    (rpc:publish-procedure!
+     'rdb:read-test-data
+     (lambda (test-id categorypatt)
+       (db:read-test-data db test-id categorypatt)))
+
+    (rpc:publish-procedure!
+     'rdb:get-test-info
+     (lambda (run-id testname item-path)
+       (db:get-test-info db  run-id testname item-path)))
 
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
@@ -119,6 +205,20 @@
 	 (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
     (if (and port
 	     (string->number port))
-	(debug:print 2 "INFO: Setting up to connect to host " host ":" port))
-    (set! *runremote* (if port (vector host (string->number port)) #f))))
+	(let ((portn (string->number port)))
+	  (debug:print 2 "INFO: Setting up to connect to host " host ":" port)
+	 (handle-exceptions
+	  exn
+	  (begin
+	    (print "Exception: " exn)
+	    (set! *runremote* #f))
+	   (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
+		    ((rpc:procedure 'serve:login host portn) *toppath*))
+	       (begin
+		 (debug:print 2 "INFO: Connected to " host ":" port)
+		 (set! *runremote* (vector host portn)))
+	       (begin
+		 (debug:print 2 "INFO: Failed to connect to " host ":" port)
+		 (set! *runremote* #f)))))
+	(debug:print 2 "INFO: no server available"))))
 

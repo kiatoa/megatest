@@ -15,7 +15,7 @@ test :
 	make runall
 
 dashboard :
-	cd ../;make dboard
+	cd ../;make install
 	$(BINPATH)/dboard &
 
 remove :

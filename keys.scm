@@ -29,39 +29,6 @@
 			  "SELECT fieldname,fieldtype FROM keys ORDER BY id ASC;")
     (reverse keys))) ;; could just sort desc?
 
-;; get key vals for a given run-id
-(define (get-key-vals db run-id)
-  (let* ((keys (get-keys db))
-	 (res  '()))
-    (debug:print 6 "keys: " keys " run-id: " run-id)
-    (for-each 
-     (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (debug:print 0 "qry: " qry)
-	 (sqlite3:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons key-val res)))
-	  db qry run-id)))
-     keys)
-    (reverse res)))
-
-;; get key val pairs for a given run-id
-;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
-(define (keys:get-key-val-pairs db run-id)
-  (let* ((keys (get-keys db))
-	 (res  '()))
-    (debug:print 6 "keys: " keys " run-id: " run-id)
-    (for-each 
-     (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (debug:print 0 "qry: " qry)
-	 (sqlite3:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
-	  db qry run-id)))
-     keys)
-    (reverse res)))
-
 (define (keys->keystr keys) ;; => key1,key2,key3,additiona1, ...
   (string-intersperse (map key:get-fieldname keys) ","))
 

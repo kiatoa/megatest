@@ -11,8 +11,8 @@
 (include "common_records.scm")
 
 (define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f))
-  (let* ((keys    (get-keys db))
-	 (keyvals (get-key-vals db run-id))
+  (let* ((keys    (rdb:get-keys db))
+	 (keyvals (rdb:get-key-vals db run-id))
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
 	 (confdat (read-config fname #f #f environ-patt: environ-patt))
 	 (whatfound (make-hash-table))

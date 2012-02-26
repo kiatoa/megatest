@@ -181,7 +181,7 @@
 	     (sqlite3:finalize! tdb))))
 
 (define (gui-monitor db)
-  (let ((keys (get-keys db))
+  (let ((keys (rdb:get-keys db))
 	(tdb  (tasks:open-db)))
     (tasks:register-monitor db tdb) ;;; let the other monitors know we are here
     (control-panel db tdb keys)
