@@ -438,8 +438,19 @@
 
 ;; this one is a bit broken BUG FIXME
 (define (db:delete-test-step-records db run-id test-name itemdat)
-  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
-		   run-id test-name (item-list->path itemdat)))
+  ;; Breaking it into two queries for better file access interleaving
+  (let ((ids '()))
+    (sqlite3:for-each-row (lambda (id)
+			    (set! ids (cons id ids)))
+			  db
+			  "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+			  run-id test-name (item-list->path itemdat))
+    (for-each (lambda (id)
+		(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" id)
+		(thread-sleep! 0.1)) ;; give others access to the db
+	      ids)))
+;;"DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
+		   
 ;; 
 (define (db:delete-test-records db test-id)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
@@ -629,7 +640,7 @@
 
 (define (db:updater db)
   (let loop ((start-time (current-time)))
-    (thread-sleep! (+ 2 (random 10))) ;; move save time around to minimize regular collisions
+    (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
     (db:write-cached-data db)
     (loop start-time)))
     
@@ -984,6 +995,7 @@
 					      (list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
 				      *incoming-data*))
 	  (mutex-unlock! *incoming-mutex*)
+	  (if (not *cache-on*)(db:write-cached-data db))
 	  #t)
 	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
 

@@ -270,7 +270,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (rdb:testmeta-get-record db testname)))
+				  (let ((tm (db:testmeta-get-record db testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 

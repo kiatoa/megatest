@@ -94,6 +94,7 @@
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
 	      (server:client-setup db))
+	  (set! *cache-on* #t)
 	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 	  (set-run-config-vars db run-id)
