@@ -157,7 +157,8 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
   (let ((modtime (file-modification-time *db-file-path*)))
-    (if (or (> modtime *last-db-update-time*)
+    (if (or (and (> modtime *last-db-update-time*)
+		 (> (current-seconds)(+ *last-db-update-time* 5)))
 	    (> *delayed-update* 0))
 	(begin
 	  (set! *please-update-buttons* #t)
