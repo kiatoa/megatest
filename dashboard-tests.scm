@@ -251,9 +251,9 @@
 (define (examine-test db test-id) ;; run-id run-key origtest)
   (let* ((testdat       (rdb:get-test-data-by-id db test-id))
 	 (db-path       (conc *toppath* "/megatest.db"))
-	 (db-mod-time   (file-modification-time db-path))
-	 (last-update   (current-seconds))
-	 (request-update #f))
+	 (db-mod-time   0) ;; (file-modification-time db-path))
+	 (last-update   0) ;; (current-seconds))
+	 (request-update #t))
     (if (not testdat)
 	(begin
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")

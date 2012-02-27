@@ -332,6 +332,18 @@ Called as " (string-intersperse (argv) " ")))
       ))
 
 ;;======================================================================
+;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
+;;======================================================================
+(if (and (args:get-arg "-server")
+	 (not (or (args:get-arg "-runall")
+		  (args:get-arg "-runtests"))))
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (if db 
+	  (server:start db (args:get-arg "-server"))
+	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
+
+;;======================================================================
 ;; full run
 ;;======================================================================
 
@@ -392,16 +404,6 @@ Called as " (string-intersperse (argv) " ")))
 		     (args:get-arg "-itempatt")
 		     user
 		     (make-hash-table)))))
-
-;;======================================================================
-;; Start the server
-;;======================================================================
-(if (args:get-arg "-server")
-    (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
-      (if db 
-	  (server:start db (args:get-arg "-server"))
-	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;======================================================================
 ;; Rollup into a run
