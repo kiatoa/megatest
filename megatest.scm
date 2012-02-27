@@ -367,13 +367,17 @@ Called as " (string-intersperse (argv) " ")))
      "-runall"
      "run all tests"
      (lambda (db target runname keys keynames keyvallst)
-       (runs:run-tests db
-		       target
-		       runname
-		       (args:get-arg "-testpatt")
-		       (args:get-arg "-itempatt")
-		       user
-		       (make-hash-table)))))
+       (let ((flags (make-hash-table)))
+	 (for-each (lambda (parm)
+		     (hash-table-set! flags parm (args:get-arg parm)))
+		   (list "-rerun" "-force"))
+	 (runs:run-tests db
+			 target
+			 runname
+			 (args:get-arg "-testpatt")
+			 (args:get-arg "-itempatt")
+			 user
+			 flags)))))
 
 ;;======================================================================
 ;; run one test

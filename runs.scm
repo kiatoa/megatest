@@ -429,11 +429,15 @@
 		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
 		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
+	     (debug:print 2 "INFO: running test " test-name "/" item-path " suppressed as it is COMPLETED and " (test:get-state testdat))
 	     (set! runflag #f))
 	    ;; -rerun and status is one of the specifed, run it
 	    ((and rerun
-		  (let ((rerunlst (string-split rerun ","))) ;; FAIL,
-		    (member (test:get-status testdat) rerunlst)))
+		  (let* ((rerunlst   (string-split rerun ","))
+			 (must-rerun (member (test:get-status testdat) rerunlst)))
+		    (debug:print 3 "INFO: -rerun list: " rerun ", test-status: " (test:get-status testdat)", must-rerun: " must-rerun)
+		    must-rerun))
+	     (debug:print 2 "INFO: Rerun forced for test " test-name "/" item-path)
 	     (set! runflag #t))
 	    ;; -keepgoing, do not rerun FAIL
 	    ((and keepgoing
@@ -447,7 +451,7 @@
 	   (if (not runflag)
 	       (if (not parent-test)
 		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
-				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-state testdat) "\" or -force to override"))
+				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat) "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
