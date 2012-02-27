@@ -249,7 +249,11 @@
 ;;
 ;;======================================================================
 (define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (rdb:get-test-data-by-id db test-id)))
+  (let* ((testdat       (rdb:get-test-data-by-id db test-id))
+	 (db-path       (conc *toppath* "/megatest.db"))
+	 (db-mod-time   (file-modification-time db-path))
+	 (last-update   (current-seconds))
+	 (request-update #f))
     (if (not testdat)
 	(begin
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
@@ -291,19 +295,20 @@
 						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				 (message-window  (conc "Directory " rundir " not found")))))
 	       (refreshdat (lambda ()
-			     (let ((newtestdat (rdb:get-test-data-by-id db test-id)))
-			       (if newtestdat 
-				   (begin
-					;(mutex-lock! mx1)
-				     (set! testdat newtestdat)
-				     (set! teststeps    (rdb:get-steps-for-test db test-id))
-				     (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
-				     (set! rundir       (db:test-get-rundir testdat))
-				     (set! testfullname (db:test-get-fullname testdat))
-					;(mutex-unlock! mx1)
-				     )
-				   (begin
-				     (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
+			     (let* ((curr-mod-time (file-modification-time db-path))
+				    (need-update   (or (and (> curr-mod-time db-mod-time)
+							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
+						       request-update))
+				    (newtestdat (if need-update (rdb:get-test-data-by-id db test-id))))
+			       (cond
+				((and need-update newtestdat)
+				 (set! testdat newtestdat)
+				 (set! teststeps    (rdb:get-steps-for-test db test-id))
+				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
+				 (set! rundir       (db:test-get-rundir testdat))
+				 (set! testfullname (db:test-get-fullname testdat)))
+				(need-update ;; if this was true and yet there is no data ....
+				 (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
 	       (widgets      (make-hash-table))
 	       (meta-widgets (make-hash-table))
 	       (self         #f)
