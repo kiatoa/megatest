@@ -48,12 +48,24 @@
 	(db:initialize db))
      (cond
 	((and (not tdataexists)(not dbexists))
-	 (db:initialize-tdat))
+	 (db:initialize-test-data-db))
 	((not tdataexists)
 	 (db:migrate-to-testdata db)))
     (db:attach-testdata db)
      db))
 
+;; Initialize the testdata db
+(define (db:initialize-test-data-db)
+  (let ((tdb (sqlite3:open-database (conc *toppath* "/testdata.db"))))
+     (sqlite3:execute tdb "CREATE TABLE test_info (
+        id INTEGER PRIMARY KEY,
+    	diskspace INTEGER,
+	cpuusage INTEGER,
+	tmpdiskspace INTEGER,
+	memoryusage INTEGER);")
+      (sqlite3:finalize! tdb)))
+
+;; Initialize the main db
 (define (db:initialize db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (config-get-fields configdat))
