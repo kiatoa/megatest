@@ -38,13 +38,21 @@
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
+         (tdatpath  (conc *toppath* "/testdata.db")))
+	 (dbexists  (file-exists? dbpath)
+         (tdatexists (file-exists? tdatpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    db))
+     (cond
+	((and (not tdataexists)(not dbexists))
+	 (db:initialize-tdat))
+	((not tdataexists)
+	 (db:migrate-to-testdata db)))
+    (db:attach-testdata db)
+     db))
 
 (define (db:initialize db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
