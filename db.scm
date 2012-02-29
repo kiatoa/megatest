@@ -38,7 +38,7 @@
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-         (tdatpath  (conc *toppath* "/testdata.db")))
+         (tdatpath  (conc *toppath* "/test_info.db")))
 	 (dbexists  (file-exists? dbpath)
          (tdatexists (file-exists? tdatpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
@@ -48,22 +48,64 @@
 	(db:initialize db))
      (cond
 	((and (not tdataexists)(not dbexists))
-	 (db:initialize-test-data-db))
+	 (let ((tdb (db:initialize-test-data-db)))
+	   (sqlite3:finalize! tdb)))
 	((not tdataexists)
 	 (db:migrate-to-testdata db)))
     (db:attach-testdata db)
      db))
 
+;; Migrate data from tests table to testinfo
+(define (db:migrate-to-test-info db)
+  ;; first create the new db and open it
+  (let ((tdb (db:initialize-test-data-db))
+	(tbldef (lambda (tname)(conc "CREATE TABLE IF NOT EXISTS " tname "
+                    (id INTEGER PRIMARY KEY,
+                     run_id     INTEGER,
+                     testname   TEXT,
+                     host       TEXT DEFAULT 'n/a',
+                     uname      TEXT DEFAULT 'n/a', 
+                     rundir     TEXT DEFAULT 'n/a',
+                     shortdir   TEXT DEFAULT '',
+                     item_path  TEXT DEFAULT '',
+                     state      TEXT DEFAULT 'NOT_STARTED',
+                     status     TEXT DEFAULT 'FAIL',
+                     attemptnum INTEGER DEFAULT 0,
+                     final_logf TEXT DEFAULT 'logs/final.log',
+                     run_duration INTEGER DEFAULT 0,
+                     comment    TEXT DEFAULT '',
+                     event_time TIMESTAMP,
+                     fail_count INTEGER DEFAULT 0,
+                     pass_count INTEGER DEFAULT 0,
+                     archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
+                     );"))))
+    (sqlite3:finalize! tdb)
+    ;; attach the test_info
+    ;; extract the test_info data
+    (sqlite3:execute db "INSERT INTO test_info (test_id,diskfree,cpuload) SELECT id,diskfree,cpuload) FROM tests;")
+    ;; create the temporary table
+    (sqlite3:execute db (tbldef "tmp_tests")))
+    ;; save the relevant test_data table data
+    (sqlite3:execute db "INSERT id,run_id,testname,host,uname,rundir,shortdir,item_path,state,status,attemptnum,final_logf,run_duration,comment,event_time,fail_count,pass_count INTO tests_dup SELECT 
+                                id,run_id,testname,host,uname,rundir,shortdir,item_path,state,status,attemptnum,final_logf,run_duration,comment,event_time,fail_count,pass_count FROM tests;")
+    ;; drop the old and create the new
+    (sqlite3:execute db "DROP TABLE tests;")
+    (sqlite3:execute db (tblqry "tests"))
+    (sqlite3:execute db "INSERT INTO tests SELECT FROM tmp_tests;")
+    (sqlite3:execute db "DROP TABLE tmp_tests;")
+    )
+
 ;; Initialize the testdata db
 (define (db:initialize-test-data-db)
-  (let ((tdb (sqlite3:open-database (conc *toppath* "/testdata.db"))))
+  (let ((tdb (sqlite3:open-database (conc *toppath* "/test_info.db"))))
      (sqlite3:execute tdb "CREATE TABLE test_info (
         id INTEGER PRIMARY KEY,
-    	diskspace INTEGER,
-	cpuusage INTEGER,
-	tmpdiskspace INTEGER,
-	memoryusage INTEGER);")
-      (sqlite3:finalize! tdb)))
+        test_id INTEGER,
+    	diskfree INTEGER,
+	cpuload INTEGER,
+	tmpdisk INTEGER,
+	memusage INTEGER);")
+     tdb))
 
 ;; Initialize the main db
 (define (db:initialize db)
