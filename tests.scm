@@ -23,9 +23,7 @@
        (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
 			run-id 
 			test-name
-			pth 
-			;; (conc "," (string-intersperse tags ",") ",")
-			))
+			pth))
      item-paths )))
 
 ;; get the previous record for when this test was run where all keys match but runname

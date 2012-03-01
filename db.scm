@@ -1223,7 +1223,10 @@
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-keys host port)))
+	(if *db-keys* *db-keys* 
+	    (let ((keys ((rpc:procedure 'rdb:get-keys host port))))
+	      (set! *db-keys* keys)
+	      keys)))
       (db:get-keys db)))
 	 
 (define (rdb:get-num-runs db runpatt)

@@ -224,6 +224,7 @@
 						       (case next-status
 							 ((warn)
 							  (set! rollup-status 2)
+							  ;; NB// test-set-status! does rdb calls under the hood
 							  (test-set-status! db run-id test-name "RUNNING" "WARN" itemdat 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
@@ -286,7 +287,7 @@
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       (sqlite3:finalize! db)
-				       (thread-sleep! (+ 8 (random 4))) ;; add some jitter to the call home time to spread out the db accesses
+				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
 				       (loop (calc-minutes)))))))
 		 (th1          (make-thread monitorjob))
 		 (th2          (make-thread runit)))
