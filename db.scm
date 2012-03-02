@@ -38,22 +38,22 @@
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-         (tdatpath  (conc *toppath* "/test_info.db")))
-	 (dbexists  (file-exists? dbpath)
-         (tdatexists (file-exists? tdatpath))
+         (tdatpath  (conc *toppath* "/test_info.db"))
+	 (dbexists  (file-exists? dbpath))
+         (tdataexists (file-exists? tdatpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-     (cond
-	((and (not tdataexists)(not dbexists))
-	 (let ((tdb (db:initialize-test-data-db)))
-	   (sqlite3:finalize! tdb)))
-	((not tdataexists)
-	 (db:migrate-to-testdata db)))
+    (cond
+     ((and (not tdataexists)(not dbexists))
+      (let ((tdb (db:initialize-test-data-db)))
+	(sqlite3:finalize! tdb)))
+     ((not tdataexists)
+      (db:migrate-to-testdata db)))
     (db:attach-testdata db)
-     db))
+    db))
 
 ;; Migrate data from tests table to testinfo
 (define (db:migrate-to-test-info db)
