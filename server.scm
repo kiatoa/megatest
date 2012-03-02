@@ -200,13 +200,30 @@
      (lambda (run-id test-name item-path)
        (tests:register-test db run-id test-name item-path)))
 
+    (rpc:publish-procedure!
+     'rdb:test-data-rollup
+     (lambda (test-id status)
+       (db:test-data-rollup db test-id status)))
+    
+    (rpc:publish-procedure!
+     'rtests:test-set-status!
+     (lambda (run-id test-name state status itemdat-or-path comment dat)
+       (test-set-status! db run-id test-name state status itemdat-or-path comment dat)))
+
+    ;;======================================================================
+    ;; end of publish-procedure section
+    ;;======================================================================
+
     (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
 	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
 	       (sqlite3:finalize! db)))
     (thread-start! th1)
     (thread-start! th2)
-    (thread-join!  th2))) ;; rpc:server)))
+    ;; (thread-join!  th2)
+    ;; return th2 for the calling process to do a join with 
+    th2
+    )) ;; rpc:server)))
 
 (define (server:find-free-port-and-open port)
   (handle-exceptions

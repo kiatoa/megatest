@@ -40,7 +40,7 @@
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler   (make-busy-timeout 36000)))
+	 (handler   (make-busy-timeout 3600))) ;; 136000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -808,7 +808,7 @@
 
 (define (db:load-test-data db run-id test-name itemdat)
   (let* ((item-path (item-list->path itemdat))
-	 (testdat (db:get-test-info db run-id test-name item-path))
+	 (testdat (rdb:get-test-info db run-id test-name item-path))
 	 (test-id (if testdat (db:test-get-id testdat) #f)))
     ;; (debug:print 1 "Enter records to insert in the test_data table, seven fields, comma separated per line")
     (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
@@ -817,11 +817,11 @@
 	  (if (not (eof-object? lin))
 	      (begin
 		(debug:print 4 lin)
-		(db:csv->test-data db test-id lin)
+		(rdb:csv->test-data db test-id lin)
 		(loop (read-line))))))
     ;; roll up the current results.
     ;; FIXME: Add the status to 
-    (db:test-data-rollup db test-id #f)))
+    (rdb:test-data-rollup db test-id #f)))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -1191,8 +1191,7 @@
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-log! host port)
-	 run-id test-name item-path logf))
+	((rpc:procedure 'rdb:test-set-log! host port) run-id test-name item-path logf))
       (db:test-set-log! db run-id test-name item-path logf)))
 
 (define (rdb:get-runs db runnamepatt numruns startrunoffset keypatts)
@@ -1313,3 +1312,10 @@
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:delete-test-records host port) test-id))
       (db:delete-test-records db test-id)))
+
+(define (rdb:test-data-rollup db test-id status)
+    (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-data-rollup host port) test-id status))
+      (db:test-data-rollup db test-id status)))

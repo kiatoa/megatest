@@ -10,7 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18))
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -573,7 +573,8 @@
   (let ((runname (args:get-arg ":runname"))
 	(target  (if (args:get-arg "-target")
 		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg"))))
+		     (args:get-arg "-reqtarg")))
+	(th1     #f))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -589,8 +590,11 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(set! db   (open-db))
-	(if (not (args:get-arg "-server"))
-	    (server:client-setup db))
+	(if (args:get-arg "-server")
+	    (server:start db (args:get-arg "-server"))
+	    (if (not (or (args:get-arg "-runall")
+			  (args:get-arg "-runtests")))
+		(set! th1 (server:client-setup db))))
 	(set! keys (rdb:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
@@ -613,6 +617,7 @@
 	    (let* ((keynames   (map key:get-fieldname keys))
 		   (keyvallst  (keys->vallist keys #t)))
 	      (proc db target runname keys keynames keyvallst)))
+	(if th1 (thread-join! th1))
 	(sqlite3:finalize! db)
 	(set! *didsomething* #t))))))
 

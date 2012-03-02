@@ -80,7 +80,7 @@ Misc
 (define *db* (open-db))
 
 ;; HACK ALERT: this is a hack, please fix.
-(define *read-only* (file-read-access? (conc *toppath* "/megatest.db")))
+(define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
 ;; (server:client-setup *db*)
 
 (define toplevel #f)

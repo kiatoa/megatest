@@ -300,7 +300,7 @@
 	    (if (not (args:get-arg "-server"))
 		(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (db:get-test-info db run-id test-name item-path)))
+		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
