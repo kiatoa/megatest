@@ -394,7 +394,11 @@
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
-    (runs:update-test_meta db test-name test-conf)
+    ;; Yes, another use of a global for caching. Need a better way?
+    (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
+        (begin
+	   (hash-table-set! *test-meta-updated* test-name #t)
+           (runs:update-test_meta db test-name test-conf)))
     
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
@@ -451,7 +455,8 @@
 	   (if (not runflag)
 	       (if (not parent-test)
 		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
-				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat) "\" or -force to override"))
+				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
+                                "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))

@@ -8,7 +8,7 @@ runall :
 	cd ../;make install
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	$(BINPATH)/dboard -rows 15 &
-	$(MEGATEST) -runall -target ubuntu/nfs/none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v
+	$(MEGATEST) -runall -target ubuntu/nfs/none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v -server -
 
 test :
 	csi -b -I .. ../megatest.scm -- -runall -target ubuntu/afs/tmp :runname blah

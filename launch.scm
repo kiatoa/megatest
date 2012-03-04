@@ -46,7 +46,8 @@
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
     (setenv "MT_CMDINFO" encoded-cmd)
-    (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed) (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
+    (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
+                        ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
@@ -441,7 +442,9 @@
 	(hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
 	(remote-megatest (config-lookup *configdat* "setup" "executable"))
 	;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
-	;;                allow running from dashboard 
+	;;                allow running from dashboard. Extract the path
+        ;;                from the called megatest and convert dashboard
+  	;;             	  or dboard to megatest
 	(local-megatest  (let* ((lm  (car (argv)))
 				(dir (pathname-directory lm))
 				(exe (pathname-strip-directory lm)))
@@ -450,7 +453,7 @@
 				   ((dboard) "megatest")
 				   ((dashboard) "megatest")
 				   (else exe)))))
-	(test-sig   (conc "=" test-name ":" (item-list->path itemdat) "=")) ;; test-path is the full path including the item-path
+	(test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	(work-area  #f)
 	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	(diskpath   #f)
@@ -458,6 +461,7 @@
 	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	(mt-bindir-path #f))
     (if hosts (set! hosts (string-split hosts)))
+    ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
     (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
@@ -499,7 +503,6 @@
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat #f #f) ;; (if launch-results launch-results "FAILED"))
-    ;; set 
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
@@ -520,7 +523,7 @@
 				      '()
 				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (debug:print 2 "Launching completed, updating db")
-      (debug:print 4 "Launch results: " launch-results)
+      (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
 	  (begin
 	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")

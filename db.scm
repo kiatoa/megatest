@@ -215,7 +215,7 @@
                                 comment TEXT DEFAULT '',
                                 status TEXT DEFAULT 'n/a',
                               CONSTRAINT test_data UNIQUE (test_id,category,variable));")
-       (print "WARNING: Table test_data and test_meta where recreated. Please do megatest -update-meta")
+       (print "WARNING: Table test_data and test_meta were recreated. Please do megatest -update-meta")
        (patch-db))
       ((< mver 1.27)
        (db:set-var db "MEGATEST_VERSION" 1.27)
@@ -447,7 +447,9 @@
 			  run-id test-name (item-list->path itemdat))
     (for-each (lambda (id)
 		(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" id)
-		(thread-sleep! 0.1)) ;; give others access to the db
+		(thread-sleep! 0.1) ;; give others access to the db
+                (sqlite3:execute db "DELETE FROM test_data WHERE test_id=?;" id)
+                (thread-sleep! 0.1)) ;; give others access to the db
 	      ids)))
 ;;"DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
 		   
@@ -552,8 +554,10 @@
    rundir run-id test-name item-path))
 
 (define (db:test-set-log! db run-id test-name item-path logf)
-  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
-		   logf run-id test-name item-path))
+  (if (string? logf)
+      (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
+		   logf run-id test-name item-path)
+      (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
 
 ;;======================================================================
 ;; Misc. test related queries

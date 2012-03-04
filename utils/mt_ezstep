@@ -29,10 +29,14 @@ fi
 
 # if a logpro file exists then use it otherwise just run the command, nb// was using 2>&1
 if [ -e ${stepname}.logpro ];then
-   $command 2>&1| logpro ${stepname}.logpro ${stepname}.html &> ${stepname}.log 
+   # could do:
+   $command 2>&1| tee ${stepname}.log | logpro ${stepname}.logpro ${stepname}.html &> /dev/null
+   logprostatus=$?
+   # $command 2>&1| logpro ${stepname}.logpro ${stepname}.html &> ${stepname}.log 
+   # allstatus=(${PIPESTATUS[0]} ${PIPESTATUS[1]}) 
    allstatus=(${PIPESTATUS[0]} ${PIPESTATUS[1]})
    runstatus=${allstatus[0]}
-   logprostatus=${allstatus[1]}
+   # logprostatus=${allstatus[1]}
 else
    $command &> ${stepname}.log
    runstatus=$?

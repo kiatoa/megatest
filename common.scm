@@ -35,6 +35,7 @@
 (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
 (define *waiting-queue* (make-hash-table))
+(define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus* 0) ;; attempt to work around possible thread issues
 (define *passnum*     0) ;; when running track calls to run-tests or similar
 (define *verbosity*   1)

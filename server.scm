@@ -84,7 +84,7 @@
     (rpc:publish-procedure!
      'rdb:csv->test-data 
      (lambda (test-id csvdata)
-       (db:csv->data db test-id csvdata)))
+       (db:csv->test-data db test-id csvdata)))
 
     (rpc:publish-procedure!
      'rdb:roll-up-pass-fail-counts
