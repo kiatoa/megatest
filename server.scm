@@ -102,7 +102,7 @@
        (db:test-set-log! db run-id test-name item-path logf)))
     
     (rpc:publish-procedure!
-     'rpc:get-test-data-by-id
+     'rdb:get-test-data-by-id
      (lambda (test-id)
        (db:get-test-data-by-id db test-id)))
 

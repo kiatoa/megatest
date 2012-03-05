@@ -202,7 +202,10 @@
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
 								   ))
-						     (rdb:teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
+                                                     (let ((exinfo (vector-ref exit-info 2))
+                                                           (logfna (if logpro-used (conc stepname ".html") "")))
+                                                        ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
+						        (rdb:teststep-set-status! db run-id test-name stepname "end" exinfo itemdat #f logfna))
 						     (if logpro-used
 							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
 						     ;; set the test final status
