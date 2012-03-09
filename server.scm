@@ -68,8 +68,8 @@
 
     (rpc:publish-procedure!
      'rdb:teststep-set-status!
-     (lambda (run-id test-name teststep-name state-in status-in item-path comment logfile)
-       (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)))
+     (lambda (test-id teststep-name state-in status-in item-path comment logfile)
+       (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)))
 
     (rpc:publish-procedure!
      'rdb:test-update-meta-info

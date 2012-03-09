@@ -55,6 +55,7 @@
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (env-ovrd  (assoc/default 'env-ovrd  cmdinfo))
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
@@ -187,7 +188,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (rdb:teststep-set-status! db run-id test-name stepname "start" "-" itemdat #f #f)
+						   (rdb:teststep-set-status! db test-id stepname "start" "-" itemdat #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -205,7 +206,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
                                                         ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						        (rdb:teststep-set-status! db run-id test-name stepname "end" exinfo itemdat #f logfna))
+						        (rdb:teststep-set-status! db test-id stepname "end" exinfo itemdat #f logfna))
 						     (if logpro-used
 							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
 						     ;; set the test final status
@@ -436,7 +437,7 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
-  (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
+  (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	(runscript  (config-lookup test-conf   "setup"        "runscript"))
 	(ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
@@ -462,8 +463,11 @@
 	(diskpath   #f)
 	(cmdparms   #f)
 	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
-	(mt-bindir-path #f))
-    (if hosts (set! hosts (string-split hosts)))
+	(mt-bindir-path #f)
+	(item-path (item-list->path itemdat))
+	(testinfo   (rdb:get-test-info db run-id test-name item-path))
+	(test-id    (db:test-get-id testinfo)))
+  (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
     (set! mt-bindir-path (pathname-directory remote-megatest))
@@ -485,6 +489,7 @@
 						   (list 'test-name test-name) 
 						   (list 'runscript runscript) 
 						   (list 'run-id    run-id   )
+						   (list 'test-id   test-id  )
 						   (list 'itemdat   itemdat  )
 						   (list 'megatest  remote-megatest)
 						   (list 'ezsteps   ezsteps) 

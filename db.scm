@@ -980,28 +980,22 @@
 	waitons)
       (delete-duplicates result))))
 
-(define (db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile)
-  (debug:print 4 "run-id: " run-id " test-name: " test-name)
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
+  (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   (let* ((state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
-    (debug:print 5 "testdat: " testdat)
-    (if (and testdat ;; if the section exists then force specification BUG, I don't like how this works.
-	     (or (not state)(not status)))
+	 (status    (check-valid-items "status" status-in)))
+    (if (or (not state)(not status))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
-	       " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if testdat
-	(let ((test-id (test:get-id testdat)))
-	  (mutex-lock! *incoming-mutex*)
-	  (set! *incoming-data* (cons (vector 'step-status
-					      (current-seconds)
-					      ;; FIXME - this should not update the logfile unless it is specified.
-					      (list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
-				      *incoming-data*))
-	  (mutex-unlock! *incoming-mutex*)
-	  (if (not *cache-on*)(db:write-cached-data db))
-	  #t)
-	(debug:print 0 "ERROR: Can't update " test-name " for run " run-id " -> no such test in db"))))
+		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
+    (mutex-lock! *incoming-mutex*)
+    (set! *incoming-data* (cons (vector 'step-status
+					(current-seconds)
+					;; FIXME - this should not update the logfile unless it is specified.
+					(list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+				*incoming-data*))
+    (mutex-unlock! *incoming-mutex*)
+    (if (not *cache-on*)(db:write-cached-data db))
+    #t))
 
 ;;======================================================================
 ;; Extract ods file from the db
@@ -1141,14 +1135,14 @@
 	 run-id testnames currstate currstatus newstate newstatus))
       (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
 
-(define (rdb:teststep-set-status! db run-id test-name teststep-name state-in status-in itemdat comment logfile)
+(define (rdb:teststep-set-status! db test-id teststep-name state-in status-in itemdat comment logfile)
   (let ((item-path (item-list->path itemdat)))
     (if *runremote*
 	(let ((host (vector-ref *runremote* 0))
 	      (port (vector-ref *runremote* 1)))
 	  ((rpc:procedure 'rdb:teststep-set-status! host port)
-	   run-id test-name teststep-name state-in status-in item-path comment logfile))
-	(db:teststep-set-status! db run-id test-name teststep-name state-in status-in item-path comment logfile))))
+	   test-id teststep-name state-in status-in item-path comment logfile))
+	(db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile))))
 
 (define (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
   (let ((item-path (item-list->path itemdat)))
