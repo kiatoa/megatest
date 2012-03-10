@@ -3,12 +3,19 @@
 BINPATH=$(shell realpath ../bin)
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
+RUNNAME := $(shell date +w%V.%u.%H)
 
 runall :
+	@echo WARNING: These tests will kill megatest and dashboard!
+	@sleep 3
+	killall -9 dboard || true
+	killall -9 megatest || true
 	cd ../;make install
 	mkdir -p /tmp/mt_runs /tmp/mt_links
+	$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt % -itempatt %
 	$(BINPATH)/dboard -rows 15 &
-	$(MEGATEST) -runall -target ubuntu/nfs/none :runname `date +w%V.%u.%H` -m "This is a comment specific to a run" -v -server -
+	$(MEGATEST) -runall -target ubuntu/nfs/none :runname $(RUNNAME)_a
+	$(MEGATEST) -runall -target ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v -server -
 
 test :
 	csi -b -I .. ../megatest.scm -- -runall -target ubuntu/afs/tmp :runname blah
