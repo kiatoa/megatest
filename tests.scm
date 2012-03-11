@@ -113,7 +113,7 @@
 (define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
   (let* ((real-status status)
 	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	 (testdat     (db:get-test-info db run-id test-name item-path))
+	 (testdat     (rdb:get-test-info db run-id test-name item-path))
 	 (test-id     (if testdat (db:test-get-id testdat) #f))
 	 (otherdat    (if dat dat (make-hash-table)))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)

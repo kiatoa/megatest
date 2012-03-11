@@ -704,6 +704,7 @@
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
+        (thread-sleep! 0.1) ;; give other processes a chance here
 	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
 	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
 	    (sqlite3:execute
