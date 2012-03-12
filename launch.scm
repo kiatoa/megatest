@@ -106,7 +106,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (test-set-meta-info db run-id test-name itemdat)
-	  (test-set-status! db run-id test-name "REMOTEHOSTSTART" "n/a" itemdat (args:get-arg "-m") #f)
+	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -230,14 +230,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (test-set-status! db run-id test-name "RUNNING" "WARN" itemdat 
+							  (test-set-status! db test-id "RUNNING" "WARN" 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (test-set-status! db run-id test-name "RUNNING" "PASS" itemdat #f #f))
+							  (test-set-status! db test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db run-id test-name "RUNNING" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  (test-set-status! db test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -285,8 +285,8 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (test-set-status! db run-id test-name "KILLED"  "FAIL"
-								       itemdat (args:get-arg "-m") #f)
+						     (test-set-status! db test-id "KILLED"  "FAIL"
+								       (args:get-arg "-m") #f)
 						     (sqlite3:finalize! db)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))

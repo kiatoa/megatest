@@ -45,5 +45,8 @@ dashboard :
 remove :
 	(cd ../;make);$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 
+clean  : 
+	rm cleanprep
+
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;done

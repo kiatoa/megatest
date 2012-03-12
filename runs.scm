@@ -405,7 +405,8 @@
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (testdat       (db:get-test-info db run-id test-name item-path)))
+	   (testdat       (db:get-test-info db run-id test-name item-path))
+	   (test-id       #f))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
@@ -413,6 +414,7 @@
 	    ;; (system (conc "mkdir -p " new-test-path))
 	    (rtests:register-test db run-id test-name item-path)
 	    (set! testdat (db:get-test-info db run-id test-name item-path))))
+      (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
@@ -474,7 +476,7 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
+	       (test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
