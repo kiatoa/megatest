@@ -309,7 +309,7 @@
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (test-set-status! db run-id test-name
+		    (test-set-status! db test-id 
 				      (if kill-job? "KILLED" "COMPLETED")
 				      ;; Old logic:
 				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
@@ -329,7 +329,7 @@
 					;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				       (else "FAIL"))
-				      itemdat (args:get-arg "-m") #f)))
+				      (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
