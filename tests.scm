@@ -395,3 +395,12 @@
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
       (test-set-status! db test-id state status comment dat)))
+
+(define (rtests:test-set-toplog! db run-id test-name logf)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+            (port (vector-ref *runremote* 1)))
+        ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
+      (test-set-toplog! db run-id test-name logf)))
+
+

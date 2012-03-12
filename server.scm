@@ -239,6 +239,12 @@
        (set! *last-db-access* (current-seconds))
        (test-set-status! db test-id state status comment dat)))
 
+    (rpc:publish-procedure!
+     'rtests:test-set-toplog!
+     (lambda (run-id test-name logf)
+        (set! *last-db-access* (current-seconds))
+        (test-set-toplog! db run-id test-name logf)))
+
     ;;======================================================================
     ;; end of publish-procedure section
     ;;======================================================================

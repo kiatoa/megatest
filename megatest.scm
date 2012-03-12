@@ -20,6 +20,7 @@
 (declare (uses runs))
 (declare (uses launch))
 (declare (uses server))
+(declare (uses tests))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -628,9 +629,9 @@ Called as " (string-intersperse (argv) " ")))
 	      ;; has sub commands that are rdb:
 	      (db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
-	      (rdb:test-set-log! db test-id (args:get-arg "-setlog")))
+	      (rtests:test-set-log! db test-id (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")
-	      (rdb:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (rtests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      (rdb:tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
