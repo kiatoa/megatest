@@ -261,6 +261,7 @@
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+    (if *rpc:listener* (server:keep-running db))
     (debug:print 4 "INFO: All done by here")))
 
 (define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
@@ -364,8 +365,9 @@
       (if (null? tal)
 	  (begin
 	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
-	    (debug:print 1 "INFO: All tests launched, exiting")
-	    (exit 0))
+	    (debug:print 1 "INFO: All tests launched")
+	    ;; (exit 0)
+	    )
 	  (loop (car tal)(cdr tal))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
@@ -599,7 +601,7 @@
 	    (server:start db (args:get-arg "-server"))
 	    (if (not (or (args:get-arg "-runall")
 			  (args:get-arg "-runtests")))
-		(set! th1 (server:client-setup db))))
+		(server:client-setup db)))
 	(set! keys (rdb:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")

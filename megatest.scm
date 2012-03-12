@@ -163,6 +163,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-env2file"
 			"-setvars"
 			"-debug" ;; for *verbosity* > 2
+			"-override-timeout"
 			) 
 		 (list  "-h"
 		        "-force"
@@ -341,8 +342,12 @@ Called as " (string-intersperse (argv) " ")))
 	   (db      (if toppath (open-db) #f)))
       (debug:print 0 "INFO: Starting the standalone server")
       (if db 
-	  (let ((th2 (server:start db (args:get-arg "-server"))))
-	    (thread-join! th2))
+	  (let* ((host:port (db:get-var "SERVER")) ;; this doen't support multiple servers BUG!!!!
+		 (th2 (server:start db (args:get-arg "-server")))
+		 (th3 (lambda ()
+			(server:keep-going db))))
+	    (thread-start! th3)
+	    (thread-join! th3))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;======================================================================
@@ -621,9 +626,9 @@ Called as " (string-intersperse (argv) " ")))
 	      (server:client-setup db))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      (db:load-test-data db run-id test-name itemdat))
+	      (db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
-	      (rdb:test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
+	      (rdb:test-set-log! db test-id (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")
 	      (rdb:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
@@ -671,7 +676,7 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (rdb:test-set-log! db run-id test-name itemdat htmllogfile)))
+			  (rdb:test-set-log! db test-id htmllogfile)))
 		    (rdb:teststep-set-status! db test-id stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
 		    (sqlite3:finalize! db)
 		    (if (not (eq? exitstat 0))

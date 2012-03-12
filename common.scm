@@ -41,6 +41,7 @@
 (define *verbosity*   1)
 (define *rpc:listener* #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*    #f) ;; if set up for server communication this will hold <host port>
+(define *last-db-access* 0) ;; update when db is accessed via server
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))

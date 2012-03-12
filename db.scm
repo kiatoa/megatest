@@ -40,7 +40,9 @@
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler   (make-busy-timeout 3600))) ;; 136000)))
+	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					   (string->number (args:get-arg "-override-timeout"))
+					   36000)))) ;; 136000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -540,11 +542,11 @@
     res))
 
 
-(define (db:test-set-comment db run-id test-name item-path comment)
+(define (db:test-set-comment db test-id comment)
   (sqlite3:execute 
    db 
-   "UPDATE tests SET comment=? WHERE run_id=? AND testname=? AND item_path=?;"
-   comment run-id test-name item-path))
+   "UPDATE tests SET comment=? WHERE id=?;"
+   comment test-id))
 
 ;;
 (define (db:test-set-rundir! db run-id test-name item-path rundir)
@@ -553,10 +555,10 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
 
-(define (db:test-set-log! db run-id test-name item-path logf)
+(define (db:test-set-log! db test-id logf)
   (if (string? logf)
-      (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path=?;" 
-		   logf run-id test-name item-path)
+      (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
+		   logf test-id)
       (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
 
 ;;======================================================================
@@ -684,10 +686,10 @@
 		     (else
 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
 		 data)))
+    (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
+    (sqlite3:finalize! step-stmt)
     (set! *incoming-data* '())
-    (mutex-unlock! *incoming-mutex*)
-    (sqlite3:finalize! meta-stmt)
-    (sqlite3:finalize! step-stmt)))
+    (mutex-unlock! *incoming-mutex*)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -715,7 +717,9 @@
                        ELSE 'COMPLETED' END,
                           status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
                        WHERE run_id=? AND testname=? AND item_path='';"
-	     run-id test-name run-id test-name)))))
+	     run-id test-name run-id test-name))
+	#f)
+      #f))
 
 
 ;;======================================================================
@@ -811,22 +815,16 @@
      "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
 
-(define (db:load-test-data db run-id test-name itemdat)
-  (let* ((item-path (item-list->path itemdat))
-	 (testdat (rdb:get-test-info db run-id test-name item-path))
-	 (test-id (if testdat (db:test-get-id testdat) #f)))
-    ;; (debug:print 1 "Enter records to insert in the test_data table, seven fields, comma separated per line")
-    (debug:print 4 "itemdat: " itemdat ", test-name: " test-name ", test-id: " test-id)
-    (if test-id
-	(let loop ((lin (read-line)))
-	  (if (not (eof-object? lin))
-	      (begin
-		(debug:print 4 lin)
-		(rdb:csv->test-data db test-id lin)
-		(loop (read-line))))))
-    ;; roll up the current results.
-    ;; FIXME: Add the status to 
-    (rdb:test-data-rollup db test-id #f)))
+(define (db:load-test-data db test-id)
+  (let loop ((lin (read-line)))
+    (if (not (eof-object? lin))
+	(begin
+	  (debug:print 4 lin)
+	  (rdb:csv->test-data db test-id lin)
+	  (loop (read-line)))))
+  ;; roll up the current results.
+  ;; FIXME: Add the status to 
+  (rdb:test-data-rollup db test-id #f))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -1178,20 +1176,20 @@
 	 run-id test-name item-path status))
       (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
 
-(define (rdb:test-set-comment db run-id test-name item-path comment)
+(define (rdb:test-set-comment db test-id comment)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rdb:test-set-comment host port)
-	 run-id test-name item-path comment))
-      (db:test-set-comment db run-id test-name item-path comment)))
+	 test-id comment))
+      (db:test-set-comment db test-id comment)))
 
-(define (rdb:test-set-log! db run-id test-name item-path logf)
+(define (rdb:test-set-log! db test-id logf)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-log! host port) run-id test-name item-path logf))
-      (db:test-set-log! db run-id test-name item-path logf)))
+	((rpc:procedure 'rdb:test-set-log! host port) test-id logf))
+      (db:test-set-log! db test-id logf)))
 
 (define (rdb:get-runs db runnamepatt numruns startrunoffset keypatts)
   (if *runremote*

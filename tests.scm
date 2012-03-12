@@ -167,28 +167,26 @@
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
       (if (and value expected tol) ;; all three required
-	  (rdb:csv->test-data db test-id 
-			     (conc category ","
-				   variable ","
-				   value    ","
-				   expected ","
-				   tol      ","
-				   units    ","
-				   dcomment ",," ;; extra comma for status
-				   type     ))))
-				   
+	  (let ((dat (conc category ","
+			   variable ","
+			   value    ","
+			   expected ","
+			   tol      ","
+			   units    ","
+			   dcomment ",," ;; extra comma for status
+			   type     )))
+	    (rdb:csv->test-data db test-id
+				dat))))
+      
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
-	(rdb:test-set-comment db  run-id test-name item-path (if waived waived comment)))
+	(let ((cmt  (if waived waived comment)))
+	  (rdb:test-set-comment db test-id cmt)))
     ))
-
-(define (test-set-log! db run-id test-name itemdat logf) 
-  (let ((item-path (item-list->path itemdat)))
-    (rdb:test-set-log! db run-id test-name item-path logf)))
 
 (define (test-set-toplog! db run-id test-name logf) 
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
