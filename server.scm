@@ -105,7 +105,7 @@
     
     (rpc:publish-procedure!
      'rdb:test-set-log!
-     (lambda (run-id test-name item-path logf)
+     (lambda (test-id logf)
        (set! *last-db-access* (current-seconds))
        (db:test-set-log! db test-id logf)))
     

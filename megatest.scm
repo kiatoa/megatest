@@ -342,10 +342,10 @@ Called as " (string-intersperse (argv) " ")))
 	   (db      (if toppath (open-db) #f)))
       (debug:print 0 "INFO: Starting the standalone server")
       (if db 
-	  (let* ((host:port (db:get-var "SERVER")) ;; this doen't support multiple servers BUG!!!!
+	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
 		 (th2 (server:start db (args:get-arg "-server")))
-		 (th3 (lambda ()
-			(server:keep-going db))))
+		 (th3 (make-thread (lambda ()
+				      (server:keep-running db)))))
 	    (thread-start! th3)
 	    (thread-join! th3))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
@@ -648,14 +648,15 @@ Called as " (string-intersperse (argv) " ")))
 			 (shell      (last (string-split (get-environment-variable "SHELL") "/")))
 			 (redir      (case (string->symbol shell)
 				       ((tcsh csh ksh)    ">&")
-				       ((zsh bash sh ash) "2>&1 >")))
+				       ((zsh bash sh ash) "2>&1 >")
+				       (else ">&")))
 			 (fullcmd    (conc "(" (string-intersperse 
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
 		    (rdb:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; close the db
-		    (sqlite3:finalize! db)
+		    ;; (sqlite3:finalize! db)
 		    ;; run the test step
 		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -663,9 +664,9 @@ Called as " (string-intersperse (argv) " ")))
 		    (set! *globalexitstatus* exitstat)
 		    (change-directory testpath)
 		    ;; re-open the db
-		    (set! db (open-db))
-		    (if (not (args:get-arg "-server"))
-			(server:client-setup db))
+		    ;; (set! db (open-db))
+		    ;; (if (not (args:get-arg "-server"))
+		    ;;     (server:client-setup db))
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
@@ -677,10 +678,11 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  (rdb:test-set-log! db test-id htmllogfile)))
-		    (rdb:teststep-set-status! db test-id stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
-		    (sqlite3:finalize! db)
-		    (if (not (eq? exitstat 0))
-			(exit 254)) ;; (exit exitstat) doesn't work?!?
+		    (let ((msg (args:get-arg "-m")))
+		      (rdb:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
+		    ;; (sqlite3:finalize! db)
+		    ;;(if (not (eq? exitstat 0))
+		    ;;	(exit 254)) ;; (exit exitstat) doesn't work?!?
 		  ;; open the db
 		  ;; mark the end of the test
 		  )))
