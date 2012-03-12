@@ -53,7 +53,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rdb:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -110,12 +110,13 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 ;; 
-(define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
+(define (test-set-status! db test-id state status comment dat)
   (let* ((real-status status)
-	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	 (testdat     (rdb:get-test-info db run-id test-name item-path))
-	 (test-id     (if testdat (db:test-get-id testdat) #f))
 	 (otherdat    (if dat dat (make-hash-table)))
+	 (testdat     (db:get-test-data-by-id db test-id))
+	 (run-id      (db:test-get-run_id testdat))
+	 (test-name   (db:test-get-testname   testdat))
+	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
@@ -388,9 +389,9 @@
 	((rpc:procedure 'rtests:register-test host port) run-id test-name item-path))
       (tests:register-test db run-id test-name item-path)))
 
-(define (rtests:test-set-status!  db run-id test-name state status itemdat-or-path comment dat)
+(define (rtests:test-set-status!  db test-id state status comment dat)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rtests:test-set-status! host port) run-id test-name state status itemdat-or-path comment dat))
-      (test-set-status! db run-id test-name state status itemdat-or-path comment dat)))
+	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
+      (test-set-status! db test-id state status comment dat)))

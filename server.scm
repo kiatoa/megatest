@@ -235,9 +235,9 @@
     
     (rpc:publish-procedure!
      'rtests:test-set-status!
-     (lambda (run-id test-name state status itemdat-or-path comment dat)
+     (lambda (test-id state status comment dat)
        (set! *last-db-access* (current-seconds))
-       (test-set-status! db run-id test-name state status itemdat-or-path comment dat)))
+       (test-set-status! db test-id state status comment dat)))
 
     ;;======================================================================
     ;; end of publish-procedure section
