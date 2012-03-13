@@ -53,7 +53,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rdb:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -110,12 +110,13 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 ;; 
-(define (test-set-status! db run-id test-name state status itemdat-or-path comment dat)
+(define (test-set-status! db test-id state status comment dat)
   (let* ((real-status status)
-	 (item-path   (if (string? itemdat-or-path) itemdat-or-path (item-list->path itemdat-or-path)))
-	 (testdat     (db:get-test-info db run-id test-name item-path))
-	 (test-id     (if testdat (db:test-get-id testdat) #f))
 	 (otherdat    (if dat dat (make-hash-table)))
+	 (testdat     (db:get-test-data-by-id db test-id))
+	 (run-id      (db:test-get-run_id testdat))
+	 (test-name   (db:test-get-testname   testdat))
+	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
@@ -167,28 +168,26 @@
 		   "category: " category ", variable: " variable ", value: " value
 		   ", expected: " expected ", tol: " tol ", units: " units)
       (if (and value expected tol) ;; all three required
-	  (rdb:csv->test-data db test-id 
-			     (conc category ","
-				   variable ","
-				   value    ","
-				   expected ","
-				   tol      ","
-				   units    ","
-				   dcomment ",," ;; extra comma for status
-				   type     ))))
-				   
+	  (let ((dat (conc category ","
+			   variable ","
+			   value    ","
+			   expected ","
+			   tol      ","
+			   units    ","
+			   dcomment ",," ;; extra comma for status
+			   type     )))
+	    (rdb:csv->test-data db test-id
+				dat))))
+      
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
-	(rdb:test-set-comment db  run-id test-name item-path (if waived waived comment)))
+	(let ((cmt  (if waived waived comment)))
+	  (rdb:test-set-comment db test-id cmt)))
     ))
-
-(define (test-set-log! db run-id test-name itemdat logf) 
-  (let ((item-path (item-list->path itemdat)))
-    (rdb:test-set-log! db run-id test-name item-path logf)))
 
 (define (test-set-toplog! db run-id test-name logf) 
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
@@ -389,3 +388,19 @@
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rtests:register-test host port) run-id test-name item-path))
       (tests:register-test db run-id test-name item-path)))
+
+(define (rtests:test-set-status!  db test-id state status comment dat)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
+      (test-set-status! db test-id state status comment dat)))
+
+(define (rtests:test-set-toplog! db run-id test-name logf)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+            (port (vector-ref *runremote* 1)))
+        ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
+      (test-set-toplog! db run-id test-name logf)))
+
+

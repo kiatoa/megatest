@@ -46,7 +46,8 @@
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
     (setenv "MT_CMDINFO" encoded-cmd)
-    (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed) (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
+    (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
+                        ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
@@ -54,6 +55,7 @@
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (env-ovrd  (assoc/default 'env-ovrd  cmdinfo))
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
@@ -104,7 +106,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (test-set-meta-info db run-id test-name itemdat)
-	  (test-set-status! db run-id test-name "REMOTEHOSTSTART" "n/a" itemdat (args:get-arg "-m") #f)
+	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -186,7 +188,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (rdb:teststep-set-status! db run-id test-name stepname "start" "-" itemdat #f #f)
+						   (rdb:teststep-set-status! db test-id stepname "start" "-" itemdat #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -201,9 +203,12 @@
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
 								   ))
-						     (rdb:teststep-set-status! db run-id test-name stepname "end" (vector-ref exit-info 2) itemdat #f (if logpro-used (conc stepname ".html") ""))
+                                                     (let ((exinfo (vector-ref exit-info 2))
+                                                           (logfna (if logpro-used (conc stepname ".html") "")))
+                                                        ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
+						        (rdb:teststep-set-status! db test-id stepname "end" exinfo itemdat #f logfna))
 						     (if logpro-used
-							 (test-set-log! db run-id test-name itemdat (conc stepname ".html")))
+							 (rdb:test-set-log! db test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -225,14 +230,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (test-set-status! db run-id test-name "RUNNING" "WARN" itemdat 
+							  (test-set-status! db test-id "RUNNING" "WARN" 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (test-set-status! db run-id test-name "RUNNING" "PASS" itemdat #f #f))
+							  (test-set-status! db test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db run-id test-name "RUNNING" "FAIL" itemdat (conc "Failed at step " stepname) #f)
+							  (test-set-status! db test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -280,8 +285,8 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (test-set-status! db run-id test-name "KILLED"  "FAIL"
-								       itemdat (args:get-arg "-m") #f)
+						     (test-set-status! db test-id "KILLED"  "FAIL"
+								       (args:get-arg "-m") #f)
 						     (sqlite3:finalize! db)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
@@ -300,11 +305,11 @@
 	    (if (not (args:get-arg "-server"))
 		(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (db:get-test-info db run-id test-name item-path)))
+		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (test-set-status! db run-id test-name
+		    (test-set-status! db test-id 
 				      (if kill-job? "KILLED" "COMPLETED")
 				      ;; Old logic:
 				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
@@ -324,7 +329,7 @@
 					;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				       (else "FAIL"))
-				      itemdat (args:get-arg "-m") #f)))
+				      (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
@@ -432,7 +437,7 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
-  (let ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
+  (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	(runscript  (config-lookup test-conf   "setup"        "runscript"))
 	(ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
@@ -441,7 +446,9 @@
 	(hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
 	(remote-megatest (config-lookup *configdat* "setup" "executable"))
 	;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
-	;;                allow running from dashboard 
+	;;                allow running from dashboard. Extract the path
+        ;;                from the called megatest and convert dashboard
+  	;;             	  or dboard to megatest
 	(local-megatest  (let* ((lm  (car (argv)))
 				(dir (pathname-directory lm))
 				(exe (pathname-strip-directory lm)))
@@ -450,14 +457,18 @@
 				   ((dboard) "megatest")
 				   ((dashboard) "megatest")
 				   (else exe)))))
-	(test-sig   (conc "=" test-name ":" (item-list->path itemdat) "=")) ;; test-path is the full path including the item-path
+	(test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	(work-area  #f)
 	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	(diskpath   #f)
 	(cmdparms   #f)
 	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
-	(mt-bindir-path #f))
-    (if hosts (set! hosts (string-split hosts)))
+	(mt-bindir-path #f)
+	(item-path (item-list->path itemdat))
+	(testinfo   (rdb:get-test-info db run-id test-name item-path))
+	(test-id    (db:test-get-id testinfo)))
+  (if hosts (set! hosts (string-split hosts)))
+    ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
     (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
@@ -478,6 +489,7 @@
 						   (list 'test-name test-name) 
 						   (list 'runscript runscript) 
 						   (list 'run-id    run-id   )
+						   (list 'test-id   test-id  )
 						   (list 'itemdat   itemdat  )
 						   (list 'megatest  remote-megatest)
 						   (list 'ezsteps   ezsteps) 
@@ -498,8 +510,7 @@
       (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
-    (test-set-status! db run-id test-name "LAUNCHED" "n/a" itemdat #f #f) ;; (if launch-results launch-results "FAILED"))
-    ;; set 
+    (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
@@ -520,7 +531,7 @@
 				      '()
 				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
       (debug:print 2 "Launching completed, updating db")
-      (debug:print 4 "Launch results: " launch-results)
+      (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
 	  (begin
 	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")

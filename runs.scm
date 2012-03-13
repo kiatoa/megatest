@@ -10,7 +10,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18))
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -261,6 +261,7 @@
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+    (if *rpc:listener* (server:keep-running db))
     (debug:print 4 "INFO: All done by here")))
 
 (define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
@@ -364,8 +365,9 @@
       (if (null? tal)
 	  (begin
 	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
-	    (debug:print 1 "INFO: All tests launched, exiting")
-	    (exit 0))
+	    (debug:print 1 "INFO: All tests launched")
+	    ;; (exit 0)
+	    )
 	  (loop (car tal)(cdr tal))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
@@ -394,12 +396,17 @@
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
-    (runs:update-test_meta db test-name test-conf)
+    ;; Yes, another use of a global for caching. Need a better way?
+    (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
+        (begin
+	   (hash-table-set! *test-meta-updated* test-name #t)
+           (runs:update-test_meta db test-name test-conf)))
     
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (testdat       (db:get-test-info db run-id test-name item-path)))
+	   (testdat       (db:get-test-info db run-id test-name item-path))
+	   (test-id       #f))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
@@ -407,6 +414,7 @@
 	    ;; (system (conc "mkdir -p " new-test-path))
 	    (rtests:register-test db run-id test-name item-path)
 	    (set! testdat (db:get-test-info db run-id test-name item-path))))
+      (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
@@ -451,7 +459,8 @@
 	   (if (not runflag)
 	       (if (not parent-test)
 		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
-				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat) "\" or -force to override"))
+				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
+                                "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
@@ -467,7 +476,7 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (test-set-status! db run-id test-name "INCOMPLETE" "STUCK/DEAD" itemdat "Test is stuck or dead" #f))
+	       (test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
@@ -573,7 +582,8 @@
   (let ((runname (args:get-arg ":runname"))
 	(target  (if (args:get-arg "-target")
 		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg"))))
+		     (args:get-arg "-reqtarg")))
+	(th1     #f))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -589,8 +599,11 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(set! db   (open-db))
-	(if (not (args:get-arg "-server"))
-	    (server:client-setup db))
+	(if (args:get-arg "-server")
+	    (server:start db (args:get-arg "-server"))
+	    (if (not (or (args:get-arg "-runall")
+			  (args:get-arg "-runtests")))
+		(server:client-setup db)))
 	(set! keys (rdb:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
@@ -613,6 +626,7 @@
 	    (let* ((keynames   (map key:get-fieldname keys))
 		   (keyvallst  (keys->vallist keys #t)))
 	      (proc db target runname keys keynames keyvallst)))
+	(if th1 (thread-join! th1))
 	(sqlite3:finalize! db)
 	(set! *didsomething* #t))))))
 

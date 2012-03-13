@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -20,6 +20,7 @@
 (declare (uses runs))
 (declare (uses launch))
 (declare (uses server))
+(declare (uses tests))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -163,6 +164,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-env2file"
 			"-setvars"
 			"-debug" ;; for *verbosity* > 2
+			"-override-timeout"
 			) 
 		 (list  "-h"
 		        "-force"
@@ -339,8 +341,14 @@ Called as " (string-intersperse (argv) " ")))
 		  (args:get-arg "-runtests"))))
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
+      (debug:print 0 "INFO: Starting the standalone server")
       (if db 
-	  (server:start db (args:get-arg "-server"))
+	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
+		 (th2 (server:start db (args:get-arg "-server")))
+		 (th3 (make-thread (lambda ()
+				      (server:keep-running db)))))
+	    (thread-start! th3)
+	    (thread-join! th3))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;======================================================================
@@ -457,7 +465,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
 		 (keys     (rdb:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (db:test-get-paths-matching db keynames target)))
+		 (paths    (rdb:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -468,7 +476,7 @@ Called as " (string-intersperse (argv) " ")))
 	 "Get paths to tests"
 	 (lambda (db target runname keys keynames keyvallst)
 	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (db:test-get-paths-matching db keynames target)))
+		  (paths    (rdb:test-get-paths-matching db keynames target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -564,6 +572,7 @@ Called as " (string-intersperse (argv) " ")))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (db        #f)
 	       (state    (args:get-arg ":state"))
@@ -578,7 +587,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (not (args:get-arg "-server"))
 	      (server:client-setup db))
 	  (if (and state status)
-	      (rdb:teststep-set-status! db run-id test-name step state status itemdat (args:get-arg "-m") logfile)
+	      (rdb:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
@@ -603,6 +612,7 @@ Called as " (string-intersperse (argv) " ")))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
+	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (db        #f)
 	       (state     (args:get-arg ":state"))
@@ -616,13 +626,14 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (not (args:get-arg "-server"))
 	      (server:client-setup db))
 	  (if (args:get-arg "-load-test-data")
-	      (db:load-test-data db run-id test-name itemdat))
+	      ;; has sub commands that are rdb:
+	      (db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
-	      (test-set-log! db run-id test-name itemdat (args:get-arg "-setlog")))
+	      (rtests:test-set-log! db test-id (args:get-arg "-setlog")))
 	  (if (args:get-arg "-set-toplog")
-	      (test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (rtests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (rdb:tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
@@ -638,14 +649,15 @@ Called as " (string-intersperse (argv) " ")))
 			 (shell      (last (string-split (get-environment-variable "SHELL") "/")))
 			 (redir      (case (string->symbol shell)
 				       ((tcsh csh ksh)    ">&")
-				       ((zsh bash sh ash) "2>&1 >")))
+				       ((zsh bash sh ash) "2>&1 >")
+				       (else ">&")))
 			 (fullcmd    (conc "(" (string-intersperse 
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (rdb:teststep-set-status! db run-id test-name stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
+		    (rdb:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; close the db
-		    (sqlite3:finalize! db)
+		    ;; (sqlite3:finalize! db)
 		    ;; run the test step
 		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -653,9 +665,9 @@ Called as " (string-intersperse (argv) " ")))
 		    (set! *globalexitstatus* exitstat)
 		    (change-directory testpath)
 		    ;; re-open the db
-		    (set! db (open-db))
-		    (if (not (args:get-arg "-server"))
-			(server:client-setup db))
+		    ;; (set! db (open-db))
+		    ;; (if (not (args:get-arg "-server"))
+		    ;;     (server:client-setup db))
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
@@ -666,11 +678,12 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (test-set-log! db run-id test-name itemdat htmllogfile)))
-		    (rdb:teststep-set-status! db run-id test-name stepname "end" exitstat itemdat (args:get-arg "-m") logfile)
-		    (sqlite3:finalize! db)
-		    (if (not (eq? exitstat 0))
-			(exit 254)) ;; (exit exitstat) doesn't work?!?
+			  (rdb:test-set-log! db test-id htmllogfile)))
+		    (let ((msg (args:get-arg "-m")))
+		      (rdb:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
+		    ;; (sqlite3:finalize! db)
+		    ;;(if (not (eq? exitstat 0))
+		    ;;	(exit 254)) ;; (exit exitstat) doesn't work?!?
 		  ;; open the db
 		  ;; mark the end of the test
 		  )))
@@ -696,7 +709,8 @@ Called as " (string-intersperse (argv) " ")))
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
 		      (sqlite3:finalize! db)
 		      (exit 6)))
-		(test-set-status! db run-id test-name state newstatus itemdat (args:get-arg "-m") otherdata)))
+		(let ((msg (args:get-arg "-m")))
+		  (rtests:test-set-status! db test-id state newstatus msg otherdata))))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 
