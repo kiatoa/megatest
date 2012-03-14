@@ -107,7 +107,7 @@
                      archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
-    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname);")
+    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
     (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
