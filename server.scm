@@ -245,6 +245,12 @@
         (set! *last-db-access* (current-seconds))
         (test-set-toplog! db run-id test-name logf)))
 
+    (rpc:publish-procedure!
+     'db:test-get-paths-matching 
+      (lambda (keynames target)
+        (set! *last-db-access* (current-seconds))
+        (db:test-get-paths-matching db keynames target)))
+
     ;;======================================================================
     ;; end of publish-procedure section
     ;;======================================================================
