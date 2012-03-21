@@ -1,0 +1,14 @@
+#!/bin/bash -e
+
+load=`uptime|awk '{print $10}'|cut -d, -f1`
+numcpu=`cpucheck|tail -1|awk '{print $6}'`
+lperc=`echo "100 * $load / $numcpu"|bc`
+
+if [[ $lperc -lt 100 ]];then
+  # echo "Load percent: $lperc < 100, using nbfake"
+  nbfake $(*)
+else
+  # echo "Load percent: $lperc > 100, using NBLAUNCHER"
+  $NBLAUNCHER $(*)
+fi
+
