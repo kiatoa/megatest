@@ -46,6 +46,9 @@ $(PREFIX)/bin/nbfake : utils/nbfake
 	cp $< $@
 	chmod a+x $@
 
+$(PREFIX)/bin/nbfind : utils/nbfind
+	cp $< $@
+	chmod a+x $@
 
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dboard $(FILES)
@@ -53,7 +56,7 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
-install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake
+install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind
 
 bin : 
 	mkdir -p $(PREFIX)/bin
