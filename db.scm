@@ -650,25 +650,22 @@
     (db:write-cached-data db)
     (loop start-time)))
     
-(define (db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree)
-  (if (not item-path)
-      (begin (debug:print 0 "WARNING: ITEMPATH not set.")   
-	     (set! item-path "")))
+(define (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
   (mutex-lock! *incoming-mutex*)
   (set! *incoming-data* (cons (vector 'meta-info
 				      (current-seconds)
 				      (list cpuload
 					    diskfree
 					    minutes
-					    run-id
-					    test-name
-					    item-path)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
-  (if (not *cache-on*)(db:write-cached-data db)))
+  (if *cache-on*
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
+      (db:write-cached-data db)))
 
 (define (db:write-cached-data db)
-  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE run_id=? AND testname=? AND item_path=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
     (if (> (length data) 0)
@@ -1143,14 +1140,13 @@
 	   test-id teststep-name state-in status-in item-path comment logfile))
 	(db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile))))
 
-(define (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
-  (let ((item-path (item-list->path itemdat)))
-    (if *runremote*
-	(let ((host (vector-ref *runremote* 0))
-	      (port (vector-ref *runremote* 1)))
-	  ((rpc:procedure 'rdb:test-update-meta-info host port)
-	   run-id test-name item-path minutes cpuload diskfree tmpfree))
-	(db:test-update-meta-info db run-id test-name item-path minutes cpuload diskfree tmpfree))))
+(define (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'rdb:test-update-meta-info host port)
+	 test-id minutes cpuload diskfree tmpfree))
+      (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)))
 
 (define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (if *runremote*

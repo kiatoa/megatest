@@ -4,18 +4,20 @@ BINPATH=$(shell realpath ../bin)
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H)
-IPADDR :="-"
+IPADDR := "-"
+# Set SERVER to "-server $(IPADDR)"
+SERVER := ""
 
 runall : test1 test2
 
 test1 : cleanprep
-	$(MEGATEST) -runtests ez_pass -target ubuntu/nfs/none :runname $(RUNNAME)_a -server $(IPADDR)
+	$(MEGATEST) -runtests ez_pass -target ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
 
 test2 : cleanprep
-	$(MEGATEST) -runtests runfirst -target ubuntu/nfs/none :runname $(RUNNAME)_b  -server $(IPADDR) -debug 10
+	$(MEGATEST) -runtests runfirst -target ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
 
 test3 : cleanprep
-	$(MEGATEST) -runall -target ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v -server $(IPADDR) 
+	$(MEGATEST) -runall -target ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
 
 cleanprep : ../*.scm
 	sqlite3 megatest.db "delete from metadat where var='SERVER';"

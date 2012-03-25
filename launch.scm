@@ -66,7 +66,7 @@
 	       (db        #f)
 	       (rollup-status 0))
 	  
-	  (debug:print 2 "Exectuing " test-name " on " (get-host-name))
+	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (change-directory testpath)
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
@@ -96,7 +96,7 @@
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
 	      (server:client-setup db))
-	  (set! *cache-on* #t)
+	  ;; (set! *cache-on* #t)
 	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 	  (set-run-config-vars db run-id)
@@ -262,7 +262,7 @@
 				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (rdb:test-update-meta-info db run-id test-name itemdat minutes cpuload diskfree tmpfree)
+				       (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -438,35 +438,35 @@
 (define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
-	(launcher   (config-lookup *configdat* "jobtools"     "launcher"))
-	(runscript  (config-lookup test-conf   "setup"        "runscript"))
-	(ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
-	(diskspace  (config-lookup test-conf   "requirements" "diskspace"))
-	(memory     (config-lookup test-conf   "requirements" "memory"))
-	(hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
-	(remote-megatest (config-lookup *configdat* "setup" "executable"))
-	;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
-	;;                allow running from dashboard. Extract the path
-        ;;                from the called megatest and convert dashboard
-  	;;             	  or dboard to megatest
-	(local-megatest  (let* ((lm  (car (argv)))
-				(dir (pathname-directory lm))
-				(exe (pathname-strip-directory lm)))
-			   (conc (if dir (conc dir "/") "")
-				 (case (string->symbol exe)
-				   ((dboard) "megatest")
-				   ((dashboard) "megatest")
-				   (else exe)))))
-	(test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
-	(work-area  #f)
-	(toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
-	(diskpath   #f)
-	(cmdparms   #f)
-	(fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
-	(mt-bindir-path #f)
-	(item-path (item-list->path itemdat))
-	(testinfo   (rdb:get-test-info db run-id test-name item-path))
-	(test-id    (db:test-get-id testinfo)))
+	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
+	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
+	 (ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	 (diskspace  (config-lookup test-conf   "requirements" "diskspace"))
+	 (memory     (config-lookup test-conf   "requirements" "memory"))
+	 (hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
+	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
+	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
+	 ;;                allow running from dashboard. Extract the path
+	 ;;                from the called megatest and convert dashboard
+	 ;;             	  or dboard to megatest
+	 (local-megatest  (let* ((lm  (car (argv)))
+				 (dir (pathname-directory lm))
+				 (exe (pathname-strip-directory lm)))
+			    (conc (if dir (conc dir "/") "")
+				  (case (string->symbol exe)
+				    ((dboard) "megatest")
+				    ((dashboard) "megatest")
+				    (else exe)))))
+	 (test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	 (work-area  #f)
+	 (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
+	 (diskpath   #f)
+	 (cmdparms   #f)
+	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
+	 (mt-bindir-path #f)
+	 (item-path (item-list->path itemdat))
+	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
+	 (test-id    (db:test-get-id testinfo)))
   (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))

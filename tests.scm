@@ -403,4 +403,3 @@
         ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
       (test-set-toplog! db run-id test-name logf)))
 
-

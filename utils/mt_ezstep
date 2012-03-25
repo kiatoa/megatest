@@ -1,7 +1,10 @@
 #!/bin/bash
 
+usage="mt_ezstep stepname prevstepname command [args ...]"
+
 if [ "$MT_CMDINFO" == "" ];then
   echo "ERROR: $0 should be run within a megatest test environment"
+  echo "Usage: $usage"
   exit
 fi
 
@@ -11,6 +14,11 @@ fi
 # Call like this:
 # mt_ezstep stepname prevstepname command ....
 # 
+if [ "x$1" == "x" ];then
+  echo "Usage: $usage"
+  exit
+fi
+
 stepname=$1;shift
 prevstepname=$1;shift
 
