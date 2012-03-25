@@ -19,6 +19,10 @@ if [ "x$1" == "x" ];then
   exit
 fi
 
+# Since the user may not have . on the path and since we are likely to want to 
+# run test scripts in the current directory add the current dir to the path
+export PATH=$PATH:$PWD
+
 stepname=$1;shift
 prevstepname=$1;shift
 
