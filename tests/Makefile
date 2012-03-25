@@ -5,7 +5,7 @@ MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H)
 IPADDR := "-"
-# Set SERVER to "-server $(IPADDR)"
+# Set SERVER to "-server -"
 SERVER := ""
 
 runall : test1 test2

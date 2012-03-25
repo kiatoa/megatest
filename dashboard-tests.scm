@@ -344,19 +344,19 @@
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "megatest -runtests " testname " -target " keystring " :runname " runname 
+			     (conc "xterm -e \"megatest -runtests " testname " -target " keystring " :runname " runname 
 				   " -itempatt " (if (equal? item-path "")
 						     "%" 
 						     item-path)
-				   "" ))))
+				   "\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
+			       (conc "xterm -e \"megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
 				     (if (equal? item-path "")
 					 "%"
 					 item-path)
-				     " -v ")))))
+				     " -v\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
