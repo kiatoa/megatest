@@ -348,7 +348,7 @@
 				   " -itempatt " (if (equal? item-path "")
 						     "%" 
 						     item-path)
-				   "\""))))
+				   ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
@@ -356,7 +356,7 @@
 				     (if (equal? item-path "")
 					 "%"
 					 item-path)
-				     " -v\"")))))
+				     " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))

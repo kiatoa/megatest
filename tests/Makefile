@@ -11,13 +11,13 @@ SERVER := ""
 runall : test1 test2
 
 test1 : cleanprep
-	$(MEGATEST) -runtests ez_pass -target ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
+	$(MEGATEST) -runtests ez_pass -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
 
 test2 : cleanprep
-	$(MEGATEST) -runtests runfirst -target ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
+	$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
 
 test3 : cleanprep
-	$(MEGATEST) -runall -target ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
+	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
 
 cleanprep : ../*.scm
 	sqlite3 megatest.db "delete from metadat where var='SERVER';"

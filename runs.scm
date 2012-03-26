@@ -294,7 +294,9 @@
 	    (if (and have-resources
 		     (null? prereqs-not-met))
 		;; no loop - drop though and use the loop at the bottom 
-		(run:test db run-id runname keyvallst test-record flags #f)
+		(if (patt-list-match item-path item-patts)
+		    (run:test db run-id runname keyvallst test-record flags #f)
+		    (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
 		;; else the run is stuck, temporarily or permanently
 		(let ((newtal (append tal (list hed))))
 		  ;; couldn't run, take a breather
@@ -317,22 +319,8 @@
 	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
 				       (vector-copy! test-record newrec)
 				       newrec))
-		    (my-item-path (item-list->path my-itemdat))
-		    
-		    ;; 3/25/2012 - this match is *always* returning true I believe. Or is it the tests that are not being handled?
-		    ;;
-		    (item-matches (if item-patts       ;; here we are filtering for matches with -itempatt
-				      (let ((res #f))	 ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
-					(for-each 
-					 (lambda (patt)
-					   (if (string-search (glob->regexp
-							       (string-translate patt "%" "*"))
-							      item-path)
-					       (set! res #t)))
-					 (string-split item-patts ","))
-					res)
-				      #t)))
-	       (if item-matches ;; yes, we want to process this item
+		    (my-item-path (item-list->path my-itemdat)))
+	       (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item
 		   (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
 		     (tests:testqueue-set-items!     new-test-record #f)
 		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
