@@ -287,7 +287,7 @@
 	      tests)
     res))
 
-(define (test:get-testconfig test-name system-allowed)
+(define (tests:get-testconfig test-name system-allowed)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
@@ -339,6 +339,43 @@
 		     #t ;; if a is a higher priority than b then we are good to go
 		     #f))))))))
 
+;; for each test:
+;;   
+(define (tests:filter-non-runnable db run-id testkeynames testrecordshash)
+  (let ((runnables '()))
+    (for-each
+     (lambda (testkeyname)
+       (let* ((test-record (hash-table-ref testrecordshash testkeyname))
+	      (test-name   (tests:testqueue-get-testname  test-record))
+	      (itemdat     (tests:testqueue-get-itemdat   test-record))
+	      (item-path   (tests:testqueue-get-item_path test-record))
+	      (waitons     (tests:testqueue-get-waitons   test-record))
+	      (keep-test   #t)
+	      (tdat        (db:get-test-info db run-id test-name item-path)))
+	 (if tdat
+	     (begin
+	       ;; Look at the test state and status
+	       (if (or (member (db:test-get-status tdat) 
+			       '("PASS" "WARN" "WAIVED" "CHECK"))
+		       (member (db:test-get-state tdat)
+			       '("INCOMPLETE" "KILLED")))
+		   (set! keep-test #f))
+
+	       ;; examine waitons for any fails. If it is FAIL or INCOMPLETE then eliminate this test
+	       ;; from the runnable list
+	       (if keep-test
+		   (for-each (lambda (waiton)
+			       ;; for now we are waiting only on the parent test
+			       (let ((wtdat (db:get-test-info db run-id waiton ""))) 
+				 (if (or (member (db:test-get-status wtdat)
+						 '("FAIL" "KILLED"))
+					 (member (db:test-get-state wtdat)
+						 '("INCOMPETE")))
+				     (set! keep-test #f)))) ;; no point in running this one again
+			     waitons))))
+	 (if keep-test (set! runnables (cons testkeyname runnables)))))
+     testkeynames)
+    runnables))
 
 ;;======================================================================
 ;; test steps

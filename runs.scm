@@ -209,7 +209,7 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
-	  (let* ((config  (test:get-testconfig hed 'return-procs))
+	  (let* ((config  (tests:get-testconfig hed 'return-procs))
 		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
 					  (if w w "")))))
 	    ;; (items   (items:get-items-from-config config)))
@@ -244,7 +244,7 @@
 						 (items:get-items-from-config config))
 						(else #f)))                           ;; not iterated
 					     #f      ;; itemsdat 5
-					     ;; #f      ;; spare
+					     #f      ;; spare - used for item-path
 					     )))
 	    (for-each 
 	     (lambda (waiton)
@@ -264,6 +264,7 @@
     (if *rpc:listener* (server:keep-running db))
     (debug:print 4 "INFO: All done by here")))
 
+;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
@@ -277,7 +278,7 @@
 	     (tconfig     (tests:testqueue-get-testconfig test-record))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
 	     (priority    (tests:testqueue-get-priority   test-record))
-	     (itemdat     (tests:testqueue-get-itemdat    test-record))
+	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 	     (items       (tests:testqueue-get-items      test-record))
 	     (item-path   (item-list->path itemdat)))
 	(debug:print 6
@@ -297,7 +298,7 @@
 		;; else the run is stuck, temporarily or permanently
 		(let ((newtal (append tal (list hed))))
 		  ;; couldn't run, take a breather
-		  (thread-sleep! 4)
+		  (thread-sleep! 0.5)
 		  (loop (car newtal)(cdr newtal))))))
 	 
 	 ;; case where an items came in as a list been processed
@@ -314,6 +315,9 @@
 				       (vector-copy! test-record newrec)
 				       newrec))
 		    (my-item-path (item-list->path my-itemdat))
+		    
+		    ;; 3/25/2012 - this match is *always* returning true I believe. Or is it the tests that are not being handled?
+		    ;;
 		    (item-matches (if item-patts       ;; here we are filtering for matches with -itempatt
 				      (let ((res #f))	 ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 					(for-each 
@@ -326,9 +330,10 @@
 					res)
 				      #t)))
 	       (if item-matches ;; yes, we want to process this item
-		   (let ((newtestname (conc hed "/" my-item-path))) 
-		     (tests:testqueue-set-items!   new-test-record #f)
-		     (tests:testqueue-set-itemdat! new-test-record my-itemdat)
+		   (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
+		     (tests:testqueue-set-items!     new-test-record #f)
+		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+		     (tests:testqueue-set-item_path! new-test-record my-item-path)
 		     (hash-table-set! test-records newtestname new-test-record)
 		     (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
 	   items)
@@ -353,7 +358,7 @@
 			(exit 1)))))
 	      (let ((newtal (append tal (list hed))))
 		;; if can't run more tests, lets take a breather
-		(thread-sleep! 1)
+		(thread-sleep! 0.5)
 		(loop (car newtal)(cdr newtal)))))
 
 	 ;; this case should not happen, added to help catch any bugs
@@ -366,9 +371,16 @@
 	  (begin
 	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
 	    (debug:print 1 "INFO: All tests launched")
-	    ;; (exit 0)
-	    )
-	  (loop (car tal)(cdr tal))))))
+	    (thread-sleep! 0.5)
+	    ;; FIXME! This harsh exit should not be necessary....
+	    (if (not *runremote*)(exit)) ;; 
+	    #f) ;; return a #f as a hint that we are done
+	  ;; Here we need to check that all the tests remaining to be run are eligible to run
+	  ;; and are not blocked by failed
+	  (let ((newlst (tests:filter-non-runnable db run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+	    (thread-sleep! 0.5)
+	    (if (not (null? newlst))
+		(loop (car newlst)(cdr newlst))))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test db run-id runname keyvallst test-record flags parent-test)
@@ -377,7 +389,7 @@
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
 	 (test-conf    (tests:testqueue-get-testconfig test-record))
 	 (itemdat      (tests:testqueue-get-itemdat    test-record))
-	 (test-path    (conc *toppath* "/tests/" test-name)) ;; could use test:get-testconfig here ...
+	 (test-path    (conc *toppath* "/tests/" test-name)) ;; could use tests:get-testconfig here ...
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
