@@ -304,7 +304,10 @@
 	 ;; case where an items came in as a list been processed
 	 ((and (list? items)     ;; thus we know our items are already calculated
 	       (not   itemdat)) ;; and not yet expanded into the list of things to be done
-	  (if (>= *verbosity* 1)(pp items))
+	  (if (and (>= *verbosity* 1)
+		   (> (length items) 0)
+		   (> (length (car items)) 0))
+		   (pp items))
 	  ;; (if (>= *verbosity* 5)
 	  ;;     (begin
 	  ;;       (print "items: ")     (pp (item-assoc->item-list items))
