@@ -9,13 +9,14 @@ else
 fi
 
 lperc=`echo "100 * $load / $numcpu"|bc`
-
-if [[ $lperc -lt 100 ]];then
-  # echo "Load percent: $lperc < 100, using nbfake"
-  nbfake "$@"
-  # $(*)
+if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
+  max_load=50
 else
-  # echo "Load percent: $lperc > 100, using NBLAUNCHER"
+  max_load=$MAX_ALLOWED_LOAD
+fi 
+if [[ $lperc -lt $max_load ]];then
+  nbfake "$@"
+else
   $NBLAUNCHER "$@"
 fi
 
