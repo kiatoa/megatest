@@ -54,6 +54,43 @@
 (define configf:comment-rx (regexp "^\\s*#.*"))
 (define configf:cont-ln-rx (regexp "^(\\s+)(\\S+.*)$"))
 
+;; read a line and process any #{ ... } constructs
+
+(define configf:var-expand-regex (regexp "^(.*)#\\{([^\\}\\{]*)\\}(.*)"))
+(define (configf:process-line l)
+  (let loop ((res l))
+    (if (string? res)
+	(let ((matchdat (string-search configf:var-expand-regex res)))
+	  (if matchdat
+	      (let ((prestr  (cadr matchdat))
+		    (cmd     (caddr matchdat))
+		    (poststr (cadddr matchdat))
+		    (result  #f))
+		(with-input-from-string (conc "(" cmd ")")
+		  (lambda ()
+		    (set! result (eval (read)))))
+		(loop (conc prestr result poststr)))
+	      res))
+	res)))
+
+(define (shell cmd)
+  (let* ((output (cmd-run->list cmd))
+	 (res    (car output))
+	 (status (cadr output)))
+    (if (equal? status 0)
+	(string-intersperse 
+	 res
+	 "\n")
+	(begin
+	  (with-output-to-port (current-error-port)
+	    (print "ERROR: " cmd " returned bad exit code " status))
+	  ""))))
+
+(define-inline (configf:read-line p)
+  (configf:process-line (read-line p)))
+
+;; read a config file, returns hash table of alists
+
 ;; read a config file, returns hash table of alists
 ;; adds to ht if given (must be #f otherwise)
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
@@ -65,7 +102,7 @@
       (if (not ht)(make-hash-table) ht)
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
-	(let loop ((inl               (read-line inp))
+	(let loop ((inl               (configf:read-line inp)) ;; (read-line inp))
 		   (curr-section-name "default")
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
 		   (lead     #f))
@@ -75,12 +112,12 @@
 		res)
 	      (regex-case 
 	       inl 
-	       (configf:comment-rx _                  (loop (read-line inp) curr-section-name #f #f))
-	       (configf:blank-l-rx _                  (loop (read-line inp) curr-section-name #f #f))
+	       (configf:comment-rx _                  (loop (configf:read-line inp) curr-section-name #f #f))
+	       (configf:blank-l-rx _                  (loop (configf:read-line inp) curr-section-name #f #f))
 	       (configf:include-rx ( x include-file ) (begin
 						(read-config include-file res allow-system environ-patt: environ-patt)
-						(loop (read-line inp) curr-section-name #f #f)))
-	       (configf:section-rx ( x section-name ) (loop (read-line inp) section-name #f #f))
+						(loop (configf:read-line inp) curr-section-name #f #f)))
+	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp) section-name #f #f))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
 							  (let ((alist (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
@@ -101,8 +138,8 @@
 												      ((return-procs) val-proc)
 												      ((return-string) cmd)
 												      (else (val-proc)))))
-							    (loop (read-line inp) curr-section-name #f #f))
-							  (loop (read-line inp) curr-section-name #f #f)))
+							    (loop (configf:read-line inp) curr-section-name #f #f))
+							  (loop (configf:read-line inp) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key val      ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 						     (envar   (and environ-patt (string-match (regexp environ-patt) curr-section-name)))
 						     (realval (if envar
@@ -114,7 +151,7 @@
 						      (setenv key realval)))
 						(hash-table-set! res curr-section-name 
 								 (config:assoc-safe-add alist key realval))
-						(loop (read-line inp) curr-section-name key #f)))
+						(loop (configf:read-line inp) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(if var-flag             ;; if set to a string then we have a continued var
@@ -128,11 +165,11 @@
 						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
 						      (hash-table-set! res curr-section-name 
 								       (config:assoc-safe-add alist var-flag newval))
-						      (loop (read-line inp) curr-section-name var-flag (if lead lead whsp)))
-						    (loop (read-line inp) curr-section-name #f #f))))
+						      (loop (configf:read-line inp) curr-section-name var-flag (if lead lead whsp)))
+						    (loop (configf:read-line inp) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (read-line inp) curr-section-name #f #f))))))))
+		     (loop (configf:read-line inp) curr-section-name #f #f))))))))
   
 (define (find-and-read-config fname #!key (environ-patt #f))
   (let* ((curr-dir   (current-directory))
