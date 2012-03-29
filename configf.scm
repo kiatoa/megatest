@@ -79,7 +79,7 @@
 				   (conc "(lambda (ht)(config-lookup ht \"" sect "\" \"" var "\"))")))
 				((runconfigs-get) (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
-		(print "fullcmd=" fullcmd)
+		;; (print "fullcmd=" fullcmd)
 		(with-input-from-string fullcmd
 		  (lambda ()
 		    (set! result ((eval (read)) ht))))
