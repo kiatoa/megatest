@@ -10,13 +10,18 @@
 
 (include "common_records.scm")
 
+
+
 (define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f))
   (let* ((keys    (rdb:get-keys db))
 	 (keyvals (rdb:get-key-vals db run-id))
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
-	 (confdat (read-config fname #f #f environ-patt: environ-patt))
+	 ;; Why was system disallowed in the reading of the runconfigs file?
+	 ;; NOTE: Should be setting env vars based on (target|default)
+	 (confdat (read-config fname #f #t environ-patt: environ-patt))
 	 (whatfound (make-hash-table))
 	 (sections (list "default" thekey)))
+    (if (not *target*)(set! *target* thekey)) ;; may save a db access or two but repeats db:get-target code
     (debug:print 4 "Using key=\"" thekey "\"")
 
     (for-each
@@ -44,8 +49,14 @@
 	  (set! *already-seen-runconfig-info* #t)))))
 
 (define (set-run-config-vars db run-id)
-  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
+  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
+	(targ       (or (args:get-arg "-target")
+			(args:get-arg "-reqtarg")
+			(db:get-target db run-id))))
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id #f environ-patt: ".*")
+	(setup-env-defaults db runconfigf run-id #t environ-patt: (conc "(default"
+									(if targ
+									    (conc "|" targ ")")
+									    ")")))
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))))
  

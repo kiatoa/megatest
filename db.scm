@@ -410,6 +410,15 @@
      keys)
     (reverse res)))
 
+;; The target is keyval1/keyval2..., cached in *target* as it is used often
+(define (db:get-target db run-id)
+  (if *target*
+      *target*
+      (let* ((keyvals (rdb:get-key-vals db run-id))
+	     (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+	(set! *target* thekey)
+	thekey)))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================

@@ -1,7 +1,7 @@
 
 PREFIX=.
 CSCOPTS= 
-
+INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
@@ -36,23 +36,23 @@ $(OFILES) $(GOFILES) : common_records.scm
 
 $(PREFIX)/bin/megatest : megatest
 	@echo Installing to PREFIX=$(PREFIX)
-	cp megatest $(PREFIX)/bin/megatest
+	$(INSTALL) megatest $(PREFIX)/bin/megatest
 
 $(HELPERS) : utils/mt_* 
-	cp $< $@
+	$(INSTALL) $< $@
 	chmod a+x $@
 
 $(PREFIX)/bin/nbfake : utils/nbfake
-	cp $< $@
+	$(INSTALL) $< $@
 	chmod a+x $@
 
 $(PREFIX)/bin/nbfind : utils/nbfind
-	cp $< $@
+	$(INSTALL) $< $@
 	chmod a+x $@
 
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dboard $(FILES)
-	cp dboard $(PREFIX)/bin/dboard
+	$(INSTALL) dboard $(PREFIX)/bin/dboard
 	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 

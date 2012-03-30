@@ -34,14 +34,15 @@
 (define *configdat*  #f)
 (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
-(define *waiting-queue* (make-hash-table))
+(define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
-(define *globalexitstatus* 0) ;; attempt to work around possible thread issues
-(define *passnum*     0) ;; when running track calls to run-tests or similar
-(define *verbosity*   1)
-(define *rpc:listener* #f) ;; if set up for server communication this will hold the tcp port
-(define *runremote*    #f) ;; if set up for server communication this will hold <host port>
-(define *last-db-access* 0) ;; update when db is accessed via server
+(define *globalexitstatus*  0) ;; attempt to work around possible thread issues
+(define *passnum*           0) ;; when running track calls to run-tests or similar
+(define *verbosity*         1)
+(define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
+(define *runremote*         #f) ;; if set up for server communication this will hold <host port>
+(define *last-db-access*    0)  ;; update when db is accessed via server
+(define *target*            #f) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))

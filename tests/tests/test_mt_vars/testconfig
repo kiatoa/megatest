@@ -3,6 +3,11 @@
 [ezsteps]
 lookittmp   ls /tmp
 lookithome  ls /home
+# $CURRENT should be /tmp/nada
+currentisblah currentisblah.sh
+
+# $BOGOUS should NOT be set
+bogousnotset bogousnotset.sh
 
 [requirements]
 waiton runfirst
