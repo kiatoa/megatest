@@ -119,7 +119,7 @@
 	  ;; from here on out we will open and close the db
 	  ;; on every access to reduce the probablitiy of 
 	  ;; contention or stuck access on nfs.
-	  (sqlite3:finalize! db)
+	  ;; (sqlite3:finalize! db)
 
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
@@ -152,9 +152,10 @@
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
-					    (db         (open-db)))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
+					    ;; (db         (open-db))
+					    )
+				       ;; (if (not (args:get-arg "-server"))
+				       ;;   (server:client-setup db))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -253,12 +254,12 @@
 							    start-seconds)))))
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
-				     (let* ((db       (open-db))
+				     (let* (;; (db       (open-db))
 					    (cpuload  (get-cpu-load))
 					    (diskfree (get-df (current-directory)))
 					    (tmpfree  (get-df "/tmp")))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
+				       ;; (if (not (args:get-arg "-server"))
+				       ;;   (server:client-setup db))
 				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
@@ -287,11 +288,11 @@
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						     (test-set-status! db test-id "KILLED"  "FAIL"
 								       (args:get-arg "-m") #f)
-						     (sqlite3:finalize! db)
+						     ;; (sqlite3:finalize! db)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
-				       (sqlite3:finalize! db)
+				       ;; (sqlite3:finalize! db)
 				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
 				       (loop (calc-minutes)))))))
 		 (th1          (make-thread monitorjob))
@@ -301,9 +302,9 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (mutex-lock! m)
-	    (set! db (open-db))
-	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
+	    ;; (set! db (open-db))
+	    ;; (if (not (args:get-arg "-server"))
+	    ;;     (server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
@@ -466,7 +467,8 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
-	 (test-id    (db:test-get-id testinfo)))
+	 (test-id    (db:test-get-id testinfo))
+	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
   (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -502,12 +504,12 @@
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
-      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
+      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
      (launcher
-      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
+      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms) debug-param)))
      (else
       (if (not useshell)(debug:print 0 "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
-      (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
+      (set! fullcmd (append (list remote-megatest test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
