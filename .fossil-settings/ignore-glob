@@ -1,1 +1,8 @@
 utils/build/*
+*~
+*.o
+bin/*
+tests/megatest.db
+tests/monitor.db
+megatest
+dboard
