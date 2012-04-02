@@ -412,7 +412,8 @@
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		     (if rd rd (conc *toppath* "/runs"))))
 	 (lnkbase  (conc linktree "/" target "/" runname))
-	 (lnkpath  (conc lnkbase "/" testname))) ;; item-path)))
+	 (lnkpath  (conc lnkbase "/" testname)) ;; item-path)))
+	 (lnkpathf (conc lnkpath (if (equal? item-path "") "" "/") item-path)))
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
 	(begin
@@ -458,8 +459,8 @@
 	  (create-directory test-path #t) ;; (system  (conc "mkdir -p " test-path))
 	  (debug:print 2 " - creating link from " test-path " to " lnktarget)
 	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
-	  
-	  (create-symbolic-link test-path lnktarget)))
+	  (if (not (file-exists? lnktarget))
+	      (create-symbolic-link test-path lnktarget))))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
@@ -476,7 +477,7 @@
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
-	  (list test-path toptest-path))
+	  (list lnkpathf lnkpath))
 	(list #f #f))))
 
 ;; 1. look though disks list for disk with most space
