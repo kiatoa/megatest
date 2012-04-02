@@ -1,4 +1,4 @@
-;; Copyright 2006-2011, Matthew Welland.
+;; Copyright 2006-2012, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -31,7 +31,7 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2011
+  license GPL, Copyright Matt Welland 2006-2012
 
 Usage: megatest [options]
   -h                      : this help
