@@ -529,7 +529,8 @@
     (if diskpath
 	(let ((dat  (create-work-area db run-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
-	  (set! toptest-work-area (cadr dat)))
+	  (set! toptest-work-area (cadr dat))
+	  (debug:print 2 "INFO: Using work area " work-area))
 	(begin
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)
