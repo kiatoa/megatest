@@ -441,7 +441,9 @@
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
-	  (list dfullp toptest-path))
+	  (list dfullp toptest-path)
+	  ;; (list lnkpath toptest-path)
+	  )
 	(list #f #f))))
 
 ;; 1. look though disks list for disk with most space
