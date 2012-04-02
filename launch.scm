@@ -381,34 +381,50 @@
 	  (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section")
 	  (exit 1)))))
 
+;; Desired directory structure:
+;;
+;;  <linkdir> - <target> - <testname> -.
+;;                                     |
+;;                                     v
+;;  <rundir>  -  <target>  -    <testname> -|- <itempath(s)>
+;;
+;;  dir stored in test is:
+;; 
+;;  <linkdir> - <target> - <testname> [ - <itempath> ]
+;; 
+;; All log file links should be stored relative to the top of link path
+;;  
+;; <target> - <testname> [ - <itempath> ] 
+;;
 (define (create-work-area db run-id test-path disk-path testname itemdat)
   (let* ((run-info (db:get-run-info db run-id))
-	 (item-path (let ((ip (item-list->path itemdat)))
-		      (if (equal? ip "") "" (conc "/" ip))))
+	 (item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 (key-vals (rdb:get-key-vals db run-id))
-	 (key-str  (string-intersperse key-vals "/"))
-	 (dfullp   (conc disk-path "/" key-str "/" runname "/" testname
-			 item-path))
-	 (toptest-path (conc disk-path "/" key-str "/" runname "/" testname))
+	 (target   (string-intersperse key-vals "/"))
+	 ;; nb// if itempath is not "" then it is prefixed with "/"
+	 (dfullp   (conc disk-path "/" target "/" runname "/" testname (if (equal? item-path "") "/" "") item-path))
+	 ;; ensure this exists first as links to subtests must be created there
+	 (toptest-path (conc disk-path "/" target "/" runname "/" testname))
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		     (if rd rd (conc *toppath* "/runs"))))
-	 (lnkpath  (conc linktree "/" key-str "/" runname item-path)))
+	 (lnkpath  (conc linktree "/" target "/" runname item-path)))
     (if (not (file-exists? linktree))
 	(begin
 	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
-	  (system (conc "mkdir -p " linktree))))
+	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
+
     ;; since this is an iterated test this is as good a place as any to
     ;; update the toptest record with its location rundir
     (if (not (equal? item-path ""))
 	(db:test-set-rundir! db run-id testname "" toptest-path))
     (debug:print 2 "Setting up test run area")
     (debug:print 2 " - creating run area in " dfullp)
-    (system  (conc "mkdir -p " dfullp))
+    (create-directory dfullp #t) ;; (system  (conc "mkdir -p " dfullp))
     (debug:print 2 " - creating link from " dfullp "/" testname " to " lnkpath)
-    (system  (conc "mkdir -p " lnkpath))
+    (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
