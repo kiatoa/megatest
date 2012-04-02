@@ -24,12 +24,12 @@ cleanprep : ../*.scm
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make
 	@sleep 1
-	@if ps -def |awk '{print $8}'|grep megatest; then \
-	   echo WARNING: These tests will kill megatest and dashboard!; \
-	   sleep 3; \
-	   killall -9 dboard || true; \
-  	   killall -9 megatest || true; \
-	fi
+	# @if ps -def |awk '{print $8}'|grep megatest; then \
+	#    echo WARNING: These tests will kill megatest and dashboard!; \
+	#    sleep 3; \
+	#    killall -9 dboard || true; \
+  	#    killall -9 megatest || true; \
+	# fi
 	cd ../;make install
 	$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt % -itempatt %
 	$(BINPATH)/dboard -rows 15 &

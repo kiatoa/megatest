@@ -44,6 +44,7 @@
 (define *last-db-access*    0)  ;; update when db is accessed via server
 (define *target*            #f) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *toptest-paths*     (make-hash-table)) ;; cache toptest path settings here
+(define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))

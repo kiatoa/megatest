@@ -347,22 +347,26 @@
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
-  (let* ((res      #f)
-	 (keys      (db:get-keys db))
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header    (append (map key:get-fieldname keys)
-			    remfields))
-	 (keystr    (conc (keys->keystr keys) ","
-			  (string-intersperse remfields ","))))
-    ;; (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-    (sqlite3:for-each-row
-     (lambda (a . x)
-       (set! res (apply vector a x)))
-     db
-     (conc "SELECT " keystr " FROM runs WHERE id=?;")
-     run-id)
-    (vector header res)))
-
+  (if (hash-table-ref/default *run-info-cache* run-id #f)
+      (hash-table-ref *run-info-cache* run-id)
+      (let* ((res      #f)
+	     (keys      (db:get-keys db))
+	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
+	     (header    (append (map key:get-fieldname keys)
+				remfields))
+	     (keystr    (conc (keys->keystr keys) ","
+			      (string-intersperse remfields ","))))
+	;; (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+	(sqlite3:for-each-row
+	 (lambda (a . x)
+	   (set! res (apply vector a x)))
+	 db
+	 (conc "SELECT " keystr " FROM runs WHERE id=?;")
+	 run-id)
+	(let ((finalres (vector header res)))
+	  (hash-table-set! *run-info-cache* run-id finalres)
+	  finalres))))
+  
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
