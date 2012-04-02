@@ -482,7 +482,8 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
-	 (test-id    (db:test-get-id testinfo)))
+	 (test-id    (db:test-get-id testinfo))
+	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
   (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -518,12 +519,15 @@
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
-      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
+      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
+      ;; (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
      (launcher
-      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
+      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms) debug-param)))
+      ;; (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
      (else
       (if (not useshell)(debug:print 0 "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
-      (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
+      (set! fullcmd (append (list remote-megatest test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
+      ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
     (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
