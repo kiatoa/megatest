@@ -1,4 +1,4 @@
-
+\
 ;; Copyright 2006-2012, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -396,52 +396,87 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-path disk-path testname itemdat)
+(define (create-work-area db run-id test-src-path disk-path testname itemdat)
   (let* ((run-info (db:get-run-info db run-id))
 	 (item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
-	 (key-vals (rdb:get-key-vals db run-id))
+	 ;; convert back to db: from rdb: - this is always run at server end
+	 (key-vals (db:get-key-vals db run-id))
 	 (target   (string-intersperse key-vals "/"))
 	 ;; nb// if itempath is not "" then it is prefixed with "/"
-	 (dfullp   (conc disk-path "/" target "/" runname "/" testname (if (equal? item-path "") "/" "") item-path))
-	 ;; ensure this exists first as links to subtests must be created there
 	 (toptest-path (conc disk-path "/" target "/" runname "/" testname))
+	 (test-path    (conc toptest-path (if (equal? item-path "") "" "/") item-path))
+	 ;; ensure this exists first as links to subtests must be created there
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		     (if rd rd (conc *toppath* "/runs"))))
-	 (lnkpath  (conc linktree "/" target "/" runname item-path)))
+	 (lnkbase  (conc linktree "/" target "/" runname))
+	 (lnkpath  (conc lnkbase "/" testname))) ;; item-path)))
+    (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
 	(begin
 	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
+    ;; create the directory for the tests dir links, this is needed no matter what...
+    (if (not (directory-exists? lnkbase))
+	(create-directory lnkbase #t))
+    
+    ;; update the toptest record with its location rundir, cache the path
+    ;; This wass highly inefficient, one db write for every subtest, potentially
+    ;; thousands of unnecessary updates, cache the fact it was set and don't set it 
+    ;; again. 
+    (if (not (hash-table-ref/default *toptest-paths* testname #f))
+	(let* ((testinfo       (db:get-test-info db run-id testname item-path))
+	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
+	  (hash-table-set! *toptest-paths* testname curr-test-path)
+	  (if (or (not curr-test-path)
+		  (not (directory-exists? toptest-path)))
+	      (begin
+		(debug:print 2 "INFO: Creating " toptest-path " and link " lnkpath)
+		(create-directory toptest-path #t)
+		(db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
+		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
-    ;; since this is an iterated test this is as good a place as any to
-    ;; update the toptest record with its location rundir
-    (if (not (equal? item-path ""))
-	(db:test-set-rundir! db run-id testname "" toptest-path))
-    (debug:print 2 "Setting up test run area")
-    (debug:print 2 " - creating run area in " dfullp)
-    (create-directory dfullp #t) ;; (system  (conc "mkdir -p " dfullp))
-    (debug:print 2 " - creating link from " dfullp "/" testname " to " lnkpath)
-    (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
+    ;; Now create the link from the test path to the link tree, however
+    ;; if the test is iterated it is necessary to create the parent path
+    ;; to the iteration. use pathname-directory to trim the path by one
+    ;; level
+    (if (not (equal? item-path "")) ;; i.e. iterated
+	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
+	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
+	  (create-directory iterated-parent #t)))
+    (if (not (file-exists? lnkpath))
+	(create-symbolic-link toptest-path lnkpath))
+    
+    ;; The toptest path has been created, the link to the test in the linktree has
+    ;; been created. Now, if this is an iterated test the real test dir must be created
+    (if (not (equal? item-path "")) ;; this is an iterated test
+	(let ((lnktarget (conc lnkpath "/" item-path)))
+	  (debug:print 2 "Setting up sub test run area")
+	  (debug:print 2 " - creating run area in " test-path)
+	  (create-directory test-path #t) ;; (system  (conc "mkdir -p " test-path))
+	  (debug:print 2 " - creating link from " test-path " to " lnktarget)
+	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
+	  
+	  (create-symbolic-link test-path lnktarget)))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
-
-    (let ((testlink (conc lnkpath "/" testname)))
-      (if (and (file-exists? testlink)
-	       (or (regular-file? testlink)
-		   (symbolic-link? testlink)))
-	  (system (conc "rm -f " testlink)))
-      (system  (conc "ln -sf " dfullp " " testlink)))
-    (if (directory? dfullp)
+    ;; I honestly don't remember *why* this chunk was needed...
+    ;; (let ((testlink (conc lnkpath "/" testname)))
+    ;;   (if (and (file-exists? testlink)
+    ;;            (or (regular-file? testlink)
+    ;;     	   (symbolic-link? testlink)))
+    ;;       (system (conc "rm -f " testlink)))
+    ;;   (system  (conc "ln -sf " test-path " " testlink)))
+    (if (directory? test-path)
 	(begin
-	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-path "/ " dfullp "/"))
+	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-src-path "/ " test-path "/"))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
-	  (list dfullp toptest-path))
+	  (list test-path toptest-path))
 	(list #f #f))))
 
 ;; 1. look though disks list for disk with most space

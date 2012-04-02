@@ -43,6 +43,7 @@
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    0)  ;; update when db is accessed via server
 (define *target*            #f) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
+(define *toptest-paths*     (make-hash-table)) ;; cache toptest path settings here
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))
