@@ -405,15 +405,28 @@
 	 ;; convert back to db: from rdb: - this is always run at server end
 	 (key-vals (db:get-key-vals db run-id))
 	 (target   (string-intersperse key-vals "/"))
+
+	 (not-iterated  (equal? "" item-path))
+
+	 ;; all tests are found at <rundir>/test-base or <linkdir>/test-base
+	 (testtop-base (conc target "/" runname "/" testname))
+	 (test-base    (conc testtop-base (if not-iterated "" "/") item-path))
+
 	 ;; nb// if itempath is not "" then it is prefixed with "/"
-	 (toptest-path (conc disk-path "/" target "/" runname "/" testname))
-	 (test-path    (conc toptest-path (if (equal? item-path "") "" "/") item-path))
+	 (toptest-path (conc disk-path "/" testtop-base))
+	 (test-path    (conc disk-path "/" test-base))
+
 	 ;; ensure this exists first as links to subtests must be created there
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		     (if rd rd (conc *toppath* "/runs"))))
+
 	 (lnkbase  (conc linktree "/" target "/" runname))
-	 (lnkpath  (conc lnkbase "/" testname)) ;; item-path)))
-	 (lnkpathf (conc lnkpath (if (equal? item-path "") "" "/") item-path)))
+	 (lnkpath  (conc lnkbase "/" testname))
+	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
+
+    ;; Update the rundir path in the test record for all
+    (db:test-set-rundir! db run-id testname item-path lnkpathf)
+
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
 	(begin
@@ -427,23 +440,26 @@
     ;; This wass highly inefficient, one db write for every subtest, potentially
     ;; thousands of unnecessary updates, cache the fact it was set and don't set it 
     ;; again. 
+
+    ;; NB - This is not working right - some top tests are not getting the path set!!!
+
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
 	(let* ((testinfo       (db:get-test-info db run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
+	  (db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
 		(debug:print 2 "INFO: Creating " toptest-path " and link " lnkpath)
 		(create-directory toptest-path #t)
-		(db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
 		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
     ;; Now create the link from the test path to the link tree, however
     ;; if the test is iterated it is necessary to create the parent path
     ;; to the iteration. use pathname-directory to trim the path by one
     ;; level
-    (if (not (equal? item-path "")) ;; i.e. iterated
+    (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
@@ -452,12 +468,14 @@
     
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
-    (if (not (equal? item-path "")) ;; this is an iterated test
+    (if (not not-iterated) ;; this is an iterated test
 	(let ((lnktarget (conc lnkpath "/" item-path)))
 	  (debug:print 2 "Setting up sub test run area")
 	  (debug:print 2 " - creating run area in " test-path)
 	  (create-directory test-path #t) ;; (system  (conc "mkdir -p " test-path))
-	  (debug:print 2 " - creating link from " test-path " to " lnktarget)
+	  (debug:print 2 
+		       " - creating link from: " test-path "\n"
+		       "                   to: " lnktarget)
 	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
 	  (if (not (file-exists? lnktarget))
 	      (create-symbolic-link test-path lnktarget))))
@@ -477,7 +495,7 @@
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
-	  (list lnkpathf lnkpath))
+	  (list lnkpathf lnkpath ))
 	(list #f #f))))
 
 ;; 1. look though disks list for disk with most space

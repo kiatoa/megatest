@@ -393,14 +393,12 @@
 	(cpuload  (get-cpu-load))
 	(hostname (get-host-name))
 	(diskfree (get-df (current-directory)))
-	(uname    (get-uname "-srvpio"))
-	(runpath  (current-directory)))
-    (sqlite3:execute db "UPDATE tests SET host=?,cpuload=?,diskfree=?,uname=?,rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
+	(uname    (get-uname "-srvpio")))
+    (sqlite3:execute db "UPDATE tests SET host=?,cpuload=?,diskfree=?,uname=? WHERE run_id=? AND testname=? AND item_path=?;"
 		  hostname
 		  cpuload
 		  diskfree
 		  uname
-		  runpath
 		  run-id
 		  testname
 		  item-path)))
