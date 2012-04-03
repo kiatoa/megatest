@@ -179,7 +179,7 @@ Misc
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
 		  (set! *last-update* (current-seconds))
-		  (set! *tot-run-count* (rdb:get-num-runs *db* runnamepatt))))
+		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
 			       (tests    (let ((tsts (rdb:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
