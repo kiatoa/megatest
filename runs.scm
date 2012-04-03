@@ -506,73 +506,77 @@
        (let ((runkey (string-intersperse (map (lambda (k)
 						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
 	     (dirs-to-remove (make-hash-table)))
-	 (let* ((run-id (db:get-value-by-header run header "id") )
-		(tests  (rdb:get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt '() '()))
+	 (let* ((run-id    (db:get-value-by-header run header "id"))
+		(run-state (db:get-value-by-header run header "state"))
+		(tests     (if (not (equal? run-state "locked"))
+			       (rdb:get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt '() '())
+			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
-
-	   (if (not (null? tests))
+	   (if (not (equal? run-state "locked"))
 	       (begin
-		 (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
-		 (for-each
-		  (lambda (test)
-		    (let* ((item-path (db:test-get-item-path test))
-			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test)))
-		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path)
-		      (rdb:delete-test-records db (db:test-get-id test))
-		      (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
-			  (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
-			    (set! lasttpath fullpath)
-			    (hash-table-set! dirs-to-remove fullpath #t)
-			    ;; The following was the safe delete code but it was not being exectuted.
-			    ;; (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
-			    ;;        (dir-to-rem (get-dir-up-n fullpath dirs-count))
-			    ;;        (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
-			    ;;        (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
-			    ;;   (if (file-exists? fullpath)
-			    ;;       (begin
-			    ;;         (debug:print 1 cmd)
-			    ;;         (system cmd)))
-			    ;;   ))
-			    ))))
-		    tests)))
+		 (if (not (null? tests))
+		     (begin
+		       (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
+		       (for-each
+			(lambda (test)
+			  (let* ((item-path (db:test-get-item-path test))
+				 (test-name (db:test-get-testname test))
+				 (run-dir   (db:test-get-rundir test)))
+			    (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path)
+			    (rdb:delete-test-records db (db:test-get-id test))
+			    (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
+				(let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
+				  (set! lasttpath fullpath)
+				  (hash-table-set! dirs-to-remove fullpath #t)
+				  ;; The following was the safe delete code but it was not being exectuted.
+				  ;; (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
+				  ;;        (dir-to-rem (get-dir-up-n fullpath dirs-count))
+				  ;;        (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
+				  ;;        (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
+				  ;;   (if (file-exists? fullpath)
+				  ;;       (begin
+				  ;;         (debug:print 1 cmd)
+				  ;;         (system cmd)))
+				  ;;   ))
+				  ))))
+			tests)))
 
-	   ;; look though the dirs-to-remove for candidates for removal. Do this after deleting the records
-	   ;; for each test in case we get killed. That should minimize the detritus left on disk
-	   ;; process the dirs from longest string length to shortest
-	   (for-each 
-	    (lambda (dir-to-remove)
-	      (if (file-exists? dir-to-remove)
-		  (let ((dir-in-db '()))
-		    (sqlite3:for-each-row
-		     (lambda (dir)
-		       (set! dir-in-db (cons dir dir-in-db)))
-		     db "SELECT rundir FROM tests WHERE rundir LIKE ?;" 
-		     (conc "%" dir-to-remove "%")) ;; yes, I'm going to bail if there is anything like this dir in the db
-		    (if (null? dir-in-db)
-			(begin
-			  (debug:print 2 "Removing directory with zero db references: " dir-to-remove)
-			  (system (conc "rm -rf " dir-to-remove))
-			  (hash-table-delete! dirs-to-remove dir-to-remove))
-			(debug:print 2 "Skipping removal of " dir-to-remove " for now as it still has references in the database")))))
-	    (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
+		 ;; look though the dirs-to-remove for candidates for removal. Do this after deleting the records
+		 ;; for each test in case we get killed. That should minimize the detritus left on disk
+		 ;; process the dirs from longest string length to shortest
+		 (for-each 
+		  (lambda (dir-to-remove)
+		    (if (file-exists? dir-to-remove)
+			(let ((dir-in-db '()))
+			  (sqlite3:for-each-row
+			   (lambda (dir)
+			     (set! dir-in-db (cons dir dir-in-db)))
+			   db "SELECT rundir FROM tests WHERE rundir LIKE ?;" 
+			   (conc "%" dir-to-remove "%")) ;; yes, I'm going to bail if there is anything like this dir in the db
+			  (if (null? dir-in-db)
+			      (begin
+				(debug:print 2 "Removing directory with zero db references: " dir-to-remove)
+				(system (conc "rm -rf " dir-to-remove))
+				(hash-table-delete! dirs-to-remove dir-to-remove))
+			      (debug:print 2 "Skipping removal of " dir-to-remove " for now as it still has references in the database")))))
+		  (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
 
-	   ;; remove the run if zero tests remain
-	   (let ((remtests (rdb:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
-	     (if (null? remtests) ;; no more tests remaining
-		 (let* ((dparts  (string-split lasttpath "/"))
-			(runpath (conc "/" (string-intersperse 
-					    (take dparts (- (length dparts) 1))
-					    "/"))))
-		   (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
-		   (db:delete-run db run-id)
-		   ;; need to figure out the path to the run dir and remove it if empty
-		   ;;    (if (null? (glob (conc runpath "/*")))
-		   ;;        (begin
-		   ;; 	 (debug:print 1 "Removing run dir " runpath)
-		   ;; 	 (system (conc "rmdir -p " runpath))))
-		   ))))
-	 ))
+		 ;; remove the run if zero tests remain
+		 (let ((remtests (rdb:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
+		   (if (null? remtests) ;; no more tests remaining
+		       (let* ((dparts  (string-split lasttpath "/"))
+			      (runpath (conc "/" (string-intersperse 
+						  (take dparts (- (length dparts) 1))
+						  "/"))))
+			 (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
+			 (db:delete-run db run-id)
+			 ;; need to figure out the path to the run dir and remove it if empty
+			 ;;    (if (null? (glob (conc runpath "/*")))
+			 ;;        (begin
+			 ;; 	 (debug:print 1 "Removing run dir " runpath)
+			 ;; 	 (system (conc "rmdir -p " runpath))))
+			 ))))
+	       ))))
      runs)))
 
 ;;======================================================================

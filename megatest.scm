@@ -91,6 +91,8 @@ Misc
   -rebuild-db             : bring the database schema up to date
   -rollup                 : fill run (set by :runname)  with latest test(s) from
                             prior runs with same keys
+  -lock                   : lock the run specified by target and runname as locked
+                            which prevents -remove-runs from removing the run
   -update-meta            : update the tests metadata for all tests
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
@@ -178,6 +180,7 @@ Called as " (string-intersperse (argv) " ")))
 			;; misc
 			"-archive"
 			"-repl"
+			"-lock"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
