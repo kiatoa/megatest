@@ -3,10 +3,10 @@
 BINPATH=$(shell realpath ../bin)
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
-RUNNAME := $(shell date +w%V.%u.%H)
+RUNNAME := $(shell date +w%V.%u.%H.%M)
 IPADDR := "-"
 # Set SERVER to "-server -"
-SERVER := ""
+SERVER := 
 
 runall : test1 test2
 
@@ -19,18 +19,16 @@ test2 : cleanprep
 test3 : cleanprep
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
 
+test4 : cleanprep
+	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -v $(SERVER) >& aa.log &
+	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -v $(SERVER) >& ab.log &
+	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -v $(SERVER) >& ac.log &
+	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -v $(SERVER) >& ad.log &	
+
 cleanprep : ../*.scm
 	sqlite3 megatest.db "delete from metadat where var='SERVER';"
 	mkdir -p /tmp/mt_runs /tmp/mt_links
-	cd ..;make
-	@sleep 1
-	# @if ps -def |awk '{print $8}'|grep megatest; then \
-	#    echo WARNING: These tests will kill megatest and dashboard!; \
-	#    sleep 3; \
-	#    killall -9 dboard || true; \
-  	#    killall -9 megatest || true; \
-	# fi
-	cd ../;make install
+	cd ..;make install
 	$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt % -itempatt %
 	$(BINPATH)/dboard -rows 15 &
 	touch cleanprep
