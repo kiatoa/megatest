@@ -292,47 +292,49 @@
 			  (string-intersperse remfields ","))))
     (list keystr header)))
 
-;; WAS db-get-runs FIXME IN REMAINING CODE
-;;
-;; MERGE THIS WITH db:get-runs, accidently wrote it twice
-;;
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;;
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
+;; runpatts: patt1,patt2 ...
 ;;
 (define (db:get-runs db runpatt count offset keypatts)
-  (let* ((res      '())
-	 (keys      (db:get-keys db))
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header    (append (map key:get-fieldname keys)
-			    remfields))
-	 (keystr    (conc (keys->keystr keys) ","
-			  (string-intersperse remfields ",")))
-	 (qrystr    (conc "SELECT " keystr " FROM runs WHERE runname LIKE ? "
-			  ;; Generate: " AND x LIKE 'keypatt' ..."
-			  (if (null? keypatts) ""
-			      (conc " AND "
-				    (string-join 
-				     (map (lambda (keypatt)
-					    (let ((key  (car keypatt))
-						  (patt (cadr keypatt)))
-					      (conc key " LIKE '" patt "'")))
-					  keypatts)
-				     " AND ")))
-			  " ORDER BY event_time DESC "
-			  (if (number? count)
-			      (conc " LIMIT " count)
-			      "")
-			  (if (number? offset)
-			      (conc " OFFSET " offset)
-			      ""))))
+  (let* ((res       '())
+	 (keys       (db:get-keys db))
+	 (runpatts   (string-split runpatt ","))
+	 (runpattstr (string-intersperse (map (lambda (patt)
+						(conc "runname LIKE '" patt "'"))
+					      runpatts)
+					 " OR "))
+	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
+	 (header     (append (map key:get-fieldname keys)
+		             remfields))
+	 (keystr     (conc (keys->keystr keys) ","
+		           (string-intersperse remfields ",")))
+	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
+		           ;; Generate: " AND x LIKE 'keypatt' ..."
+		           (if (null? keypatts) ""
+		               (conc " AND "
+		         	    (string-join 
+		         	     (map (lambda (keypatt)
+		         		    (let ((key  (car keypatt))
+		         			  (patt (cadr keypatt)))
+		         		      (conc key " LIKE '" patt "'")))
+		         		  keypatts)
+		         	     " AND ")))
+		           " ORDER BY event_time DESC "
+		           (if (number? count)
+		               (conc " LIMIT " count)
+		               "")
+		           (if (number? offset)
+		               (conc " OFFSET " offset)
+		               ""))))
     (debug:print 8 "INFO: db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
      db
      qrystr
-     runpatt)
+     )
     (vector header res)))
 
 ;; just get count of runs
