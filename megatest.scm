@@ -257,7 +257,9 @@ Called as " (string-intersperse (argv) " ")))
 	  (runs:remove-runs db
 			    (args:get-arg ":runname")
 			    (args:get-arg "-testpatt")
-			    (args:get-arg "-itempatt")))
+			    (args:get-arg "-itempatt")
+			    state: (args:get-arg ":state") 
+			    status: (args:get-arg ":status")))
       (sqlite3:finalize! db)
       (set! *didsomething* #t)))))
 	  
