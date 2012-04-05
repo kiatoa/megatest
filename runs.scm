@@ -495,11 +495,13 @@
 	       "/"))))
 ;; Remove runs
 ;; fields are passing in through 
-(define (runs:remove-runs db runnamepatt testpatt itempatt)
+(define (runs:remove-runs db runnamepatt testpatt itempatt #!key (state #f)(status #f))
   (let* ((keys        (rdb:get-keys db))
 	 (rundat      (runs:get-runs-by-patt db keys runnamepatt))
 	 (header      (vector-ref rundat 0))
-	 (runs        (vector-ref rundat 1)))
+	 (runs        (vector-ref rundat 1))
+	 (states      (if state  (string-split state  ",") '()))
+	 (statuses    (if status (string-split status ",") '())))
     (debug:print 1 "Header: " header)
     (for-each
      (lambda (run)
@@ -507,7 +509,8 @@
 						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
 	     (dirs-to-remove (make-hash-table)))
 	 (let* ((run-id (db:get-value-by-header run header "id") )
-		(tests  (rdb:get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt '() '()))
+		;; not-in: switches from the default get-tests-for-run behavior to require a match
+		(tests  (rdb:get-tests-for-run db (db:get-value-by-header run header "id") testpatt itempatt states statuses not-in: #f))
 		(lasttpath "/does/not/exist/I/hope"))
 
 	   (if (not (null? tests))
