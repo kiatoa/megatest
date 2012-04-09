@@ -25,7 +25,7 @@ test4 : cleanprep
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -v $(SERVER) >& ac.log &
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -v $(SERVER) >& ad.log &	
 
-cleanprep : ../*.scm
+cleanprep : ../*.scm Makefile *.config
 	sqlite3 megatest.db "delete from metadat where var='SERVER';"
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install

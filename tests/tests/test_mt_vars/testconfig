@@ -14,7 +14,7 @@ waiton runfirst
 priority 0
 
 [items]
-NUMNUM [system cat $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/the_ans]
+NUMNUM [system cat $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/$PREDICTABLE]
 
 [test_meta]
 author matt

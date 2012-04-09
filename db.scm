@@ -435,11 +435,16 @@
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run db run-id testpatt itempatt states statuses #!key (not-in #t))
   (let* ((res '())
-	 (states-str    (conc "('" (string-intersperse states   "','") "')"))
-	 (statuses-str  (conc "('" (string-intersperse statuses "','") "')"))
+	 ;; if states or statuses are null then assume match all when not-in is false
+	 (states-str    (conc " state in ('" (string-intersperse states   "','") "')"))
+	 (statuses-str  (conc " status in ('" (string-intersperse statuses "','") "')"))
+	 (state-status-qry (if (or (not (null? states))
+				   (not (null? states)))
+			       (conc " AND " (if not-in "NOT" "") " (" states-str " AND " statuses-str ") ")
+			       ""))
 	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 			 " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
-			 " AND " (if not-in "NOT" "") " (state in " states-str " AND status IN " statuses-str ") "
+			 state-status-qry
 			 ;; " ORDER BY id DESC;"
 			 " ORDER BY event_time ASC;" ;; POTENTIAL ISSUE! CHECK ME! Does anyting depend on this being sorted by id?
 			 )))

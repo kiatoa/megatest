@@ -75,9 +75,9 @@
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
-	   (if (string-match (glob->regexp
-			       (string-translate patt "%" "*"))
-			      item)
+	   (if (string-match 
+		(regexp (string-substitute "%" ".*" "a%b")) ;;(glob->regexp (string-translate patt "%" "*"))
+		item)
 	       (set! res #t)))
 	 (string-split patts ","))
 	res)

@@ -76,6 +76,7 @@
 		 (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
 		 run-id))
 	      keys)
+    (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
     (sqlite3:for-each-row
      (lambda (runname)
