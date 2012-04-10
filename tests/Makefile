@@ -24,6 +24,7 @@ test4 : cleanprep
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -v $(SERVER) >& ab.log &
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -v $(SERVER) >& ac.log &
 	$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -v $(SERVER) >& ad.log &	
+	$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname w15.1.09.06_runfirst_1 -v
 
 cleanprep : ../*.scm Makefile *.config
 	sqlite3 megatest.db "delete from metadat where var='SERVER';"

@@ -160,7 +160,7 @@
 
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals
-(define (runs:run-tests db target runname test-patts item-patts user flags)
+(define (runs:run-tests db target runname test-patts user flags)
   (let* ((keys        (rdb:get-keys db))
 	 (keyvallst   (keys:target->keyval keys target))
 	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
@@ -269,7 +269,7 @@
 (define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
-  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst)
+  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
 	(item-patts        (hash-table-ref/default flags "-itempatt" #f)))
     (let loop (; (numtimes 0) ;; shouldn't need this
@@ -301,7 +301,7 @@
 		;; else the run is stuck, temporarily or permanently
 		(let ((newtal (append tal (list hed))))
 		  ;; couldn't run, take a breather
-		  (thread-sleep! 0.5)
+		  (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
 		  (loop (car newtal)(cdr newtal))))))
 	 
 	 ;; case where an items came in as a list been processed
@@ -321,7 +321,7 @@
 				       (vector-copy! test-record newrec)
 				       newrec))
 		    (my-item-path (item-list->path my-itemdat)))
-	       (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item
+	       (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
 		   (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
 		     (tests:testqueue-set-items!     new-test-record #f)
 		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
@@ -350,7 +350,7 @@
 			(exit 1)))))
 	      (let ((newtal (append tal (list hed))))
 		;; if can't run more tests, lets take a breather
-		(thread-sleep! 0.5)
+		(thread-sleep! 0.1) ;; may as well wait a while for resources to free up
 		(loop (car newtal)(cdr newtal)))))
 
 	 ;; this case should not happen, added to help catch any bugs
@@ -370,7 +370,7 @@
 	  ;; Here we need to check that all the tests remaining to be run are eligible to run
 	  ;; and are not blocked by failed
 	  (let ((newlst (tests:filter-non-runnable db run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
-	    (thread-sleep! 0.5)
+	    (thread-sleep! 0.1)
 	    (if (not (null? newlst))
 		(loop (car newlst)(cdr newlst))))))))
 

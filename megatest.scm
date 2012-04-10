@@ -380,17 +380,16 @@ Called as " (string-intersperse (argv) " ")))
      "-runall"
      "run all tests"
      (lambda (db target runname keys keynames keyvallst)
-       (let ((flags (make-hash-table)))
-	 (for-each (lambda (parm)
-		     (hash-table-set! flags parm (args:get-arg parm)))
-		   (list "-rerun" "-force"))
+;;       (let ((flags (make-hash-table)))
+;;	 (for-each (lambda (parm)
+;;		     (hash-table-set! flags parm (args:get-arg parm)))
+;;		   (list "-rerun" "-force" "-itempatt"))
 	 (runs:run-tests db
 			 target
 			 runname
-			 (args:get-arg "-testpatt")
-			 (args:get-arg "-itempatt")
+			 (args:get-arg "-runtests")
 			 user
-			 flags)))))
+			 args:arg-hash)))) ;; )
 
 ;;======================================================================
 ;; run one test
@@ -418,9 +417,8 @@ Called as " (string-intersperse (argv) " ")))
 		     target
 		     runname
 		     (args:get-arg "-runtests")
-		     (args:get-arg "-itempatt")
 		     user
-		     (make-hash-table)))))
+		     args:arg-hash))))
 
 ;;======================================================================
 ;; Rollup into a run
