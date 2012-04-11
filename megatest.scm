@@ -637,7 +637,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (if (args:get-arg "-set-toplog")
 	      (rtests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (rdb:tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
