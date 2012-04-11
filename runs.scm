@@ -272,107 +272,109 @@
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
 	(item-patts        (hash-table-ref/default flags "-itempatt" #f)))
-    (let loop (; (numtimes 0) ;; shouldn't need this
-	       (hed         (car sorted-test-names))
-	       (tal         (cdr sorted-test-names)))
-      (let* ((test-record (hash-table-ref test-records hed))
-	     (tconfig     (tests:testqueue-get-testconfig test-record))
-	     (waitons     (tests:testqueue-get-waitons    test-record))
-	     (priority    (tests:testqueue-get-priority   test-record))
-	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
-	     (items       (tests:testqueue-get-items      test-record))
-	     (item-path   (item-list->path itemdat)))
-	(debug:print 6
-		     "itemdat:     " itemdat
-		     "\n  items:     " items
-		     "\n  item-path: " item-path)
-	(cond
-	 ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	  (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
-		(prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
-	    ;; Don't know at this time if the test have been launched at some time in the past
-	    ;; i.e. is this a re-launch?
-	    (if (and have-resources
-		     (null? prereqs-not-met))
-		;; no loop - drop though and use the loop at the bottom 
-		(if (patt-list-match item-path item-patts)
-		    (run:test db run-id runname keyvallst test-record flags #f)
-		    (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
-		;; else the run is stuck, temporarily or permanently
-		(let ((newtal (append tal (list hed))))
-		  ;; couldn't run, take a breather
-		  (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
-		  (loop (car newtal)(cdr newtal))))))
-	 
-	 ;; case where an items came in as a list been processed
-	 ((and (list? items)     ;; thus we know our items are already calculated
-	       (not   itemdat)) ;; and not yet expanded into the list of things to be done
-	  (if (and (>= *verbosity* 1)
-		   (> (length items) 0)
-		   (> (length (car items)) 0))
-		   (pp items))
-	  ;; (if (>= *verbosity* 5)
-	  ;;     (begin
-	  ;;       (print "items: ")     (pp (item-assoc->item-list items))
-	  ;;       (print "itemstable: ")(pp (item-table->item-list itemstable))))
-	  (for-each
-	   (lambda (my-itemdat)
-	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
-				       (vector-copy! test-record newrec)
-				       newrec))
-		    (my-item-path (item-list->path my-itemdat)))
-	       (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		   (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
-		     (tests:testqueue-set-items!     new-test-record #f)
-		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
-		     (tests:testqueue-set-item_path! new-test-record my-item-path)
-		     (hash-table-set! test-records newtestname new-test-record)
-		     (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
-	   items)
-	  (loop (car tal)(cdr tal)))
+    (if (not (null? sorted-test-names))
+	(let loop (; (numtimes 0) ;; shouldn't need this
+		   (hed         (car sorted-test-names))
+		   (tal         (cdr sorted-test-names)))
+	  (let* ((test-record (hash-table-ref test-records hed))
+		 (tconfig     (tests:testqueue-get-testconfig test-record))
+		 (waitons     (tests:testqueue-get-waitons    test-record))
+		 (priority    (tests:testqueue-get-priority   test-record))
+		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
+		 (items       (tests:testqueue-get-items      test-record))
+		 (item-path   (item-list->path itemdat)))
+	    (debug:print 6
+			 "itemdat:     " itemdat
+			 "\n  items:     " items
+			 "\n  item-path: " item-path)
+	    (cond
+	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
+	      (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
+		    (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
+		;; Don't know at this time if the test have been launched at some time in the past
+		;; i.e. is this a re-launch?
+		(if (and have-resources
+			 (null? prereqs-not-met))
+		    ;; no loop - drop though and use the loop at the bottom 
+		    (if (patt-list-match item-path item-patts)
+			(run:test db run-id runname keyvallst test-record flags #f)
+			(debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
+		    ;; else the run is stuck, temporarily or permanently
+		    (let ((newtal (append tal (list hed))))
+		      ;; couldn't run, take a breather
+		      (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+		      (loop (car newtal)(cdr newtal))))))
+	     
+	     ;; case where an items came in as a list been processed
+	     ((and (list? items)     ;; thus we know our items are already calculated
+		   (not   itemdat)) ;; and not yet expanded into the list of things to be done
+	      (if (and (>= *verbosity* 1)
+		       (> (length items) 0)
+		       (> (length (car items)) 0))
+		  (pp items))
+	      ;; (if (>= *verbosity* 5)
+	      ;;     (begin
+	      ;;       (print "items: ")     (pp (item-assoc->item-list items))
+	      ;;       (print "itemstable: ")(pp (item-table->item-list itemstable))))
+	      (for-each
+	       (lambda (my-itemdat)
+		 (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
+					   (vector-copy! test-record newrec)
+					   newrec))
+			(my-item-path (item-list->path my-itemdat)))
+		   (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+		       (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
+			 (tests:testqueue-set-items!     new-test-record #f)
+			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+			 (tests:testqueue-set-item_path! new-test-record my-item-path)
+			 (hash-table-set! test-records newtestname new-test-record)
+			 (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
+	       items)
+	      (if (not (null? tal))
+		  (loop (car tal)(cdr tal))))
 
-	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
-	 ;;    - but only do that if resources exist to kick off the job
-	 ((or (procedure? items)(eq? items 'have-procedure))
-	  (if (and (runs:can-run-more-tests db test-record)
-		   (null? (db:get-prereqs-not-met db run-id waitons item-path)))
-	      (let ((test-name (tests:testqueue-get-testname test-record)))
-		(setenv "MT_TEST_NAME" test-name) ;; 
-		(setenv "MT_RUNNAME"   runname)
-		(set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-		(let ((items-list (items:get-items-from-config tconfig)))
-		  (if (list? items-list)
-		      (begin
-			(tests:testqueue-set-items! test-record items-list)
-			(loop hed tal))
-		      (begin
-			(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
-			(exit 1)))))
-	      (let ((newtal (append tal (list hed))))
-		;; if can't run more tests, lets take a breather
-		(thread-sleep! 0.1) ;; may as well wait a while for resources to free up
-		(loop (car newtal)(cdr newtal)))))
+	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
+	     ;;    - but only do that if resources exist to kick off the job
+	     ((or (procedure? items)(eq? items 'have-procedure))
+	      (if (and (runs:can-run-more-tests db test-record)
+		       (null? (db:get-prereqs-not-met db run-id waitons item-path)))
+		  (let ((test-name (tests:testqueue-get-testname test-record)))
+		    (setenv "MT_TEST_NAME" test-name) ;; 
+		    (setenv "MT_RUNNAME"   runname)
+		    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+		    (let ((items-list (items:get-items-from-config tconfig)))
+		      (if (list? items-list)
+			  (begin
+			    (tests:testqueue-set-items! test-record items-list)
+			    (loop hed tal))
+			  (begin
+			    (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+			    (exit 1)))))
+		  (let ((newtal (append tal (list hed))))
+		    ;; if can't run more tests, lets take a breather
+		    (thread-sleep! 0.1) ;; may as well wait a while for resources to free up
+		    (loop (car newtal)(cdr newtal)))))
 
-	 ;; this case should not happen, added to help catch any bugs
-	 ((and (list? items) itemdat)
-	  (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
-	  (exit 1))))
-	
-      ;; we get here on "drop through" - loop for next test in queue
-      (if (null? tal)
-	  (begin
-	    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
-	    (debug:print 1 "INFO: All tests launched")
-	    (thread-sleep! 0.5)
-	    ;; FIXME! This harsh exit should not be necessary....
-	    (if (not *runremote*)(exit)) ;; 
-	    #f) ;; return a #f as a hint that we are done
-	  ;; Here we need to check that all the tests remaining to be run are eligible to run
-	  ;; and are not blocked by failed
-	  (let ((newlst (tests:filter-non-runnable db run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
-	    (thread-sleep! 0.1)
-	    (if (not (null? newlst))
-		(loop (car newlst)(cdr newlst))))))))
+	     ;; this case should not happen, added to help catch any bugs
+	     ((and (list? items) itemdat)
+	      (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
+	      (exit 1))))
+	  
+	  ;; we get here on "drop through" - loop for next test in queue
+	  (if (null? tal)
+	      (begin
+		;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
+		(debug:print 1 "INFO: All tests launched")
+		(thread-sleep! 0.5)
+		;; FIXME! This harsh exit should not be necessary....
+		(if (not *runremote*)(exit)) ;; 
+		#f) ;; return a #f as a hint that we are done
+	      ;; Here we need to check that all the tests remaining to be run are eligible to run
+	      ;; and are not blocked by failed
+	      (let ((newlst (tests:filter-non-runnable db run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+		(thread-sleep! 0.1)
+		(if (not (null? newlst))
+		    (loop (car newlst)(cdr newlst)))))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test db run-id runname keyvallst test-record flags parent-test)
