@@ -76,10 +76,10 @@
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
-	   (if (string-match 
-		(regexp (string-substitute "%" ".*" patt)) ;;(glob->regexp (string-translate patt "%" "*"))
-		item)
-	       (set! res #t)))
+	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
+	     (debug:print 10 "INFO: patt " patt " modpatt " modpatt)
+	     (if (string-match (regexp modpatt) item)
+		 (set! res #t))))
 	 (string-split patts ","))
 	res)
       #t))
