@@ -140,11 +140,9 @@
 	       (configf:blank-l-rx _                  (loop (configf:read-line inp res) curr-section-name #f #f))
 	       (configf:include-rx ( x include-file ) (let ((curr-dir (current-directory))
 							    (conf-dir  (pathname-directory path)))
-							(if conf-dir
-							    (begin
-							      (change-directory conf-dir)
-							      (read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name)
-							      (change-directory curr-dir)))
+							(if conf-dir (change-directory conf-dir))
+							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name)
+							(change-directory curr-dir)
 							(loop (configf:read-line inp res) curr-section-name #f #f)))
 	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res) section-name #f #f))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
