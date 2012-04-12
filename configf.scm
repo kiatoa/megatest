@@ -93,9 +93,11 @@
 	 (res    (car output))
 	 (status (cadr output)))
     (if (equal? status 0)
-	(string-intersperse 
-	 res
-	 "\n")
+	(let ((outres (string-intersperse 
+		       res
+		       "\n")))
+	  (debug:print 4 "INFO: shell result:\n" outres)
+	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
 	    (print "ERROR: " cmd " returned bad exit code " status))
@@ -151,9 +153,11 @@
 									    (let* ((cmdres  (cmd-run->list cmd))
 										   (status  (cadr cmdres))
 										   (res     (car  cmdres)))
+									      (debug:print 4 "INFO: " inl "\n => " (string-intersperse res "\n"))
 									      (if (not (eq? status 0))
 										  (begin
-										    (debug:print 0 "ERROR: problem with " inl ", return code " status)
+										    (debug:print 0 "ERROR: problem with " inl ", return code " status
+												 " output: " cmdres)
 										    (exit 1)))
 									      (if (null? res)
 										  ""
