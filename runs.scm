@@ -498,14 +498,18 @@
 	       "/"))))
 ;; Remove runs
 ;; fields are passing in through 
-(define (runs:remove-runs db runnamepatt testpatt itempatt #!key (state #f)(status #f))
-  (let* ((keys        (rdb:get-keys db))
-	 (rundat      (runs:get-runs-by-patt db keys runnamepatt))
-	 (header      (vector-ref rundat 0))
-	 (runs        (vector-ref rundat 1))
-	 (states      (if state  (string-split state  ",") '()))
-	 (statuses    (if status (string-split status ",") '())))
-    (debug:print 1 "Header: " header)
+;; action:
+;;    'remove-runs
+;;    'set-state-status
+(define (runs:operate-on db action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
+  (let* ((keys         (rdb:get-keys db))
+	 (rundat       (runs:get-runs-by-patt db keys runnamepatt))
+	 (header       (vector-ref rundat 0))
+	 (runs         (vector-ref rundat 1))
+	 (states       (if state  (string-split state  ",") '()))
+	 (statuses     (if status (string-split status ",") '()))
+	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f))))
+    (debug:print 2 "Header: " header " action: " action " new-state-status: " new-state-status)
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
@@ -520,66 +524,79 @@
 
 	   (if (not (null? tests))
 	       (begin
-		 (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname"))
+		 (case action
+		   ((remove-runs)
+		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
+		   ((set-state-status)
+		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
+		   (else
+		    (print "INFO: action not recognised " action)))
 		 (for-each
 		  (lambda (test)
 		    (let* ((item-path (db:test-get-item-path test))
 			   (test-name (db:test-get-testname test))
 			   (run-dir   (db:test-get-rundir test)))
 		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path)
-		      (rdb:delete-test-records db (db:test-get-id test))
-		      (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
-			  (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
-			    (set! lasttpath fullpath)
-			    (hash-table-set! dirs-to-remove fullpath #t)
-			    ;; The following was the safe delete code but it was not being exectuted.
-			    ;; (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
-			    ;;        (dir-to-rem (get-dir-up-n fullpath dirs-count))
-			    ;;        (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
-			    ;;        (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
-			    ;;   (if (file-exists? fullpath)
-			    ;;       (begin
-			    ;;         (debug:print 1 cmd)
-			    ;;         (system cmd)))
-			    ;;   ))
-			    ))))
-		    tests)))
+		      (case action
+			((remove-runs)
+			 (rdb:delete-test-records db (db:test-get-id test))
+			 (if (> (string-length run-dir) 5) ;; bad heuristic but should prevent /tmp /home etc.
+			     (let ((fullpath run-dir)) ;; "/" (db:test-get-item-path test))))
+			       (set! lasttpath fullpath)
+			       (hash-table-set! dirs-to-remove fullpath #t)
+			       ;; The following was the safe delete code but it was not being exectuted.
+			       ;; (let* ((dirs-count (+ 1 (length keys)(length (string-split item-path "/"))))
+			       ;;        (dir-to-rem (get-dir-up-n fullpath dirs-count))
+			       ;;        (remainingd (string-substitute (regexp (conc "^" dir-to-rem "/")) "" fullpath))
+			       ;;        (cmd (conc "cd " dir-to-rem "; rmdir -p " remainingd )))
+			       ;;   (if (file-exists? fullpath)
+			       ;;       (begin
+			       ;;         (debug:print 1 cmd)
+			       ;;         (system cmd)))
+			       ;;   ))
+			       )))
+			((set-state-status)
+			 (debug:print 4 "INFO: new state " (car state-status) ", new status " (cadr state-status))
+			 (db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
+		  tests)))
 
 	   ;; look though the dirs-to-remove for candidates for removal. Do this after deleting the records
 	   ;; for each test in case we get killed. That should minimize the detritus left on disk
 	   ;; process the dirs from longest string length to shortest
-	   (for-each 
-	    (lambda (dir-to-remove)
-	      (if (file-exists? dir-to-remove)
-		  (let ((dir-in-db '()))
-		    (sqlite3:for-each-row
-		     (lambda (dir)
-		       (set! dir-in-db (cons dir dir-in-db)))
-		     db "SELECT rundir FROM tests WHERE rundir LIKE ?;" 
-		     (conc "%" dir-to-remove "%")) ;; yes, I'm going to bail if there is anything like this dir in the db
-		    (if (null? dir-in-db)
-			(begin
-			  (debug:print 2 "Removing directory with zero db references: " dir-to-remove)
-			  (system (conc "rm -rf " dir-to-remove))
-			  (hash-table-delete! dirs-to-remove dir-to-remove))
-			(debug:print 2 "Skipping removal of " dir-to-remove " for now as it still has references in the database")))))
-	    (sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b)))))
+	   (if (eq? action 'remove-runs)
+	       (for-each 
+		(lambda (dir-to-remove)
+		  (if (file-exists? dir-to-remove)
+		      (let ((dir-in-db '()))
+			(sqlite3:for-each-row
+			 (lambda (dir)
+			   (set! dir-in-db (cons dir dir-in-db)))
+			 db "SELECT rundir FROM tests WHERE rundir LIKE ?;" 
+			 (conc "%" dir-to-remove "%")) ;; yes, I'm going to bail if there is anything like this dir in the db
+			(if (null? dir-in-db)
+			    (begin
+			      (debug:print 2 "Removing directory with zero db references: " dir-to-remove)
+			      (system (conc "rm -rf " dir-to-remove))
+			      (hash-table-delete! dirs-to-remove dir-to-remove))
+			    (debug:print 2 "Skipping removal of " dir-to-remove " for now as it still has references in the database")))))
+		(sort (hash-table-keys dirs-to-remove) (lambda (a b)(> (string-length a)(string-length b))))))
 
 	   ;; remove the run if zero tests remain
-	   (let ((remtests (rdb:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
-	     (if (null? remtests) ;; no more tests remaining
-		 (let* ((dparts  (string-split lasttpath "/"))
-			(runpath (conc "/" (string-intersperse 
-					    (take dparts (- (length dparts) 1))
-					    "/"))))
-		   (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
-		   (db:delete-run db run-id)
-		   ;; need to figure out the path to the run dir and remove it if empty
-		   ;;    (if (null? (glob (conc runpath "/*")))
-		   ;;        (begin
-		   ;; 	 (debug:print 1 "Removing run dir " runpath)
-		   ;; 	 (system (conc "rmdir -p " runpath))))
-		   ))))
+	   (if (eq? action 'remove-runs)
+	       (let ((remtests (rdb:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
+		 (if (null? remtests) ;; no more tests remaining
+		     (let* ((dparts  (string-split lasttpath "/"))
+			    (runpath (conc "/" (string-intersperse 
+						(take dparts (- (length dparts) 1))
+						"/"))))
+		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
+		       (db:delete-run db run-id)
+		       ;; need to figure out the path to the run dir and remove it if empty
+		       ;;    (if (null? (glob (conc runpath "/*")))
+		       ;;        (begin
+		       ;; 	 (debug:print 1 "Removing run dir " runpath)
+		       ;; 	 (system (conc "rmdir -p " runpath))))
+		       )))))
 	 ))
      runs)))
 

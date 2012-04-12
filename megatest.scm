@@ -83,11 +83,10 @@ Queries
 
 Misc 
   -force                  : override some checks
-  -remove-runs            : remove the data for a run, requires all fields be specified
-                            and :runname ,-testpatt and -itempatt
-                            and -testpatt
-  -rerun FAIL,WARN...     : re-run if called on a test that previously ran (nullified
-                            if -keepgoing is also specified)
+  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
+                            -itempatt be set. Optionally use :state and :status
+  -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
+  -rerun FAIL,WARN...     : re-run if called on a test that previously ran
   -rebuild-db             : bring the database schema up to date
   -rollup                 : fill run (set by :runname)  with latest test(s) from
                             prior runs with same keys
@@ -165,6 +164,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-pathmod"
 			"-env2file"
 			"-setvars"
+			"-set-state-status"
 			"-debug" ;; for *verbosity* > 2
 			"-override-timeout"
 			) 
@@ -186,7 +186,6 @@ Called as " (string-intersperse (argv) " ")))
 
 			"-runall"    ;; run all tests
 			"-remove-runs"
-			"-keepgoing"
 			"-usequeue"
 			"-rebuild-db"
 			"-rollup"
@@ -230,45 +229,47 @@ Called as " (string-intersperse (argv) " ")))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (remove-runs)
+(define (operate-on db action)
   (cond
    ((not (args:get-arg ":runname"))
-    (debug:print 0 "ERROR: Missing required parameter for -remove-runs, you must specify the run name pattern with :runname patt")
+    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
     (exit 2))
    ((not (args:get-arg "-testpatt"))
-    (debug:print 0 "ERROR: Missing required parameter for -remove-runs, you must specify the test pattern with -testpatt")
+    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
     (exit 3))
    ((not (args:get-arg "-itempatt"))
-    (print "ERROR: Missing required parameter for -remove-runs, you must specify the items with -itempatt")
+    (print "ERROR: Missing required parameter for " action ", you must specify the items with -itempatt")
     (exit 4))
-   ((let ((db #f))
-      (if (not (setup-for-run))
-	  (begin 
-	    (debug:print 0 print "Failed to setup, exiting")
-	    (exit 1)))
-      (set! db (open-db))
-;;       (if (not (args:get-arg "-server"))
-;; 	  (server:client-setup db))
-      (if (not (car *configinfo*))
-	  (begin
-	    (debug:print 0 "ERROR: Attempted to remove test(s) but run area config file not found")
-	    (exit 1))
-	  ;; put test parameters into convenient variables
-	  (runs:remove-runs db
-			    (args:get-arg ":runname")
-			    (args:get-arg "-testpatt")
-			    (args:get-arg "-itempatt")
-			    state: (args:get-arg ":state") 
-			    status: (args:get-arg ":status")))
-      (sqlite3:finalize! db)
-      (set! *didsomething* #t)))))
+   (else
+    (if (not (car *configinfo*))
+	(begin
+	  (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
+	  (exit 1))
+	;; put test parameters into convenient variables
+	(runs:operate-on  db
+			  action
+			  (args:get-arg ":runname")
+			  (args:get-arg "-testpatt")
+			  (args:get-arg "-itempatt")
+			  state: (args:get-arg ":state") 
+			  status: (args:get-arg ":status")
+			  new-state-status: (args:get-arg "-set-state-status")))
+    (sqlite3:finalize! db)
+    (set! *didsomething* #t))))
 	  
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
      "remove runs"
      (lambda (db target runname keys keynames keyvallst)
-       (remove-runs))))
+       (operate-on db 'remove-runs))))
+
+(if (args:get-arg "-set-state-status")
+    (general-run-call 
+     "-set-state-status"
+     "set state and status"
+     (lambda (db target runname keys keynames keyvallst)
+       (operate-on db 'set-state-status))))
 
 ;;======================================================================
 ;; Query runs
