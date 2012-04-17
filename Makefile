@@ -14,10 +14,10 @@ GOFILES  = $(GUISRCF:%.scm=%.o)
 
 HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
 
-all : megatest dboard
+all : mtest dboard
 
-megatest: $(OFILES) megatest.o
-	csc $(CSCOPTS) $(OFILES) megatest.o -o megatest
+mtest: $(OFILES) megatest.o
+	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
@@ -34,9 +34,11 @@ $(OFILES) $(GOFILES) : common_records.scm
 %.o : %.scm
 	csc $(CSCOPTS) -c $<
 
-$(PREFIX)/bin/megatest : megatest
+$(PREFIX)/bin/mtest : mtest
 	@echo Installing to PREFIX=$(PREFIX)
-	$(INSTALL) megatest $(PREFIX)/bin/megatest
+	$(INSTALL) mtest $(PREFIX)/bin/mtest
+	utils/mk_wrapper $(PREFIX) mtest > $(PREFIX)/bin/megatest
+	chmod a+x $(PREFIX)/bin/megatest
 
 $(HELPERS) : utils/mt_* 
 	$(INSTALL) $< $@
@@ -53,10 +55,10 @@ $(PREFIX)/bin/nbfind : utils/nbfind
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dboard $(FILES)
 	$(INSTALL) dboard $(PREFIX)/bin/dboard
-	utils/mk_dashboard_wrapper $(PREFIX) > $(PREFIX)/bin/dashboard
+	utils/mk_wrapper $(PREFIX) dboard > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
-install : bin $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind
+install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind
 
 bin : 
 	mkdir -p $(PREFIX)/bin

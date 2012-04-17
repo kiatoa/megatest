@@ -1,11 +1,13 @@
 #!/bin/bash
 
 prefix=$1
+cmd=$2
+
 echo "#!/bin/bash"
 if [ "$LD_LIBRARY_PATH" != "" ];then
   echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 fi
 
-dboard=`realpath $prefix/bin/dboard`
+fullcmd=`realpath $prefix/bin/$cmd`
 
-echo "$dboard \$*"
+echo "$fullcmd \$*"
