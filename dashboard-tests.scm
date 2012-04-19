@@ -344,7 +344,7 @@
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -e \"megatest -runtests " testname " -target " keystring " :runname " runname 
+			     (conc "xterm -geometry 180x20 -e \"megatest -runtests " testname " -target " keystring " :runname " runname 
 				   " -itempatt " (if (equal? item-path "")
 						     "%" 
 						     item-path)
@@ -352,7 +352,7 @@
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -e \"megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
 				     (if (equal? item-path "")
 					 "%"
 					 item-path)
