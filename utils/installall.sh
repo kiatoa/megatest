@@ -66,7 +66,7 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 
-for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking; do
+for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils directory-utils; do
   chicken-install $PROX $f
 done
 

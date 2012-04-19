@@ -433,7 +433,10 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt itempatt states statuses #!key (not-in #t))
+(define (db:get-tests-for-run db run-id testpatt itempatt states statuses 
+			      #!key (not-in #t)
+			      (sort-by #f) ;; 'rundir 'event_time
+			      )
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-str    (conc " state in ('" (string-intersperse states   "','") "')"))
@@ -445,8 +448,10 @@
 	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 			 " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
 			 state-status-qry
-			 ;; " ORDER BY id DESC;"
-			 " ORDER BY event_time ASC;" ;; POTENTIAL ISSUE! CHECK ME! Does anyting depend on this being sorted by id?
+			 (case sort-by
+			   ((rundir)     " ORDER BY length(rundir) DESC;")
+			   ((event_time) " ORDER BY event_time ASC;")
+			   (else         ";"))
 			 )))
     (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
