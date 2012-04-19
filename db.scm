@@ -379,6 +379,16 @@
 (define (db:update-run-event_time db run-id)
   (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)) 
 
+(define (db:lock/unlock-run db run-id lock unlock user)
+  (let ((newlockval (if lock "locked"
+			(if unlock
+			    "unlocked"
+			    "locked")))) ;; semi-failsafe
+    (sqlite3:execute db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
+    (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
+		     user (conc newlockval " " run-id))
+    (debug:print 1 "INFO: " newlockval " run number " run-id)))
+
 ;;======================================================================
 ;; K E Y S
 ;;======================================================================

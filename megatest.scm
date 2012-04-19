@@ -36,14 +36,29 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 Usage: megatest [options]
   -h                      : this help
 
-Process and test running
+Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
                             CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
+  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
+                            -itempatt be set. Optionally use :state and :status
+  -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
+  -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
+  -rollup                 : fill run (set by :runname)  with latest test(s) from
+                            prior runs with same keys
+  -lock                   : lock run specified by target and runname
+  -unlock                 : unlock run specified by target and runname
 
-Run status updates (these require that you are in a test directory
-                    and you have sourced the \"megatest.csh\" or
-                    \"megatest.sh\" file.)
+Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
+  -target key1/key2/...   : run for key1, key2, etc.
+  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
+  -testpatt patt          : % is wildcard
+  -itempatt patt          : % is wildcard
+  :runname                : required, name for this particular test run
+  :state                  : Applies to runs, tests or steps depending on context
+  :status                 : Applies to runs, tests or steps depending on context
+
+Test helpers (for use inside tests)
   -step stepname
   -test-status            : set the state and status of a test (use :state and :status)
   -setlog logfname        : set the path/filename to the final log relative to the test
@@ -52,15 +67,8 @@ Run status updates (these require that you are in a test directory
   -summarize-items        : for an itemized test create a summary html 
   -m comment              : insert a comment for this test
 
-Run data
-  -target key1/key2/...   : run for key1, key2, etc.
-  -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
-  :runname                : required, name for this particular test run
-  :state                  : required if updating step state; e.g. start, end, completed
-  :status                 : required if updating step status; e.g. pass, fail, n/a
-
-Values and record errors and warnings
-  -set-values             : update or set values in the megatest db 
+Test data capture
+  -set-values             : update or set values in the testdata table
   :category               : set the category field (optional)
   :variable               : set the variable name (optional)
   :value                  : value measured (required)
@@ -68,35 +76,22 @@ Values and record errors and warnings
   :tol                    : |value-expect| <= tol (required, can be <, >, >=, <= or number)
   :units                  : name of the units for value, expected_value etc. (optional)
 
-Arbitrary test data loading
   -load-test-data         : read test specific data for storage in the test_data table
                             from standard in. Each line is comma delimited with four
                             fields category,variable,value,comment
 
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
-  -testpatt patt          : in list-runs show only these tests, % is the wildcard
-  -itempatt patt          : in list-runs show only tests with items that match patt
   -showkeys               : show the keys used in this megatest setup
   -test-paths targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
 
 Misc 
-  -force                  : override some checks
-  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
-                            -itempatt be set. Optionally use :state and :status
-  -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
-  -rerun FAIL,WARN...     : re-run if called on a test that previously ran
   -rebuild-db             : bring the database schema up to date
-  -rollup                 : fill run (set by :runname)  with latest test(s) from
-                            prior runs with same keys
-  -lock                   : lock the run specified by target and runname as locked
-                            which prevents -remove-runs from removing the run
   -update-meta            : update the tests metadata for all tests
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
-  -archive                : archive tests, use -target, :runname, -itempatt and -testpatt
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -repl                   : start a repl (useful for extending megatest)
@@ -109,11 +104,6 @@ Spreadsheet generation
                             to windows style
 
 Helpers (these only apply in test run mode)
-  -runstep stepname  ...  : take remaining params as comand and execute as stepname
-                            log will be in stepname.log. Best to put command in quotes
-  -logpro file            : with -exec apply logpro file to stepname.log, creates
-                            stepname.html and sets log to same
-                            If using make use stepname_logpro.log as your target
 
 Examples
 
@@ -181,6 +171,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-archive"
 			"-repl"
 			"-lock"
+			"-unlock"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -424,6 +415,7 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 ;; Rollup into a run
 ;;======================================================================
+
 (if (args:get-arg "-rollup")
     (general-run-call 
      "-rollup" 
@@ -434,6 +426,23 @@ Called as " (string-intersperse (argv) " ")))
 			(keys->alist keys "na")
 			(args:get-arg ":runname") 
 			user))))
+
+;;======================================================================
+;; Lock or unlock a run
+;;======================================================================
+
+(if (or (args:get-arg "-lock")(args:get-arg "-unlock"))
+    (general-run-call 
+     (if (args:get-arg "-lock") "-lock" "-unlock")
+     "lock/unlock tests" 
+     (lambda (db target runname keys keynames keyvallst)
+       (runs:handle-locking db
+		  target
+		  keys
+		  (args:get-arg ":runname") 
+		  (args:get-arg "-lock")
+		  (args:get-arg "-unlock")
+		  user))))
 
 ;;======================================================================
 ;; Get paths to tests
@@ -563,6 +572,10 @@ Called as " (string-intersperse (argv) " ")))
     (begin
       (launch:execute (args:get-arg "-execute"))
       (set! *didsomething* #t)))
+
+;;======================================================================
+;; Test commands (i.e. for use inside tests)
+;;======================================================================
 
 (if (args:get-arg "-step")
     (if (not (getenv "MT_CMDINFO"))
@@ -719,6 +732,10 @@ Called as " (string-intersperse (argv) " ")))
 	  (sqlite3:finalize! db)
 	  (set! *didsomething* #t))))
 
+;;======================================================================
+;; Various helper commands can go below here
+;;======================================================================
+
 (if (args:get-arg "-showkeys")
     (let ((db #f)
 	  (keys #f))
@@ -758,7 +775,7 @@ Called as " (string-intersperse (argv) " ")))
 
 ;;======================================================================
 ;; Update the tests meta data from the testconfig files
-;;
+;;======================================================================
 
 (if (args:get-arg "-update-meta")
     (begin
@@ -777,6 +794,7 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 ;; Start a repl
 ;;======================================================================
+
 (if (args:get-arg "-repl")
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))

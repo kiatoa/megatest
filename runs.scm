@@ -501,6 +501,9 @@
 ;; action:
 ;;    'remove-runs
 ;;    'set-state-status
+;;
+;; NB// should pass in keys?
+;;
 (define (runs:operate-on db action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
   (let* ((keys         (rdb:get-keys db))
 	 (rundat       (runs:get-runs-by-patt db keys runnamepatt))
@@ -646,6 +649,24 @@
 	(sqlite3:finalize! db)
 	(set! *didsomething* #t))))))
 
+;;======================================================================
+;; Lock/unlock runs
+;;======================================================================
+
+(define (runs:handle-locking db target keys runname lock unlock user)
+  (let* ((rundat   (runs:get-runs-by-patt db keys runname))
+	 (header   (vector-ref rundat 0))
+	 (runs     (vector-ref rundat 1)))
+    (for-each (lambda (run)
+		(let ((run-id (db:get-value-by-header run header "id")))
+		  (if (or lock
+			  (and unlock
+			       (begin
+				 (print "Do you really wish to unlock run " run-id "?\n   y/n: ")
+				 (equal? "y" (read-line)))))
+		      (db:lock/unlock-run db run-id lock unlock user)
+		      (debug:print 0 "INFO: Skipping lock/unlock on " run-id))))
+	      runs)))
 ;;======================================================================
 ;; Rollup runs
 ;;======================================================================
