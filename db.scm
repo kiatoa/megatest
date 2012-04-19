@@ -292,6 +292,18 @@
 			  (string-intersperse remfields ","))))
     (list keystr header)))
 
+;; make a query (fieldname like 'patt1' OR fieldname 
+(define (db:patt->like fieldname pattstr #!key (comparator " OR "))
+  (let ((patts (if (string? pattstr)
+		   (string-split pattstr ",")
+		   '(""))))
+    (string-intersperse (map (lambda (patt)
+			       (conc fieldname " LIKE '" patt "'"))
+			     (if (null? patts)
+				 '("")
+				 patts))
+			comparator)))
+
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;;
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
@@ -300,11 +312,7 @@
 (define (db:get-runs db runpatt count offset keypatts)
   (let* ((res       '())
 	 (keys       (db:get-keys db))
-	 (runpatts   (string-split runpatt ","))
-	 (runpattstr (string-intersperse (map (lambda (patt)
-						(conc "runname LIKE '" patt "'"))
-					      runpatts)
-					 " OR "))
+	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header     (append (map key:get-fieldname keys)
 		             remfields))
@@ -318,7 +326,7 @@
 		         	     (map (lambda (keypatt)
 		         		    (let ((key  (car keypatt))
 		         			  (patt (cadr keypatt)))
-		         		      (conc key " LIKE '" patt "'")))
+		         		      (db:patt->like key patt)))
 		         		  keypatts)
 		         	     " AND ")))
 		           " ORDER BY event_time DESC "
@@ -456,7 +464,10 @@
 			       (conc " AND " (if not-in "NOT" "") " (" states-str " AND " statuses-str ") ")
 			       ""))
 	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
-			 " FROM tests WHERE run_id=? AND testname like ? AND item_path LIKE ? " 
+			 " FROM tests WHERE run_id=? AND "
+			 ;; testname like ? AND item_path LIKE ? " 
+			 (db:patt->like "testname" testpatt) " AND "
+			 (db:patt->like "item_path" itempatt)
 			 state-status-qry
 			 (case sort-by
 			   ((rundir)     " ORDER BY length(rundir) DESC;")
@@ -470,8 +481,9 @@
      db 
      qry
      run-id
-     (if testpatt testpatt "%")
-     (if itempatt itempatt "%"))
+     ;; (if testpatt testpatt "%")
+     ;; (if itempatt itempatt "%"))
+     )
     res))
 
 ;; this one is a bit broken BUG FIXME

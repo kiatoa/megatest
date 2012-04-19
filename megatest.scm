@@ -283,12 +283,13 @@ Called as " (string-intersperse (argv) " ")))
       ;; Each run
       (for-each 
        (lambda (run)
-	 (debug:print 2 "Run: "
+	 (debug:print 1 "Run: "
 		(string-intersperse (map (lambda (x)
 					   (db:get-value-by-header run header x))
 					 keynames) "/")
 		"/"
-		(db:get-value-by-header run header "runname"))
+		(db:get-value-by-header run header "runname")
+		" status: " (db:get-value-by-header run header "state"))
 	 (let ((run-id (db:get-value-by-header run header "id")))
 	   (let ((tests (rdb:get-tests-for-run db run-id testpatt itempatt '() '())))
 	     ;; Each test
