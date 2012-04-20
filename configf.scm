@@ -144,7 +144,7 @@
 	       (configf:include-rx ( x include-file ) (let ((curr-dir (current-directory))
 							    (conf-dir  (pathname-directory path)))
 							(if conf-dir (change-directory conf-dir))
-							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name)
+							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
 							(change-directory curr-dir)
 							(loop (configf:read-line inp res) curr-section-name #f #f)))
 	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res)

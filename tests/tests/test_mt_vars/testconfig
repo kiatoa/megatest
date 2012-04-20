@@ -9,6 +9,9 @@ currentisblah currentisblah.sh
 # $BOGOUS should NOT be set
 bogousnotset bogousnotset.sh
 
+# ALT_VAR should NOT be set
+altvarnotset altvarnotset.sh
+
 [requirements]
 waiton runfirst
 priority 0
