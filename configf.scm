@@ -119,9 +119,9 @@
 ;; adds to ht if given (must be #f otherwise)
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
-
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f))
-  (debug:print 4 "INFO: read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section)
+;; sections: #f => get all, else list of sections to gather
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
+  (debug:print 4 "INFO: read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections)
   (if (not (file-exists? path))
       (begin 
 	(debug:print 4 "INFO: read-config - file not found " path " current path: " (current-directory))
@@ -135,6 +135,7 @@
 	  (if (eof-object? inl) 
 	      (begin
 		(close-input-port inp)
+		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
 		res)
 	      (regex-case 
 	       inl 
@@ -143,10 +144,15 @@
 	       (configf:include-rx ( x include-file ) (let ((curr-dir (current-directory))
 							    (conf-dir  (pathname-directory path)))
 							(if conf-dir (change-directory conf-dir))
-							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name)
+							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
 							(change-directory curr-dir)
 							(loop (configf:read-line inp res) curr-section-name #f #f)))
-	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res) section-name #f #f))
+	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res)
+							    ;; if we have the sections list then force all settings into "" and delete it later?
+							    (if (or (not sections) 
+								    (member section-name sections))
+								section-name "") ;; stick everything into ""
+							    #f #f))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
 							  (let ((alist (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
