@@ -296,7 +296,7 @@
 (define (db:patt->like fieldname pattstr #!key (comparator " OR "))
   (let ((patts (if (string? pattstr)
 		   (string-split pattstr ",")
-		   '(""))))
+		   '("%"))))
     (string-intersperse (map (lambda (patt)
 			       (conc fieldname " LIKE '" patt "'"))
 			     (if (null? patts)
