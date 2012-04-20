@@ -18,7 +18,7 @@
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
-	 (confdat (read-config fname #f #t environ-patt: environ-patt))
+	 (confdat (read-config fname #f #t environ-patt: environ-patt sections: '("default" thekey)))
 	 (whatfound (make-hash-table))
 	 (sections (list "default" thekey)))
     (if (not *target*)(set! *target* thekey)) ;; may save a db access or two but repeats db:get-target code
