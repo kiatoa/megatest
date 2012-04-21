@@ -75,7 +75,6 @@ Test data capture
   :expected               : value expected (required)
   :tol                    : |value-expect| <= tol (required, can be <, >, >=, <= or number)
   :units                  : name of the units for value, expected_value etc. (optional)
-
   -load-test-data         : read test specific data for storage in the test_data table
                             from standard in. Each line is comma delimited with four
                             fields category,variable,value,comment

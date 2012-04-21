@@ -613,9 +613,8 @@
 ;; Misc. test related queries
 ;;======================================================================
 
-(define (db:test-get-paths-matching db keynames target)
-  (let* ((res '())
-	 (itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
+(define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
+  (let* ((itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
 	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
@@ -636,7 +635,33 @@
        (set! res (cons p res)))
      db 
      qrystr)
-    res))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (glob (conc p "/" fnamepatt)))
+		    res))
+	res)))
+
+;; look through tests from matching runs for a file
+(define (db:test-get-first-path-matching db keynames target fname)
+  ;; [refpaths] is the section where references to other megatest databases are stored
+  (let ((mt-paths (configf:get-section "refpaths"))
+	(res       (db:test-get-paths-matching db keynames target fname)))
+    (let loop ((pathdat (if (null? paths) #f (car mt-paths)))
+	       (tal     (if (null? paths) '()(cdr mt-paths))))
+      (if (not (null? res))
+	  (car res) ;; return first found
+	  (if path
+	      (let* ((db     (open-db path: (cadr pathdat)))
+		     (newres (db:test-get-paths-matching db keynames target fname)))
+		(debug:print 4 "INFO: Trying " (car pathdat) " at " (cadr pathdat))
+		(sqlite3:finalize! db)
+		(if (not (null? newres))
+		    (car newres)
+		    (if (null? tal)
+			#f
+			(loop (car tal)(cdr tal))))))))))
+
 
 (define (db:test-get-test-records-matching db keynames target)
   (let* ((res '())
