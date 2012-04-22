@@ -66,7 +66,7 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 
-for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils directory-utils; do
+for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils directory-utils hostinfo; do
   chicken-install $PROX $f
 done
 
@@ -89,6 +89,8 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
     fi
 fi
+
+chicken-install $PROX sqlite3
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
