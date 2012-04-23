@@ -53,6 +53,16 @@ the generated files before starting your first runs")
 	  (print "The path " path " does not exist or is not a directory. Attempting to create it now")
 	  (create-directory path #t)))
 
+    ;; First check that megatest.config does not exist!
+    (if (file-exists? (conc path "/megatest.config"))
+	(begin
+	  (print "WARNING: megatest.config already exists! Do you wish to clobber files in " path "?")
+	  (display "Enter y/n: ")
+	  (if (not (equal? "y" (read-line)))
+	      (begin
+		(print "INFO: Creation of megatest files in " path " aborted")
+		(exit 1)))))
+
     ;; first prompt user for fields
     ;;
     (print "==================\nNext you must specify fields or keys for your megatest area. These will 
@@ -140,24 +150,46 @@ of keys).")
 	(scripts  '())
 	(items    '())
 	(rel-path #f))
-    (print "We are going to generate a skeleton set of files for your test " testname " Note: do not worry "
-	   "too much about typos, you can edit the files when you are done")
 
-    (print "==================\nPlease describe this test. The description will be visible in various dialogs and reports")
+    (cond
+     ((file-exists? "megatest.config")         (set! rel-path "./"))
+     ((file-exists? "../megatest.config")      (set! rel-path "../"))
+     ((file-exists? "../../megatest.config")   (set! rel-path "../../"))
+     ((file-exists? "../../../megatest.config")(set! rel-path "../../../"))) ;; good enough dang it.
+
+    ;; Don't gather data or continue if a) megatest.config can't be found or b) testconfig already exists
+    (if (not rel-path)
+	(begin
+	  (print "ERROR: I could not find megatest.config, please run -get-megatest-test in the top dir of your megatest area")
+	  (exit 1)))
+
+    (if (file-exists? (conc rel-path "tests/" testname "/testconfig"))
+	(begin
+	  (print "WARNING: You already have a testconfig in " rel-path "tests/" testname ", do you want to clobber your files?")
+	  (display "Enter y/n: ")
+	  (if (not (equal? "y" (read-line)))
+	      (begin
+		(print "INFO: user abort of creation of test " testname)
+		(exit 1)))))
+
+    (print "We are going to generate a skeleton set of files for your test " testname "\n"
+	   " *** Note: do not worry too much about typos, you can edit the files created when you are done.")
+
+    (print "\n\n==================\nPlease describe this test. The description will be visible in various dialogs and reports")
     (display "Enter one line description for this test: ")
     (set! description (read-line))
 
-    (print "==================\nDoes this test, " testname ", require any other test be run prior to launch?")
+    (print "\n\n==================\nDoes this test, " testname ", require any other test be run prior to launch?")
     (display (conc "Enter space delimited list of tests which " testname " must wait for: "))
     (set! waiton (read-line))
 
-    (print "==================\nDo you wish to prioritize the running of this test over other tests? If so")
+    (print "\n\n==================\nDo you wish to prioritize the running of this test over other tests? If so")
     (print "enter a number greater than zero here")
     (display "Enter a priority of 0 (default) or higher: ")
     (set! priority (read-line))
 
     ;; Get the steps
-    (print "==================\nNow to enter the one or more steps that make up your test, note; you can add more later")
+    (print "\n\n==================\nNow to enter the one or more steps that make up your test, note; you can add more later")
     (print "Hint; use .sh extension on the script names and we'll create placeholder scripts."
 
     (let ((stepname   #f)
@@ -174,7 +206,7 @@ of keys).")
 	    (loop #f))))
 
     ;; Get the items
-    (print "==================\nNext we need to get the variables and values you wish to iterate this test over (blank for none)")
+    (print "\n\n==================\nNext we need to get the variables and values you wish to iterate this test over (blank for none)")
     (let ((varname #f)
 	  (values  #f))
       (let loop ((done #f))
@@ -189,11 +221,6 @@ of keys).")
 	    (loop #f))))
 
     ;; Now create the test
-    (cond
-     ((file-exists? "megatest.config")         (set! rel-path "./"))
-     ((file-exists? "../megatest.config")      (set! rel-path "../"))
-     ((file-exists? "../../megatest.config")   (set! rel-path "../../"))
-     ((file-exists? "../../../megatest.config")(set! rel-path "../../../"))) ;; good enough dang it.
     (if (not rel-path)
 	(begin
 	  (print "ERROR: You must run this command in a megatest area under where the megatest.config file exists.")
