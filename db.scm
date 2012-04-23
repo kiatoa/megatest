@@ -1386,11 +1386,11 @@
 	((rpc:procedure 'rdb:test-data-rollup host port) test-id status))
       (db:test-data-rollup db test-id status)))
 
-(define (rdb:test-get-paths-matching db keynames target)
+(define (rdb:test-get-paths-matching db keynames target fname)
    (if *runremote*
        (let ((host (vector-ref *runremote* 0))
 	     (port (vector-ref *runremote* 1)))
-	 ((rpc:procedure 'rdb:test-get-paths-matching host port) keynames target))
-       (db:test-get-paths-matching db keynames target)))
+	 ((rpc:procedure 'rdb:test-get-paths-matching host port) keynames target fname))
+       (db:test-get-paths-matching db keynames target fname)))
 
  
