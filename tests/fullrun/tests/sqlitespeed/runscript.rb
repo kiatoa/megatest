@@ -1,6 +1,6 @@
 #! /usr/bin/env ruby
 
-require "#{ENV['MT_RUN_AREA_HOME']}/supportfiles/ruby/librunscript.rb"
+require "#{ENV['MT_RUN_AREA_HOME']}/../supportfiles/ruby/librunscript.rb"
 
 # run_record(stepname, cmd) - will record in db if exit code of script was zero or not
 run_and_record('create db',"sqlite3 testing.db << EOF\ncreate table if not exists blah(id INTEGER PRIMARY KEY,name TEXT);\n.q\nEOF","")
