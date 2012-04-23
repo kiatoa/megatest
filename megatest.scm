@@ -21,6 +21,7 @@
 (declare (uses launch))
 (declare (uses server))
 (declare (uses tests))
+(declare (uses genexample))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -75,7 +76,6 @@ Test data capture
   :expected               : value expected (required)
   :tol                    : |value-expect| <= tol (required, can be <, >, >=, <= or number)
   :units                  : name of the units for value, expected_value etc. (optional)
-
   -load-test-data         : read test specific data for storage in the test_data table
                             from standard in. Each line is comma delimited with four
                             fields category,variable,value,comment
@@ -83,7 +83,7 @@ Test data capture
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -showkeys               : show the keys used in this megatest setup
-  -test-paths targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
+  -test-path targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
 
 Misc 
@@ -102,13 +102,14 @@ Spreadsheet generation
                             will clear the field if no rundir/testname/itempath/logfile
                             if it contains forward slashes the path will be converted
                             to windows style
-
-Helpers (these only apply in test run mode)
+Getting started
+  -gen-megatest-area      : create a skeleton megatest area. You will be prompted for paths
+  -gen-megatest-test      : create a skeleton megatest test. You will be prompted for info
 
 Examples
 
-# Get test paths 
-megatest -test-paths -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
+# Get test path, the '.' is required, could use '*' or a specific path/file
+megatest -test-path . -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ")))
 
@@ -156,6 +157,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-setvars"
 			"-set-state-status"
 			"-debug" ;; for *verbosity* > 2
+			"-gen-megatest-test"
 			"-override-timeout"
 			) 
 		 (list  "-h"
@@ -174,6 +176,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-unlock"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
+			"-test-path"  ;; -test-paths is deprecated
 
 			"-runall"    ;; run all tests
 			"-remove-runs"
@@ -181,6 +184,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
+			"-gen-megatest-area"
 
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -449,7 +453,7 @@ Called as " (string-intersperse (argv) " ")))
 ;; Get paths to tests
 ;;======================================================================
 ;; Get test paths matching target, runname, testpatt, and itempatt
-(if (args:get-arg "-test-paths")
+(if (or (args:get-arg "-test-path")(args:get-arg "-test-paths"))
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
@@ -471,7 +475,7 @@ Called as " (string-intersperse (argv) " ")))
 		(exit 1)))
 	  (if (not (setup-for-run))
 	      (begin
-		(debug:print 0 "Failed to setup, giving up on -test-paths, exiting")
+		(debug:print 0 "Failed to setup, giving up on -test-path, exiting")
 		(exit 1)))
 	  (set! db (open-db))    
 	  (if (not (args:get-arg "-server"))
@@ -486,8 +490,8 @@ Called as " (string-intersperse (argv) " ")))
 		      paths)))
 	;; else do a general-run-call
 	(general-run-call 
-	 "-test-paths"
-	 "Get paths to tests"
+	 "-test-path"
+	 "Get paths to test"
 	 (lambda (db target runname keys keynames keyvallst)
 	   (let* ((itempatt (args:get-arg "-itempatt"))
 		  (paths    (rdb:test-get-paths-matching db keynames target)))
@@ -756,6 +760,16 @@ Called as " (string-intersperse (argv) " ")))
     (begin
       (debug:print 0 "Look at the dashboard for now")
       ;; (megatest-gui)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-gen-megatest-area")
+    (begin
+      (genexample:mk-megatest.config)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-gen-megatest-test")
+    (let ((testname (args:get-arg "-gen-megatest-test")))
+      (genexample:mk-megatest-test testname)
       (set! *didsomething* #t)))
 
 ;;======================================================================

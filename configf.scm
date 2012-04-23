@@ -235,6 +235,9 @@
 	'()
 	(map car sectdat))))
 
+(define (configf:get-section cfdat section)
+  (hash-table-ref/default cfgdat section '()))
+
 (define (setup)
   (let* ((configf (find-config))
 	 (config  (if configf (read-config configf #f #t) #f)))

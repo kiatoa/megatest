@@ -78,7 +78,7 @@
     
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
-;; can use wildcards. 
+;; can use wildcards. Also can likely be factored in with get test paths?
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
   (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
