@@ -21,6 +21,7 @@
 (declare (uses launch))
 (declare (uses server))
 (declare (uses tests))
+(declare (uses genexample))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -101,6 +102,9 @@ Spreadsheet generation
                             will clear the field if no rundir/testname/itempath/logfile
                             if it contains forward slashes the path will be converted
                             to windows style
+Getting started
+  -gen-megatest-area      : create a skeleton megatest area. You will be prompted for paths
+  -gen-megatest-test      : create a skeleton megatest test. You will be prompted for info
 
 Examples
 
@@ -153,6 +157,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-setvars"
 			"-set-state-status"
 			"-debug" ;; for *verbosity* > 2
+			"-gen-megatest-test"
 			"-override-timeout"
 			) 
 		 (list  "-h"
@@ -179,6 +184,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
+			"-gen-megatest-area"
 
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -754,6 +760,16 @@ Called as " (string-intersperse (argv) " ")))
     (begin
       (debug:print 0 "Look at the dashboard for now")
       ;; (megatest-gui)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-gen-megatest-area")
+    (begin
+      (genexample:mk-megatest.config)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-gen-megatest-test")
+    (let ((testname (args:get-arg "-gen-megatest-test")))
+      (genexample:mk-megatest-test testname)
       (set! *didsomething* #t)))
 
 ;;======================================================================
