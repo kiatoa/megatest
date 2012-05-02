@@ -363,8 +363,9 @@
 			      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 			      (exit 1)))))
 		    (let ((newtal (append tal (list hed)))
-			  (fails  (filter (lambda (test)(not (member (db:test-get-status test)
-								     '("PASS" "WARN" "CHECK" "WAIVED"))))
+			  (fails  (filter (lambda (test)
+					    (not (member (db:test-get-status test)
+							 '("PASS" "WARN" "CHECK" "WAIVED"))))
 					  prereqs-not-met)))
 		      ;; if can't run more tests, lets take a breather
 		      (debug:print 4 "FAILS: " fails)

@@ -1,17 +1,4 @@
-(use test)
-;; (require-library args)
-
-(include "../megatest.scm")
-(include "../common.scm")
-(include "../keys.scm")
-(include "../db.scm")
-(include "../configf.scm")
-(include "../process.scm")
-(include "../launch.scm")
-(include "../items.scm")
-(include "../runs.scm")
-(include "../runconfig.scm")
-(include "../megatest-version.scm")
+(require-extension test)
 
 (define test-work-dir (current-directory))
 
@@ -63,14 +50,14 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
-(test "get all legal tests" (list "runfirst" "runwithfirst" "singletest" "singletest2" "sqlitespeed") (sort (get-all-legal-tests) string<=?))
+(test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(register-test *db* 1 "nada" "" '("tag1" "tag2" "tag3"))
-	(test:get-state (db:get-test-info *db* 1 "nada" ""))))
+	(tests:register-test *db* 1 "nada" "")
+	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
 
-(test "get-keys" "sysname" (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
+(test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
 (define remargs (args:get-args
 		 '("bar" "foo" ":runname" "bob" ":sysname" "ubuntu" ":fsname" "nfs" ":datapath" "blah/foo" "nada")
@@ -79,8 +66,14 @@
 		 args:arg-hash
 		 0))
 
-(test "register-run" #t (number? (register-run *db* (db-get-keys *db*))))
-(define keys (db-get-keys *db*))
+(test "register-run" #t (number? (runs:register-run *db*
+						    (db:get-keys *db*)
+						    '(("SYSTEM" "key1")("OS" "key2"))
+						    "myrun" 
+						    "new"
+						    "n/a" 
+						    "bob")))
+(define keys (db:get-keys *db*))
 
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
