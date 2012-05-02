@@ -300,10 +300,21 @@
 			(run:test db run-id runname keyvallst test-record flags #f)
 			(debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
 		    ;; else the run is stuck, temporarily or permanently
-		    (let ((newtal (append tal (list hed))))
-		      ;; couldn't run, take a breather
-		      (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
-		      (loop (car newtal)(cdr newtal))))))
+		    (let ((newtal (append tal (list hed)))
+			  (fails  (filter (lambda (test)(not (member (db:test-get-status test)
+								     '("PASS" "WARN" "CHECK" "WAIVED"))))
+					  prereqs-not-met)))
+		      (debug:print 4 "FAILS: " fails)
+		      ;; If one or more of the prereqs-not-met are FAIL then we can issue
+		      ;; a message and drop hed from the items to be processed.
+		      (if (null? fails)
+			  (begin
+			    ;; couldn't run, take a breather
+			    (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+			    (loop (car newtal)(cdr newtal)))
+			  ;; the waiton is FAIL so no point in trying to run hed
+			  (if (not (null? tal))
+			      (loop (car tal)(cdr tal))))))))
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -336,24 +347,37 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (if (and (runs:can-run-more-tests db test-record)
-		       (null? (db:get-prereqs-not-met db run-id waitons item-path)))
-		  (let ((test-name (tests:testqueue-get-testname test-record)))
-		    (setenv "MT_TEST_NAME" test-name) ;; 
-		    (setenv "MT_RUNNAME"   runname)
-		    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-		    (let ((items-list (items:get-items-from-config tconfig)))
-		      (if (list? items-list)
+	      (let ((can-run-more    (runs:can-run-more-tests db test-record))
+		    (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
+		(if (and can-run-more (null? prereqs-not-met))
+		    (let ((test-name (tests:testqueue-get-testname test-record)))
+		      (setenv "MT_TEST_NAME" test-name) ;; 
+		      (setenv "MT_RUNNAME"   runname)
+		      (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+		      (let ((items-list (items:get-items-from-config tconfig)))
+			(if (list? items-list)
+			    (begin
+			      (tests:testqueue-set-items! test-record items-list)
+			      (loop hed tal))
+			    (begin
+			      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+			      (exit 1)))))
+		    (let ((newtal (append tal (list hed)))
+			  (fails  (filter (lambda (test)(not (member (db:test-get-status test)
+								     '("PASS" "WARN" "CHECK" "WAIVED"))))
+					  prereqs-not-met)))
+		      ;; if can't run more tests, lets take a breather
+		      (debug:print 4 "FAILS: " fails)
+		      ;; If one or more of the prereqs-not-met are FAIL then we can issue
+		      ;; a message and drop hed from the items to be processed.
+		      (if (null? fails)
 			  (begin
-			    (tests:testqueue-set-items! test-record items-list)
-			    (loop hed tal))
-			  (begin
-			    (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
-			    (exit 1)))))
-		  (let ((newtal (append tal (list hed))))
-		    ;; if can't run more tests, lets take a breather
-		    (thread-sleep! 0.1) ;; may as well wait a while for resources to free up
-		    (loop (car newtal)(cdr newtal)))))
+			    ;; couldn't run, take a breather
+			    (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+			    (loop (car newtal)(cdr newtal)))
+			  ;; the waiton is FAIL so no point in trying to run hed
+			  (if (not (null? tal))
+			      (loop (car tal)(cdr tal))))))))
 
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)

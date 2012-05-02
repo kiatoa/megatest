@@ -112,7 +112,10 @@
 (hash-table-set! args:arg-hash "-itempatt" "%")
 (hash-table-set! args:arg-hash "-testpatt" "%")
 (test "Setup for a run"       #t (begin (setup-for-run) #t))
-(test "Remove the rollup run" #t (begin (remove-runs) #t))
+
+
+;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
+
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test" 

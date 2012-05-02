@@ -1043,9 +1043,10 @@
 		    (set! item-waiton-met #t)))))
 	      tests)
 	     (if (not (or parent-waiton-met item-waiton-met))
-		 (set! result (cons waitontest-name result)))
+		 (set! result (append tests result)))
 	     ;; if the test is not found then clearly the waiton is not met...
-	     (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	     ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	     (if (not ever-seen)(set! result (append tests result)))))
 	waitons)
       (delete-duplicates result))))
 
