@@ -1,0 +1,34 @@
+
+Reference
+=========
+
+The First Chapter of the Second Part
+------------------------------------
+Chapters grouped into book parts are at level 1 and can contain
+sub-sections.
+
+The testconfig File
+-------------------
+
+-------------------
+# testconfig
+[requirements]
+
+# A normal waiton waits for the prior tests to be COMPLETED 
+# and PASS, CHECK or WAIVED
+waiton test1 test2
+
+# A item based waiton will start items in a test when the
+# same-named item is COMPLETED and PASS, CHECK or WAIVED
+# in the prior test
+#
+mode   normal | toplevel
+
+# With a toplevel test you may wish to generate your list 
+# of tests to run dynamically
+#
+# waiton #{shell get-valid-tests-to-run.sh}
+------------------
+
+:numbered!:
+

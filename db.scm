@@ -1006,8 +1006,10 @@
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
 ;; Note: do not convert to remote as it calls remote under the hood
-;;
-(define (db:get-prereqs-not-met db run-id waitons ref-item-path)
+;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK or WAIVED)
+;;       mode 'toplevel means that tests must be COMPLETED only
+;; 
+(define (db:get-prereqs-not-met db run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -1035,17 +1037,19 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 is-ok)
+			 (or is-ok (eq? mode 'toplevel)))
 		    (set! parent-waiton-met #t))
 		   ((and same-itempath
 			 is-completed
-			 is-ok)
+			 (or is-ok (eq? mode 'toplevel)))
 		    (set! item-waiton-met #t)))))
 	      tests)
 	     (if (not (or parent-waiton-met item-waiton-met))
-		 (set! result (cons waitontest-name result)))
+		 (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
 	     ;; if the test is not found then clearly the waiton is not met...
-	     (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	     ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
+	     (if (not ever-seen)
+		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	waitons)
       (delete-duplicates result))))
 
