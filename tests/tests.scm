@@ -135,3 +135,6 @@
 (test "Rollup the run(s)" #t (begin
 			       (runs:rollup-run db keys)
 			       #t))
+
+;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
+;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())

@@ -273,8 +273,7 @@
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
 	(item-patts        (hash-table-ref/default flags "-itempatt" #f)))
     (if (not (null? sorted-test-names))
-	(let loop (; (numtimes 0) ;; shouldn't need this
-		   (hed         (car sorted-test-names))
+	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names)))
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
@@ -282,7 +281,8 @@
 		 (priority    (tests:testqueue-get-priority   test-record))
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 		 (items       (tests:testqueue-get-items      test-record))
-		 (item-path   (item-list->path itemdat)))
+		 (item-path   (item-list->path itemdat))
+		 (newtal      (append tal (list hed))))
 	    (debug:print 6
 			 "itemdat:     " itemdat
 			 "\n  items:     " items
@@ -291,30 +291,46 @@
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
 	      (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
 		    (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
+
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
-		(if (and have-resources
-			 (null? prereqs-not-met))
-		    ;; no loop - drop though and use the loop at the bottom 
-		    (if (patt-list-match item-path item-patts)
-			(run:test db run-id runname keyvallst test-record flags #f)
-			(debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
-		    ;; else the run is stuck, temporarily or permanently
-		    (let ((newtal (append tal (list hed)))
-			  (fails  (filter (lambda (test)(not (member (db:test-get-status test)
-								     '("PASS" "WARN" "CHECK" "WAIVED"))))
-					  prereqs-not-met)))
-		      (debug:print 4 "FAILS: " fails)
-		      ;; If one or more of the prereqs-not-met are FAIL then we can issue
-		      ;; a message and drop hed from the items to be processed.
-		      (if (null? fails)
-			  (begin
-			    ;; couldn't run, take a breather
-			    (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
-			    (loop (car newtal)(cdr newtal)))
-			  ;; the waiton is FAIL so no point in trying to run hed
-			  (if (not (null? tal))
-			      (loop (car tal)(cdr tal))))))))
+		(cond
+		 ((and have-resources
+		       (null? prereqs-not-met))
+		  ;; no loop here, just drop though and use the loop at the bottom 
+		  (if (patt-list-match item-path item-patts)
+		      (run:test db run-id runname keyvallst test-record flags #f)
+		      (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
+		  ;; else the run is stuck, temporarily or permanently
+		  ;; but should check if it is due to lack of resources vs. prerequisites
+		  )
+		 ((not have-resources) ;; simply try again after waiting a second
+		  (thread-sleep! 1.0)
+		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
+		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
+		  (loop (car newtal)(cdr newtal)))
+		 (else ;; must be we have unmet prerequisites
+		  (let ((fails  (filter (lambda (test)
+					  (and (not (string? test))
+					       (not (member (db:test-get-status test)
+							    '("PASS" "WARN" "CHECK" "WAIVED")))))
+					prereqs-not-met)))
+		    (debug:print 4 "FAILS: " fails)
+		    ;; If one or more of the prereqs-not-met are FAIL then we can issue
+		    ;; a message and drop hed from the items to be processed.
+		    (if (null? fails)
+			(begin
+			  ;; couldn't run, take a breather
+			  (debug:print 4 "INFO: Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
+			  (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+			  ;; we made new tal by sticking hed at the back of the list
+			  (loop (car newtal)(cdr newtal)))
+			;; the waiton is FAIL so no point in trying to run hed ever again
+			(if (not (null? tal))
+			    (begin
+			      (debug:print 1 "WARN: Dropping test " (db:test-get-test-name hed) "/" (db:test-get-item-path hed)
+					   " from the launch list as it has prerequistes that are FAIL")
+			      (loop (car tal)(cdr tal))))))))))
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -362,23 +378,31 @@
 			    (begin
 			      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 			      (exit 1)))))
-		    (let ((newtal (append tal (list hed)))
-			  (fails  (filter (lambda (test)
-					    (not (member (db:test-get-status test)
-							 '("PASS" "WARN" "CHECK" "WAIVED"))))
-					  prereqs-not-met)))
-		      ;; if can't run more tests, lets take a breather
-		      (debug:print 4 "FAILS: " fails)
-		      ;; If one or more of the prereqs-not-met are FAIL then we can issue
-		      ;; a message and drop hed from the items to be processed.
-		      (if (null? fails)
-			  (begin
-			    ;; couldn't run, take a breather
-			    (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
-			    (loop (car newtal)(cdr newtal)))
-			  ;; the waiton is FAIL so no point in trying to run hed
-			  (if (not (null? tal))
-			      (loop (car tal)(cdr tal))))))))
+		    (if can-run-more
+			(loop (car newtal)(cdr newtal)) ;; an issue with prereqs not yet met?
+			(begin
+			  (debug:print 1 "INFO: Can't run more right now, killing a little time ...")
+			  (thread-sleep! 1.0)
+			  (loop (car newtal)(cdr newtal)))))))
+			
+		    ;; Can't run anything right now so put the test back on the queue
+		    ;; (let ((newtal (append tal (list hed)))
+		    ;;       (fails  (filter (lambda (test)  ;; fails is a list of prerequisite tests that are FAIL
+		    ;;     		    (not (member (db:test-get-status test)
+		    ;;     				 '("PASS" "WARN" "CHECK" "WAIVED"))))
+		    ;;     		  prereqs-not-met)))
+		    ;;   ;; if can't run more tests, lets take a breather
+		    ;;   (debug:print 4 "FAILS: " fails)
+		    ;;   ;; If one or more of the prereqs-not-met are FAIL then we can issue
+		    ;;   ;; a message and drop hed from the items to be processed.
+		    ;;   (if (null? fails)
+		    ;;       (begin
+		    ;;         ;; couldn't run, take a breather
+		    ;;         (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+		    ;;         (loop (car newtal)(cdr newtal)))
+		    ;;       ;; the waiton is FAIL so no point in trying to run hed
+		    ;;       (if (not (null? tal))
+		    ;;           (loop hed tal)))))))
 
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)
@@ -455,7 +479,6 @@
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
 	((NOT_STARTED COMPLETED)
-	 (debug:print 6 "Got here, " (test:get-state testdat))
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
