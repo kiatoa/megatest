@@ -1,26 +1,28 @@
 
-The First Part of the Book
-==========================
+Getting Started
+===============
 
 [partintro]
-.Optional part introduction title
+.Getting started with Megatest
 --
-Optional part introduction goes here.
+How to install Megatest and set it up for running your regressions and continuous integration process.
 --
 
-The First Chapter
------------------
-Chapters can be grouped by preceeding them with a level 0 Book Part
-title.
+Installation
+------------
 
-Book chapters are at level 1 and can contain sub-sections nested up to
-three deep.
+Dependencies
+~~~~~~~~~~~~
+
+Chicken scheme and a number of "eggs" are required for building
+Megatest. See the script installall.sch in the utils directory of the
+distribution for a mostly automated way to install everything needed
+for building Megatest on Linux.
+
 footnote:[An example footnote.]
 indexterm:[Example index entry]
 
-It's also worth noting that a book part can have it's own preface,
-bibliography, glossary and index. Chapters can have their own
-bibliography, glossary and index.
+
 
 And now for something completely different: ((monkeys)), lions and
 tigers (Bengal and Siberian) using the alternative syntax index

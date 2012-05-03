@@ -282,16 +282,24 @@
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 		 (items       (tests:testqueue-get-items      test-record))
 		 (item-path   (item-list->path itemdat))
-		 (newtal      (append tal (list hed))))
+		 (newtal      (append tal (list hed)))
+		 (calc-fails  (lambda (prereqs-not-met)
+				(filter (lambda (test)
+					  (debug:print 9 "test: " test)
+					  (and (vector? test) ;; not (string? test))
+					       (not (member (db:test-get-status test)
+							    '("PASS" "WARN" "CHECK" "WAIVED")))))
+					prereqs-not-met))))
 	    (debug:print 6
 			 "itemdat:     " itemdat
 			 "\n  items:     " items
 			 "\n  item-path: " item-path)
 	    (cond
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
-		    (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
-
+	      (let* ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
+		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path))
+		     (fails           (calc-fails prereqs-not-met)))
+		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " prereqs-not-met " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
 		(cond
@@ -310,11 +318,6 @@
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal)))
 		 (else ;; must be we have unmet prerequisites
-		  (let ((fails  (filter (lambda (test)
-					  (and (not (string? test))
-					       (not (member (db:test-get-status test)
-							    '("PASS" "WARN" "CHECK" "WAIVED")))))
-					prereqs-not-met)))
 		    (debug:print 4 "FAILS: " fails)
 		    ;; If one or more of the prereqs-not-met are FAIL then we can issue
 		    ;; a message and drop hed from the items to be processed.
@@ -330,7 +333,7 @@
 			    (begin
 			      (debug:print 1 "WARN: Dropping test " (db:test-get-test-name hed) "/" (db:test-get-item-path hed)
 					   " from the launch list as it has prerequistes that are FAIL")
-			      (loop (car tal)(cdr tal))))))))))
+			      (loop (car tal)(cdr tal)))))))))
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -363,47 +366,37 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (runs:can-run-more-tests db test-record))
-		    (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path)))
-		(if (and can-run-more (null? prereqs-not-met))
-		    (let ((test-name (tests:testqueue-get-testname test-record)))
-		      (setenv "MT_TEST_NAME" test-name) ;; 
-		      (setenv "MT_RUNNAME"   runname)
-		      (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-		      (let ((items-list (items:get-items-from-config tconfig)))
-			(if (list? items-list)
-			    (begin
-			      (tests:testqueue-set-items! test-record items-list)
-			      (loop hed tal))
-			    (begin
-			      (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
-			      (exit 1)))))
-		    (if can-run-more
-			(loop (car newtal)(cdr newtal)) ;; an issue with prereqs not yet met?
-			(begin
-			  (debug:print 1 "INFO: Can't run more right now, killing a little time ...")
-			  (thread-sleep! 1.0)
-			  (loop (car newtal)(cdr newtal)))))))
-			
-		    ;; Can't run anything right now so put the test back on the queue
-		    ;; (let ((newtal (append tal (list hed)))
-		    ;;       (fails  (filter (lambda (test)  ;; fails is a list of prerequisite tests that are FAIL
-		    ;;     		    (not (member (db:test-get-status test)
-		    ;;     				 '("PASS" "WARN" "CHECK" "WAIVED"))))
-		    ;;     		  prereqs-not-met)))
-		    ;;   ;; if can't run more tests, lets take a breather
-		    ;;   (debug:print 4 "FAILS: " fails)
-		    ;;   ;; If one or more of the prereqs-not-met are FAIL then we can issue
-		    ;;   ;; a message and drop hed from the items to be processed.
-		    ;;   (if (null? fails)
-		    ;;       (begin
-		    ;;         ;; couldn't run, take a breather
-		    ;;         (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
-		    ;;         (loop (car newtal)(cdr newtal)))
-		    ;;       ;; the waiton is FAIL so no point in trying to run hed
-		    ;;       (if (not (null? tal))
-		    ;;           (loop hed tal)))))))
-
+	      (let* ((can-run-more    (runs:can-run-more-tests db test-record))
+		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path))
+		     (fails           (calc-fails prereqs-not-met)))
+		(debug:print 8 "INFO: can-run-more: " can-run-more
+			     " prereqs-not-met:\n  " (intersperse prereqs-not-met "\n")
+			     " fails:\n "            (intersperse fails "\n"))
+		(cond 
+		 ((and can-run-more (null? prereqs-not-met))
+		  (let ((test-name (tests:testqueue-get-testname test-record)))
+		    (setenv "MT_TEST_NAME" test-name) ;; 
+		    (setenv "MT_RUNNAME"   runname)
+		    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+		    (let ((items-list (items:get-items-from-config tconfig)))
+		      (if (list? items-list)
+			  (begin
+			    (tests:testqueue-set-items! test-record items-list)
+			    (loop hed tal))
+			  (begin
+			    (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+			    (exit 1))))))
+		 ((and can-run-more (null? fails))
+		  (debug:print 4 "INFO: Can't run more right now, killing a little time ...")
+		  (thread-sleep! 3.0)
+		  (loop (car newtal)(cdr newtal))) ;; an issue with prereqs not yet met?
+		 (else
+		  (debug:print 1 "INFO: test "  hed " has failed prerequisite(s); "
+			       (string-intersperse (map db:test-get-testname fails) ", ")
+			       ", removing it from to-do list")
+		  (if (not (null? tal))
+		      (loop (car tal)(cdr tal)))))))
+	     
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)
 	      (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
@@ -491,7 +484,7 @@
 		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
 		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
-	     (debug:print 2 "INFO: running test " test-name "/" item-path " suppressed as it is COMPLETED and " (test:get-state testdat))
+	     (debug:print 2 "INFO: running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
 	     (set! runflag #f))
 	    ;; -rerun and status is one of the specifed, run it
 	    ((and rerun

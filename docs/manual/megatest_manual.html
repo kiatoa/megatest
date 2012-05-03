@@ -757,7 +757,7 @@ and roll of the eyes.</p></div>
 years, thank you. I&#8217;ve benefitted from your patience and insight and I
 hope that some of what I&#8217;ve learned from you has been incorporated
 into Megatest.</p></div>
-<div class="paragraph"><p>Lastly, my thanks to all the wonderful open source creators. These
+<div class="paragraph"><p>Also, my thanks to all the wonderful open source creators. These
 truly free projects, from Linux, xemacs, chicken scheme, and fossil to
 asciidoc and bash are the philosophical and direct underpinnings of
 the Megatest project.</p></div>
@@ -766,41 +766,58 @@ the Megatest project.</p></div>
 </div>
 </div>
 <div class="sect1">
-<h2 id="_example_preface">Example Preface</h2>
+<h2 id="_preface">Preface</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>The optional book preface goes here at section level zero.</p></div>
+<div class="paragraph"><p>This book is organised as three sub-books; getting started, writing tests and reference.</p></div>
 <div class="sect2">
-<h3 id="_preface_sub_section">Preface Sub-section</h3>
-<div class="admonitionblock">
-<table><tr>
-<td class="icon">
-<div class="title">Note</div>
-</td>
-<td class="content">Preface and appendix subsections start out of sequence at level
-2 (level 1 is skipped). This only applies to multi-part book
-documents.</td>
-</tr></table>
+<h3 id="_why_megatest">Why Megatest?</h3>
+<div class="paragraph"><p>The Megatest project was started for two reasons, the first was an
+immediate and pressing need for a generalized tool to manage a suite
+of regression tests and the second was the fact that I had written or
+maintained several such tools at different companies over the years
+and it seemed a good thing to have a single open source tool, flexible
+enough to meet the needs of any team doing continuous integrating and
+or running a complex suite of tests for release qualification.</p></div>
+</div>
+<div class="sect2">
+<h3 id="_megatest_design_philosophy">Megatest Design Philosophy</h3>
+<div class="paragraph"><p>Megatest is intended to provide the minimum needed resources to make
+writing a suite of tests and implementing continuous build for
+software, design engineering or process control (via owlfs for
+example) without being specialized for any specific problem
+space. Megatest in of itself does not know what constitutes a PASS or
+FAIL of a test. In most cases megatest is best used in conjunction
+with logpro or a similar tool to parse, analyze and decide on the test
+outcome.</p></div>
+</div>
+<div class="sect2">
+<h3 id="_megatest_architecture">Megatest Architecture</h3>
+<div class="paragraph"><p>All data to specify the tests and configure the system is stored in
+plain text files. All system state is stored in an sqlite3
+database. Tests are launched using the launching system available for
+the distributed compute platform in use. A template script is provided
+which can launch jobs on local and remote Linux hosts. Currently
+megatest uses the network filesystem to call home to your master
+sqlite3 database.</p></div>
 </div>
 </div>
 </div>
-</div>
-<h1 id="_the_first_part_of_the_book">The First Part of the Book</h1>
+<h1 id="_getting_started">Getting Started</h1>
 <div class="openblock">
-<div class="title">Optional part introduction title</div>
+<div class="title">Getting started with Megatest</div>
 <div class="content">
-<div class="paragraph"><p>Optional part introduction goes here.</p></div>
+<div class="paragraph"><p>How to install Megatest and set it up for running your regressions and continuous integration process.</p></div>
 </div></div>
 <div class="sect1">
-<h2 id="_the_first_chapter">The First Chapter</h2>
+<h2 id="_installation">Installation</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>Chapters can be grouped by preceeding them with a level 0 Book Part
-title.</p></div>
-<div class="paragraph"><p>Book chapters are at level 1 and can contain sub-sections nested up to
-three deep.
-<span class="footnote"><br />[An example footnote.]<br /></span></p></div>
-<div class="paragraph"><p>It&#8217;s also worth noting that a book part can have it&#8217;s own preface,
-bibliography, glossary and index. Chapters can have their own
-bibliography, glossary and index.</p></div>
+<div class="sect2">
+<h3 id="_dependencies">Dependencies</h3>
+<div class="paragraph"><p>Chicken scheme and a number of "eggs" are required for building
+Megatest. See the script installall.sch in the utils directory of the
+distribution for a mostly automated way to install everything needed
+for building Megatest on Linux.</p></div>
+<div class="paragraph"><p><span class="footnote"><br />[An example footnote.]<br /></span></p></div>
 <div class="paragraph"><p>And now for something completely different: monkeys, lions and
 tigers (Bengal and Siberian) using the alternative syntax index
 entries.
@@ -850,6 +867,7 @@ cellspacing="0" cellpadding="4">
 <div class="content">
 <div class="paragraph"><p>Lorum ipum&#8230;</p></div>
 </div></div>
+</div>
 <div class="sect2">
 <h3 id="X1">Sub-section with Anchor</h3>
 <div class="paragraph"><p>Sub-section at level 2.</p></div>
@@ -874,17 +892,9 @@ AsciiDoc configuration.
 <div class="paragraph"><p>An example link to a bibliography entry <a href="#taoup">[taoup]</a>.</p></div>
 </div>
 </div>
-<h1 id="_writing_tests">Writing Tests</h1>
-<div class="sect1">
-<h2 id="_the_first_chapter_of_the_second_part">The First Chapter of the Second Part</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>Chapters grouped into book parts are at level 1 and can contain
-sub-sections.</p></div>
-</div>
-</div>
 <h1 id="_reference">Reference</h1>
 <div class="sect1">
-<h2 id="_the_first_chapter_of_the_second_part_2">The First Chapter of the Second Part</h2>
+<h2 id="_the_first_chapter_of_the_second_part">The First Chapter of the Second Part</h2>
 <div class="sectionbody">
 <div class="paragraph"><p>Chapters grouped into book parts are at level 1 and can contain
 sub-sections.</p></div>
@@ -996,7 +1006,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2012-05-02 13:56:01 MST
+Last updated 2012-05-03 07:53:32 MST
 </div>
 </div>
 </body>

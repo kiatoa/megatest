@@ -21,25 +21,51 @@ years, thank you. I've benefitted from your patience and insight and I
 hope that some of what I've learned from you has been incorporated
 into Megatest.
 
-Lastly, my thanks to all the wonderful open source creators. These
+Also, my thanks to all the wonderful open source creators. These
 truly free projects, from Linux, xemacs, chicken scheme, and fossil to
 asciidoc and bash are the philosophical and direct underpinnings of
 the Megatest project.
 
 [preface]
-Example Preface
-================
-The optional book preface goes here at section level zero.
+Preface
+=======
+This book is organised as three sub-books; getting started, writing tests and reference.
 
-Preface Sub-section
-~~~~~~~~~~~~~~~~~~~
-NOTE: Preface and appendix subsections start out of sequence at level
-2 (level 1 is skipped). This only applies to multi-part book
-documents.
+Why Megatest?
+~~~~~~~~~~~~~
 
+The Megatest project was started for two reasons, the first was an
+immediate and pressing need for a generalized tool to manage a suite
+of regression tests and the second was the fact that I had written or
+maintained several such tools at different companies over the years
+and it seemed a good thing to have a single open source tool, flexible
+enough to meet the needs of any team doing continuous integrating and
+or running a complex suite of tests for release qualification.
 
-include::getting_started.txt[]
-include::writing_tests.txt[]
+Megatest Design Philosophy
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Megatest is intended to provide the minimum needed resources to make
+writing a suite of tests and implementing continuous build for
+software, design engineering or process control (via owlfs for
+example) without being specialized for any specific problem
+space. Megatest in of itself does not know what constitutes a PASS or
+FAIL of a test. In most cases megatest is best used in conjunction
+with logpro or a similar tool to parse, analyze and decide on the test
+outcome.
+
+Megatest Architecture
+~~~~~~~~~~~~~~~~~~~~~
+
+All data to specify the tests and configure the system is stored in
+plain text files. All system state is stored in an sqlite3
+database. Tests are launched using the launching system available for
+the distributed compute platform in use. A template script is provided
+which can launch jobs on local and remote Linux hosts. Currently
+megatest uses the network filesystem to call home to your master
+sqlite3 database.
+
+include::getting_started.txt[] include::writing_tests.txt[]
 include::reference.txt[]
 
 [appendix]
