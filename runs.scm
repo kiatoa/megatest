@@ -282,8 +282,11 @@
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names)))
+	  (thread-sleep! 0.1) ;; give other applications some time with the db
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
+		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
+				(if m m 'normal)))
 		 (waitons     (tests:testqueue-get-waitons    test-record))
 		 (priority    (tests:testqueue-get-priority   test-record))
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
@@ -294,9 +297,22 @@
 				(filter (lambda (test)
 					  (debug:print 9 "test: " test)
 					  (and (vector? test) ;; not (string? test))
+					       (equal? (db:test-get-state test) "COMPLETED")
 					       (not (member (db:test-get-status test)
 							    '("PASS" "WARN" "CHECK" "WAIVED")))))
-					prereqs-not-met))))
+					prereqs-not-met)))
+		 (calc-not-completed (lambda (prereqs-not-met)
+				       (filter
+					(lambda (t)
+					  (or (not (vector? t))
+					      (not (equal? "COMPLETED" (db:test-get-state t)))))
+					prereqs-not-met)))
+		 (pretty-string (lambda (lst)
+				  (map (lambda (t)
+					 (if (string? t)
+					     t
+					     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
+				       lst))))
 	    (debug:print 6
 			 "itemdat:     " itemdat
 			 "\n  items:     " items
@@ -313,14 +329,21 @@
 	    (cond
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
 	      (let* ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
-		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: (config-lookup tconfig "requirements" "testmode")))
-		     (fails           (calc-fails prereqs-not-met)))
-		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " prereqs-not-met " fails: " fails)
+		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: testmode))
+		     (fails           (calc-fails prereqs-not-met))
+		     (non-completed   (calc-not-completed prereqs-not-met)))
+		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
+			     (string-intersperse 
+			      (map (lambda (t)
+				     (conc (db:test-get-state t)"/"(db:test-get-status t)))
+				   prereqs-not-met) ", ") " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
 		(cond
 		 ((and have-resources
-		       (null? prereqs-not-met))
+		       (or (null? prereqs-not-met)
+			   (and (eq? testmode 'toplevel)
+				(null? non-completed))))
 		  ;; no loop here, just drop though and use the loop at the bottom 
 		  (if (patt-list-match item-path item-patts)
 		      (run:test db run-id runname keyvallst test-record flags #f)
@@ -382,36 +405,45 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let* ((can-run-more    (runs:can-run-more-tests db test-record))
-		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: (config-lookup tconfig "requirements" "testmode")))
-		     (fails           (calc-fails prereqs-not-met)))
-		(debug:print 8 "INFO: can-run-more: " can-run-more
-			     " prereqs-not-met:\n  " (intersperse prereqs-not-met "\n")
-			     " fails:\n "            (intersperse fails "\n"))
-		(cond 
-		 ((and can-run-more (null? prereqs-not-met))
-		  (let ((test-name (tests:testqueue-get-testname test-record)))
-		    (setenv "MT_TEST_NAME" test-name) ;; 
-		    (setenv "MT_RUNNAME"   runname)
-		    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
-		    (let ((items-list (items:get-items-from-config tconfig)))
-		      (if (list? items-list)
-			  (begin
-			    (tests:testqueue-set-items! test-record items-list)
-			    (loop hed tal))
-			  (begin
-			    (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
-			    (exit 1))))))
-		 ((and can-run-more (null? fails))
-		  (debug:print 4 "INFO: Can't run more right now, killing a little time ...")
-		  (thread-sleep! 3.0)
-		  (loop (car newtal)(cdr newtal))) ;; an issue with prereqs not yet met?
-		 (else
-		  (debug:print 1 "INFO: test "  hed " has failed prerequisite(s); "
-			       (string-intersperse (map db:test-get-testname fails) ", ")
-			       ", removing it from to-do list")
-		  (if (not (null? tal))
-		      (loop (car tal)(cdr tal)))))))
+	      (let ((can-run-more    (runs:can-run-more-tests db test-record)))
+		(if can-run-more
+		    (let* ((prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: testmode))
+			   (fails           (calc-fails prereqs-not-met))
+			   (non-completed   (calc-not-completed prereqs-not-met)))
+		      (debug:print 8 "INFO: can-run-more: " can-run-more
+				   "\n prereqs-not-met: " (pretty-string prereqs-not-met)
+				   "\n non-completed:   " (pretty-string non-completed) 
+				   "\n fails:           " (pretty-string fails))
+		      (cond 
+		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
+			    ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
+			    (and (eq? testmode 'toplevel)
+				 (null? non-completed)))
+			(let ((test-name (tests:testqueue-get-testname test-record)))
+			  (setenv "MT_TEST_NAME" test-name) ;; 
+			  (setenv "MT_RUNNAME"   runname)
+			  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+			  (let ((items-list (items:get-items-from-config tconfig)))
+			    (if (list? items-list)
+				(begin
+				  (tests:testqueue-set-items! test-record items-list)
+				  (loop hed tal))
+				(begin
+				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+				  (exit 1))))))
+		       ((null? fails)
+			(loop (car newtal)(cdr newtal))) ;; an issue with prereqs not yet met?
+		       ((and (not (null? fails))(eq? testmode 'normal))
+			(debug:print 1 "INFO: test "  hed " (mode=" testmode ") has failed prerequisite(s); "
+				     (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
+				     ", removing it from to-do list")
+			(if (not (null? tal))
+			    (loop (car tal)(cdr tal))))
+		       (else
+			(debug:print 8 "ERROR: No handler for this condition, hed: " hed " fails: " (string-intersperse (map db:test-get-testname fails) ",") " testmode: " testmode " prereqs-not-met: " (pretty-string prereqs-not-met))
+			(loop (car newtal)(cdr newtal)))))
+		    ;; if can't run more just loop with next possible test
+		    (loop (car newtal)(cdr newtal)))))
 	     
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)

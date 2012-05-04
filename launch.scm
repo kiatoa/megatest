@@ -584,7 +584,7 @@
       (set! fullcmd (append (list remote-megatest test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
     ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
-    (debug:print 1 "Launching megatest for test " test-name " in " work-area" ...")
+    (debug:print 1 "Launching " work-area)
     (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
