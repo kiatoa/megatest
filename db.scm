@@ -1000,6 +1000,10 @@
        (sort steps (lambda (a b)(< (db:step-get-event_time a)(db:step-get-event_time b)))))
       res)))
 
+;;======================================================================
+;; M I S C   M A N A G E M E N T   I T E M S 
+;;======================================================================
+
 ;; the new prereqs calculation, looks also at itempath if specified
 ;; all prereqs must be met:
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met

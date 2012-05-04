@@ -213,6 +213,13 @@
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
 		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
 					  (if w w "")))))
+	    ;; check for hed in waitons => this would be circular, remove it and issue an
+	    ;; error
+	    (if (member hed waitons)
+		(begin
+		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
 		(hash-table-set! test-records
@@ -293,11 +300,20 @@
 	    (debug:print 6
 			 "itemdat:     " itemdat
 			 "\n  items:     " items
-			 "\n  item-path: " item-path)
+			 "\n  item-path: " item-path
+			 "\n  waitons:   " waitons)
+
+	    ;; check for hed in waitons => this would be circular, remove it and issue an
+	    ;; error
+	    (if (member hed waitons)
+		(begin
+		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		  (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
+
 	    (cond
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
 	      (let* ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
-		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path))
+		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: (config-lookup tconfig "requirements" "testmode")))
 		     (fails           (calc-fails prereqs-not-met)))
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " prereqs-not-met " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
@@ -367,7 +383,7 @@
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
 	      (let* ((can-run-more    (runs:can-run-more-tests db test-record))
-		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path))
+		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: (config-lookup tconfig "requirements" "testmode")))
 		     (fails           (calc-fails prereqs-not-met)))
 		(debug:print 8 "INFO: can-run-more: " can-run-more
 			     " prereqs-not-met:\n  " (intersperse prereqs-not-met "\n")
