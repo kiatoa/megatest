@@ -56,6 +56,7 @@
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
+	       (target    (assoc/default 'target    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
 	       (env-ovrd  (assoc/default 'env-ovrd  cmdinfo))
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
@@ -86,6 +87,7 @@
 	  (setenv "MT_ITEM_INFO" (conc itemdat))
 	  (setenv "MT_RUNNAME"   runname)
 	  (setenv "MT_MEGATEST"  megatest)
+	  (setenv "MT_TARGET"    target)
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  
 	  (if (not (setup-for-run))
@@ -565,6 +567,7 @@
 							  (list 'itemdat   itemdat  )
 							  (list 'megatest  remote-megatest)
 							  (list 'ezsteps   ezsteps) 
+							  (list 'target    (string-intersperse (map cadr keyvallst) "/"))
 							  (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 							  (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 							  (list 'runname   runname)
