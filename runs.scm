@@ -286,7 +286,7 @@
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
-				(if m m 'normal)))
+				(if m (string->symbol m) 'normal)))
 		 (waitons     (tests:testqueue-get-waitons    test-record))
 		 (priority    (tests:testqueue-get-priority   test-record))
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
@@ -413,7 +413,10 @@
 		      (debug:print 8 "INFO: can-run-more: " can-run-more
 				   "\n prereqs-not-met: " (pretty-string prereqs-not-met)
 				   "\n non-completed:   " (pretty-string non-completed) 
-				   "\n fails:           " (pretty-string fails))
+				   "\n fails:           " (pretty-string fails)
+				   "\n testmode:        " testmode
+				   "\n (eq? testmode 'toplevel) " (eq? testmode 'toplevel)
+				   "\n (null? non-completed)    " (null? non-completed))
 		      (cond 
 		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
 			    ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
@@ -440,7 +443,12 @@
 			(if (not (null? tal))
 			    (loop (car tal)(cdr tal))))
 		       (else
-			(debug:print 8 "ERROR: No handler for this condition, hed: " hed " fails: " (string-intersperse (map db:test-get-testname fails) ",") " testmode: " testmode " prereqs-not-met: " (pretty-string prereqs-not-met))
+			(debug:print 8 "ERROR: No handler for this condition.")
+			;; 	     "\n  hed:            " hed 
+			;; 	     "\n fails:           " (string-intersperse (map db:test-get-testname fails) ",")
+			;; 	     "\n testmode:        " testmode
+			;; 	     "\n prereqs-not-met: " (pretty-string prereqs-not-met)
+			;; 	     "\n items:           " items)
 			(loop (car newtal)(cdr newtal)))))
 		    ;; if can't run more just loop with next possible test
 		    (loop (car newtal)(cdr newtal)))))
