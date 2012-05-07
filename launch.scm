@@ -346,19 +346,21 @@
 		(exit 4)))))))
 
 ;; set up the very basics needed for doing anything here.
-(define (setup-for-run)
+(define (setup-for-run toppath)
   ;; would set values for KEYS in the environment here for better support of env-override but 
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now.
-  (find-and-read-config (if (args:get-arg "-config")
-			    (args:get-arg "-config") 
-			    "megatest.config")
-			environ-patt: "env-override"))
-        ;; (*configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-	;; (*toppath*    (if (car *configinfo*)(cadr *configinfo*) #f)))
-    ;; (if *toppath*
-    ;;	(setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
-    ;;	(debug:print 0 "ERROR: failed to find the top path to your run setup."))
+  (let ((configdat (find-and-read-config (if (args:get-arg "-config")
+					     (args:get-arg "-config") 
+					     (conc toppath "/megatest.config"))
+					 environ-patt: "env-override")))
+    (debug:print 0 "NOTE: handle MT_RUN_AREA_HOME here!")
+    configdat))
+;; (*configdat*  (if (car *configinfo*)(car *configinfo*) #f))
+;; (*toppath*    (if (car *configinfo*)(cadr *configinfo*) #f)))
+;; (if *toppath*
+;;	(setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
+;;	(debug:print 0 "ERROR: failed to find the top path to your run setup."))
 
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))

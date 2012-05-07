@@ -45,11 +45,11 @@
 					   36000)))) ;; 136000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
-	(db:initialize db))
+	(db:initialize db configinfo))
     db))
 
-(define (db:initialize db)
-  (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
+(define (db:initialize db configinfo)
+  (let* ((configdat (car configinfo))  ;; tut tut, global warning...
 	 (keys     (config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
