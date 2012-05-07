@@ -78,4 +78,35 @@
 	       (thread-sleep! 2)
 	       (loop (+ i 1)))
 	     (values pid-val exit-status exit-code))))))
-  
+
+;;======================================================================
+;; A persistent shell to which we can send many commands
+;;    WATCH for flush issues!
+;;    ALWAYS call with > /dev/null OR > logfile to cmd
+;;======================================================================  
+(define (cmdshell:make-shell cmd . params)
+  ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
+  (handle-exceptions
+   exn
+   (begin
+     (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
+     #f)
+   (let-values (((fh fho pid) (if (null? params)
+				  (process cmd)
+				  (process cmd params))))
+      (vector fh fho pid))))
+
+;; WARNING!! This will fail horribly if varname or varvalue have escaped or quoted portions
+(define (cmdshell:set-env-var cmdshell varname varvalue)
+  (with-output-to-port (vector-ref cmdshell 1)
+    (lambda ()
+      (print "export " varname "=" varvalue))))
+
+(define (cmdshell:run-cmd cmdshell cmd)
+  (with-output-to-port (vector-ref cmdshell 1)
+    (lambda ()
+      (print cmd))))
+
+      ;; (close-input-port fh)
+      ;;   (close-output-port fho)
+

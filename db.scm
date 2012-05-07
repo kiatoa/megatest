@@ -36,8 +36,8 @@
 (define *incoming-mutex*     (make-mutex))
 (define *cache-on* #f)
 
-(define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
+(define (open-db #!key (path #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (let* ((dbpath    (conc (if path path *toppath*) "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
