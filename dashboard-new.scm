@@ -72,7 +72,11 @@ Misc
       (print help)
       (exit)))
 
+;; Globals and constants
+;;
 (define *panels* (make-hash-table))
+(define blank-line-rx (regexp "^\\s*$"))
+
 
 (define (dboard:panel toppath)
   (let* ((db                    (open-db toppath))
@@ -108,7 +112,14 @@ Misc
 	 (megatest-config       (setup-for-run toppath))
 	 (megatest-configdat    #f)
 	 (my-run-shell          (cmdshell:make-shell "/bin/bash" toppath))
-	 (my-env-vars          '())) ;; stack up all var val pairs here 
+	 (my-env-vars          '()) ;; stack up all var val pairs here 
+	 (collapsed             (make-hash-table))
+	 ;; functions
+	 (db:been-changed       (lambda ()
+				  (> (file-modification-time (conc toppath*"/megatest.db")) last-db-update-time))))
+
+; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
+
     (if (not megatest-config)
 	(begin
 	  (print "Failed to find megatest.config, canceling open of " toppath)
@@ -119,6 +130,10 @@ Misc
 	  (set! my-env-vars (append my-env-vars (list (list "MT_RUN_AREA_HOME" toppath))))
 	  ;; here is where the persistent proc lives (to be run in a thread)
 	  (lambda ()
+	    (set!last-db-update-time (file-modification-time (conc toppath "/megatest.db")))
+(define (db:set-db-update-time)
+  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
+
 	    
 	    
       
@@ -204,9 +219,6 @@ Misc
 	    maxtests))
 	*num-tests*))) ;; FIXME, naughty coding eh?
 
-(define *collapsed* (make-hash-table))
-; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
-
 (define (toggle-hide lnum) ; fulltestname)
   (let* ((btn (vector-ref (dboard:uidat-get-lftcol uidat) lnum))
 	 (fulltestname (iup:attribute btn "TITLE"))
@@ -221,8 +233,6 @@ Misc
 	  ;(iup:attribute-set! btn "FGCOLOR" "0 192 192")
 	  (hash-table-set! *collapsed* basetestname #t)))))
   
-(define blank-line-rx (regexp "^\\s*$"))
-
 (define (run-item-name->vectors lst)
   (map (lambda (x)
 	 (let ((splst (string-split x "("))
@@ -613,12 +623,6 @@ Misc
 
 ;; Move this stuff to db.scm FIXME
 ;;
-(define *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db")))
-(define (db:been-changed)
-  (> (file-modification-time (conc *toppath* "/megatest.db")) *last-db-update-time*))
-(define (db:set-db-update-time)
-  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
-
 (define (run-update x)
   (update-buttons uidat *num-runs* *num-tests*)
   ;; (if (db:been-changed)
