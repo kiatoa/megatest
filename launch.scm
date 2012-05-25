@@ -106,7 +106,11 @@
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars db run-id)
 	  (set-item-env-vars itemdat)
-	  (save-environment-as-files "megatest")
+	  (save-environment-as-files "megatest" 
+				     flst:      '("DISPLAY")
+				     overrides: (if (config-lookup *configdat* "setup" "homedir")
+						    (list (list "HOME" (config-lookup *configdat* "setup" "homedir"))
+						    (list (list "HOME" work-area)))))
 	  (test-set-meta-info db run-id test-name itemdat)
 	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
@@ -356,6 +360,13 @@
   (if *toppath*
       (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
       (debug:print 0 "ERROR: failed to find the top path to your run setup."))
+  ;; here we extract the path to the megatest executable and append it to the path
+  (let ((path (pathname-directory (car (argv)))))
+    (if path
+	(setenv "PATH" (conc
+			(get-environment-variable "PATH")
+			":"
+			(posix-extras#resolve-pathname path)))))
   *toppath*)
 
 (define (get-best-disk confdat)

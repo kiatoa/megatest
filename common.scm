@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml)
+(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml posix-extras)
 (require-extension sqlite3 regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -112,7 +112,7 @@
 		      (let ((newval (string->number (cadr match))))
 			(if (number? newval)
 			    (set! cpu-load newval))))))
-	      (car load-res))
+              (car load-res))
     cpu-load))
 
 (define (get-uname . params)
@@ -122,23 +122,28 @@
 	"unknown"
 	(caar uname-res))))
 	      
-(define (save-environment-as-files fname)
+;; filter is a list of vars to not save
+;; override is an alist of vars value pairs to override
+(define (save-environment-as-files fname #!key (flst '())(overrides '()))
   (let ((envvars (get-environment-variables))
-        (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]")))
-     (with-output-to-file (conc fname ".csh")
-       (lambda ()
-          (for-each (lambda (key)
-                      (let* ((val (cdr key))
-                             (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-                        (print "setenv " (car key) " " sval)))
-                     envvars)))
-     (with-output-to-file (conc fname ".sh")
-       (lambda ()
-          (for-each (lambda (key)
-                      (let* ((val (cdr key))
-                             (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-                         (print "export " (car key) "=" sval)))
-                    envvars)))))
+        (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]"))
+	(cshport (open-output-file (conc fname ".csh")))
+	(bshport (open-output-file (conc fname ".sh"))))
+    (for-each (lambda (key)
+		(let* ((val (cdr key))
+		       (var (car key))
+		       (sval (if (assoc var overrides)
+				 (cadr (assoc var overrides))
+				 (if (string-search whitesp val)(conc "\"" val "\"") val))))
+		  (if (not (member var flst))
+		      (begin
+			(with-output-to-port cshport
+			  (lambda ()
+			    (print "setenv " (car key) " " sval)))
+			(with-output-to-port bshport
+			  (lambda ()
+			    (print "export " (car key) "=" sval)))))))
+	      envvars)))
 
 ;; set some env vars from an alist, return an alist with original values
 ;; (("VAR" "value") ...)
