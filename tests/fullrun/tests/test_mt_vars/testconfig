@@ -2,7 +2,10 @@
 
 [ezsteps]
 lookittmp   ls /tmp
-lookithome  ls /home
+lookithome  ls $HOME
+
+testsimple  sh -c "exit 0"
+
 # $CURRENT should be /tmp/nada
 currentisblah currentisblah.sh
 
