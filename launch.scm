@@ -49,6 +49,7 @@
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
                         ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
+	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -68,7 +69,6 @@
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
-	  (change-directory testpath)
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -89,11 +89,12 @@
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
-	  
+	  (change-directory top-path)
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
 		(exit 1)))
+	  (change-directory *toppath*)
 	  ;; now can find our db
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
@@ -568,6 +569,7 @@
     (set! cmdparms (base64:base64-encode (with-output-to-string
 					   (lambda () ;; (list 'hosts     hosts)
 					     (write (list (list 'testpath  test-path)
+							  (list 'toppath   *toppath*)
 							  (list 'work-area work-area)
 							  (list 'test-name test-name) 
 							  (list 'runscript runscript) 
