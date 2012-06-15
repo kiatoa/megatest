@@ -83,8 +83,10 @@ Test data capture
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -showkeys               : show the keys used in this megatest setup
-  -test-path targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
+  -test-path targpatt     : get the most recent test path/file matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
+  -test-paths             : get the test paths matching target, runname, item and test
+                            patterns.
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -159,6 +161,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
+			"-test-path"  ;; -test-paths is for listing all
 			) 
 		 (list  "-h"
 		        "-force"
@@ -176,7 +179,6 @@ Called as " (string-intersperse (argv) " ")))
 			"-unlock"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
-			"-test-path"  ;; -test-paths is deprecated
 
 			"-runall"    ;; run all tests
 			"-remove-runs"
@@ -467,15 +469,16 @@ Called as " (string-intersperse (argv) " ")))
 	       (db        #f)
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
-	       (target    (args:get-arg "-target")))
-	  (change-directory testpath)
+	       (target    (args:get-arg "-target"))
+	       (toppath   (assoc/default 'toppath   cmdinfo)))
+	  (change-directory toppath)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
 	  (if (not (setup-for-run))
 	      (begin
-		(debug:print 0 "Failed to setup, giving up on -test-path, exiting")
+		(debug:print 0 "Failed to setup, giving up on -test-path(s), exiting")
 		(exit 1)))
 	  (set! db (open-db))    
 	  (if (not (args:get-arg "-server"))
