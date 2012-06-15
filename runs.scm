@@ -211,8 +211,11 @@
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
-		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
-					  (if w w "")))))
+		 (waitons (if config (string-split (let ((w (config-lookup config "requirements" "waiton")))
+						     (if w w "")))
+			      (begin
+				(debug:print 0 "ERROR: non-existant required test \"" hed "\"")
+				(exit 1)))))
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
 	    (if (member hed waitons)

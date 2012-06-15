@@ -221,14 +221,16 @@
       (list configdat toppath configfile fname))))
 
 (define (config-lookup cfgdat section var)
-  (let ((sectdat (hash-table-ref/default cfgdat section '())))
-    (if (null? sectdat)
-	#f
-	(let ((match (assoc var sectdat)))
-	  (if match ;; (and match (list? match)(> (length match) 1))
-	      (cadr match)
-	      #f))
-	)))
+  (if (hash-table? cfgdat)
+      (let ((sectdat (hash-table-ref/default cfgdat section '())))
+	(if (null? sectdat)
+	    #f
+	    (let ((match (assoc var sectdat)))
+	      (if match ;; (and match (list? match)(> (length match) 1))
+		  (cadr match)
+		  #f))
+	    ))
+      #f))
 
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
