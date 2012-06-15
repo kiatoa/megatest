@@ -539,6 +539,7 @@
 	 (item-path (item-list->path itemdat))
 	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
 	 (test-id    (db:test-get-id testinfo))
+	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
@@ -567,7 +568,7 @@
 							  (list 'itemdat   itemdat  )
 							  (list 'megatest  remote-megatest)
 							  (list 'ezsteps   ezsteps) 
-							  (list 'target    (string-intersperse (map cadr keyvallst) "/"))
+							  (list 'target    mt_target)
 							  (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 							  (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 							  (list 'runname   runname)
@@ -596,9 +597,12 @@
 	   (testprevvals   (alist->env-vars
 			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
 	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-			    (append (list (list "MT_TEST_NAME" test-name)
+			    (append (list (list "MT_TEST_RUN_DIR" work-area)
+					  (list "MT_TEST_NAME" test-name)
 					  (list "MT_ITEM_INFO" (conc itemdat)) 
-					  (list "MT_RUNNAME"   runname))
+					  (list "MT_RUNNAME"   runname)
+					  (list "MT_TARGET"    mt_target)
+					  )
 				    itemdat)))
 	   (launch-results (apply cmd-run-proc-each-line
 				  (if useshell
@@ -608,6 +612,9 @@
 				  (if useshell
 				      '()
 				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
+      (with-output-to-file "mt_launch.log"
+	(lambda ()
+	  (apply print launch-results)))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
