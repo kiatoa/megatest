@@ -214,7 +214,8 @@
 		 (waitons (if config (string-split (let ((w (config-lookup config "requirements" "waiton")))
 						     (if w w "")))
 			      (begin
-				(debug:print 0 "ERROR: non-existant required test \"" hed "\"")
+				(debug:print 0 "ERROR: non-existent required test \"" hed "\"")
+                                (sqlite3:finalize! db)
 				(exit 1)))))
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
