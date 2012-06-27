@@ -374,7 +374,7 @@
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
 			    (begin
-			      (debug:print 1 "WARN: Dropping test " (db:test-get-test-name hed) "/" (db:test-get-item-path hed)
+			      (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 					   " from the launch list as it has prerequistes that are FAIL")
 			      (loop (car tal)(cdr tal)))))))))
 	     
