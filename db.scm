@@ -581,14 +581,18 @@
 
 ;; Get test data using test_id
 (define (db:get-test-data-by-id db test-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
-     db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
-     test-id)
-    res))
+  (if (not test-id)
+      (begin
+	(debug:print 0 "INFO: db:get-test-data-by-id called with test-id=" test-id)
+	#f)
+      (let ((res #f))
+	(sqlite3:for-each-row
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+	 db 
+	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+	 test-id)
+	res)))
 
 
 (define (db:test-set-comment db test-id comment)
