@@ -47,6 +47,11 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
+    (if (config-lookup *configdat* "setup"     "synchronous")
+	(begin
+	  (debug:print 4 "INFO: Turning on pragma synchronous")
+	  (sqlite3:execute db "PRAGMA synchronous = 0;"))
+	(debug:print 4 "INFO: NOT turning on pragma synchronous"))
     db))
 
 (define (db:initialize db)
