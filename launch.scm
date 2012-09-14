@@ -470,7 +470,8 @@
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
-    (if (not (file-exists? lnkpath))
+    (if (not (or (file-exists? lnkpath)
+		 (symbolic-link? lnkpath)))
 	(create-symbolic-link toptest-path lnkpath))
     
     ;; The toptest path has been created, the link to the test in the linktree has
