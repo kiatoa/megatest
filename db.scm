@@ -151,6 +151,66 @@
     (db:set-var db "MEGATEST_VERSION" megatest-version)
     ))
 
+;; Create the sqlite db for the individual test(s)
+(define (open-test-db testpath) 
+  (let* ((dbpath    (conc testpath "/.testdat.db"))
+	 (dbexists  (file-exists? dbpath))
+	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					   (string->number (args:get-arg "-override-timeout"))
+					   36000))))
+    (debug:print 4 "INFO: test dbpath=" dbpath)
+    (sqlite3:set-busy-handler! db handler)
+    (if (not dbexists)
+	(db:testdb-initialize db))
+    (sqlite3:execute db "PRAGMA synchronous = 0;")
+    db))
+
+(define (db:testdb-initialize db)
+  (for-each
+   (lambda (sqlcmd)
+     (sqlite3:exectute db sqlcmd))
+   (list "CREATE TABLE IF NOT EXISTS test_rundat (
+              id INTEGER PRIMARY KEY,
+              event_time TIMESTAMP,
+              cpuload INTEGER DEFAULT -1,
+              uname TEXT DEFAULT '',
+              diskfree INTEGER DEFAULT -1,
+              diskusage INTGER DEFAULT -1,
+              run_duration INTEGER DEFAULT 0);"
+	  "CREATE TABLE IF NOT EXISTS test_data (
+              id INTEGER PRIMARY KEY,
+              test_id INTEGER,
+              category TEXT DEFAULT '',
+              variable TEXT,
+	      value REAL,
+	      expected REAL,
+	      tol REAL,
+              units TEXT,
+              comment TEXT DEFAULT '',
+              status TEXT DEFAULT 'n/a',
+              type TEXT DEFAULT '',
+              CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));"
+           "CREATE TABLE IF NOT EXISTS test_steps (
+              id INTEGER PRIMARY KEY,
+              test_id INTEGER, 
+              stepname TEXT, 
+              state TEXT DEFAULT 'NOT_STARTED', 
+              status TEXT DEFAULT 'n/a',
+              event_time TIMESTAMP,
+              comment TEXT DEFAULT '',
+              logfile TEXT DEFAULT '',
+              CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));"
+	   ;; test_meta can be used for handing commands to the test
+	   ;; e.g. KILLREQ
+	   ;;      the ackstate is set to 1 once the command has been completed
+	   "CREATE TABLE IF NOT EXISTS test_meta (
+              id INTEGER PRIMARY KEY,
+              var TEXT,
+              val TEXT,
+              ackstate INTEGER DEFAULT 0,
+              CONSTRAINT metadat_constraint UNIQUE (var));")))
+
 ;;======================================================================
 ;; TODO:
 ;;   put deltas into an assoc list with version numbers
