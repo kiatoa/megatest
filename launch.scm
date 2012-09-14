@@ -49,6 +49,7 @@
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
                         ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
+	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -68,7 +69,6 @@
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
-	  (change-directory testpath)
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -89,11 +89,12 @@
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
-	  
+	  (change-directory top-path)
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
 		(exit 1)))
+	  (change-directory *toppath*)
 	  ;; now can find our db
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
@@ -349,8 +350,12 @@
 (define (setup-for-run)
   ;; would set values for KEYS in the environment here for better support of env-override but 
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
-  ;; pass on that idea for now.
-  (set! *configinfo* (find-and-read-config (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config") environ-patt: "env-override"))
+  ;; pass on that idea for now
+  ;; special case
+  (set! *configinfo* (find-and-read-config 
+		      (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+		      environ-patt: "env-override"
+		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*
@@ -509,6 +514,14 @@
 ;;      (launch-test db (cadr status) test-conf))
 (define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
+  (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
+   (list ;; (list "MT_TEST_RUN_DIR" work-area)
+	 (list "MT_RUN_AREA_HOME" *toppath*)
+	 (list "MT_TEST_NAME" test-name)
+	 ;; (list "MT_ITEM_INFO" (conc itemdat)) 
+	 (list "MT_RUNNAME"   runname)
+	 ;; (list "MT_TARGET"    mt_target)
+	 ))
   (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
@@ -539,6 +552,7 @@
 	 (item-path (item-list->path itemdat))
 	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
 	 (test-id    (db:test-get-id testinfo))
+	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
@@ -559,6 +573,7 @@
     (set! cmdparms (base64:base64-encode (with-output-to-string
 					   (lambda () ;; (list 'hosts     hosts)
 					     (write (list (list 'testpath  test-path)
+							  (list 'toppath   *toppath*)
 							  (list 'work-area work-area)
 							  (list 'test-name test-name) 
 							  (list 'runscript runscript) 
@@ -567,7 +582,7 @@
 							  (list 'itemdat   itemdat  )
 							  (list 'megatest  remote-megatest)
 							  (list 'ezsteps   ezsteps) 
-							  (list 'target    (string-intersperse (map cadr keyvallst) "/"))
+							  (list 'target    mt_target)
 							  (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 							  (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 							  (list 'runname   runname)
@@ -596,9 +611,12 @@
 	   (testprevvals   (alist->env-vars
 			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
 	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
-			    (append (list (list "MT_TEST_NAME" test-name)
+			    (append (list (list "MT_TEST_RUN_DIR" work-area)
+					  (list "MT_TEST_NAME" test-name)
 					  (list "MT_ITEM_INFO" (conc itemdat)) 
-					  (list "MT_RUNNAME"   runname))
+					  (list "MT_RUNNAME"   runname)
+					  (list "MT_TARGET"    mt_target)
+					  )
 				    itemdat)))
 	   (launch-results (apply cmd-run-proc-each-line
 				  (if useshell
@@ -608,6 +626,9 @@
 				  (if useshell
 				      '()
 				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
+      (with-output-to-file "mt_launch.log"
+	(lambda ()
+	  (apply print launch-results)))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
@@ -623,5 +644,6 @@
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals)
-      launch-results)))
+      launch-results))
+  (change-directory *toppath*))
 

@@ -211,8 +211,12 @@
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
-		 (waitons (string-split (let ((w (config-lookup config "requirements" "waiton")))
-					  (if w w "")))))
+		 (waitons (if config (string-split (let ((w (config-lookup config "requirements" "waiton")))
+						     (if w w "")))
+			      (begin
+				(debug:print 0 "ERROR: non-existent required test \"" hed "\"")
+                                (sqlite3:finalize! db)
+				(exit 1)))))
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
 	    (if (member hed waitons)
@@ -370,7 +374,7 @@
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
 			    (begin
-			      (debug:print 1 "WARN: Dropping test " (db:test-get-test-name hed) "/" (db:test-get-item-path hed)
+			      (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 					   " from the launch list as it has prerequistes that are FAIL")
 			      (loop (car tal)(cdr tal)))))))))
 	     

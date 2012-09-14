@@ -83,8 +83,10 @@ Test data capture
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
   -showkeys               : show the keys used in this megatest setup
-  -test-path targpatt    : get the most recent test path(s) matching targpatt e.g. %/%... 
+  -test-files targpatt     : get the most recent test path/file matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
+  -test-paths             : get the test paths matching target, runname, item and test
+                            patterns.
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -108,8 +110,8 @@ Getting started
 
 Examples
 
-# Get test path, the '.' is required, could use '*' or a specific path/file
-megatest -test-path . -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
+# Get test path, use '.' to get a single path or a specific path/file pattern
+megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ")))
 
@@ -159,6 +161,7 @@ Called as " (string-intersperse (argv) " ")))
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
+			"-test-files"  ;; -test-paths is for listing all
 			) 
 		 (list  "-h"
 		        "-force"
@@ -176,7 +179,6 @@ Called as " (string-intersperse (argv) " ")))
 			"-unlock"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
-			"-test-path"  ;; -test-paths is deprecated
 
 			"-runall"    ;; run all tests
 			"-remove-runs"
@@ -453,7 +455,7 @@ Called as " (string-intersperse (argv) " ")))
 ;; Get paths to tests
 ;;======================================================================
 ;; Get test paths matching target, runname, testpatt, and itempatt
-(if (or (args:get-arg "-test-path")(args:get-arg "-test-paths"))
+(if (or (args:get-arg "-test-files")(args:get-arg "-test-paths"))
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
@@ -467,15 +469,16 @@ Called as " (string-intersperse (argv) " ")))
 	       (db        #f)
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
-	       (target    (args:get-arg "-target")))
-	  (change-directory testpath)
+	       (target    (args:get-arg "-target"))
+	       (toppath   (assoc/default 'toppath   cmdinfo)))
+	  (change-directory toppath)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
 	  (if (not (setup-for-run))
 	      (begin
-		(debug:print 0 "Failed to setup, giving up on -test-path, exiting")
+		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
 	  (set! db (open-db))    
 	  (if (not (args:get-arg "-server"))
@@ -483,18 +486,18 @@ Called as " (string-intersperse (argv) " ")))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
 		 (keys     (rdb:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-path"))))
+		 (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
 		      paths)))
 	;; else do a general-run-call
 	(general-run-call 
-	 "-test-path"
+	 "-test-files"
 	 "Get paths to test"
 	 (lambda (db target runname keys keynames keyvallst)
 	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-path"))))
+		  (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
