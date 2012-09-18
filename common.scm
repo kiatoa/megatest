@@ -30,6 +30,7 @@
 (define user (getenv "USER"))
 
 ;; global gletches
+(define *db-keys* #f)
 (define *configinfo* #f)
 (define *configdat*  #f)
 (define *toppath*    #f)
@@ -42,7 +43,9 @@
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    0)  ;; update when db is accessed via server
-(define *target*            #f) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
+(define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
+(define *keys*              (make-hash-table)) ;; cache the keys here
+(define *keyvals*           (make-hash-table))
 (define *toptest-paths*     (make-hash-table)) ;; cache toptest path settings here
 (define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
 

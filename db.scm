@@ -175,6 +175,11 @@
     (sqlite3:execute db "PRAGMA synchronous = 0;")
     db))
 
+;; find and open the testdat.db file for an existing test
+(define (db:open-test-db-by-test-id db test-id)
+  (let* ((test-path (db:test-get-rundir db test-id)))
+    (open-test-db test-path)))
+
 (define (db:testdb-initialize db)
   (for-each
    (lambda (sqlcmd)
@@ -324,8 +329,6 @@
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
-
-(define *db-keys* #f)
 
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
@@ -487,28 +490,34 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
-  (let* ((keys (get-keys db))
-	 (res  '()))
-    (debug:print 6 "keys: " keys " run-id: " run-id)
-    (for-each 
-     (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (debug:print 0 "qry: " qry)
-	 (sqlite3:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons key-val res)))
-	  db qry run-id)))
-     keys)
-    (reverse res)))
+  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
+    (if mykeyvals 
+	mykeyvals
+	(let* ((keys (get-keys db))
+	       (res  '()))
+	  (debug:print 6 "keys: " keys " run-id: " run-id)
+	  (for-each 
+	   (lambda (key)
+	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+	       ;; (debug:print 0 "qry: " qry)
+	       (sqlite3:for-each-row 
+		(lambda (key-val)
+		  (set! res (cons key-val res)))
+		db qry run-id)))
+	   keys)
+	  (let ((final-res (reverse res)))
+	    (hash-table-set! *keyvals* run-id final-res)
+	    final-res)))))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target db run-id)
-  (if *target*
-      *target*
-      (let* ((keyvals (rdb:get-key-vals db run-id))
-	     (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
-	(set! *target* thekey)
-	thekey)))
+  (let ((mytarg (hash-table-ref/default *target* run-id #f)))
+    (if mytarg
+	mytarg
+	(let* ((keyvals (db:get-key-vals db run-id)) ;; (rdb:get-key-vals db run-id))
+	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+	  (hash-table-set! *target* run-id thekey)
+	  thekey))))
 
 ;;======================================================================
 ;;  T E S T S
@@ -554,22 +563,13 @@
     res))
 
 ;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db run-id test-name itemdat)
+(define (db:delete-test-step-records db test-id)
   ;; Breaking it into two queries for better file access interleaving
-  (let ((ids '()))
-    (sqlite3:for-each-row (lambda (id)
-			    (set! ids (cons id ids)))
-			  db
-			  "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
-			  run-id test-name (item-list->path itemdat))
-    (for-each (lambda (id)
-		(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" id)
-		(thread-sleep! 0.1) ;; give others access to the db
-                (sqlite3:execute db "DELETE FROM test_data WHERE test_id=?;" id)
-                (thread-sleep! 0.1)) ;; give others access to the db
-	      ids)))
-;;"DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
-		   
+  (let* ((tdb (db:open-test-db-by-test-id db test-id)))
+    (sqlite3:execute tdb "DELETE FROM test_steps;")
+    (sqlite3:execute tdb "DELETE FROM test_data;")
+    (sqlite3:finalize! tdb)))
+
 ;; 
 (define (db:delete-test-records db test-id)
   (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
@@ -673,6 +673,21 @@
    db 
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
+
+;; 
+(define (db:test-get-rundir db test-id)
+  (let ((res (hash-table-ref/default *test-paths* test-id #f)))
+    (if res
+	res
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (tpath)
+	     (set! res tpath))
+	   db 
+	   "SELECT rundir FROM tests WHERE id=?;"
+	   test-id)
+	  (hash-table-set! *test-paths* test-id res)
+	  res))))
 
 (define (db:test-set-log! db test-id logf)
   (if (string? logf)
@@ -808,29 +823,30 @@
 ;;       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
 ;;       (db:write-cached-data db)))
 ;; 
-;; (define (db:write-cached-data db)
-;;   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-;; 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-;; 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-;;     (if (> (length data) 0)
-;; 	(debug:print 4 "Writing cached data " data))
-;;     (mutex-lock! *incoming-mutex*)
-;;     (sqlite3:with-transaction 
-;;      db
-;;      (lambda ()
-;;        (for-each (lambda (entry)
-;; 		   (case (vector-ref entry 0)
-;; 		     ((meta-info)
-;; 		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-;; 		     ((step-status)
-;; 		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-;; 		     (else
-;; 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-;; 		 data)))
-;;     (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-;;     (sqlite3:finalize! step-stmt)
-;;     (set! *incoming-data* '())
-;;     (mutex-unlock! *incoming-mutex*)))
+
+;; ==> (define (db:write-cached-data db)
+;; ==>   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+;; ==> 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+;; ==> 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
+;; ==>     (if (> (length data) 0)
+;; ==> 	(debug:print 4 "Writing cached data " data))
+;; ==>     (mutex-lock! *incoming-mutex*)
+;; ==>     (sqlite3:with-transaction 
+;; ==>      db
+;; ==>      (lambda ()
+;; ==>        (for-each (lambda (entry)
+;; ==> 		   (case (vector-ref entry 0)
+;; ==> 		     ((meta-info)
+;; ==> 		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+;; ==> 		     ((step-status)
+;; ==> 		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+;; ==> 		     (else
+;; ==> 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+;; ==> 		 data)))
+;; ==>     (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
+;; ==>     (sqlite3:finalize! step-stmt)
+;; ==>     (set! *incoming-data* '())
+;; ==>     (mutex-unlock! *incoming-mutex*)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -1007,13 +1023,15 @@
 
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test db test-id)
-  (let ((res '()))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id))
+	 (res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
        (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-     db
+     tdb
      "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
+    (sqlite3:finalize! tdb)
     (reverse res)))
 
 ;; get a pretty table to summarize steps
@@ -1130,20 +1148,17 @@
 
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
-  (let* ((state     (check-valid-items "state" state-in))
+  (let* ((tdb       (db:open-test-db-by-test-id db test-id))
+	 (state     (check-valid-items "state" state-in))
 	 (status    (check-valid-items "status" status-in)))
     (if (or (not state)(not status))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (mutex-lock! *incoming-mutex*)
-    (set! *incoming-data* (cons (vector 'step-status
-					(current-seconds)
-					;; FIXME - this should not update the logfile unless it is specified.
-					(list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
-				*incoming-data*))
-    (mutex-unlock! *incoming-mutex*)
-    ;; (if (not *cache-on*)(db:write-cached-data db))
-    #t))
+    (sqlite3:execute 
+     tdb
+     "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+     test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+    #t)
 
 ;;======================================================================
 ;; Extract ods file from the db

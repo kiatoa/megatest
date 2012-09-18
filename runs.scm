@@ -313,8 +313,8 @@
 					prereqs-not-met)))
 		 (pretty-string (lambda (lst)
 				  (map (lambda (t)
-					 (if (string? t)
-					     t
+					 (if (not (vector? t))
+					     (conc t)
 					     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
 				       lst))))
 	    (debug:print 6
@@ -339,9 +339,9 @@
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
 			     (string-intersperse 
 			      (map (lambda (t)
-				     (if (string? t)
-					 (conc " WARNING: t is a string=" t )
-					 (conc (db:test-get-state t)"/"(db:test-get-status t))))
+				     (if (not (vector? t))
+					 (conc " WARNING: t is not a vector=" t )
+					 (conc (db:test-get-state t) "/" (db:test-get-status t))))
 				   prereqs-not-met) ", ") " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
