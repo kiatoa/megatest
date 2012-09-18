@@ -339,7 +339,9 @@
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
 			     (string-intersperse 
 			      (map (lambda (t)
-				     (conc (db:test-get-state t)"/"(db:test-get-status t)))
+				     (if (string? t)
+					 (conc " WARNING: t is a string=" t )
+					 (conc (db:test-get-state t)"/"(db:test-get-status t))))
 				   prereqs-not-met) ", ") " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?

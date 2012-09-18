@@ -412,11 +412,10 @@
      "SELECT count(id) FROM test_rundat;")
     res))
 
-(define (test-set-meta-info db tdb run-id testname itemdat)
+(define (test-set-meta-info db tdb run-id testname itemdat #!key (minutes #f))
   (let* ((num-records (test:tdb-get-rundat-count tdb))
 	 (item-path   (item-list->path itemdat))
 	 (cpuload  (get-cpu-load))
-	 ;; (hostname (get-host-name))
 	 (diskfree (get-df (current-directory))))
     (if (eq? (modulo num-records 10) 0) ;; every ten records update central
 	(begin
@@ -427,8 +426,12 @@
 			   testname
 			   item-path)
 	  (if (eq? num-records 0)
-	      (sqlite3:execute db "UPDATE tests SET uname=?,hostname=? WHERE run_id=? AND testname=? AND item_path=?;"
-			       (get-uname "-srvpio") (get-host-name) run-id testname item-path))))
+	      (begin
+		(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE run_id=? AND testname=? AND item_path=?;"
+		  	             (get-uname "-srvpio") (get-host-name) run-id testname item-path)
+                (if minutes 
+                    (sqlite3:execute db "UPDATE tests SET minutes=? WHERE run_id=? AND testname=? AND item_path=?;"
+                                        minutes run-id testname item-path))))))
     (sqlite3:execute tdb "INSERT INTO test_rundat (cpuload,diskfree) VALUES (?,?);"
 		     cpuload diskfree)))
 	  

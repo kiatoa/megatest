@@ -1142,7 +1142,7 @@
 					(list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
 				*incoming-data*))
     (mutex-unlock! *incoming-mutex*)
-    (if (not *cache-on*)(db:write-cached-data db))
+    ;; (if (not *cache-on*)(db:write-cached-data db))
     #t))
 
 ;;======================================================================
