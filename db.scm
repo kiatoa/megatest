@@ -159,7 +159,7 @@
 
 ;; Create the sqlite db for the individual test(s)
 (define (open-test-db testpath) 
-  (let* ((dbpath    (conc testpath "/.testdat.db"))
+  (let* ((dbpath    (conc testpath "/testdat.db"))
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
@@ -168,22 +168,23 @@
     (debug:print 4 "INFO: test dbpath=" dbpath)
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
-	(db:testdb-initialize db))
+	(begin
+	  (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	  (debug:print 0 "Initialized test database " dbpath)
+	  (db:testdb-initialize db)))
     (sqlite3:execute db "PRAGMA synchronous = 0;")
     db))
 
 (define (db:testdb-initialize db)
   (for-each
    (lambda (sqlcmd)
-     (sqlite3:exectute db sqlcmd))
+     (sqlite3:execute db sqlcmd))
    (list "CREATE TABLE IF NOT EXISTS test_rundat (
               id INTEGER PRIMARY KEY,
-              event_time TIMESTAMP,
+              update_time TIMESTAMP,
               cpuload INTEGER DEFAULT -1,
-              uname TEXT DEFAULT '',
               diskfree INTEGER DEFAULT -1,
-              diskusage INTGER DEFAULT -1,
-              run_duration INTEGER DEFAULT 0);"
+              diskusage INTGER DEFAULT -1);"
 	  "CREATE TABLE IF NOT EXISTS test_data (
               id INTEGER PRIMARY KEY,
               test_id INTEGER,
@@ -787,49 +788,49 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS
 ;;======================================================================
 
-(define (db:updater db)
-  (let loop ((start-time (current-time)))
-    (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
-    (db:write-cached-data db)
-    (loop start-time)))
-    
-(define (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
-  (mutex-lock! *incoming-mutex*)
-  (set! *incoming-data* (cons (vector 'meta-info
-				      (current-seconds)
-				      (list cpuload
-					    diskfree
-					    minutes
-					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
-			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
-      (db:write-cached-data db)))
-
-(define (db:write-cached-data db)
-  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-    (if (> (length data) 0)
-	(debug:print 4 "Writing cached data " data))
-    (mutex-lock! *incoming-mutex*)
-    (sqlite3:with-transaction 
-     db
-     (lambda ()
-       (for-each (lambda (entry)
-		   (case (vector-ref entry 0)
-		     ((meta-info)
-		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-		     ((step-status)
-		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-		     (else
-		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-		 data)))
-    (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-    (sqlite3:finalize! step-stmt)
-    (set! *incoming-data* '())
-    (mutex-unlock! *incoming-mutex*)))
+;; (define (db:updater db)
+;;   (let loop ((start-time (current-time)))
+;;     (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
+;;     (db:write-cached-data db)
+;;     (loop start-time)))
+;;     
+;; (define (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+;;   (mutex-lock! *incoming-mutex*)
+;;   (set! *incoming-data* (cons (vector 'meta-info
+;; 				      (current-seconds)
+;; 				      (list cpuload
+;; 					    diskfree
+;; 					    minutes
+;; 					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+;; 			      *incoming-data*))
+;;   (mutex-unlock! *incoming-mutex*)
+;;   (if *cache-on*
+;;       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
+;;       (db:write-cached-data db)))
+;; 
+;; (define (db:write-cached-data db)
+;;   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+;; 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+;; 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
+;;     (if (> (length data) 0)
+;; 	(debug:print 4 "Writing cached data " data))
+;;     (mutex-lock! *incoming-mutex*)
+;;     (sqlite3:with-transaction 
+;;      db
+;;      (lambda ()
+;;        (for-each (lambda (entry)
+;; 		   (case (vector-ref entry 0)
+;; 		     ((meta-info)
+;; 		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+;; 		     ((step-status)
+;; 		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+;; 		     (else
+;; 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+;; 		 data)))
+;;     (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
+;;     (sqlite3:finalize! step-stmt)
+;;     (set! *incoming-data* '())
+;;     (mutex-unlock! *incoming-mutex*)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))

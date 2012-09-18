@@ -403,20 +403,35 @@
 	 (testdat   (db:get-test-info db run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
-(define (test-set-meta-info db run-id testname itemdat)
-  (let ((item-path (item-list->path itemdat))
-	(cpuload  (get-cpu-load))
-	(hostname (get-host-name))
-	(diskfree (get-df (current-directory)))
-	(uname    (get-uname "-srvpio")))
-    (sqlite3:execute db "UPDATE tests SET host=?,cpuload=?,diskfree=?,uname=? WHERE run_id=? AND testname=? AND item_path=?;"
-		  hostname
-		  cpuload
-		  diskfree
-		  uname
-		  run-id
-		  testname
-		  item-path)))
+(define (test:tdb-get-rundat-count tdb)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     tdb
+     "SELECT count(id) FROM test_rundat;")
+    res))
+
+(define (test-set-meta-info db tdb run-id testname itemdat)
+  (let* ((num-records (test:tdb-get-rundat-count tdb))
+	 (item-path   (item-list->path itemdat))
+	 (cpuload  (get-cpu-load))
+	 ;; (hostname (get-host-name))
+	 (diskfree (get-df (current-directory))))
+    (if (eq? (modulo num-records 10) 0) ;; every ten records update central
+	(begin
+	  (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE run_id=? AND testname=? AND item_path=?;"
+			   cpuload
+			   diskfree
+			   run-id
+			   testname
+			   item-path)
+	  (if (eq? num-records 0)
+	      (sqlite3:execute db "UPDATE tests SET uname=?,hostname=? WHERE run_id=? AND testname=? AND item_path=?;"
+			       (get-uname "-srvpio") (get-host-name) run-id testname item-path))))
+    (sqlite3:execute tdb "INSERT INTO test_rundat (cpuload,diskfree) VALUES (?,?);"
+		     cpuload diskfree)))
+	  
 
 ;;======================================================================
 ;; A R C H I V I N G

@@ -66,6 +66,7 @@
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
 	       (db        #f)
+	       (tdb       #f)
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -93,6 +94,8 @@
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
+		;; (sqlite3:finalize! db)
+		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  (change-directory *toppath*)
 	  ;; now can find our db
@@ -102,13 +105,21 @@
 	  ;; (set! *cache-on* #t)
 	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
+
+	  ;; Open up the test specific database
+	  (set! tdb (open-test-db work-area))
+	  (on-exit (lambda ()
+		     (debug:print 0 "Finalizing both tdb and db!!!")
+		     (sqlite3:finalize! tdb)
+		     (sqlite3:finalize! db)))
+
 	  (set-run-config-vars db run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars db run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (test-set-meta-info db run-id test-name itemdat)
+	  (test-set-meta-info db tdb run-id test-name itemdat)
 	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -119,11 +130,6 @@
 	  ;; any previous runs
 	  ;; (db:test-remove-steps db run-id testname itemdat)
 	  
-	  ;; from here on out we will open and close the db
-	  ;; on every access to reduce the probablitiy of 
-	  ;; contention or stuck access on nfs.
-	  (sqlite3:finalize! db)
-
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
 		 (exit-info    (vector #t #t #t))
@@ -256,16 +262,18 @@
 							    start-seconds)))))
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
-				     (let* ((db       (open-db))
-					    (cpuload  (get-cpu-load))
-					    (diskfree (get-df (current-directory)))
-					    (tmpfree  (get-df "/tmp")))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
-				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
-				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
+				     ;; (let* (;; (db       (open-db))
+					    ;; (cpuload  (get-cpu-load))
+					    ;; (diskfree (get-df (current-directory)))
+					    ;; (tmpfree  (get-df "/tmp")))
+				     (begin
+				       ;; (if (not (args:get-arg "-server"))
+				       ;;	   (server:client-setup db))
+				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
+				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+				       (test-set-meta-info db tdb run-id testname itemdat minutes: minutes)
+				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -291,10 +299,11 @@
 						     (test-set-status! db test-id "KILLED"  "FAIL"
 								       (args:get-arg "-m") #f)
 						     (sqlite3:finalize! db)
+						     (sqlite3:finalize! tdb)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
-				       (sqlite3:finalize! db)
+				       ;; (sqlite3:finalize! db)
 				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
 				       (loop (calc-minutes)))))))
 		 (th1          (make-thread monitorjob))
@@ -304,9 +313,9 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (mutex-lock! m)
-	    (set! db (open-db))
-	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
+	    ;; (set! db (open-db))
+	    ;; (if (not (args:get-arg "-server"))
+	    ;;	(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
@@ -343,6 +352,7 @@
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
 	    (sqlite3:finalize! db)
+	    (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
