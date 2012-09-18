@@ -47,6 +47,7 @@
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))
 (define *toptest-paths*     (make-hash-table)) ;; cache toptest path settings here
+(define *test-paths*        (make-hash-table)) ;; cache test-id to test run paths here
 (define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
 
 (define (get-with-default val default)
