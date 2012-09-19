@@ -106,11 +106,8 @@
 	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  ;; Open up the test specific database
-	  (set! tdb (open-test-db work-area))
 	  (on-exit (lambda ()
-		     (debug:print 0 "Finalizing both tdb and db!!!")
-		     (sqlite3:finalize! tdb)
+		     (debug:print 0 "Finalizing db!!!")
 		     (sqlite3:finalize! db)))
 
 	  (set-run-config-vars db run-id)
@@ -119,7 +116,7 @@
 	  (set-megatest-env-vars db run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (test-set-meta-info db tdb run-id test-name itemdat)
+	  (test-set-meta-info db test-id run-id test-name itemdat)
 	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -272,7 +269,7 @@
 				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (test-set-meta-info db tdb run-id test-name itemdat minutes: minutes)
+				       (test-set-meta-info db test-id run-id test-name itemdat minutes: minutes)
 				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin

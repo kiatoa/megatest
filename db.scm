@@ -159,25 +159,28 @@
 
 ;; Create the sqlite db for the individual test(s)
 (define (open-test-db testpath) 
-  (let* ((dbpath    (conc testpath "/testdat.db"))
-	 (dbexists  (file-exists? dbpath))
-	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   36000))))
-    (debug:print 4 "INFO: test dbpath=" dbpath)
-    (sqlite3:set-busy-handler! db handler)
-    (if (not dbexists)
-	(begin
-	  (sqlite3:execute db "PRAGMA synchronous = FULL;")
-	  (debug:print 0 "Initialized test database " dbpath)
-	  (db:testdb-initialize db)))
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    db))
+  (if (and (directory? testpath)
+	   (file-read-access? testpath))
+      (let* ((dbpath    (conc testpath "/testdat.db"))
+	     (dbexists  (file-exists? dbpath))
+	     (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					       (string->number (args:get-arg "-override-timeout"))
+					       36000))))
+	(debug:print 4 "INFO: test dbpath=" dbpath)
+	(sqlite3:set-busy-handler! db handler)
+	(if (not dbexists)
+	    (begin
+	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	      (debug:print 0 "Initialized test database " dbpath)
+	      (db:testdb-initialize db)))
+	(sqlite3:execute db "PRAGMA synchronous = 0;")
+	db)
+      #f))
 
 ;; find and open the testdat.db file for an existing test
 (define (db:open-test-db-by-test-id db test-id)
-  (let* ((test-path (db:test-get-rundir db test-id)))
+  (let* ((test-path (db:test-get-rundir-from-test-id db test-id)))
     (open-test-db test-path)))
 
 (define (db:testdb-initialize db)
@@ -566,9 +569,12 @@
 (define (db:delete-test-step-records db test-id)
   ;; Breaking it into two queries for better file access interleaving
   (let* ((tdb (db:open-test-db-by-test-id db test-id)))
-    (sqlite3:execute tdb "DELETE FROM test_steps;")
-    (sqlite3:execute tdb "DELETE FROM test_data;")
-    (sqlite3:finalize! tdb)))
+    ;; test db's can go away - must check every time
+    (if tdb
+	(begin
+	  (sqlite3:execute tdb "DELETE FROM test_steps;")
+	  (sqlite3:execute tdb "DELETE FROM test_data;")
+	  (sqlite3:finalize! tdb)))))
 
 ;; 
 (define (db:delete-test-records db test-id)
@@ -675,7 +681,7 @@
    rundir run-id test-name item-path))
 
 ;; 
-(define (db:test-get-rundir db test-id)
+(define (db:test-get-rundir-from-test-id db test-id)
   (let ((res (hash-table-ref/default *test-paths* test-id #f)))
     (if res
 	res
@@ -1025,14 +1031,17 @@
 (define (db:get-steps-for-test db test-id)
   (let* ((tdb (db:open-test-db-by-test-id db test-id))
 	 (res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test-id stepname state status event-time logfile)
-       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-     tdb
-     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-     test-id)
-    (sqlite3:finalize! tdb)
-    (reverse res)))
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row 
+	   (lambda (id test-id stepname state status event-time logfile)
+	     (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	   tdb
+	   "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	   test-id)
+	  (sqlite3:finalize! tdb)
+	  (reverse res))
+	'())))
 
 ;; get a pretty table to summarize steps
 ;;
@@ -1154,11 +1163,14 @@
     (if (or (not state)(not status))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (sqlite3:execute 
-     tdb
-     "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
-     test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
-    #t)
+    (if tdb
+	(begin
+	  (sqlite3:execute 
+	   tdb
+	   "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+	   test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile ""))
+	  #t)
+	#f)))
 
 ;;======================================================================
 ;; Extract ods file from the db

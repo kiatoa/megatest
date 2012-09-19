@@ -404,16 +404,19 @@
     (equal? (test:get-state testdat) "KILLREQ")))
 
 (define (test:tdb-get-rundat-count tdb)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))
-     tdb
-     "SELECT count(id) FROM test_rundat;")
-    res))
+  (if tdb
+      (let ((res 0))
+	(sqlite3:for-each-row
+	 (lambda (count)
+	   (set! res count))
+	 tdb
+	 "SELECT count(id) FROM test_rundat;")
+	res))
+  0)
 
-(define (test-set-meta-info db tdb run-id testname itemdat #!key (minutes #f))
-  (let* ((num-records (test:tdb-get-rundat-count tdb))
+(define (test-set-meta-info db test-id run-id testname itemdat #!key (minutes #f))
+  (let* ((tdb         (db:open-test-db-by-test-id db test-id))
+	 (num-records (test:tdb-get-rundat-count tdb))
 	 (item-path   (item-list->path itemdat))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
