@@ -205,6 +205,8 @@
 	  (db:delete-tests-in-state db run-id "NOT_STARTED")
 	  (rdb:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
+    ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
+    (sqlite3:finalize! db) 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
@@ -271,12 +273,11 @@
     (if (not (null? required-tests))
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
-    (runs:run-tests-queue db run-id runname test-records keyvallst flags)
-    (if *rpc:listener* (server:keep-running db))
+    (runs:run-tests-queue run-id runname test-records keyvallst flags)
     (debug:print 4 "INFO: All done by here")))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue db run-id runname test-records keyvallst flags)
+(define (runs:run-tests-queue run-id runname test-records keyvallst flags)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
@@ -331,8 +332,8 @@
 
 	    (cond
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let* ((have-resources  (runs:can-run-more-tests db test-record)) ;; look at the test jobgroup and tot jobs running
-		     (prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: testmode))
+	      (let* ((have-resources  (open-run-close runs:can-run-more-tests #f test-record)) ;; look at the test jobgroup and tot jobs running
+		     (prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
 		     (fails           (calc-fails prereqs-not-met))
 		     (non-completed   (calc-not-completed prereqs-not-met)))
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
@@ -351,7 +352,7 @@
 				(null? non-completed))))
 		  ;; no loop here, just drop though and use the loop at the bottom 
 		  (if (patt-list-match item-path item-patts)
-		      (run:test db run-id runname keyvallst test-record flags #f)
+		      (run:test run-id runname keyvallst test-record flags #f)
 		      (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
@@ -410,9 +411,9 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (runs:can-run-more-tests db test-record)))
+	      (let ((can-run-more    (open-run-close runs:can-run-more-tests #f test-record)))
 		(if can-run-more
-		    (let* ((prereqs-not-met (db:get-prereqs-not-met db run-id waitons item-path mode: testmode))
+		    (let* ((prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
 			   (fails           (calc-fails prereqs-not-met))
 			   (non-completed   (calc-not-completed prereqs-not-met)))
 		      (debug:print 8 "INFO: can-run-more: " can-run-more
@@ -430,7 +431,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+			  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin
@@ -474,13 +475,13 @@
 		#f) ;; return a #f as a hint that we are done
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
-	      (let ((newlst (tests:filter-non-runnable db run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+	      (let ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		(thread-sleep! 0.1)
 		(if (not (null? newlst))
 		    (loop (car newlst)(cdr newlst)))))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test db run-id runname keyvallst test-record flags parent-test)
+(define (run:test run-id runname keyvallst test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
@@ -490,7 +491,8 @@
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
-	 (item-path     ""))
+	 (item-path     "")
+	 (db           #f))
     (debug:print 5
 		 "test-config: " (hash-table->alist test-conf)
 		 "\n   itemdat: " itemdat
@@ -501,7 +503,7 @@
     (debug:print 2 "Attempting to launch test " test-name "/" item-path)
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
@@ -509,21 +511,21 @@
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
 	   (hash-table-set! *test-meta-updated* test-name #t)
-           (runs:update-test_meta db test-name test-conf)))
+           (open-run-close runs:update-test_meta db test-name test-conf)))
     
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (test-id       (db:get-test-id db  run-id test-name item-path))
-	   (testdat       (db:get-test-info-by-id db test-id)))
+	   (test-id       (open-run-close db:get-test-id db  run-id test-name item-path))
+	   (testdat       (open-run-close db:get-test-info-by-id db test-id)))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
 	    ;; NOPE: Cannot! Don't know yet which disk area will be assigned....
 	    ;; (system (conc "mkdir -p " new-test-path))
-	    (tests:register-test db run-id test-name item-path)
-	    (set! test-id (db:get-test-id db run-id test-name item-path))
-	    (set! testdat (db:get-test-info-by-id db test-id))))
+	    (open-run-close tests:register-test db run-id test-name item-path)
+	    (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))
+	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
@@ -572,7 +574,7 @@
                                 "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
-	       (if (not (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
+	       (if (not (open-run-close launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 
@@ -585,7 +587,7 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
+	       (open-run-close test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
