@@ -48,6 +48,9 @@
 (define *keyvals*           (make-hash-table))
 (define *toptest-paths*     (make-hash-table)) ;; cache toptest path settings here
 (define *test-paths*        (make-hash-table)) ;; cache test-id to test run paths here
+(define *test-ids*          (make-hash-table)) ;; cache run-id, testname, and item-path => test-id
+(define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
+
 (define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
 
 (define (get-with-default val default)

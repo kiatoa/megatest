@@ -30,16 +30,18 @@
 (include "test_records.scm")
 
 (define (tests:register-test db run-id test-name item-path)
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (for-each 
-     (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth))
-     item-paths )))
+;;   (with-dot-lock ;; NOTE: This locking only reduces the number of overlapping db accesses on a single machine!! 
+;;    "megatest.lock"
+   (let ((item-paths (if (equal? item-path "")
+			 (list item-path)
+			 (list item-path ""))))
+     (for-each 
+      (lambda (pth)
+	(sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+			 run-id 
+			 test-name
+			 pth))
+      item-paths ))) ;; )
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
@@ -106,7 +108,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rdb:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -128,7 +130,7 @@
 (define (test-set-status! db test-id state status comment dat)
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (db:get-test-data-by-id db test-id))
+	 (testdat     (db:get-test-info-by-id db test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -366,7 +368,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (tdat        (db:get-test-info db run-id test-name item-path)))
+	      (test-id     (db:get-test-id db run-id test-name item-path))
+	      (tdat        (db:get-test-info-by-id db test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -381,7 +384,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let ((wtdat (db:get-test-info db run-id waiton ""))) 
+			       (let* ((parent-test-id (db:get-test-id db run-id waiton ""))
+				      (wtdat (db:get-test-info-by-id db test-id)))
 				 (if (or (member (db:test-get-status wtdat)
 						 '("FAIL" "KILLED"))
 					 (member (db:test-get-state wtdat)
@@ -398,9 +402,9 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request db run-id test-name itemdat)
-  (let* ((item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
+(define (test-get-kill-request db test-id) ;; run-id test-name itemdat)
+  (let* (;; (item-path (item-list->path itemdat))
+	 (testdat   (db:get-test-info-by-id db test-id))) ;; run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
 (define (test:tdb-get-rundat-count tdb)
@@ -431,10 +435,10 @@
 	  (if (eq? num-records 0)
 	      (begin
 		(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE run_id=? AND testname=? AND item_path=?;"
-		  	             (get-uname "-srvpio") (get-host-name) run-id testname item-path)
+				 (get-uname "-srvpio") (get-host-name) run-id testname item-path)
                 (if minutes 
-                    (sqlite3:execute db "UPDATE tests SET minutes=? WHERE run_id=? AND testname=? AND item_path=?;"
-                                        minutes run-id testname item-path))))))
+                    (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" ;; run_id=? AND testname=? AND item_path=?;"
+				     minutes test-id)))))) ;; run-id testname item-path))))))
     (sqlite3:execute tdb "INSERT INTO test_rundat (cpuload,diskfree) VALUES (?,?);"
 		     cpuload diskfree)))
 	  

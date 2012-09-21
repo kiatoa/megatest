@@ -268,7 +268,7 @@
 				       ;;	   (server:client-setup db))
 				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
-				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
+				       (set! kill-job? (test-get-kill-request db test-id)) ;; run-id test-name itemdat))
 				       (test-set-meta-info db test-id run-id test-name itemdat minutes: minutes)
 				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
@@ -314,7 +314,7 @@
 	    ;; (if (not (args:get-arg "-server"))
 	    ;;	(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
+		   (testinfo  (db:get-test-info-by-id db test-id))) ;; )) ;; run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
@@ -410,7 +410,7 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-src-path disk-path testname itemdat)
+(define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
   (let* ((run-info (db:get-run-info db run-id))
 	 (item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
@@ -458,7 +458,7 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (db:get-test-info db run-id testname item-path))
+	(let* ((testinfo       (db:get-test-info-by-id db test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  (db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
@@ -558,8 +558,8 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
-	 (test-id    (db:test-get-id testinfo))
+	 (test-id    (db:get-test-id db run-id test-name item-path))
+	 (testinfo   (db:get-test-info-by-id db test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
     (if hosts (set! hosts (string-split hosts)))
@@ -570,7 +570,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (create-work-area db run-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area db run-id test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print 2 "INFO: Using work area " work-area))

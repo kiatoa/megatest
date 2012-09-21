@@ -47,11 +47,11 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (if (config-lookup *configdat* "setup"     "synchronous")
-	(begin
-	  (debug:print 4 "INFO: Turning on pragma synchronous")
-	  (sqlite3:execute db "PRAGMA synchronous = 0;"))
-	(debug:print 4 "INFO: NOT turning on pragma synchronous"))
+    ;; (if (config-lookup *configdat* "setup"     "synchronous")
+    ;;     (begin
+    ;;       (debug:print 4 "INFO: Turning off pragma synchronous")
+    ;;       (sqlite3:execute db "PRAGMA synchronous = 0;"))
+    ;;     (debug:print 4 "INFO: NOT turning off pragma synchronous"))
     db))
 
 (define (db:initialize db)
@@ -174,7 +174,7 @@
 	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
 	      (debug:print 0 "Initialized test database " dbpath)
 	      (db:testdb-initialize db)))
-	(sqlite3:execute db "PRAGMA synchronous = 0;")
+	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	db)
       #f))
 
@@ -192,8 +192,9 @@
               update_time TIMESTAMP,
               cpuload INTEGER DEFAULT -1,
               diskfree INTEGER DEFAULT -1,
-              diskusage INTGER DEFAULT -1);"
-	  "CREATE TABLE IF NOT EXISTS test_data (
+              diskusage INTGER DEFAULT -1,
+              run_duration INTEGER DEFAULT 0);"
+	 "CREATE TABLE IF NOT EXISTS test_data (
               id INTEGER PRIMARY KEY,
               test_id INTEGER,
               category TEXT DEFAULT '',
@@ -640,32 +641,79 @@
      "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ') AND run_id=?;" run-id)
     res))
 
-;; NB// Sync this with runs:get-test-info
-(define (db:get-test-info db run-id testname item-path)
-  (let ((res #f))
+;; map run-id, testname item-path to test-id
+(define (db:get-test-id db run-id testname item-path)
+  (let* ((test-key (conc run-id "-" testname "-" item-path))
+	 (res      (hash-table-ref/default *test-ids* test-key #f)))
+    (if res 
+	res
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
+	     (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
+	   db 
+	   "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+	   run-id testname item-path)
+	  (hash-table-set! *test-ids* test-key res)
+	  res))))
+
+;; given a test-info record, patch in the latest data from the testdat.db file
+;; found in the test run directory
+(define (db:patch-tdb-data-into-test-info db test-id res)
+  (let ((tdb (db:open-test-db-by-test-id db test-id)))
+    ;; get state and status from megatest.db in real time
+    ;; other fields that perhaps should be updated:
+    ;;   fail_count
+    ;;   pass_count
+    ;;   final_logf
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
-     db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
-     run-id testname item-path)
-    res))
+     (lambda (state status final_logf)
+       (db:test-set-state!        res state)
+       (db:test-set-status!       res status)
+       (db:test-set-final_logf!   res final_logf))
+     db
+     "SELECT state,status,final_logf FROM tests WHERE id=?;"
+     test-id)
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (update_time cpuload disk_free run_duration)
+	     (db:test-set-cpuload!      res cpuload)
+	     (db:test-set-diskfree!     res disk_free)
+	     (db:test-set-run_duration! res run_duration))
+	   tdb
+	   "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat;")
+	  (sqlite3:finalize! tdb))
+	;; if the test db is not found what to do?
+	;; 1. set state to DELETED
+	;; 2. set status to n/a
+	(begin
+	  (db:test-set-state!  res "NOT_STARTED")
+	  (db:test-set-status! res "n/a")))))
 
 ;; Get test data using test_id
-(define (db:get-test-data-by-id db test-id)
+(define (db:get-test-info-by-id db test-id)
   (if (not test-id)
       (begin
-	(debug:print 0 "INFO: db:get-test-data-by-id called with test-id=" test-id)
+	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
 	#f)
-      (let ((res #f))
-	(sqlite3:for-each-row
-	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
-	 db 
-	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
-	 test-id)
-	res)))
+      (let ((res (hash-table-ref/default *test-info* test-id #f)))
+	(if res
+	    (db:patch-tdb-data-into-test-info db test-id res)
+	    ;; if no cached value then full read and write to cache
+	    (begin
+	      (sqlite3:for-each-row
+	       (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+		 ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+		 (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+	       db 
+	       "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+	       test-id)
+	      (if res (db:patch-tdb-data-into-test-info db test-id res))
+	      res)))))
 
+(define (db:get-test-info db run-id testname item-path)
+  (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
 
 (define (db:test-set-comment db test-id comment)
   (sqlite3:execute 
@@ -854,6 +902,7 @@
 ;; ==>     (set! *incoming-data* '())
 ;; ==>     (mutex-unlock! *incoming-mutex*)))
 
+
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
@@ -913,70 +962,77 @@
 
 (define (db:csv->test-data db test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((csvlist (csv->list (make-csv-reader
-			     (open-input-string csvdata)
-			     '((strip-leading-whitespace? #t)
-			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
-    (for-each 
-     (lambda (csvrow)
-       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
-	      (category    (list-ref padded-row 0))
-	      (variable    (list-ref padded-row 1))
-	      (value       (any->number-if-possible (list-ref padded-row 2)))
-	      (expected    (any->number-if-possible (list-ref padded-row 3)))
-	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
-	      (units       (list-ref padded-row 5))
-	      (comment     (list-ref padded-row 6))
-	      (status      (let ((s (list-ref padded-row 7)))
-			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
-						     (string-match (regexp "^n/a$") s)))
-				 #f
-				 s))) ;; if specified on the input then use, else calculate
-	      (type        (list-ref padded-row 8)))
-	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
-	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
+  (let ((tdb     (db:open-test-db-by-test-id db test-id)))
+    (if tdb
+	(let ((csvlist (csv->list (make-csv-reader
+				   (open-input-string csvdata)
+				   '((strip-leading-whitespace? #t)
+				     (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
+	  (for-each 
+	   (lambda (csvrow)
+	     (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
+		    (category    (list-ref padded-row 0))
+		    (variable    (list-ref padded-row 1))
+		    (value       (any->number-if-possible (list-ref padded-row 2)))
+		    (expected    (any->number-if-possible (list-ref padded-row 3)))
+		    (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
+		    (units       (list-ref padded-row 5))
+		    (comment     (list-ref padded-row 6))
+		    (status      (let ((s (list-ref padded-row 7)))
+				   (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
+							   (string-match (regexp "^n/a$") s)))
+				       #f
+				       s))) ;; if specified on the input then use, else calculate
+		    (type        (list-ref padded-row 8)))
+	       ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	       (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
 
-	 (if (and (or (not expected)(equal? expected ""))
-		  (or (not tol)     (equal? expected ""))
-		  (or (not units)   (equal? expected "")))
-	     (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
-			 (set! expected new-expected)
-			 (set! tol      new-tol)
-			 (set! units    new-units)))
+	       (if (and (or (not expected)(equal? expected ""))
+			(or (not tol)     (equal? expected ""))
+			(or (not units)   (equal? expected "")))
+		   (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
+			       (set! expected new-expected)
+			       (set! tol      new-tol)
+			       (set! units    new-units)))
 
-	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 ;; calculate status if NOT specified
-	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
-	     (if (number? tol) ;; if tol is a number then we do the standard comparison
-		 (let* ((max-val (+ expected tol))
-			(min-val (- expected tol))
-			(result  (and (>=  value min-val)(<= value max-val))))
-		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
-		   (set! status (if result "pass" "fail")))
-		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
-		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
-			 ((>)  (if (>  value expected) "pass" "fail"))
-			 ((<)  (if (<  value expected) "pass" "fail"))
-			 ((>=) (if (>= value expected) "pass" "fail"))
-			 ((<=) (if (<= value expected) "pass" "fail"))
-			 (else (conc "ERROR: bad tol comparator " tol))))))
-	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
-			  test-id category variable value expected tol units (if comment comment "") status type)))
-     csvlist)))
+	       (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	       ;; calculate status if NOT specified
+	       (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
+		   (if (number? tol) ;; if tol is a number then we do the standard comparison
+		       (let* ((max-val (+ expected tol))
+			      (min-val (- expected tol))
+			      (result  (and (>=  value min-val)(<= value max-val))))
+			 (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+			 (set! status (if result "pass" "fail")))
+		       (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
+			     (case (string->symbol tol) ;; tol should be >, <, >=, <=
+			       ((>)  (if (>  value expected) "pass" "fail"))
+			       ((<)  (if (<  value expected) "pass" "fail"))
+			       ((>=) (if (>= value expected) "pass" "fail"))
+			       ((<=) (if (<= value expected) "pass" "fail"))
+			       (else (conc "ERROR: bad tol comparator " tol))))))
+	       (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	       (sqlite3:execute tdb "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+				test-id category variable value expected tol units (if comment comment "") status type)
+	       (sqlite3:finalize! tdb)))
+	   csvlist)))))
 
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt)
-  (let ((res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test_id category variable value expected tol units comment status type)
-       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-     db
-     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-    (reverse res)))
+  (let ((tdb  (db:open-test-db-by-test-id db test-id)))
+    (if tdb
+	(let ((res '()))
+	  (sqlite3:for-each-row 
+	   (lambda (id test_id category variable value expected tol units comment status type)
+	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+	   db
+	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+	  (sqlite3:finalize! tdb)
+	  (reverse res))
+	'())))
 
 (define (db:load-test-data db test-id)
   (let loop ((lin (read-line)))
@@ -995,26 +1051,38 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup db test-id status)
-  (sqlite3:execute 
-   db 
-   "UPDATE tests 
-      SET fail_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail'),
-          pass_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass')
-      WHERE id=?;"
-   test-id test-id test-id)
-  ;; if the test is not FAIL then set status based on the fail and pass counts.
-  (thread-sleep! 1)
-  (sqlite3:execute
-   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
-   "UPDATE tests
-      SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+  (let ((tdb (db:open-test-db-by-test-id db test-id))
+	(fail-count 0)
+	(pass-count 0))
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (fcount pcount)
+	     (set! fail-count fcount)
+	     (set! pass-count pcount))
+	   tdb 
+	   "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
+                   (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
+	   test-id test-id)
+	  (sqlite3:finalize! tdb)
+
+	  ;; Now rollup the counts to the central megatest.db
+	  (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" fail-count pass-count test-id)
+
+	  (thread-sleep! 0.1) ;; play nice with other tests
+
+	  ;; if the test is not FAIL then set status based on the fail and pass counts.
+	  (sqlite3:execute
+	   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
+	   "UPDATE tests
+                      SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                          THEN 'FAIL'
                       WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
                            (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                         THEN 'PASS'
+                      THEN 'PASS'
                       ELSE status
                   END WHERE id=?;"
-   test-id test-id test-id test-id))
+	   test-id test-id test-id test-id)))))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?
@@ -1169,6 +1237,7 @@
 	   tdb
 	   "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
 	   test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile ""))
+	  (sqlite3:finalize! tdb)
 	  #t)
 	#f)))
 
@@ -1382,13 +1451,13 @@
 	  run-id testpatt itempatt states statuses not-in: not-in))
       (db:get-tests-for-run db run-id testpatt itempatt states statuses not-in: not-in)))
 
-(define (rdb:get-test-data-by-id db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rpc:get-test-data-by-id host port)
-	 test-id))
-      (db:get-test-data-by-id db test-id)))
+;; (define (rdb:get-test-data-by-id db test-id)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'rpc:get-test-data-by-id host port)
+;; 	 test-id))
+;;       (db:get-test-data-by-id db test-id)))
       
 (define (rdb:get-keys db)
   (if *runremote*
@@ -1436,12 +1505,12 @@
 	((rpc:procedure 'rdb:testmeta-get-record host port) testname))
       (db:testmeta-get-record db testname)))
 
-(define (rdb:get-test-data-by-id db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-test-data-by-id host port) test-id))
-      (db:get-test-data-by-id db test-id)))
+;; (define (rdb:get-test-data-by-id db test-id)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'rdb:get-test-data-by-id host port) test-id))
+;;       (db:get-test-data-by-id db test-id)))
 
 (define (rdb:get-run-info db run-id)
   (if *runremote*

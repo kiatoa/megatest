@@ -249,7 +249,7 @@
 ;;
 ;;======================================================================
 (define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (rdb:get-test-data-by-id db test-id))
+  (let* ((testdat       (db:get-test-info-by-id db test-id))
 	 (db-path       (conc *toppath* "/megatest.db"))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
@@ -259,8 +259,8 @@
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (rdb:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (rdb:get-run-info db run-id) #f))
+	       (keydat        (if testdat (db:get-key-val-pairs db run-id) #f))
+	       (rundat        (if testdat (db:get-run-info db run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -299,7 +299,7 @@
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
 						       request-update))
-				    (newtestdat (if need-update (rdb:get-test-data-by-id db test-id))))
+				    (newtestdat (if need-update (db:get-test-info-by-id db test-id))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)

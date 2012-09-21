@@ -515,15 +515,16 @@
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (testdat       (db:get-test-info db run-id test-name item-path))
-	   (test-id       #f))
+	   (test-id       (db:get-test-id db  run-id test-name item-path))
+	   (testdat       (db:get-test-info-by-id db test-id)))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
 	    ;; NOPE: Cannot! Don't know yet which disk area will be assigned....
 	    ;; (system (conc "mkdir -p " new-test-path))
-	    (rtests:register-test db run-id test-name item-path)
-	    (set! testdat (db:get-test-info db run-id test-name item-path))))
+	    (tests:register-test db run-id test-name item-path)
+	    (set! test-id (db:get-test-id db run-id test-name item-path))
+	    (set! testdat (db:get-test-info-by-id db test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")

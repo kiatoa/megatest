@@ -104,17 +104,28 @@
 ; (hash-table-set! args:arg-hash "-keepgoing" #t)
 (hash-table-set! args:arg-hash "-itempatt" "%")
 (hash-table-set! args:arg-hash "-testpatt" "%")
+(hash-table-set! args:arg-hash "-target" "ubuntu/r1.2")
 (test "Setup for a run"       #t (begin (setup-for-run) #t))
 
+(define *tdb* #f)
+
+(define testdbpath (conc "/tmp/" (getenv "USER") "/megatest_testing"))
+(system (conc "rm -f " testdbpath "/testdat.db;mkdir -p " testdbpath))
+
+(print "Using " testdbpath " for test db")
+(test #f #t (let ((db (open-test-db testdbpath)))
+	      (set! *tdb* db)
+	      (sqlite3#database? db)))
+(sqlite3#finalize! *tdb*)
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
 
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
-		       "run a test" 
-		       (lambda (db keys keynames keyvallst)
-			 (let ((test-names '("runfirst")))
-			   (run-tests db test-names)))))
+		       "run a test"
+		       (lambda (db target runname keys keynames keyvallst)
+			 (let ((test-patts "runfirst"))
+			   (runs:run-tests  db target runname test-patts user (make-hash-table))))))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
