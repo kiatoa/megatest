@@ -56,6 +56,10 @@
       (begin
 	(tests:register-test *db* 1 "nada" "")
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
+(test #f "NOT_STARTED"    
+      (begin
+	(open-run-close tests:register-test #f 1 "nada" "")
+	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 

@@ -64,7 +64,6 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
-
 (define (set-megatest-env-vars db run-id)
   (let ((keys (rdb:get-keys db)))
     (for-each (lambda (key)

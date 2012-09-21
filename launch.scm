@@ -65,8 +65,6 @@
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
-	       (db        #f)
-	       (tdb       #f)
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -98,26 +96,18 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  (change-directory *toppath*)
-	  ;; now can find our db
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
-	  ;; (set! *cache-on* #t)
-	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+
+	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (on-exit (lambda ()
-		     (debug:print 0 "Finalizing db!!!")
-		     (sqlite3:finalize! db)))
-
-	  (set-run-config-vars db run-id)
+	  (open-run-close set-run-config-vars #f run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (set-megatest-env-vars db run-id)
+	  (open-run-close set-megatest-env-vars #f run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (test-set-meta-info db test-id run-id test-name itemdat)
-	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat)
+	  (open-run-close test-set-status! #f test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -157,10 +147,7 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
-					    (db         (open-db)))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
+					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -194,7 +181,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (rdb:teststep-set-status! db test-id stepname "start" "-" itemdat #f #f)
+						   (open-run-close db:teststep-set-status! #f test-id stepname "start" "-" itemdat #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -212,9 +199,9 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
                                                         ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						        (rdb:teststep-set-status! db test-id stepname "end" exinfo itemdat #f logfna))
+						        (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo itemdat #f logfna))
 						     (if logpro-used
-							 (rdb:test-set-log! db test-id (conc stepname ".html")))
+							 (open-run-close db:test-set-log! #f test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -236,14 +223,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (test-set-status! db test-id "RUNNING" "WARN" 
+							  (open-run-close test-set-status! #f test-id "RUNNING" "WARN" 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (test-set-status! db test-id "RUNNING" "PASS" #f #f))
+							  (open-run-close test-set-status! #f test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (open-run-close test-set-status! #f test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -268,8 +255,8 @@
 				       ;;	   (server:client-setup db))
 				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
-				       (set! kill-job? (test-get-kill-request db test-id)) ;; run-id test-name itemdat))
-				       (test-set-meta-info db test-id run-id test-name itemdat minutes: minutes)
+				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
+				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes: minutes)
 				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
@@ -293,9 +280,8 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (test-set-status! db test-id "KILLED"  "FAIL"
+						     (open-run-close test-set-status! #f test-id "KILLED"  "FAIL"
 								       (args:get-arg "-m") #f)
-						     (sqlite3:finalize! db)
 						     (sqlite3:finalize! tdb)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
@@ -314,11 +300,11 @@
 	    ;; (if (not (args:get-arg "-server"))
 	    ;;	(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (db:get-test-info-by-id db test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (test-set-status! db test-id 
+		    (open-run-close test-set-status! #f test-id 
 				      (if kill-job? "KILLED" "COMPLETED")
 				      ;; Old logic:
 				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
@@ -341,7 +327,7 @@
 				      (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
+		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))

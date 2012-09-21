@@ -54,6 +54,12 @@
     ;;     (debug:print 4 "INFO: NOT turning off pragma synchronous"))
     db))
 
+(define (open-run-close proc idb . params)
+  (let* ((db  (if idb idb (open-db)))
+	 (res (apply proc db params)))
+    (if (not idb)(sqlite3:finalize! db))
+    res))
+
 (define (db:initialize db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (config-get-fields configdat))
@@ -1028,7 +1034,7 @@
 	  (sqlite3:for-each-row 
 	   (lambda (id test_id category variable value expected tol units comment status type)
 	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-	   db
+	   tdb
 	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
 	  (sqlite3:finalize! tdb)
 	  (reverse res))
