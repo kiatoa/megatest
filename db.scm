@@ -47,11 +47,11 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    ;; (if (config-lookup *configdat* "setup"     "synchronous")
-    ;;     (begin
-    ;;       (debug:print 4 "INFO: Turning off pragma synchronous")
-    ;;       (sqlite3:execute db "PRAGMA synchronous = 0;"))
-    ;;     (debug:print 4 "INFO: NOT turning off pragma synchronous"))
+    (if (config-lookup *configdat* "setup"     "synchronous")
+        (begin
+          (debug:print 5 "INFO: Turning off pragma synchronous")
+          (sqlite3:execute db "PRAGMA synchronous = 0;"))
+        (debug:print 5 "INFO: NOT turning off pragma synchronous"))
     db))
 
 (define (open-run-close proc idb . params)
@@ -606,9 +606,15 @@
   (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
-  (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
-  (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-  (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
+  (cond
+   ((and newstate newstatus newcomment)
+    (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
+   ((and newstate newstatus)
+    (sqlite3:exectute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+   (else
+    (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+    (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))))
 
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 

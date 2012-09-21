@@ -154,7 +154,7 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
+	(db:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
 
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)
@@ -193,17 +193,17 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (rdb:csv->test-data db test-id
+	    (db:csv->test-data db test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+    (db:roll-up-pass-fail-counts db run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rdb:test-set-comment db test-id cmt)))
+	  (db:test-set-comment db test-id cmt)))
     ))
 
 (define (test-set-toplog! db run-id test-name logf) 

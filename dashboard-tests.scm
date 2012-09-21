@@ -199,7 +199,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(rdb:test-set-state-status-by-id *db* test-id #f #f b)
+					(open-run-close db:test-set-state-status-by-id *db* test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -209,7 +209,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (rdb:test-set-state-status-by-id *db* test-id state #f #f)
+								    (open-run-close db:test-set-state-status-by-id *db* test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
@@ -229,7 +229,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (rdb:test-set-state-status-by-id *db* test-id #f status #f)
+								    (open-run-close db:test-set-state-status-by-id *db* test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
@@ -248,19 +248,20 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test db test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (db:get-test-info-by-id db test-id))
+(define (examine-test test-id) ;; run-id run-key origtest)
+  (let* ((testdat       (open-run-close db:get-test-info-by-id #f test-id))
 	 (db-path       (conc *toppath* "/megatest.db"))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
-	 (request-update #t))
+	 (request-update #t)
+	 (db             #f))
     (if (not testdat)
 	(begin
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (db:get-run-info db run-id) #f))
+	       (keydat        (if testdat (open-run-close db:get-key-val-pairs db run-id) #f))
+	       (rundat        (if testdat (open-run-close db:get-run-info db run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -270,7 +271,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (db:testmeta-get-record db testname)))
+				  (let ((tm (open-run-close db:testmeta-get-record db testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -299,11 +300,11 @@
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
 						       request-update))
-				    (newtestdat (if need-update (db:get-test-info-by-id db test-id))))
+				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id db test-id))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (rdb:get-steps-for-test db test-id))
+				 (set! teststeps    (open-run-close db:get-steps-for-test db test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat)))
@@ -402,7 +403,7 @@
 						    (lambda (testdat)
 						      (let* ((currval (iup:attribute stepsdat "VALUE")) ;; "TITLE"))
 							     (fmtstr  "~20a~10a~10a~12a~15a~20a")
-							     (comprsteps (rdb:get-steps-table db test-id))
+							     (comprsteps (open-run-close db:get-steps-table db test-id))
 							     (newval  (string-intersperse 
 								       (append
 									(list 
@@ -460,7 +461,7 @@
 										       (db:test-data-get-units    x)
 										       (db:test-data-get-type     x)
 										       (db:test-data-get-comment  x)))
-									     (db:read-test-data db test-id "%")))
+									     (open-run-close db:read-test-data db test-id "%")))
 								       "\n")))
 							(if (not (equal? currval newval))
 							    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

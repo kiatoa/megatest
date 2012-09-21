@@ -77,7 +77,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *db* (open-db))
+(define *db* #f) ;; (open-db))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
@@ -86,7 +86,7 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (rdb:get-keys  *db*))
+(define *keys*   (open-run-close db:get-keys  *db*))
 ;; (define *keys*   (db:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
@@ -96,7 +96,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (rdb:get-num-runs *db* "%"))
+(define *tot-run-count* (open-run-close db:get-num-runs *db* "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
@@ -168,7 +168,7 @@ Misc
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
-	  (let* ((allruns     (rdb:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	  (let* ((allruns     (open-run-close db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
@@ -183,9 +183,9 @@ Misc
 		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (rdb:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+			       (tests    (let ((tsts (open-run-close db:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (rdb:get-key-vals *db* run-id)))
+			       (key-vals (open-run-close db:get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
@@ -639,14 +639,14 @@ Misc
 	  (lambda (x)
 	    (on-exit (lambda ()
 		       (sqlite3:finalize! *db*)))
-	    (examine-run *db* runid)))
+	    (open-run-close examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test")
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
-	(examine-test *db* testid)
+	(examine-test testid)
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))
