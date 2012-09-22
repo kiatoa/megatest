@@ -65,7 +65,7 @@
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
 (define (set-megatest-env-vars db run-id)
-  (let ((keys (rdb:get-keys db)))
+  (let ((keys (db:get-keys db)))
     (for-each (lambda (key)
 		(sqlite3:for-each-row
 		 (lambda (val)
@@ -286,7 +286,7 @@
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names)))
-	  (thread-sleep! 0.1) ;; give other applications some time with the db
+	  (thread-sleep! (/ *global-delta* 10)) ;; give other applications some time with the db
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
@@ -339,9 +339,9 @@
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
 			     (string-intersperse 
 			      (map (lambda (t)
-				     (if (not (vector? t))
-					 (conc " WARNING: t is not a vector=" t )
-					 (conc (db:test-get-state t) "/" (db:test-get-status t))))
+				     (if (vector? t)
+					 (conc (db:test-get-state t) "/" (db:test-get-status t))
+					 (conc " WARNING: t is not a vector=" t )))
 				   prereqs-not-met) ", ") " fails: " fails)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
@@ -358,7 +358,7 @@
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  )
 		 ((not have-resources) ;; simply try again after waiting a second
-		  (thread-sleep! 1.0)
+		  (thread-sleep! (* *global-delta* *global-delta*))
 		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal)))
@@ -370,7 +370,7 @@
 			(begin
 			  ;; couldn't run, take a breather
 			  (debug:print 4 "INFO: Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-			  (thread-sleep! 0.1) ;; long sleep here - no resources, may as well be patient
+			  (thread-sleep! (* *global-delta* *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
 			  (loop (car newtal)(cdr newtal)))
 			;; the waiton is FAIL so no point in trying to run hed ever again
@@ -431,7 +431,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+			  (open-run-close-measure set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin
@@ -476,7 +476,7 @@
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
 	      (let ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
-		(thread-sleep! 0.1)
+		(thread-sleep! (/ *global-delta* 10))
 		(if (not (null? newlst))
 		    (loop (car newlst)(cdr newlst)))))))))
 
@@ -503,7 +503,7 @@
     (debug:print 2 "Attempting to launch test " test-name "/" item-path)
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (open-run-close-measure set-megatest-env-vars db run-id) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated

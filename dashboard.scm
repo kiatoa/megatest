@@ -447,7 +447,7 @@ Misc
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update))))
 	     (iup:hbox
-	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	      (iup:button "Quit" #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))

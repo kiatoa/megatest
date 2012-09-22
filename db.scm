@@ -54,10 +54,20 @@
         (debug:print 5 "INFO: NOT turning off pragma synchronous"))
     db))
 
-(define (open-run-close proc idb . params)
+(define (open-run-close  proc idb . params)
   (let* ((db  (if idb idb (open-db)))
 	 (res (apply proc db params)))
     (if (not idb)(sqlite3:finalize! db))
+    res))
+
+(define *global-delta* 0)
+(define (open-run-close-measure  proc idb . params)
+  (let* ((start-ms (current-milliseconds))
+	 (db       (if idb idb (open-db)))
+	 (res      (apply proc db params)))
+    (if (not idb)(sqlite3:finalize! db))
+    (set! *global-delta* (- (current-milliseconds) start-ms))
+    (print "INFO: delta=" *global-delta*)
     res))
 
 (define (db:initialize db)
