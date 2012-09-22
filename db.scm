@@ -47,11 +47,11 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (if (config-lookup *configdat* "setup"     "synchronous")
-        (begin
-          (debug:print 5 "INFO: Turning off pragma synchronous")
-          (sqlite3:execute db "PRAGMA synchronous = 0;"))
-        (debug:print 5 "INFO: NOT turning off pragma synchronous"))
+    ;; (if (config-lookup *configdat* "setup"     "synchronous")
+    ;;     (begin
+    ;;       (debug:print 5 "INFO: Turning off pragma synchronous")
+    ;;       (sqlite3:execute db "PRAGMA synchronous = 0;"))
+    ;;     (debug:print 5 "INFO: NOT turning off pragma synchronous"))
     db))
 
 (define (open-run-close  proc idb . params)
@@ -66,8 +66,9 @@
 	 (db       (if idb idb (open-db)))
 	 (res      (apply proc db params)))
     (if (not idb)(sqlite3:finalize! db))
-    (set! *global-delta* (- (current-milliseconds) start-ms))
-    (print "INFO: delta=" *global-delta*)
+    ;; scale by 10, average with current value.
+    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) 100)) 2))
+    (debug:print 4 "INFO: delta=" *global-delta*)
     res))
 
 (define (db:initialize db)

@@ -286,7 +286,7 @@
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names)))
-	  (thread-sleep! (/ *global-delta* 10)) ;; give other applications some time with the db
+	  (thread-sleep! *global-delta*) ;; give other applications some time with the db
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
@@ -358,7 +358,7 @@
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  )
 		 ((not have-resources) ;; simply try again after waiting a second
-		  (thread-sleep! (* *global-delta* *global-delta*))
+		  (thread-sleep! (+ 1 *global-delta*))
 		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal)))
@@ -370,14 +370,16 @@
 			(begin
 			  ;; couldn't run, take a breather
 			  (debug:print 4 "INFO: Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-			  (thread-sleep! (* *global-delta* *global-delta*)) ;; long sleep here - no resources, may as well be patient
+			  (thread-sleep! (+ 1 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
 			  (loop (car newtal)(cdr newtal)))
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
 			    (begin
-			      (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
-					   " from the launch list as it has prerequistes that are FAIL")
+			      (if (vector? hed)
+				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+					       " from the launch list as it has prerequistes that are FAIL")
+				  (debug:print 1 "WARN: Dropping test " hed " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)"))
 			      (loop (car tal)(cdr tal)))))))))
 	     
 	     ;; case where an items came in as a list been processed
@@ -476,7 +478,7 @@
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
 	      (let ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
-		(thread-sleep! (/ *global-delta* 10))
+		(thread-sleep! *global-delta*)
 		(if (not (null? newlst))
 		    (loop (car newlst)(cdr newlst)))))))))
 
