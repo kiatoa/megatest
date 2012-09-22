@@ -544,8 +544,8 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (test-id    (db:get-test-id db run-id test-name item-path))
-	 (testinfo   (db:get-test-info-by-id db test-id))
+	 (test-id    (open-run-close db:get-test-id db run-id test-name item-path))
+	 (testinfo   (open-run-close db:get-test-info-by-id db test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
     (if hosts (set! hosts (string-split hosts)))
@@ -556,7 +556,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (create-work-area db run-id test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print 2 "INFO: Using work area " work-area))
@@ -582,8 +582,10 @@
 							  (list 'runname   runname)
 							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
-    (db:delete-test-step-records db test-id)
+    (print "FIXMEEEEE!!!!")
+    ;; (db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+    (open-run-close test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
@@ -597,7 +599,6 @@
     ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching " work-area)
-    (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
@@ -628,7 +629,7 @@
       (if (not launch-results)
 	  (begin
 	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-	    (sqlite3:finalize! db)
+	    ;; (sqlite3:finalize! db)
 	    ;; good ole "exit" seems not to work
 	    ;; (_exit 9)
 	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list

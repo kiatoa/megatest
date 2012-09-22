@@ -576,7 +576,7 @@
                                 "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
-	       (if (not (open-run-close launch-test db run-id runname test-conf keyvallst test-name test-path itemdat flags))
+	       (if (not (launch-test #f run-id runname test-conf keyvallst test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 

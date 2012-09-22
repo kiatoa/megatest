@@ -67,7 +67,7 @@
 	 (res      (apply proc db params)))
     (if (not idb)(sqlite3:finalize! db))
     ;; scale by 10, average with current value.
-    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) 100)) 2))
+    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) 200)) 2))
     (debug:print 4 "INFO: delta=" *global-delta*)
     res))
 
