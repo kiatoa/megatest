@@ -91,6 +91,7 @@
 	      (setenv (car item) (cadr item)))
 	    itemdat))
 
+(define *last-num-running-tests* 0)
 (define (runs:can-run-more-tests db test-record)
   (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
 	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
@@ -98,7 +99,10 @@
 	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
 	 (max-concurrent-jobs     (config-lookup *configdat* "setup"     "max_concurrent_jobs"))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
-    (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+    (if (not (eq? *last-num-running-tests* num-running))
+	(begin
+	  (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
+	  (set! *last-num-running-tests* num-running)))
     (if (not (eq? 0 *globalexitstatus*))
 	#f
 	(let ((can-not-run-more (cond
@@ -380,7 +384,7 @@
 						    " from the launch list as it has prerequistes that are FAIL")
 				       (loop (car tal)(cdr tal)))
 				(begin
-				  (debug:print 1 "WARN: Test not processed correctly? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 				  (loop hed tal)))))))))
 	     
 	     ;; case where an items came in as a list been processed
