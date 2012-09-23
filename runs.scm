@@ -375,12 +375,13 @@
 			  (loop (car newtal)(cdr newtal)))
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
-			    (begin
-			      (if (vector? hed)
-				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
-					       " from the launch list as it has prerequistes that are FAIL")
-				  (debug:print 1 "WARN: Dropping test " hed " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)"))
-			      (loop (car tal)(cdr tal)))))))))
+			    (if (vector? hed)
+				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+						    " from the launch list as it has prerequistes that are FAIL")
+				       (loop (car tal)(cdr tal)))
+				(begin
+				  (debug:print 1 "WARN: Test not processed correctly? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+				  (loop hed tal)))))))))
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
