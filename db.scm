@@ -67,13 +67,14 @@
 (define *last-global-delta-printed* 0)
 (define (open-run-close-measure  proc idb . params)
   (let* ((start-ms (current-milliseconds))
-	 (db       (if idb idb (open-db))))
+	 (db       (if idb idb (open-db)))
+         (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
     (if (equal? (config-lookup *configdat* "setup"     "synchronous") "yes")
 	(sqlite3:execute db "PRAGMA synchronous = 0;"))
     (set! res      (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
     ;; scale by 10, average with current value.
-    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) 200)) 2))
+    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) (if throttle throttle 100))) 2))
     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 	(begin
 	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
@@ -625,6 +626,7 @@
 (define (db:delete-tests-in-state db run-id state)
   (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
+;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
