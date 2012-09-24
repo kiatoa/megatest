@@ -1212,6 +1212,7 @@
 ;; Note: do not convert to remote as it calls remote under the hood
 ;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
+;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 (define (db:get-prereqs-not-met db run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
