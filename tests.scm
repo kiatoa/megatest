@@ -30,8 +30,6 @@
 (include "test_records.scm")
 
 (define (tests:register-test db run-id test-name item-path)
-;;   (with-dot-lock ;; NOTE: This locking only reduces the number of overlapping db accesses on a single machine!! 
-;;    "megatest.lock"
    (let ((item-paths (if (equal? item-path "")
 			 (list item-path)
 			 (list item-path ""))))
@@ -41,7 +39,7 @@
 			 run-id 
 			 test-name
 			 pth))
-      item-paths ))) ;; )
+      item-paths)))
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
