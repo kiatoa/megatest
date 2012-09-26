@@ -554,6 +554,21 @@
 ;;  T E S T S
 ;;======================================================================
 
+(define (db:tests-register-test db run-id test-name item-path)
+  (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (for-each 
+     (lambda (pth)
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+			run-id 
+			test-name
+			pth))
+     item-paths)
+    #f))
+
+
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
@@ -700,8 +715,7 @@
      db 
      "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
-    res)
-  #f)
+    res))
 
 ;; given a test-info record, patch in the latest data from the testdat.db file
 ;; found in the test run directory

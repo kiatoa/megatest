@@ -364,7 +364,7 @@
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal))))
 		 ((not (hash-table-ref/default test-registery (conc test-name "/" item-path) #f))
-		  (open-run-close tests:register-test #f run-id test-name item-path)
+		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (conc test-name "/" item-path) #t)
 		  (loop (car newtal)(cdr newtal)))
 		 ((not have-resources) ;; simply try again after waiting a second
@@ -548,7 +548,12 @@
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
 	    (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))
-	    (debug:print 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=" item-path)
+	    (if (not test-id)
+		(begin
+		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
+		  (open-run-close db:tests-register-test db run-id test-name item-path)
+		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
+	    (debug:print 4 "INFO: test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
