@@ -334,7 +334,7 @@
 	    ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    (sqlite3:finalize! db)
+	    ;; (sqlite3:finalize! db)
 	    (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
