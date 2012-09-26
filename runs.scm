@@ -280,6 +280,7 @@
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
     (runs:run-tests-queue run-id runname test-records keyvallst flags)
+    (runs:run-tests-queue run-id runname test-records keyvallst flags)
     (debug:print 4 "INFO: All done by here")))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >

@@ -25,10 +25,12 @@ test4 : fullprep
 	cd fullrun;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
 
 test5 : fullprep
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -v $(SERVER) 2&>1 aa.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -v $(SERVER) 2&>1 ab.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -v $(SERVER) 2&>1 ac.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -v $(SERVER) 2&>1 ad.log &	
+	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -debug $(DEBUG) > aa.log 2> aa.log &
+	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -debug $(DEBUG) > ab.log 2> ab.log &
+	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -debug $(DEBUG) > ac.log 2> ac.log &
+	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -debug $(DEBUG) > ad.log 2> ad.log &	
+
+test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
 
