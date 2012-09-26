@@ -280,6 +280,7 @@
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
     (runs:run-tests-queue run-id runname test-records keyvallst flags)
+    (debug:print 1 "INFO: running queue one more time to catch any changed test states")
     (runs:run-tests-queue run-id runname test-records keyvallst flags)
     (debug:print 4 "INFO: All done by here")))
 
@@ -290,10 +291,13 @@
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
 	(item-patts        (hash-table-ref/default flags "-itempatt" #f))
-	(test-registery    (make-hash-table)))
+	(test-registery    (make-hash-table))
+	(num-retries        0))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
-		   (tal         (cdr sorted-test-names)))
+		   (tal         (cdr sorted-test-names))
+		   (reruns      '()))
+	  (if (not (null? reruns))(debug:print 4 "INFO: reruns=" reruns))
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (test-name   (tests:testqueue-get-testname test-record))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
@@ -307,7 +311,6 @@
 		 (newtal      (append tal (list hed)))
 		 (calc-fails  (lambda (prereqs-not-met)
 				(filter (lambda (test)
-					  (debug:print 9 "test: " test)
 					  (and (vector? test) ;; not (string? test))
 					       (equal? (db:test-get-state test) "COMPLETED")
 					       (not (member (db:test-get-status test)
@@ -328,11 +331,12 @@
 	    
 	    (debug:print 6
 			 "test-name: " test-name
-			 "\n  hed: " hed
+			 "\n  hed:         " hed
 			 "\n  itemdat:     " itemdat
-			 "\n  items:     " items
-			 "\n  item-path: " item-path
-			 "\n  waitons:   " waitons)
+			 "\n  items:       " items
+			 "\n  item-path:   " item-path
+			 "\n  waitons:     " waitons
+			 "\n  num-retries: " num-retries)
 
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -363,16 +367,16 @@
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
 		  (if (not (null? tal))
-		      (loop (car tal)(cdr tal))))
+		      (loop (car tal)(cdr tal) reruns)))
 		 ((not (hash-table-ref/default test-registery (conc test-name "/" item-path) #f))
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (conc test-name "/" item-path) #t)
-		  (loop (car newtal)(cdr newtal)))
+		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (thread-sleep! (+ 1 *global-delta*))
 		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
-		  (loop (car newtal)(cdr newtal)))
+		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
@@ -389,16 +393,16 @@
 			  (debug:print 4 "INFO: Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
 			  (thread-sleep! (+ 1 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
-			  (loop (car newtal)(cdr newtal)))
+			  (loop (car newtal)(cdr newtal) reruns))
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
 			    (if (vector? hed)
 				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 						    " from the launch list as it has prerequistes that are FAIL")
-				       (loop (car tal)(cdr tal)))
+				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-				  (loop hed tal)))))))))
+				  (loop hed tal reruns)))))))))
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -426,7 +430,7 @@
 			 (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
 	       items)
 	      (if (not (null? tal))
-		  (loop (car tal)(cdr tal))))
+		  (loop (car tal)(cdr tal) reruns)))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
@@ -437,12 +441,15 @@
 			   (fails           (calc-fails prereqs-not-met))
 			   (non-completed   (calc-not-completed prereqs-not-met)))
 		      (debug:print 8 "INFO: can-run-more: " can-run-more
+				   "\n testname:        " hed
 				   "\n prereqs-not-met: " (pretty-string prereqs-not-met)
 				   "\n non-completed:   " (pretty-string non-completed) 
 				   "\n fails:           " (pretty-string fails)
 				   "\n testmode:        " testmode
-				   "\n (eq? testmode 'toplevel) " (eq? testmode 'toplevel)
-				   "\n (null? non-completed)    " (null? non-completed))
+				   "\n num-retries:     " num-retries
+				   "\n (eq? testmode 'toplevel): " (eq? testmode 'toplevel)
+				   "\n (null? non-completed):    " (null? non-completed)
+				   "\n reruns: " reruns)
 		      (cond 
 		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
 			    ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
@@ -456,18 +463,19 @@
 			    (if (list? items-list)
 				(begin
 				  (tests:testqueue-set-items! test-record items-list)
-				  (loop hed tal))
+				  (loop hed tal reruns))
 				(begin
 				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 				  (exit 1))))))
 		       ((null? fails)
-			(loop (car newtal)(cdr newtal))) ;; an issue with prereqs not yet met?
+			(debug:print 4 "INFO: fails is null, moving on in the queue but keeping " hed " for now")
+			(loop (car newtal)(cdr newtal) reruns)) ;; an issue with prereqs not yet met?
 		       ((and (not (null? fails))(eq? testmode 'normal))
 			(debug:print 1 "INFO: test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 				     (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 				     ", removing it from to-do list")
 			(if (not (null? tal))
-			    (loop (car tal)(cdr tal))))
+			    (loop (car tal)(cdr tal)(cons hed reruns))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
 			;; 	     "\n  hed:            " hed 
@@ -475,11 +483,12 @@
 			;; 	     "\n testmode:        " testmode
 			;; 	     "\n prereqs-not-met: " (pretty-string prereqs-not-met)
 			;; 	     "\n items:           " items)
-			(loop (car newtal)(cdr newtal)))))
+			(loop (car newtal)(cdr newtal) reruns))))
 		    ;; if can't run more just loop with next possible test
 		    (begin
+		      (debug:print 4 "INFO: processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
 		      (thread-sleep! (+ 1 *global-delta*))
-		      (loop (car newtal)(cdr newtal))))))
+		      (loop (car newtal)(cdr newtal) reruns)))))
 	     
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)
@@ -497,10 +506,16 @@
 		#f) ;; return a #f as a hint that we are done
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
-	      (let ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records))) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+	      (let* ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+		     (junked (lset-difference equal? tal newlst)))
+		(debug:print 4 "INFO: full drop through, if reruns is less than 100 we will force retry them: " reruns)
+		(if (< num-retries 100)
+		    (set! newlst (append reruns newlst)))
+		(set! num-retries (+ num-retries 1))
 		(thread-sleep! *global-delta*)
 		(if (not (null? newlst))
-		    (loop (car newlst)(cdr newlst)))))))))
+		    ;; since reruns have been tacked on to newlst create new reruns from junked
+		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))))))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test run-id runname keyvallst test-record flags parent-test)
