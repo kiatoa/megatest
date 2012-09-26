@@ -476,7 +476,9 @@
 			;; 	     "\n items:           " items)
 			(loop (car newtal)(cdr newtal)))))
 		    ;; if can't run more just loop with next possible test
-		    (loop (car newtal)(cdr newtal)))))
+		    (begin
+		      (thread-sleep! (+ 1 *global-delta*))
+		      (loop (car newtal)(cdr newtal))))))
 	     
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)
