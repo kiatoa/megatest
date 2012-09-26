@@ -30,16 +30,17 @@
 (include "test_records.scm")
 
 (define (tests:register-test db run-id test-name item-path)
-   (let ((item-paths (if (equal? item-path "")
-			 (list item-path)
-			 (list item-path ""))))
-     (for-each 
-      (lambda (pth)
-	(sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			 run-id 
-			 test-name
-			 pth))
-      item-paths)))
+  (debug:print 4 "INFO: tests:register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=" item-path)
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (for-each 
+     (lambda (pth)
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+			run-id 
+			test-name
+			pth))
+     item-paths)))
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found

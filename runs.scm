@@ -215,6 +215,7 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	  (debug:print 4 "INFO: hed=" hed " at top of loop")
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
 		 (waitons (if config (string-split (let ((w (config-lookup config "requirements" "waiton")))
 						     (if w w "")))
@@ -277,6 +278,7 @@
     (if (not (null? required-tests))
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
+    (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
     (runs:run-tests-queue run-id runname test-records keyvallst flags)
     (debug:print 4 "INFO: All done by here")))
 
@@ -286,12 +288,13 @@
     ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
-	(item-patts        (hash-table-ref/default flags "-itempatt" #f)))
+	(item-patts        (hash-table-ref/default flags "-itempatt" #f))
+	(test-registery    (make-hash-table)))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names)))
-	  (thread-sleep! *global-delta*) ;; give other applications some time with the db
 	  (let* ((test-record (hash-table-ref test-records hed))
+		 (test-name   (tests:testqueue-get-testname test-record))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 				(if m (string->symbol m) 'normal)))
@@ -321,17 +324,20 @@
 					     (conc t)
 					     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
 				       lst))))
+	    
 	    (debug:print 6
-			 "itemdat:     " itemdat
+			 "test-name: " test-name
+			 "\n  hed: " hed
+			 "\n  itemdat:     " itemdat
 			 "\n  items:     " items
 			 "\n  item-path: " item-path
 			 "\n  waitons:   " waitons)
 
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
-	    (if (member hed waitons)
+	    (if (member test-name waitons)
 		(begin
-		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		  (debug:print 0 "ERROR: test " test-name " has listed itself as a waiton, please correct this!")
 		  (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	    (cond
@@ -347,25 +353,31 @@
 					 (conc (db:test-get-state t) "/" (db:test-get-status t))
 					 (conc " WARNING: t is not a vector=" t )))
 				   prereqs-not-met) ", ") " fails: " fails)
+		(debug:print 4 "INFO: hed=" hed)
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
 		(cond
-		 ((and have-resources
-		       (or (null? prereqs-not-met)
-			   (and (eq? testmode 'toplevel)
-				(null? non-completed))))
-		  ;; no loop here, just drop though and use the loop at the bottom 
-		  (if (patt-list-match item-path item-patts)
-		      (run:test run-id runname keyvallst test-record flags #f)
-		      (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts))
+		 ((not (patt-list-match item-path item-patts))
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
-		  )
+		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
+		  (if (not (null? tal))
+		      (loop (car tal)(cdr tal))))
+		 ((not (hash-table-ref/default test-registery (conc test-name "/" item-path) #f))
+		  (open-run-close tests:register-test #f run-id test-name item-path)
+		  (hash-table-set! test-registery (conc test-name "/" item-path) #t)
+		  (loop (car newtal)(cdr newtal)))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (thread-sleep! (+ 1 *global-delta*))
 		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal)))
+		 ((and have-resources
+		       (or (null? prereqs-not-met)
+			   (and (eq? testmode 'toplevel)
+				(null? non-completed))))
+		  ;; no loop here, just drop though and use the loop at the bottom 
+		  (run:test run-id runname keyvallst test-record flags #f))
 		 (else ;; must be we have unmet prerequisites
 		    (debug:print 4 "FAILS: " fails)
 		    ;; If one or more of the prereqs-not-met are FAIL then we can issue
@@ -500,14 +512,14 @@
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
 	 (item-path     "")
 	 (db           #f))
-    (debug:print 5
+    (debug:print 4
 		 "test-config: " (hash-table->alist test-conf)
 		 "\n   itemdat: " itemdat
 		 )
     ;; setting itemdat to a list if it is #f
     (if (not itemdat)(set! itemdat '()))
     (set! item-path (item-list->path itemdat))
-    (debug:print 2 "Attempting to launch test " test-name "/" item-path)
+    (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "/") "/" item-path))
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
     (open-run-close-measure set-megatest-env-vars db run-id) ;; these may be needed by the launching process
@@ -530,8 +542,13 @@
 	    ;; ensure that the path exists before registering the test
 	    ;; NOPE: Cannot! Don't know yet which disk area will be assigned....
 	    ;; (system (conc "mkdir -p " new-test-path))
-	    (open-run-close tests:register-test db run-id test-name item-path)
+	    ;;
+	    ;; (open-run-close tests:register-test db run-id test-name item-path)
+	    ;;
+	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
+	    ;;
 	    (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))
+	    (debug:print 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=" item-path)
 	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)

@@ -676,7 +676,7 @@
     res))
 
 ;; map run-id, testname item-path to test-id
-(define (db:get-test-id db run-id testname item-path)
+(define (db:get-test-cached-id db run-id testname item-path)
   (let* ((test-key (conc run-id "-" testname "-" item-path))
 	 (res      (hash-table-ref/default *test-ids* test-key #f)))
     (if res 
@@ -690,6 +690,18 @@
 	   run-id testname item-path)
 	  (hash-table-set! *test-ids* test-key res)
 	  res))))
+
+;; map run-id, testname item-path to test-id
+(define (db:get-test-id db run-id testname item-path)
+  (let* ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
+       (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
+     db 
+     "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     run-id testname item-path)
+    res)
+  #f)
 
 ;; given a test-info record, patch in the latest data from the testdat.db file
 ;; found in the test run directory
@@ -726,7 +738,7 @@
 	  (db:test-set-status! res "n/a")))))
 
 ;; Get test data using test_id
-(define (db:get-test-info-by-id db test-id)
+(define (db:get-test-info-cached-by-id db test-id)
   (if (not test-id)
       (begin
 	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
@@ -745,6 +757,22 @@
 	       test-id)
 	      (if res (db:patch-tdb-data-into-test-info db test-id res))
 	      res)))))
+
+;; Get test data using test_id
+(define (db:get-test-info-by-id db test-id)
+  (if (not test-id)
+      (begin
+	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
+	#f)
+      (let ((res #f))
+	(sqlite3:for-each-row
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+	 db 
+	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+	 test-id)
+	res)))
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
