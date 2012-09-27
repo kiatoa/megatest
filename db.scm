@@ -82,12 +82,14 @@
   (let* ((start-ms (current-milliseconds))
 	 (db       (if idb idb (open-db)))
          (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
-    (if (equal? (config-lookup *configdat* "setup"     "synchronous") "yes")
-	(sqlite3:execute db "PRAGMA synchronous = 0;"))
+
+    (db:set-sync db)
     (set! res      (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
     ;; scale by 10, average with current value.
-    (set! *global-delta* (/ (+ *global-delta* (/ (- (current-milliseconds) start-ms) (if throttle throttle 100))) 2))
+    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
+						 (if throttle throttle 0.01)))
+			    2))
     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 	(begin
 	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
@@ -799,7 +801,7 @@
 	      res)))))
 
 ;; Get test data using test_id
-(define (db:get-test-info-by-id db test-id)
+(define (db:get-test-info-not-cached-by-id db test-id)
   (if (not test-id)
       (begin
 	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
@@ -813,6 +815,8 @@
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
 	res)))
+
+(define db:get-test-info-by-id db:get-test-info-cached-by-id)
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
