@@ -583,7 +583,7 @@
 							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
     (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
-    (db:delete-test-step-records db test-id)
+    (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (open-run-close test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
