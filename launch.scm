@@ -106,7 +106,7 @@
 	  (open-run-close set-megatest-env-vars #f run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat)
+	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
 	  (open-run-close test-set-status! #f test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -256,7 +256,7 @@
 				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
 				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
-				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes: minutes)
+				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
 				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
@@ -335,7 +335,7 @@
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
 	    ;; (sqlite3:finalize! db)
-	    (sqlite3:finalize! tdb)
+	    ;; (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 

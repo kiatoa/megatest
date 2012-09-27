@@ -775,7 +775,7 @@
 	     (db:test-set-diskfree!     res disk_free)
 	     (db:test-set-run_duration! res run_duration))
 	   tdb
-	   "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat;")
+	   "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY id DESC LIMIT 1;")
 	  (sqlite3:finalize! tdb))
 	;; if the test db is not found what to do?
 	;; 1. set state to DELETED

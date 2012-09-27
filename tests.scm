@@ -404,7 +404,7 @@
 	res))
   0)
 
-(define (test-set-meta-info db test-id run-id testname itemdat #!key (minutes #f))
+(define (test-set-meta-info db test-id run-id testname itemdat minutes)
   (let* ((tdb         (db:open-test-db-by-test-id db test-id))
 	 (num-records (test:tdb-get-rundat-count tdb))
 	 (item-path   (item-list->path itemdat))
@@ -418,15 +418,15 @@
 			   run-id
 			   testname
 			   item-path)
+	  (if minutes (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
 	  (if (eq? num-records 0)
-	      (begin
+	      (let ((uname (get-uname "-srvpio"))
+		    (hostname (get-host-name)))
 		(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE run_id=? AND testname=? AND item_path=?;"
-				 (get-uname "-srvpio") (get-host-name) run-id testname item-path)
-                (if minutes 
-                    (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" ;; run_id=? AND testname=? AND item_path=?;"
-				     minutes test-id)))))) ;; run-id testname item-path))))))
-    (sqlite3:execute tdb "INSERT INTO test_rundat (cpuload,diskfree) VALUES (?,?);"
-		     cpuload diskfree)))
+				 uname hostname run-id testname item-path)))))
+                
+    (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+		     cpuload diskfree minutes)))
 	  
 
 ;;======================================================================
