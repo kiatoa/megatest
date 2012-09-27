@@ -64,25 +64,45 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
+;; Awful. Please FIXME
+(define *env-vars-by-run-id* (make-hash-table))
+(define *current-run-name*   #f)
+
 (define (set-megatest-env-vars db run-id)
-  (let ((keys (db:get-keys db)))
-    (for-each (lambda (key)
-		(sqlite3:for-each-row
-		 (lambda (val)
-		   (debug:print 2 "setenv " (key:get-fieldname key) " " val)
-		   (setenv (key:get-fieldname key) val))
-		 db 
-		 (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
-		 run-id))
-	      keys)
+  (let ((keys (db:get-keys db))
+	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
+    ;; get the info from the db and put it in the cache
+    (if (not vals)
+	(let ((ht (make-hash-table)))
+	  (hash-table-set! *env-vars-by-run-id* run-id ht)
+	  (set! vals ht)
+	  (for-each
+	   (lambda (key)
+	     (sqlite3:for-each-row
+	      (lambda (val)
+		(hash-table-set! vals key val))
+	      db 
+	      (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
+	      run-id))
+	   keys)))
+    ;; from the cached data set the vars
+    (hash-table-for-each
+     vals
+     (lambda (key val)
+       (debug:print 2 "setenv " (key:get-fieldname key) " " val)
+       (setenv (key:get-fieldname key) val)))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (sqlite3:for-each-row
-     (lambda (runname)
-       (setenv "MT_RUNNAME" runname))
-     db
-     "SELECT runname FROM runs WHERE id=?;"
-     run-id)
+    (if (not *current-run-name*)
+	(sqlite3:for-each-row
+	 (lambda (runname)
+	   (set! *current-run-name* runname))
+
+	 db
+	 "SELECT runname FROM runs WHERE id=?;"
+	 run-id))
+    (setenv "MT_RUNNAME" *current-run-name*)
+    (setenv "MT_RUN_AREA_HOME" *toppath*)
     ))
 
 (define (set-item-env-vars itemdat)
@@ -207,7 +227,7 @@
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
 	  (db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (rdb:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
     (sqlite3:finalize! db) 
@@ -460,7 +480,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (open-run-close-measure set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+			  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin
@@ -542,7 +562,7 @@
     (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "/") "/" item-path))
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (open-run-close-measure set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated

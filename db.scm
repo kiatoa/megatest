@@ -78,6 +78,7 @@
 
 (define *global-delta* 0)
 (define *last-global-delta-printed* 0)
+
 (define (open-run-close-measure  proc idb . params)
   (let* ((start-ms (current-milliseconds))
 	 (db       (if idb idb (open-db)))
@@ -359,16 +360,28 @@
 ;;======================================================================
 
 ;; returns number if string->number is successful, string otherwise
+;; also updates *global-delta*
 (define (db:get-var db var)
-  (let ((res #f))
+  (let* ((start-ms (current-milliseconds))
+         (throttle (string->number (config-lookup *configdat* "setup" "throttle")))
+	 (res      #f))
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
      db "SELECT val FROM metadat WHERE var=?;" var)
+    ;; convert to number if can
     (if (string? res)
 	(let ((valnum (string->number res)))
-	  (if valnum valnum res))
-	res)))
+	  (if valnum (set! res valnum))))
+    ;; scale by 10, average with current value.
+    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
+						 (if throttle throttle 0.01)))
+			    2))
+    (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
+	(begin
+	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
+	  (set! *last-global-delta-printed* *global-delta*)))
+    res))
 
 (define (db:set-var db var val)
   (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
