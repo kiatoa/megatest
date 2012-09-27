@@ -294,7 +294,7 @@
 	(test-registery    (make-hash-table))
 	(num-retries        0)
 	(max-retries       (config-lookup *configdat* "setup" "maxretries")))
-    (if (and max-retries (string->number max-retries))(set! max-retries (string->number max-retries)) 100)
+    (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
 		   (tal         (cdr sorted-test-names))
