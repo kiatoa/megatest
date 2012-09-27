@@ -379,7 +379,7 @@
 			    2))
     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 	(begin
-	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
+	  (debug:print 4 "INFO: launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
     res))
 

@@ -97,7 +97,7 @@
 		(exit 1)))
 	  (change-directory *toppath*)
 
-	  (open-run-close-measure set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
 	  (open-run-close set-run-config-vars #f run-id)
