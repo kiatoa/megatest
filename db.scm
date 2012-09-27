@@ -36,6 +36,24 @@
 (define *incoming-mutex*     (make-mutex))
 (define *cache-on* #f)
 
+(define (db:set-sync db)
+  (let* ((syncval  (config-lookup *configdat* "setup"     "synchronous"))
+	 (val      (cond   ;; 0 | OFF | 1 | NORMAL | 2 | FULL;
+		    ((not syncval) #f)
+		    ((string->number syncval)
+		     (let ((val (string->number syncval)))
+		       (if (member val '(0 1 2)) val #f)))
+		    ((string-match (regexp "yes" #t) syncval) 1)
+		    ((string-match (regexp "no"  #t) syncval) 0)
+		    ((string-match (regexp "(off|normal|full)" #t) syncval) syncval)
+		    (else 
+		     (debug:print 0 "ERROR: synchronous must be 0,1,2,OFF,NORMAL or FULL, you provided: " syncval)
+		     #f))))
+    (if val
+	(begin
+	  (debug:print 2 "INFO: Setting pragma synchronous to " val)
+	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
+
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
@@ -47,18 +65,13 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (if (equal? (config-lookup *configdat* "setup"     "synchronous") "yes")
-        (begin
-          (debug:print 5 "INFO: Turning off pragma synchronous")
-          (sqlite3:execute db "PRAGMA synchronous = 0;"))
-        (debug:print 5 "INFO: NOT turning off pragma synchronous"))
+    (db:set-sync db)
     db))
 
 (define (open-run-close  proc idb . params)
   (let* ((db   (if idb idb (open-db)))
 	 (res #f))
-    (if (equal? (config-lookup *configdat* "setup"     "synchronous") "yes")
-	(sqlite3:execute db "PRAGMA synchronous = 0;"))
+    (db:set-sync db)
     (set! res (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
     res))
@@ -1266,7 +1279,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (rdb:get-tests-for-run db run-id waitontest-name #f '() '()))
+	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name #f '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
