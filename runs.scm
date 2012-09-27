@@ -728,16 +728,18 @@
 	   
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
+	       (let ((remtests (db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
 						(take dparts (- (length dparts) 1))
 						"/"))))
-		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
+		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
 		       (db:delete-run db run-id)
 		       ;; This is a pretty good place to purge old DELETED tests
+		       (db:delete-tests-for-run db run-id)
 		       (db:delete-old-deleted-test-records db)
+		       (db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin

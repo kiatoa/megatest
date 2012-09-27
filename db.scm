@@ -496,7 +496,7 @@
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
-;; does not (obviously!) removed dependent data. 
+;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
@@ -635,7 +635,7 @@
 	  (sqlite3:finalize! tdb)))))
 
 ;; 
-(define (db:delete-test-records db tdb test-id)
+(define (db:delete-test-records db tdb test-id #!key (force #f))
   (if tdb 
       (begin
 	(sqlite3:execute tdb "DELETE FROM test_steps;")
@@ -645,11 +645,16 @@
       (begin
 	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
 	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
-	(sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE test_id=?;" test-id))))
+	(if force
+	    (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id)
+	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE id=?;" test-id)))))
+
+(define (db:delete-tests-for-run db run-id)
+  (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
   (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
-    (sqlite3:exectute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
+    (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
@@ -779,13 +784,24 @@
 	  (db:test-set-state!  res "NOT_STARTED")
 	  (db:test-set-status! res "n/a")))))
 
+(define *last-test-cache-delete* (current-seconds))
+
 ;; Get test data using test_id
 (define (db:get-test-info-cached-by-id db test-id)
+  ;; is all this crap really worth it? I somehow doubt it.
+  (let* ((last-delete-str (db:get-var db "DELETED_TESTS"))
+	 (last-delete     (if (string? last-delete-str)(string->number last-delete-str) #f)))
+    (if (and last-delete (> last-delete *last-test-cache-delete*))
+	(begin
+	  (set! *test-info* (make-hash-table))
+	  (set! *test-id-cache* (make-hash-table))
+	  (set! *last-test-cache-delete* last-delete)
+	  (debug:print 4 "INFO: Clearing test data cache"))))
   (if (not test-id)
       (begin
 	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
 	#f)
-      (let ((res (hash-table-ref/default *test-info* test-id #f)))
+      (let* ((res (hash-table-ref/default *test-info* test-id #f)))
 	(if res
 	    (db:patch-tdb-data-into-test-info db test-id res)
 	    ;; if no cached value then full read and write to cache
