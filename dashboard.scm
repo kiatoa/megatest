@@ -474,7 +474,7 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *state-ignore-hash* state #t)
 							  (hash-table-delete! *state-ignore-hash* state)))))
-		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED")))
+		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))

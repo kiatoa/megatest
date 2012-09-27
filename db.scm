@@ -69,12 +69,23 @@
     db))
 
 (define (open-run-close  proc idb . params)
-  (let* ((db   (if idb idb (open-db)))
-	 (res #f))
-    (db:set-sync db)
-    (set! res (apply proc db params))
-    (if (not idb)(sqlite3:finalize! db))
-    res))
+  (let ((runner (lambda ()
+		  (let* ((db   (if idb idb (open-db)))
+			 (res #f))
+		    (db:set-sync db)
+		    (set! res (apply proc db params))
+		    (if (not idb)(sqlite3:finalize! db))
+		    res))))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "EXCEPTION: database probably overloaded?")
+       (debug:print 0 "  " exn)
+       (print-call-chain)
+       (thread-sleep! (random 120))
+       (debug:print 0 "trying db call one more time....")
+       (runner))
+     (runner))))
 
 (define *global-delta* 0)
 (define *last-global-delta-printed* 0)

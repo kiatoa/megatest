@@ -125,7 +125,7 @@
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 
+				 (open-run-close test-set-status! #f test-id "RUNNING" "n/a" #f #f)
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
