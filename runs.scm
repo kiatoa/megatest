@@ -673,7 +673,7 @@
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (rdb:get-tests-for-run db (db:get-value-by-header run header "id")
+			       (db:get-tests-for-run db (db:get-value-by-header run header "id")
 						      testpatt itempatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
@@ -695,11 +695,13 @@
 		  (lambda (test)
 		    (let* ((item-path (db:test-get-item-path test))
 			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test)))
+			   (run-dir   (db:test-get-rundir test))
+			   (test-id   (db:test-get-id test)))
+		      ;;   (tdb       (db:open-test-db run-dir)))
 		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
 		      (case action
-			((remove-runs)
-			 (rdb:delete-test-records db (db:test-get-id test))
+			((remove-runs) ;; the tdb is for future possible. 
+			 (db:delete-test-records db #f (db:test-get-id test))
 			 (debug:print 1 "INFO: Attempting to remove dir " run-dir)
 			 (if (and (> (string-length run-dir) 5)
 				  (file-exists? run-dir)) ;; bad heuristic but should prevent /tmp /home etc.
@@ -721,12 +723,12 @@
 			     (debug:print 0 "WARNING: directory already removed " run-dir)))
 			((set-state-status)
 			 (debug:print 2 "INFO: new state " (car state-status) ", new status " (cadr state-status))
-			 (db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
+			 (open-run-close db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
 		  tests)))
 	   
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (rdb:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
+	       (let ((remtests (db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '() '())))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -734,6 +736,8 @@
 						"/"))))
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname"))
 		       (db:delete-run db run-id)
+		       ;; This is a pretty good place to purge old DELETED tests
+		       (db:delete-old-deleted-test-records db)
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin

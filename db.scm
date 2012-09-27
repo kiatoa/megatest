@@ -633,10 +633,21 @@
 	  (sqlite3:finalize! tdb)))))
 
 ;; 
-(define (db:delete-test-records db test-id)
-  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
-  (sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
-  (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+(define (db:delete-test-records db tdb test-id)
+  (if tdb 
+      (begin
+	(sqlite3:execute tdb "DELETE FROM test_steps;")
+	(sqlite3:execute tdb "DELETE FROM test_data;")))
+  ;; (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+  (if db 
+      (begin
+	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
+	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
+	(sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE test_id=?;" test-id))))
+
+(define (db:delete-old-deleted-test-records db)
+  (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
+    (sqlite3:exectute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
@@ -704,7 +715,7 @@
     res))
 
 ;; map run-id, testname item-path to test-id
-(define (db:get-test-cached-id db run-id testname item-path)
+(define (db:get-test-id-cached db run-id testname item-path)
   (let* ((test-key (conc run-id "-" testname "-" item-path))
 	 (res      (hash-table-ref/default *test-ids* test-key #f)))
     (if res 
@@ -720,7 +731,7 @@
 	  res))))
 
 ;; map run-id, testname item-path to test-id
-(define (db:get-test-id db run-id testname item-path)
+(define (db:get-test-id-not-cached db run-id testname item-path)
   (let* ((res #f))
     (sqlite3:for-each-row
      (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
@@ -729,6 +740,8 @@
      "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
     res))
+
+(define db:get-test-id db:get-test-id-cached)
 
 ;; given a test-info record, patch in the latest data from the testdat.db file
 ;; found in the test run directory
