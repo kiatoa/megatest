@@ -348,7 +348,8 @@
   (set! *configinfo* (find-and-read-config 
 		      (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
 		      environ-patt: "env-override"
-		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")))
+		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+		      pathenvvar: "MT_RUN_AREA_HOME"))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*

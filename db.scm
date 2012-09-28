@@ -384,7 +384,8 @@
 ;; also updates *global-delta*
 (define (db:get-var db var)
   (let* ((start-ms (current-milliseconds))
-         (throttle (string->number (config-lookup *configdat* "setup" "throttle")))
+         (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
+		     (if t (string->number t) t)))
 	 (res      #f))
     (sqlite3:for-each-row
      (lambda (val)
