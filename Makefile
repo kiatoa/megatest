@@ -13,7 +13,7 @@ OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
 
 HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
-
+MTESTHASH=$(shell fsl info|grep checkout:| awk '{print $$2}')
 all : mtest dboard
 
 mtest: $(OFILES) megatest.o
@@ -28,6 +28,11 @@ tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
+megatest.o : megatest-fossil-hash.scm
+
+megatest-fossil-hash.scm : $(SRCFILES) megatest.scm *_records.scm
+	echo "(define megatest-fossil-hash \"$(MTESTHASH)\")" > megatest-fossil-hash.new
+	if ! diff -q megatest-fossil-hash.new megatest-fossil-hash.scm ; then echo copying .new to .scm;cp -f megatest-fossil-hash.new megatest-fossil-hash.scm;fi
 
 $(OFILES) $(GOFILES) : common_records.scm 
 

@@ -28,6 +28,7 @@
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
+(include "megatest-fossil-hash.scm")
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -113,7 +114,8 @@ Examples
 # Get test path, use '.' to get a single path or a specific path/file pattern
 megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
-Called as " (string-intersperse (argv) " ")))
+Called as " (string-intersperse (argv) " ") "
+Built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
