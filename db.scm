@@ -68,22 +68,21 @@
     (db:set-sync db)
     db))
 
+;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
  (let* ((db   (if idb idb (open-db)))
 	(res #f))
-   (db:set-sync db)
    (set! res (apply proc db params))
    (if (not idb)(sqlite3:finalize! db))
    res))
 
 (define (open-run-close-exception-handling proc idb . params)
  (let ((runner (lambda ()
-    	  (let* ((db   (if idb idb (open-db)))
-    		 (res #f))
-    	    (db:set-sync db)
-    	    (set! res (apply proc db params))
-    	    (if (not idb)(sqlite3:finalize! db))
-    	    res))))
+		 (let* ((db   (if idb idb (open-db)))
+			(res #f))
+		   (set! res (apply proc db params))
+		   (if (not idb)(sqlite3:finalize! db))
+		   res))))
    (handle-exceptions
     exn
     (begin

@@ -95,8 +95,7 @@
 		;; (sqlite3:finalize! db)
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
-	  (change-directory *toppath*)
-
+	  (change-directory *toppath*) 
 	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
@@ -107,7 +106,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
-	  (open-run-close test-set-status! #f test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (open-run-close tests:test-set-status! #f test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -125,7 +124,7 @@
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 (open-run-close test-set-status! #f test-id "RUNNING" "n/a" #f #f)
+				 (open-run-close tests:test-set-status! #f test-id "RUNNING" "n/a" #f #f)
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
@@ -223,14 +222,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (open-run-close test-set-status! #f test-id "RUNNING" "WARN" 
+							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "WARN" 
 									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									    #f))
 							 ((pass)
-							  (open-run-close test-set-status! #f test-id "RUNNING" "PASS" #f #f))
+							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (open-run-close test-set-status! #f test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -280,7 +279,7 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (open-run-close test-set-status! #f test-id "KILLED"  "FAIL"
+						     (open-run-close tests:test-set-status! #f test-id "KILLED"  "FAIL"
 								       (args:get-arg "-m") #f)
 						     (sqlite3:finalize! tdb)
 						     (exit 1))))
@@ -304,7 +303,7 @@
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (open-run-close test-set-status! #f test-id 
+		    (open-run-close tests:test-set-status! #f test-id 
 				      (if kill-job? "KILLED" "COMPLETED")
 				      ;; Old logic:
 				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
@@ -586,7 +585,7 @@
     (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
-    (open-run-close test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (open-run-close tests:test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

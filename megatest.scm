@@ -228,7 +228,7 @@ Built from " megatest-fossil-hash ))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on db action)
+(define (operate-on action)
   (cond
    ((not (args:get-arg ":runname"))
     (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
@@ -245,30 +245,28 @@ Built from " megatest-fossil-hash ))
 	  (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
 	  (exit 1))
 	;; put test parameters into convenient variables
-	(runs:operate-on  db
-			  action
+	(runs:operate-on  action
 			  (args:get-arg ":runname")
 			  (args:get-arg "-testpatt")
 			  (args:get-arg "-itempatt")
 			  state: (args:get-arg ":state") 
 			  status: (args:get-arg ":status")
 			  new-state-status: (args:get-arg "-set-state-status")))
-    (sqlite3:finalize! db)
     (set! *didsomething* #t))))
 	  
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
      "remove runs"
-     (lambda (db target runname keys keynames keyvallst)
-       (operate-on db 'remove-runs))))
+     (lambda (target runname keys keynames keyvallst)
+       (operate-on 'remove-runs))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
-     (lambda (db target runname keys keynames keyvallst)
-       (operate-on db 'set-state-status))))
+     (lambda (target runname keys keynames keyvallst)
+       (operate-on 'set-state-status))))
 
 ;;======================================================================
 ;; Query runs
@@ -288,6 +286,8 @@ Built from " megatest-fossil-hash ))
 	   (keynames (map key:get-fieldname keys)))
       (if (not (args:get-arg "-server"))
 	  (server:client-setup db))
+      (sqlite3:finalize! db)
+      (set! db #f)
       ;; Each run
       (for-each 
        (lambda (run)
@@ -298,8 +298,8 @@ Built from " megatest-fossil-hash ))
 		"/"
 		(db:get-value-by-header run header "runname")
 		" status: " (db:get-value-by-header run header "state"))
-	 (let ((run-id (db:get-value-by-header run header "id")))
-	   (let ((tests (db:get-tests-for-run db run-id testpatt itempatt '() '())))
+	 (let ((run-id (open-run-close db:get-value-by-header run header "id")))
+	   (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
 	     ;; Each test
 	     (for-each 
 	      (lambda (test)
@@ -324,7 +324,7 @@ Built from " megatest-fossil-hash ))
 			     "\n         rundir:   " (db:test-get-rundir test)
 			     )
 		      ;; Each test
-		      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
+		      (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
 			(for-each 
 			 (lambda (step)
 			   (format #t 
@@ -380,13 +380,12 @@ Built from " megatest-fossil-hash ))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (db target runname keys keynames keyvallst)
+     (lambda (target runname keys keynames keyvallst)
 ;;       (let ((flags (make-hash-table)))
 ;;	 (for-each (lambda (parm)
 ;;		     (hash-table-set! flags parm (args:get-arg parm)))
 ;;		   (list "-rerun" "-force" "-itempatt"))
-	 (runs:run-tests db
-			 target
+	 (runs:run-tests target
 			 runname
 			 (args:get-arg "-runtests")
 			 user
@@ -413,9 +412,8 @@ Built from " megatest-fossil-hash ))
   (general-run-call 
    "-runtests" 
    "run a test" 
-   (lambda (db target runname keys keynames keyvallst)
-     (runs:run-tests db
-		     target
+   (lambda (target runname keys keynames keyvallst)
+     (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
 		     user
@@ -429,9 +427,8 @@ Built from " megatest-fossil-hash ))
     (general-run-call 
      "-rollup" 
      "rollup tests" 
-     (lambda (db target runname keys keynames keyvallst)
-       (runs:rollup-run db
-			keys
+     (lambda (target runname keys keynames keyvallst)
+       (runs:rollup-run keys
 			(keys->alist keys "na")
 			(args:get-arg ":runname") 
 			user))))
@@ -444,8 +441,8 @@ Built from " megatest-fossil-hash ))
     (general-run-call 
      (if (args:get-arg "-lock") "-lock" "-unlock")
      "lock/unlock tests" 
-     (lambda (db target runname keys keynames keyvallst)
-       (runs:handle-locking db
+     (lambda (target runname keys keynames keyvallst)
+       (runs:handle-locking 
 		  target
 		  keys
 		  (args:get-arg ":runname") 
@@ -484,11 +481,14 @@ Built from " megatest-fossil-hash ))
 		(exit 1)))
 	  (set! db (open-db))    
 	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
+	      (server:client-setup db)
+	      (begin
+		(sqlite3:finalize! db)
+		(set! db #f)))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (db:get-keys db))
+		 (keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		 (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -497,9 +497,10 @@ Built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-files"
 	 "Get paths to test"
-	 (lambda (db target runname keys keynames keyvallst)
-	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+	 (lambda (target runname keys keynames keyvallst)
+	   (let* ((db       #f)
+		  (itempatt (args:get-arg "-itempatt"))
+		  (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -532,13 +533,10 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (set! db (open-db))   
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (db:get-keys db))
+		 (keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (db:test-get-paths-matching db keynames target)))
+		 (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -547,9 +545,10 @@ Built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
-	 (lambda (db target runname keys keynames keyvallst)
-	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (db:test-get-paths-matching db keynames target)))
+	 (lambda (target runname keys keynames keyvallst)
+	   (let* ((db       #f)
+		  (itempatt (args:get-arg "-itempatt"))
+		  (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -562,13 +561,14 @@ Built from " megatest-fossil-hash ))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (db target runname keys keynames keyvallst)
-       (let ((outputfile (args:get-arg "-extract-ods"))
+     (lambda (target runname keys keynames keyvallst)
+       (let ((db         #f)
+	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
-	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
+	 (open-run-close db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
 ;; execute the test
@@ -612,13 +612,16 @@ Built from " megatest-fossil-hash ))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
+	      (server:client-setup db)
+	      (begin
+		(sqlite3:finalize! db)
+		(set! db #f)))
 	  (if (and state status)
-	      (db:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
+	      (open-run-close db:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
-	  (sqlite3:finalize! db)
+	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
@@ -651,22 +654,25 @@ Built from " megatest-fossil-hash ))
 		(exit 1)))
 	  (set! db (open-db))
 	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
+	      (server:client-setup db)
+	      (begin
+		(sqlite3:finalize! db)
+		(set! db #f)))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      (db:load-test-data db test-id))
+	      (open-run-close db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(db:test-set-log! db test-id logfname)))
+		(open-run-close db:test-set-log! db test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
-	      (rtests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (open-run-close tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (open-run-close tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
 		    (debug:print 0 "ERROR: nothing specified to run!")
-		    (sqlite3:finalize! db)
+		    (if db (sqlite3:finalize! db))
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
 			 (logprofile (args:get-arg "-logpro"))
@@ -683,19 +689,13 @@ Built from " megatest-fossil-hash ))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (db:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
-		    ;; close the db
-		    ;; (sqlite3:finalize! db)
+		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
 		    (change-directory testpath)
-		    ;; re-open the db
-		    ;; (set! db (open-db))
-		    ;; (if (not (args:get-arg "-server"))
-		    ;;     (server:client-setup db))
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
@@ -706,15 +706,10 @@ Built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (db:test-set-log! db test-id htmllogfile)))
+			  (open-run-close db:test-set-log! db test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      (db:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
-		    ;; (sqlite3:finalize! db)
-		    ;;(if (not (eq? exitstat 0))
-		    ;;	(exit 254)) ;; (exit exitstat) doesn't work?!?
-		  ;; open the db
-		  ;; mark the end of the test
-		  )))
+		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
+		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
 	      (let ((newstatus (cond
@@ -735,11 +730,11 @@ Built from " megatest-fossil-hash ))
 			     (not status)))
 		    (begin
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-		      (sqlite3:finalize! db)
+		      ;; (sqlite3:finalize! db)
 		      (exit 6)))
 		(let ((msg (args:get-arg "-m")))
-		  (rtests:test-set-status! db test-id state newstatus msg otherdata))))
-	  (sqlite3:finalize! db)
+		  (open-run-close tests:test-set-status! db test-id state newstatus msg otherdata))))
+	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -755,10 +750,13 @@ Built from " megatest-fossil-hash ))
 	    (exit 1)))
       (set! db (open-db))
       (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      (set! keys (db:get-keys db))
+	  (server:client-setup db)
+	  (begin
+	    (sqlite3:finalize! db)
+	    (set! db #f)))
+      (set! keys (open-run-close db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
-      (sqlite3:finalize! db)
+      (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")
@@ -787,10 +785,7 @@ Built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; now can find our db
-      (set! db (open-db))
-      (patch-db db)
-      (sqlite3:finalize! db)
+      (open-run-close patch-db #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -806,9 +801,12 @@ Built from " megatest-fossil-hash ))
       ;; now can find our db
       (set! db (open-db))
       (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      (runs:update-all-test_meta db)
-      (sqlite3:finalize! db)
+	  (server:client-setup db)
+	  (begin
+	    (sqlite3:finalize! db)
+	    (set! db #f)))
+      (open-run-close runs:update-all-test_meta db)
+      (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 ;;======================================================================

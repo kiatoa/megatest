@@ -183,10 +183,11 @@
 
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals
-(define (runs:run-tests db target runname test-patts user flags)
-  (let* ((keys        (db:get-keys db))
+(define (runs:run-tests target runname test-patts user flags)
+  (let* ((db          #f)
+	 (keys        (open-run-close db:get-keys db))
 	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
@@ -195,10 +196,10 @@
 	 (required-tests '())
 	 (test-records (make-hash-table)))
 
-    (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")
+	(open-run-close setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
     
     ;; look up all tests matching the comma separated list of globs in
@@ -226,11 +227,11 @@
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+	  (open-run-close db:delete-tests-in-state db run-id "NOT_STARTED")
+	  (open-run-close db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
-    (sqlite3:finalize! db) 
+    ;; (sqlite3:finalize! db) 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
@@ -241,7 +242,7 @@
 						     (if w w "")))
 			      (begin
 				(debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-                                (sqlite3:finalize! db)
+                                (if db (sqlite3:finalize! db))
 				(exit 1)))))
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -656,7 +657,7 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (open-run-close test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
+	       (open-run-close tests:test-set-status! db test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
@@ -678,9 +679,10 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on db action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
-  (let* ((keys         (db:get-keys db))
-	 (rundat       (runs:get-runs-by-patt db keys runnamepatt))
+(define (runs:operate-on action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
+  (let* ((db           #f)
+	 (keys         (open-run-close db:get-keys db))
+	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
@@ -695,7 +697,7 @@
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (db:get-tests-for-run db (db:get-value-by-header run header "id")
+			       (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id")
 						      testpatt itempatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
@@ -723,7 +725,7 @@
 		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
 		      (case action
 			((remove-runs) ;; the tdb is for future possible. 
-			 (db:delete-test-records db #f (db:test-get-id test))
+			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
 			 (debug:print 1 "INFO: Attempting to remove dir " run-dir)
 			 (if (and (> (string-length run-dir) 5)
 				  (file-exists? run-dir)) ;; bad heuristic but should prevent /tmp /home etc.
@@ -750,18 +752,18 @@
 	   
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
 						(take dparts (- (length dparts) 1))
 						"/"))))
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
-		       (db:delete-run db run-id)
+		       (open-run-close db:delete-run db run-id)
 		       ;; This is a pretty good place to purge old DELETED tests
-		       (db:delete-tests-for-run db run-id)
-		       (db:delete-old-deleted-test-records db)
-		       (db:set-var db "DELETED_TESTS" (current-seconds))
+		       (open-run-close db:delete-tests-for-run db run-id)
+		       (open-run-close db:delete-old-deleted-test-records db)
+		       (open-run-close db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -800,10 +802,13 @@
 	(set! db   (open-db))
 	(if (args:get-arg "-server")
 	    (server:start db (args:get-arg "-server"))
-	    (if (not (or (args:get-arg "-runall")
-			  (args:get-arg "-runtests")))
-		(server:client-setup db)))
-	(set! keys (db:get-keys db))
+	    (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
+			 (args:get-arg "-runtests")))
+		(server:client-setup db)
+		(begin
+		  (sqlite3:finalize! db)
+		  (set! db #f))))
+	(set! keys (open-run-close db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
@@ -812,7 +817,7 @@
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		  (begin
 		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
-		    (sqlite3:finalize! db)
+		    (if db (sqlite3:finalize! db))
 		    (exit 1))))
 	    (if (args:get-arg "-target")
 		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
@@ -824,17 +829,18 @@
 	    ;; here then call proc
 	    (let* ((keynames   (map key:get-fieldname keys))
 		   (keyvallst  (keys->vallist keys #t)))
-	      (proc db target runname keys keynames keyvallst)))
+	      (proc target runname keys keynames keyvallst)))
 	(if th1 (thread-join! th1))
-	(sqlite3:finalize! db)
+	(if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
 ;;======================================================================
 ;; Lock/unlock runs
 ;;======================================================================
 
-(define (runs:handle-locking db target keys runname lock unlock user)
-  (let* ((rundat   (runs:get-runs-by-patt db keys runname))
+(define (runs:handle-locking target keys runname lock unlock user)
+  (let* ((db       #f)
+	 (rundat   (open-run-close runs:get-runs-by-patt db keys runname))
 	 (header   (vector-ref rundat 0))
 	 (runs     (vector-ref rundat 1)))
     (for-each (lambda (run)
@@ -844,7 +850,7 @@
 			       (begin
 				 (print "Do you really wish to unlock run " run-id "?\n   y/n: ")
 				 (equal? "y" (read-line)))))
-		      (db:lock/unlock-run db run-id lock unlock user)
+		      (open-run-close db:lock/unlock-run db run-id lock unlock user)
 		      (debug:print 0 "INFO: Skipping lock/unlock on " run-id))))
 	      runs)))
 ;;======================================================================
@@ -853,11 +859,11 @@
 
 ;; Update the test_meta table for this test
 (define (runs:update-test_meta db test-name test-conf)
-  (let ((currrecord (db:testmeta-get-record db test-name)))
+  (let ((currrecord (open-run-close db:testmeta-get-record db test-name)))
     (if (not currrecord)
 	(begin
 	  (set! currrecord (make-vector 10 #f))
-	  (db:testmeta-add-record db test-name)))
+	  (open-run-close db:testmeta-add-record db test-name)))
     (for-each 
      (lambda (key)
        (let* ((idx (cadr key))
@@ -867,7 +873,7 @@
 	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
-	       (db:testmeta-update-field db test-name fld val)))))
+	       (open-run-close db:testmeta-update-field db test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
 
 ;; Update test_meta for all tests
@@ -880,18 +886,19 @@
 	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	      ;; read configs with tricks turned off (i.e. no system)
 	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
-	 (runs:update-test_meta db test-name test-conf)))
+	 ;; use the open-run-close instead of passing in db
+	 (runs:update-test_meta #f test-name test-conf)))
      test-names)))
 
 ;; This could probably be refactored into one complex query ...
-(define (runs:rollup-run db keys keyvallst runname user) ;; was target, now keyvallst
+(define (runs:rollup-run keys keyvallst runname user) ;; was target, now keyvallst
   (debug:print 4 "runs:rollup-run, keys: " keys " keyvallst: " keyvallst " :runname " runname " user: " user)
-  (let* (; (keyvalllst      (keys:target->keyval keys target))
-	 (new-run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))
-	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (db:get-tests-for-run db new-run-id "%" "%" '() '()))
+  (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
+	 (new-run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))
+	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
-    (db:update-run-event_time db new-run-id)
+    (open-run-close db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
@@ -909,7 +916,7 @@
 	      (item-path (db:test-get-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps      (db:get-steps-for-test db (db:test-get-id testdat)))
+	      (test-steps      (open-run-close db:get-steps-for-test db (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
@@ -917,22 +924,24 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (db:get-tests-for-run db new-run-id testname item-path '() '())))
+	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id testname item-path '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	 (sqlite3:execute 
-	  db 
-	  (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
-		"SELECT " (db:test-get-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
-	  (db:test-get-id testdat))
-	 ;; Now duplicate the test data
-	 (debug:print 4 "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	 (sqlite3:execute 
-	  db 
-	  (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) "
-		"SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
-	  (db:test-get-id testdat))
+	 (open-run-close 
+	  (lambda ()
+	    (sqlite3:execute 
+	     db 
+	     (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
+		   "SELECT " (db:test-get-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
+	     (db:test-get-id testdat))
+	    ;; Now duplicate the test data
+	    (debug:print 4 "Copying records in test_data from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
+	    (sqlite3:execute 
+	     db 
+	     (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) "
+		   "SELECT " (db:test-get-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
+	     (db:test-get-id testdat))))
 	 ))
      prev-tests)))
 	 

@@ -113,7 +113,7 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 ;; 
-(define (test-set-status! db test-id state status comment dat)
+(define (tests:test-set-status! db test-id state status comment dat)
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
 	 (testdat     (db:get-test-info-by-id db test-id))
@@ -192,7 +192,7 @@
 	  (db:test-set-comment db test-id cmt)))
     ))
 
-(define (test-set-toplog! db run-id test-name logf) 
+(define (tests:test-set-toplog! db run-id test-name logf) 
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
 		   logf run-id test-name))
 
@@ -277,7 +277,7 @@
 		(release-dot-lock outputfilename)))
 	    (close-output-port oup)
 	    (change-directory orig-dir)
-	    (test-set-toplog! db run-id test-name outputfilename)
+	    (tests:test-set-toplog! db run-id test-name outputfilename)
 	    )))))
 
 (define (get-all-legal-tests)
@@ -455,12 +455,12 @@
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
 	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
-      (test-set-status! db test-id state status comment dat)))
+      (tests:test-set-status! db test-id state status comment dat)))
 
 (define (rtests:test-set-toplog! db run-id test-name logf)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
             (port (vector-ref *runremote* 1)))
         ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
-      (test-set-toplog! db run-id test-name logf)))
+      (tests:test-set-toplog! db run-id test-name logf)))
 
