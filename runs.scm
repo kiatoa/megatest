@@ -184,7 +184,7 @@
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals
 (define (runs:run-tests db target runname test-patts user flags)
-  (let* ((keys        (rdb:get-keys db))
+  (let* ((keys        (db:get-keys db))
 	 (keyvallst   (keys:target->keyval keys target))
 	 (run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
@@ -679,7 +679,7 @@
 ;; NB// should pass in keys?
 ;;
 (define (runs:operate-on db action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
-  (let* ((keys         (rdb:get-keys db))
+  (let* ((keys         (db:get-keys db))
 	 (rundat       (runs:get-runs-by-patt db keys runnamepatt))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
@@ -803,7 +803,7 @@
 	    (if (not (or (args:get-arg "-runall")
 			  (args:get-arg "-runtests")))
 		(server:client-setup db)))
-	(set! keys (rdb:get-keys db))
+	(set! keys (db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
@@ -889,7 +889,7 @@
   (let* (; (keyvalllst      (keys:target->keyval keys target))
 	 (new-run-id      (runs:register-run db keys keyvallst runname "new" "n/a" user))
 	 (prev-tests      (test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (rdb:get-tests-for-run db new-run-id "%" "%" '() '()))
+	 (curr-tests      (db:get-tests-for-run db new-run-id "%" "%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     (db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
@@ -917,7 +917,7 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (rdb:get-tests-for-run db new-run-id testname item-path '() '())))
+	 (set! new-testdat (car (db:get-tests-for-run db new-run-id testname item-path '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))

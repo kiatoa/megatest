@@ -13,8 +13,8 @@
 
 
 (define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f))
-  (let* ((keys    (rdb:get-keys db))
-	 (keyvals (rdb:get-key-vals db run-id))
+  (let* ((keys    (db:get-keys db))
+	 (keyvals (db:get-key-vals db run-id))
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
