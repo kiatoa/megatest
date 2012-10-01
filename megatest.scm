@@ -733,7 +733,8 @@ Built from " megatest-fossil-hash ))
 		      ;; (sqlite3:finalize! db)
 		      (exit 6)))
 		(let ((msg (args:get-arg "-m")))
-		  (open-run-close tests:test-set-status! db test-id state newstatus msg otherdata))))
+		  ;; Convert to rpc
+		  (rdb:open-run-close 'tests:test-set-status! #f test-id state newstatus msg otherdata))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 

@@ -29,10 +29,10 @@
    exn
    (begin
      (debug:print 1 "Remote failed for " proc " " params)
-     (apply (eval (string->symbol proc)) params))
-   (if *runremote*
-       (apply (eval (string->symbol (conc "remote:" procstr))) params)
-       (eval (string->symbol procstr) params))))
+     (apply (eval (string->symbol procstr)) params))
+   ;; (if *runremote*
+   ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
+   (apply (eval (string->symbol procstr)) params)))
 
 (define (server:start db hostn)
   (debug:print 0 "Attempting to start the server ...")
@@ -61,6 +61,13 @@
     ;; db specials here
     ;;======================================================================
     ;; ** set-tests-state-status
+    (rpc:publish-procedure!
+     'rdb:open-run-close 
+     (lambda (procname . remargs)
+       (debug:print 4 "INFO: rdb:open-run-close " procname " " remargs)
+       (set! *last-db-access* (current-seconds))
+       (apply open-run-close (eval procname) remargs)))
+
     (rpc:publish-procedure!
      'rdb:set-tests-state-status 
      (lambda (run-id testnames currstate currstatus newstate newstatus)
