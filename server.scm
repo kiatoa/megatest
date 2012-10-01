@@ -36,242 +36,61 @@
 
 (define (server:start db hostn)
   (debug:print 0 "Attempting to start the server ...")
-  (let* ((rpc:listener   (server:find-free-port-and-open (rpc:default-server-port)))
-	 (th1            (make-thread
-			  (cute (rpc:make-server rpc:listener) "rpc:server")
-			  'rpc:server))
-	 (th2            (make-thread (lambda ()(db:updater db))))
-	 (hostname       (if (string=? "-" hostn)
-			     (get-host-name) 
-			     hostn))
-	 (ipaddrstr      (if (string=? "-" hostn)
-			     (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
-			     #f))
-	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
-    (db:set-var db "SERVER" host:port)
-    (set! *cache-on* #t)
+  (let ((host:port      (db:get-var db "SERVER"))) ;; do whe already have a server running?
+    (if host:port 
+	(set! *runremote* #t)
+	(let* ((rpc:listener   (server:find-free-port-and-open (rpc:default-server-port)))
+	       (th1            (make-thread
+				(cute (rpc:make-server rpc:listener) "rpc:server")
+				'rpc:server))
+	       (th2            (make-thread (lambda ()(db:updater))))
+	       (hostname       (if (string=? "-" hostn)
+				   (get-host-name) 
+				   hostn))
+	       (ipaddrstr      (if (string=? "-" hostn)
+				   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+				   #f))
+	       (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
+	  (db:set-var db "SERVER" host:port)
+	  (set! *cache-on* #t)
+	  
+	  ;; can use this to run most anything at the remote
+	  (rpc:publish-procedure! 
+	   'remote:run 
+	   (lambda (procstr . params)
+	     (server:autoremote procstr params)))
+	  
+	  ;;======================================================================
+	  ;; db specials here
+	  ;;======================================================================
+	  ;; remote call to open-run-close
+	  (rpc:publish-procedure!
+	   'rdb:open-run-close 
+	   (lambda (procname . remargs)
+	     (debug:print 4 "INFO: rdb:open-run-close " procname " " remargs)
+	     (set! *last-db-access* (current-seconds))
+	     (apply open-run-close (eval procname) remargs)))
+	  
+	  (rpc:publish-procedure!
+	   'cdb:test-set-state-status
+	   (lambda (test-id status state)
+	     (debug:print 4 "INFO: cdb:test-set-state-status " procname " " remargs)
+	     (apply cdb:test-set-state-status remargs)))
 
-    ;; can use this to run most anything at the remote
-    (rpc:publish-procedure! 
-     'remote:run 
-     (lambda (procstr . params)
-       (server:autoremote procstr params)))
+	  ;;======================================================================
+	  ;; end of publish-procedure section
+	  ;;======================================================================
 
-    ;;======================================================================
-    ;; db specials here
-    ;;======================================================================
-    ;; ** set-tests-state-status
-    (rpc:publish-procedure!
-     'rdb:open-run-close 
-     (lambda (procname . remargs)
-       (debug:print 4 "INFO: rdb:open-run-close " procname " " remargs)
-       (set! *last-db-access* (current-seconds))
-       (apply open-run-close (eval procname) remargs)))
-
-    (rpc:publish-procedure!
-     'rdb:set-tests-state-status 
-     (lambda (run-id testnames currstate currstatus newstate newstatus)
-       (set! *last-db-access* (current-seconds))
-       (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
-
-    (rpc:publish-procedure!
-     'rdb:teststep-set-status!
-     (lambda (test-id teststep-name state-in status-in item-path comment logfile)
-       (set! *last-db-access* (current-seconds))
-       (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)))
-
-    (rpc:publish-procedure!
-     'rdb:test-update-meta-info
-     (lambda (run-id testname item-path minutes cpuload diskfree tmpfree)
-       (set! *last-db-access* (current-seconds))
-       (db:test-update-meta-info db run-id testname item-path minutes cpuload diskfree tmpfree)))
-     
-    (rpc:publish-procedure!
-     'rdb:test-set-state-status-by-run-id-testname
-     (lambda (run-id test-name item-path status state)
-       (set! *last-db-access* (current-seconds))
-       (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
-
-    (rpc:publish-procedure!
-     'rdb:csv->test-data 
-     (lambda (test-id csvdata)
-       (set! *last-db-access* (current-seconds))
-       (db:csv->test-data db test-id csvdata)))
-
-    (rpc:publish-procedure!
-     'rdb:roll-up-pass-fail-counts
-     (lambda (run-id test-name item-path status)
-       (set! *last-db-access* (current-seconds))
-       (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
-
-    (rpc:publish-procedure!
-     'rdb:test-set-comment 
-     (lambda (run-id test-name item-path comment)
-       (set! *last-db-access* (current-seconds))
-       (db:test-set-comment db run-id test-name item-path comment)))
-    
-    (rpc:publish-procedure!
-     'rdb:test-set-log!
-     (lambda (test-id logf)
-       (set! *last-db-access* (current-seconds))
-       (db:test-set-log! db test-id logf)))
-    
-    (rpc:publish-procedure!
-     'rdb:get-test-data-by-id
-     (lambda (test-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-test-data-by-id db test-id)))
-
-    (rpc:publish-procedure!
-     'serve:get-toppath
-     (lambda ()
-       (set! *last-db-access* (current-seconds))
-       *toppath*))
-
-    (rpc:publish-procedure!
-     'serve:login
-     (lambda (toppath)
-       (set! *last-db-access* (current-seconds))
-       (if (equal? *toppath* toppath)
-	   (begin
-	     (debug:print 2 "INFO: login successful")
-	     #t)
-	   #f)))	     
-    
-    (rpc:publish-procedure!
-     'rdb:get-runs
-     (lambda (runnamepatt numruns startrunoffset keypatts)
-       (set! *last-db-access* (current-seconds))
-       (db:get-runs db runnamepatt numruns startrunoffset keypatts)))
-
-    (rpc:publish-procedure!
-     'rdb:get-tests-for-run 
-     (lambda (run-id testpatt itempatt states statuses)
-       (set! *last-db-access* (current-seconds))
-       (db:get-tests-for-run db run-id testpatt itempatt states statuses)))
-
-    (rpc:publish-procedure!
-     'rdb:get-keys
-     (lambda ()
-       (set! *last-db-access* (current-seconds))
-       (db:get-keys db)))
-
-    (rpc:publish-procedure!
-     'rdb:get-num-runs
-     (lambda (runpatt)
-       (set! *last-db-access* (current-seconds))
-       (db:get-num-runs db runpatt)))
-
-    (rpc:publish-procedure!
-     'rdb:test-set-state-status-by-id
-     (lambda (test-id newstate newstatus newcomment)
-       (set! *last-db-access* (current-seconds))
-       (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)))
-
-    (rpc:publish-procedure!
-     'rdb:get-key-val-pairs
-     (lambda (run-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-key-val-pairs db run-id)))
-
-    (rpc:publish-procedure!
-     'rdb:get-key-vals
-     (lambda (run-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-key-vals db run-id)))
-
-    (rpc:publish-procedure!
-     'rdb:testmeta-get-record
-     (lambda (run-id)
-       (set! *last-db-access* (current-seconds))
-       (db:testmeta-get-record db run-id)))
-
-    (rpc:publish-procedure!
-     'rdb:get-test-data-by-id
-     (lambda (test-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-test-data-by-id db test-id)))
-
-    (rpc:publish-procedure!
-     'rdb:get-run-info
-     (lambda (run-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-run-info db run-id)))
-
-    (rpc:publish-procedure!
-     'rdb:get-steps-for-test
-     (lambda (test-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-steps-for-test db test-id)))
-
-    (rpc:publish-procedure!
-     'rdb:get-steps-table
-     (lambda (test-id)
-       (set! *last-db-access* (current-seconds))
-       (db:get-steps-table db test-id)))
-
-    (rpc:publish-procedure!
-     'rdb:read-test-data
-     (lambda (test-id categorypatt)
-       (set! *last-db-access* (current-seconds))
-       (db:read-test-data db test-id categorypatt)))
-
-    (rpc:publish-procedure!
-     'rdb:get-test-info
-     (lambda (run-id testname item-path)
-       (set! *last-db-access* (current-seconds))
-       (db:get-test-info db  run-id testname item-path)))
-
-    (rpc:publish-procedure!
-     'rdb:delete-test-records
-     (lambda (test-id)
-       (set! *last-db-access* (current-seconds))
-       (db:delete-test-records db test-id)))
-
-    (rpc:publish-procedure!
-     'rtests:register-test
-     (lambda (run-id test-name item-path)
-       (set! *last-db-access* (current-seconds))
-       (tests:register-test db run-id test-name item-path)))
-
-    (rpc:publish-procedure!
-     'rdb:test-data-rollup
-     (lambda (test-id status)
-       (set! *last-db-access* (current-seconds))
-       (db:test-data-rollup db test-id status)))
-    
-    (rpc:publish-procedure!
-     'rtests:test-set-status!
-     (lambda (test-id state status comment dat)
-       (set! *last-db-access* (current-seconds))
-       (test-set-status! db test-id state status comment dat)))
-
-    (rpc:publish-procedure!
-     'rtests:test-set-toplog!
-     (lambda (run-id test-name logf)
-        (set! *last-db-access* (current-seconds))
-        (test-set-toplog! db run-id test-name logf)))
-
-    (rpc:publish-procedure!
-     'db:test-get-paths-matching 
-      (lambda (keynames target)
-        (set! *last-db-access* (current-seconds))
-        (db:test-get-paths-matching db keynames target)))
-
-    ;;======================================================================
-    ;; end of publish-procedure section
-    ;;======================================================================
-
-    (set! *rpc:listener* rpc:listener)
-    (on-exit (lambda ()
-	       (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
-	       (sqlite3:finalize! db)))
-    (thread-start! th1)
-    (thread-start! th2)
-    ;; (thread-join!  th2)
-    ;; return th2 for the calling process to do a join with 
-    th2
-    )) ;; rpc:server)))
+	  (set! *rpc:listener* rpc:listener)
+	  (on-exit (lambda ()
+		     (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
+		     (sqlite3:finalize! db)))
+	  (thread-start! th1)
+	  (thread-start! th2)
+	  ;; (thread-join!  th2)
+	  ;; return th2 for the calling process to do a join with 
+	  th2
+	  )))) ;; rpc:server)))
 
 (define (server:keep-running db)
   ;; if none running or if > 20 seconds since 
@@ -299,14 +118,14 @@
    (rpc:default-server-port port)
    (tcp-listen (rpc:default-server-port))))
 
-(define (server:client-setup db)
+(define (server:client-setup)
   (if *runremote*
       (begin
 	(debug:print 0 "ERROR: Attempt to connect to server but already connected")
 	#f)
-      (let* ((hostinfo (db:get-var db "SERVER"))
-	     (hostdat  (if hostinfo (string-split hostinfo ":")))
-	     (host     (if hostinfo (car hostdat)))
+      (let* ((hostinfo (open-run-close db:get-var #f "SERVER"))
+	     (hostdat  (if hostinfo (string-split hostinfo ":") #f))
+	     (host     (if hostinfo (car hostdat) #f))
 	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
 	(if (and port
 		 (string->number port))
@@ -315,7 +134,11 @@
 	      (handle-exceptions
 	       exn
 	       (begin
-		 (print "Exception: " exn)
+		 (print "Exception: " ((condition-property-accessor 'exn 'message) exn))
+		 (open-run-close 
+		  (lambda (db . param) 
+		    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
+		  #f)
 		 (set! *runremote* #f))
 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 			((rpc:procedure 'serve:login host portn) *toppath*))

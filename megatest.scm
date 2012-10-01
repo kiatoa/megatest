@@ -273,71 +273,66 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-list-runs")
-    (let* ((db       (begin
-		       (setup-for-run)
-		       (open-db)))
-	   (runpatt  (args:get-arg "-list-runs"))
-	   (testpatt (args:get-arg "-testpatt"))
-	   (itempatt (args:get-arg "-itempatt"))
-	   (runsdat  (db:get-runs db runpatt #f #f '()))
-	   (runs     (db:get-rows runsdat))
-	   (header   (db:get-header runsdat))
-	   (keys     (db:get-keys db))
-	   (keynames (map key:get-fieldname keys)))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      (sqlite3:finalize! db)
-      (set! db #f)
-      ;; Each run
-      (for-each 
-       (lambda (run)
-	 (debug:print 1 "Run: "
-		(string-intersperse (map (lambda (x)
-					   (db:get-value-by-header run header x))
-					 keynames) "/")
-		"/"
-		(db:get-value-by-header run header "runname")
-		" status: " (db:get-value-by-header run header "state"))
-	 (let ((run-id (open-run-close db:get-value-by-header run header "id")))
-	   (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
-	     ;; Each test
-	     (for-each 
-	      (lambda (test)
-		(format #t
-			"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-			(conc (db:test-get-testname test)
-			      (if (equal? (db:test-get-item-path test) "")
-				  "" 
-				  (conc "(" (db:test-get-item-path test) ")")))
-			(db:test-get-state test)
-			(db:test-get-status test)
-			(db:test-get-run_duration test)
-			(db:test-get-event_time test)
-			(db:test-get-host test))
- 		(if (not (or (equal? (db:test-get-status test) "PASS")
-			     (equal? (db:test-get-status test) "WARN")
-			     (equal? (db:test-get-state test)  "NOT_STARTED")))
-		    (begin
-		      (print "         cpuload:  " (db:test-get-cpuload test)
-			     "\n         diskfree: " (db:test-get-diskfree test)
-			     "\n         uname:    " (db:test-get-uname test)
-			     "\n         rundir:   " (db:test-get-rundir test)
-			     )
-		      ;; Each test
-		      (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
-			(for-each 
-			 (lambda (step)
-			   (format #t 
-				   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-				   (db:step-get-stepname step)
-				   (db:step-get-state step)
-				   (db:step-get-status step)
-				   (db:step-get-event_time step)))
-			 steps)))))
-		tests))))
-       runs)
-      (set! *didsomething* #t)
-      ))
+    (if (setup-for-run)
+	(let* ((db       #f)
+	       (runpatt  (args:get-arg "-list-runs"))
+	       (testpatt (args:get-arg "-testpatt"))
+	       (itempatt (args:get-arg "-itempatt"))
+	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
+	       (runs     (db:get-rows runsdat))
+	       (header   (db:get-header runsdat))
+	       (keys     (open-run-close db:get-keys db))
+	       (keynames (map key:get-fieldname keys)))
+	  ;; Each run
+	  (for-each 
+	   (lambda (run)
+	     (debug:print 1 "Run: "
+			  (string-intersperse (map (lambda (x)
+						     (db:get-value-by-header run header x))
+						   keynames) "/")
+			  "/"
+			  (db:get-value-by-header run header "runname")
+			  " status: " (db:get-value-by-header run header "state"))
+	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
+	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
+		 ;; Each test
+		 (for-each 
+		  (lambda (test)
+		    (format #t
+			    "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+			    (conc (db:test-get-testname test)
+				  (if (equal? (db:test-get-item-path test) "")
+				      "" 
+				      (conc "(" (db:test-get-item-path test) ")")))
+			    (db:test-get-state test)
+			    (db:test-get-status test)
+			    (db:test-get-run_duration test)
+			    (db:test-get-event_time test)
+			    (db:test-get-host test))
+		    (if (not (or (equal? (db:test-get-status test) "PASS")
+				 (equal? (db:test-get-status test) "WARN")
+				 (equal? (db:test-get-state test)  "NOT_STARTED")))
+			(begin
+			  (print "         cpuload:  " (db:test-get-cpuload test)
+				 "\n         diskfree: " (db:test-get-diskfree test)
+				 "\n         uname:    " (db:test-get-uname test)
+				 "\n         rundir:   " (db:test-get-rundir test)
+				 )
+			  ;; Each test
+			  (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
+			    (for-each 
+			     (lambda (step)
+			       (format #t 
+				       "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+				       (db:step-get-stepname step)
+				       (db:step-get-state step)
+				       (db:step-get-status step)
+				       (db:step-get-event_time step)))
+			     steps)))))
+		  tests))))
+	   runs)
+	  (set! *didsomething* #t)
+	  )))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -479,12 +474,6 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (set! db (open-db))    
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db)
-	      (begin
-		(sqlite3:finalize! db)
-		(set! db #f)))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
 		 (keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
@@ -610,12 +599,6 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db)
-	      (begin
-		(sqlite3:finalize! db)
-		(set! db #f)))
 	  (if (and state status)
 	      (open-run-close db:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
 	      (begin
@@ -652,12 +635,10 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db)
-	      (begin
-		(sqlite3:finalize! db)
-		(set! db #f)))
+
+	  ;; can setup as client for server mode now
+	  (server:client-setup)
+
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      (open-run-close db:load-test-data db test-id))
@@ -734,7 +715,8 @@ Built from " megatest-fossil-hash ))
 		      (exit 6)))
 		(let ((msg (args:get-arg "-m")))
 		  ;; Convert to rpc
-		  (rdb:open-run-close 'tests:test-set-status! #f test-id state newstatus msg otherdata))))
+		  ;; (rdb:open-run-close 'tests:test-set-status! #f test-id state newstatus msg otherdata))))
+		  (tests:test-set-status! db test-id state newstatus msg otherdata))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
@@ -749,12 +731,6 @@ Built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! db (open-db))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db)
-	  (begin
-	    (sqlite3:finalize! db)
-	    (set! db #f)))
       (set! keys (open-run-close db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
       (if db (sqlite3:finalize! db))
@@ -800,14 +776,7 @@ Built from " megatest-fossil-hash ))
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       ;; now can find our db
-      (set! db (open-db))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db)
-	  (begin
-	    (sqlite3:finalize! db)
-	    (set! db #f)))
       (open-run-close runs:update-all-test_meta db)
-      (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 ;;======================================================================

@@ -112,11 +112,11 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
-;; 
+;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! db test-id state status comment dat)
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (db:get-test-info-by-id db test-id))
+	 (testdat     (open-run-close db:get-test-info-by-id db test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -140,12 +140,13 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(db:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
-
+	;; (rdb:open-run-close 'cdb:test-set-state-status #f test-id real-status state)) ;; this one works
+	(cdb:test-set-state-status test-id real-status state))
+    
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup db test-id status))
+	(open-run-close db:test-data-rollup db test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -179,17 +180,17 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (db:csv->test-data db test-id
+	    (open-run-close db:csv->test-data db test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+    (open-run-close db:roll-up-pass-fail-counts db run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (db:test-set-comment db test-id cmt)))
+	  (open-run-close db:test-set-comment db test-id cmt)))
     ))
 
 (define (tests:test-set-toplog! db run-id test-name logf) 

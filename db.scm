@@ -87,7 +87,7 @@
     exn
     (begin
       (debug:print 0 "EXCEPTION: database probably overloaded?")
-      (debug:print 0 "  " exn)
+      (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
       (print-call-chain)
       (thread-sleep! (random 120))
       (debug:print 0 "trying db call one more time....")
@@ -594,7 +594,7 @@
   (let ((mytarg (hash-table-ref/default *target* run-id #f)))
     (if mytarg
 	mytarg
-	(let* ((keyvals (db:get-key-vals db run-id)) ;; (rdb:get-key-vals db run-id))
+	(let* ((keyvals (db:get-key-vals db run-id))
 	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
 	  (hash-table-set! *target* run-id thekey)
 	  thekey))))
@@ -1013,49 +1013,101 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS
 ;;======================================================================
 
-(define (db:updater db)
+(define (db:updater)
   (let loop ((start-time (current-time)))
     (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
-    (db:write-cached-data db)
+    (db:write-cached-data)
     (loop start-time)))
     
-(define (remote:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+(define (cdb:test-set-state-status test-id status state)
+  (debug:print 4 "INFO: Adding status/state to queue: " status "/" state)
   (mutex-lock! *incoming-mutex*)
-  (set! *incoming-data* (cons (vector 'meta-info
+  (set! *incoming-data* (cons (vector 'state-status
 				      (current-seconds)
-				      (list cpuload
-					    diskfree
-					    minutes
+				      (list state
+					    status 
 					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
-      (db:write-cached-data db)))
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
 
-(define (db:write-cached-data db)
-  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-    (if (> (length data) 0)
-	(debug:print 4 "Writing cached data " data))
-    (mutex-lock! *incoming-mutex*)
-    (sqlite3:with-transaction 
-     db
-     (lambda ()
-       (for-each (lambda (entry)
-		   (case (vector-ref entry 0)
-		     ((meta-info)
-		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-		     ((step-status)
-		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-		     (else
-		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-		 data)))
-    (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-    (sqlite3:finalize! step-stmt)
-    (set! *incoming-data* '())
-    (mutex-unlock! *incoming-mutex*)))
+;; (define (remote:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+;;   (mutex-lock! *incoming-mutex*)
+;;   (set! *incoming-data* (cons (vector 'meta-info
+;; 				      (current-seconds)
+;; 				      (list cpuload
+;; 					    diskfree
+;; 					    minutes
+;; 					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+;; 			      *incoming-data*))
+;;   (mutex-unlock! *incoming-mutex*)
+;;   (if *cache-on*
+;;       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
+;;       (db:write-cached-data db)))
+
+;; The queue is a list of vectors where the zeroth slot indicates the type of query to
+;; apply and the second slot is the time of the query and the third entry is a list of 
+;; values to be applied
+;;
+(define (db:write-cached-data)
+  (open-run-close
+   (lambda (db . params)
+     (let ((meta-stmt         (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+	   (state-status-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
+	   (step-stmt         (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+	   (data              #f))
+       (mutex-lock! *incoming-mutex*)
+       (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+       (set! *incoming-data* '())
+       (mutex-unlock! *incoming-mutex*)
+       (if (> (length data) 0)
+	   (debug:print 4 "INFO: Writing cached data " data))
+       (sqlite3:with-transaction 
+	db
+	(lambda ()
+	  (for-each (lambda (entry)
+		      (debug:print 4 "INFO: flushing " entry " to db")
+		      (case (vector-ref entry 0)
+			((meta-info)
+			 (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+			((step-status)
+			 (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+			((state-status)
+			 (apply sqlite3:execute state-status-stmt (vector-ref entry 2)))
+			(else
+			 (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+		    data)))
+       (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
+       (sqlite3:finalize! step-stmt)
+       (sqlite3:finalize! state-status-stmt)
+       ))
+   #f))
+
+;; (define (db:write-cached-data db)
+;;   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+;; 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+;; 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
+;;     (if (> (length data) 0)
+;; 	(debug:print 4 "Writing cached data " data))
+;;     (mutex-lock! *incoming-mutex*)
+;;     (sqlite3:with-transaction 
+;;      db
+;;      (lambda ()
+;;        (for-each (lambda (entry)
+;; 		   (case (vector-ref entry 0)
+;; 		     ((meta-info)
+;; 		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
+;; 		     ((step-status)
+;; 		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
+;; 		     (else
+;; 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+;; 		 data)))
+;;     (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
+;;     (sqlite3:finalize! step-stmt)
+;;     (set! *incoming-data* '())
+;;     (mutex-unlock! *incoming-mutex*)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -1192,11 +1244,11 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (rdb:csv->test-data db test-id lin)
+	  (db:csv->test-data db test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
-  (rdb:test-data-rollup db test-id #f))
+  (db:test-data-rollup db test-id #f))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -1524,203 +1576,6 @@
 ;;======================================================================
 ;; REMOTE DB ACCESS VIA RPC
 ;;======================================================================
-
-(define (rdb:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:set-tests-state-status host port)
-	 run-id testnames currstate currstatus newstate newstatus))
-      (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
-
-(define (rdb:teststep-set-status! db test-id teststep-name state-in status-in itemdat comment logfile)
-  (let ((item-path (item-list->path itemdat)))
-    (if *runremote*
-	(let ((host (vector-ref *runremote* 0))
-	      (port (vector-ref *runremote* 1)))
-	  ((rpc:procedure 'rdb:teststep-set-status! host port)
-	   test-id teststep-name state-in status-in item-path comment logfile))
-	(db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile))))
-
-(define (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-update-meta-info host port)
-	 test-id minutes cpuload diskfree tmpfree))
-      (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)))
-
-(define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-state-status-by-run-id-testname host port)
-	  run-id test-name item-path status state))
-      (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
-
-(define (rdb:csv->test-data db test-id csvdata)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:csv->test-data host port)
-	 test-id csvdata))
-      (db:csv->test-data db test-id csvdata)))
-
-(define (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:roll-up-pass-fail-counts host port)
-	 run-id test-name item-path status))
-      (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
-
-(define (rdb:test-set-comment db test-id comment)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-comment host port)
-	 test-id comment))
-      (db:test-set-comment db test-id comment)))
-
-(define (rdb:test-set-log! db test-id logf)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-log! host port) test-id logf))
-      (db:test-set-log! db test-id logf)))
-
-(define (rdb:get-runs db runnamepatt numruns startrunoffset keypatts)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-runs host port)
-	 runnamepatt numruns startrunoffset keypatts))
-      (db:get-runs db runnamepatt numruns startrunoffset keypatts)))
-
-(define (rdb:get-tests-for-run db run-id testpatt itempatt states statuses #!key (not-in #t))
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-tests-for-run host port)
-	  run-id testpatt itempatt states statuses not-in: not-in))
-      (db:get-tests-for-run db run-id testpatt itempatt states statuses not-in: not-in)))
-
-;; (define (rdb:get-test-data-by-id db test-id)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'rpc:get-test-data-by-id host port)
-;; 	 test-id))
-;;       (db:get-test-data-by-id db test-id)))
-      
-(define (rdb:get-keys db)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	(if *db-keys* *db-keys* 
-	    (let ((keys ((rpc:procedure 'rdb:get-keys host port))))
-	      (set! *db-keys* keys)
-	      keys)))
-      (db:get-keys db)))
-	 
-(define (rdb:get-num-runs db runpatt)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-num-runs host port) runpatt))
-      (db:get-num-runs db runpatt)))
-
-(define (rdb:test-set-state-status-by-id db test-id newstate newstatus newcomment)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-state-status-by-id host port)
-	 test-id newstate newstatus newcomment))
-      (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)))
-
-(define (rdb:get-key-val-pairs db run-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-key-val-pairs host port) run-id))
-      (db:get-key-val-pairs db run-id)))
-	 
-(define (rdb:get-key-vals db run-id)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-key-vals host port) run-id))
-      (db:get-key-vals db run-id)))
-
-(define (rdb:testmeta-get-record db testname)
-   (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:testmeta-get-record host port) testname))
-      (db:testmeta-get-record db testname)))
-
-;; (define (rdb:get-test-data-by-id db test-id)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'rdb:get-test-data-by-id host port) test-id))
-;;       (db:get-test-data-by-id db test-id)))
-
-(define (rdb:get-run-info db run-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-run-info host port) run-id))
-      (db:get-run-info db run-id)))
-
-(define (rdb:get-steps-for-test db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-steps-for-test host port) test-id))
-      (db:get-steps-for-test db test-id)))
-
-(define (rdb:get-steps-table db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-steps-table host port) test-id))
-      (db:get-steps-table db test-id)))
-
-(define (rdb:read-test-data db test-id categorypatt)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:read-test-data host port) test-id categorypatt))
-      (db:read-test-data db test-id categorypatt)))
-
-(define (rdb:get-test-info db run-id testname item-path)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-test-info host port) run-id testname item-path))
-      (db:get-test-info db run-id testname item-path)))
-
-(define (rdb:delete-test-records db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:delete-test-records host port) test-id))
-      (db:delete-test-records db test-id)))
-
-(define (rdb:test-data-rollup db test-id status)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-data-rollup host port) test-id status))
-      (db:test-data-rollup db test-id status)))
-
-(define (rdb:test-get-paths-matching db keynames target fname)
-   (if *runremote*
-       (let ((host (vector-ref *runremote* 0))
-	     (port (vector-ref *runremote* 1)))
-	 ((rpc:procedure 'rdb:test-get-paths-matching host port) keynames target fname))
-       (db:test-get-paths-matching db keynames target fname)))
 
 (define (rdb:open-run-close procname . remargs)
    (if *runremote*

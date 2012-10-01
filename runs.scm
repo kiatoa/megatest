@@ -525,7 +525,7 @@
 		(debug:print 1 "INFO: All tests launched")
 		(thread-sleep! 0.5)
 		;; FIXME! This harsh exit should not be necessary....
-		(if (not *runremote*)(exit)) ;; 
+		;; (if (not *runremote*)(exit)) ;; 
 		#f) ;; return a #f as a hint that we are done
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
@@ -799,15 +799,11 @@
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
-	(set! db   (open-db))
 	(if (args:get-arg "-server")
-	    (server:start db (args:get-arg "-server"))
+	    (open-run-close server:start db (args:get-arg "-server"))
 	    (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
 			 (args:get-arg "-runtests")))
-		(server:client-setup db)
-		(begin
-		  (sqlite3:finalize! db)
-		  (set! db #f))))
+		(server:client-setup)))
 	(set! keys (open-run-close db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")

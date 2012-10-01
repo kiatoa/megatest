@@ -95,6 +95,9 @@
 		;; (sqlite3:finalize! db)
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
+	  ;; Can setup as client for server mode now
+	  (server:client-setup)
+
 	  (change-directory *toppath*) 
 	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
@@ -245,18 +248,9 @@
 							    start-seconds)))))
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
-				     ;; (let* (;; (db       (open-db))
-					    ;; (cpuload  (get-cpu-load))
-					    ;; (diskfree (get-df (current-directory)))
-					    ;; (tmpfree  (get-df "/tmp")))
 				     (begin
-				       ;; (if (not (args:get-arg "-server"))
-				       ;;	   (server:client-setup db))
-				       ;; (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
-				       ;; (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
 				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
 				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
-				       ;; (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -295,9 +289,6 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (mutex-lock! m)
-	    ;; (set! db (open-db))
-	    ;; (if (not (args:get-arg "-server"))
-	    ;;	(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
@@ -305,14 +296,6 @@
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
 		    (open-run-close tests:test-set-status! #f test-id 
 				      (if kill-job? "KILLED" "COMPLETED")
-				      ;; Old logic:
-				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
-				      ;;     (if (and (not kill-job?) 
-				      ;;         (eq? (vector-ref exit-info 2) 0)) ;; we can now use rollup-status instead
-				      ;;         "PASS"
-				      ;;         "FAIL")
-				      ;;     "FAIL") 
-				      ;; New logic based on rollup-status
 				      (cond
 				       ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				       ((eq? rollup-status 0)
