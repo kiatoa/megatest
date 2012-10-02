@@ -117,10 +117,15 @@ Misc
 (define *hide-empty-runs* #f)
 
 (define *verbosity* (cond
-		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		     ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
 		     ((args:get-arg "-v")    2)
 		     ((args:get-arg "-q")    0)
 		     (else                   1)))
+
+(if (not (number? *verbosity*))
+    (begin
+      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
+      (exit)))
 
 (define uidat #f)
 
