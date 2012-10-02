@@ -525,7 +525,7 @@
 		(debug:print 1 "INFO: All tests launched")
 		(thread-sleep! 0.5)
 		;; FIXME! This harsh exit should not be necessary....
-		;; (if (not *runremote*)(exit)) ;; 
+		(if (not *runremote*)(exit)) ;; 
 		#f) ;; return a #f as a hint that we are done
 	      ;; Here we need to check that all the tests remaining to be run are eligible to run
 	      ;; and are not blocked by failed
