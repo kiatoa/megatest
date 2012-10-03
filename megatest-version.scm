@@ -3,5 +3,5 @@
 
 (declare (unit megatest-version))
 
-(define megatest-version 1.4608)
+(define megatest-version 1.4609)
 
