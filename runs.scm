@@ -389,11 +389,13 @@
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
+		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 ((not (hash-table-ref/default test-registery (conc test-name "/" item-path) #f))
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (conc test-name "/" item-path) #t)
+		  (thread-sleep! *global-delta*)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (thread-sleep! (+ 1 *global-delta*))
@@ -422,9 +424,11 @@
 			    (if (vector? hed)
 				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 						    " from the launch list as it has prerequistes that are FAIL")
+				       (thread-sleep! *global-delta*)
 				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+				  (thread-sleep! *global-delta*)
 				  (loop hed tal reruns)))))))))
 	     
 	     ;; case where an items came in as a list been processed
@@ -453,7 +457,9 @@
 			 (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
 	       items)
 	      (if (not (null? tal))
-		  (loop (car tal)(cdr tal) reruns)))
+		  (begin
+		    (thread-sleep! *global-delta*)
+		    (loop (car tal)(cdr tal) reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
@@ -486,19 +492,23 @@
 			    (if (list? items-list)
 				(begin
 				  (tests:testqueue-set-items! test-record items-list)
+				  (thread-sleep! *global-delta*)
 				  (loop hed tal reruns))
 				(begin
 				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 				  (exit 1))))))
 		       ((null? fails)
 			(debug:print 4 "INFO: fails is null, moving on in the queue but keeping " hed " for now")
+			(thread-sleep! *global-delta*)
 			(loop (car newtal)(cdr newtal) reruns)) ;; an issue with prereqs not yet met?
 		       ((and (not (null? fails))(eq? testmode 'normal))
 			(debug:print 1 "INFO: test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 				     (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 				     ", removing it from to-do list")
 			(if (not (null? tal))
-			    (loop (car tal)(cdr tal)(cons hed reruns))))
+			    (begin
+			      (thread-sleep! *global-delta*)
+			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
 			;; 	     "\n  hed:            " hed 
@@ -506,6 +516,7 @@
 			;; 	     "\n testmode:        " testmode
 			;; 	     "\n prereqs-not-met: " (pretty-string prereqs-not-met)
 			;; 	     "\n items:           " items)
+			(thread-sleep! *global-delta*)
 			(loop (car newtal)(cdr newtal) reruns))))
 		    ;; if can't run more just loop with next possible test
 		    (begin

@@ -114,6 +114,7 @@
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat)
+  (debug:print 4 "INFO: tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
@@ -141,8 +142,8 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	;; (rdb:open-run-close 'cdb:test-set-state-status #f test-id real-status state)) ;; this one works
-	(rdb:test-set-status-state test-id real-status state))
+	;; (rdb:open-run-close 'cdb:test-set-status-state #f test-id real-status state)) ;; this one works
+	(rdb:test-set-status-state test-id real-status state #f))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)

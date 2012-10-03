@@ -70,29 +70,29 @@
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
- (let* ((db   (if idb idb (open-db)))
-	(res #f))
-   (set! res (apply proc db params))
-   (if (not idb)(sqlite3:finalize! db))
-   res))
+  (let* ((db   (if idb idb (open-db)))
+	 (res #f))
+    (set! res (apply proc db params))
+    (if (not idb)(sqlite3:finalize! db))
+    res))
 
 (define (open-run-close-exception-handling proc idb . params)
- (let ((runner (lambda ()
-		 (let* ((db   (if idb idb (open-db)))
-			(res #f))
-		   (set! res (apply proc db params))
-		   (if (not idb)(sqlite3:finalize! db))
-		   res))))
-   (handle-exceptions
-    exn
-    (begin
-      (debug:print 0 "EXCEPTION: database probably overloaded?")
-      (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-      (print-call-chain)
-      (thread-sleep! (random 120))
-      (debug:print 0 "trying db call one more time....")
-      (runner))
-    (runner))))
+  (let ((runner (lambda ()
+		  (let* ((db   (if idb idb (open-db)))
+			 (res #f))
+		    (set! res (apply proc db params))
+		    (if (not idb)(sqlite3:finalize! db))
+		    res))))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "EXCEPTION: database probably overloaded?")
+       (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+       (print-call-chain)
+       (thread-sleep! (random 120))
+       (debug:print 0 "trying db call one more time....")
+       (runner))
+     (runner))))
 
 (define open-run-close open-run-close-exception-handling)
 
@@ -270,7 +270,7 @@
               status TEXT DEFAULT 'n/a',
               type TEXT DEFAULT '',
               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));"
-           "CREATE TABLE IF NOT EXISTS test_steps (
+	 "CREATE TABLE IF NOT EXISTS test_steps (
               id INTEGER PRIMARY KEY,
               test_id INTEGER, 
               stepname TEXT, 
@@ -280,10 +280,10 @@
               comment TEXT DEFAULT '',
               logfile TEXT DEFAULT '',
               CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));"
-	   ;; test_meta can be used for handing commands to the test
-	   ;; e.g. KILLREQ
-	   ;;      the ackstate is set to 1 once the command has been completed
-	   "CREATE TABLE IF NOT EXISTS test_meta (
+	 ;; test_meta can be used for handing commands to the test
+	 ;; e.g. KILLREQ
+	 ;;      the ackstate is set to 1 once the command has been completed
+	 "CREATE TABLE IF NOT EXISTS test_meta (
               id INTEGER PRIMARY KEY,
               var TEXT,
               val TEXT,
@@ -472,13 +472,13 @@
 		           ;; Generate: " AND x LIKE 'keypatt' ..."
 		           (if (null? keypatts) ""
 		               (conc " AND "
-		         	    (string-join 
-		         	     (map (lambda (keypatt)
-		         		    (let ((key  (car keypatt))
-		         			  (patt (cadr keypatt)))
-		         		      (db:patt->like key patt)))
-		         		  keypatts)
-		         	     " AND ")))
+				     (string-join 
+				      (map (lambda (keypatt)
+					     (let ((key  (car keypatt))
+						   (patt (cadr keypatt)))
+					       (db:patt->like key patt)))
+					   keypatts)
+				      " AND ")))
 		           " ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
@@ -526,7 +526,7 @@
 	(let ((finalres (vector header res)))
 	  (hash-table-set! *run-info-cache* run-id finalres)
 	  finalres))))
-  
+
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
@@ -902,7 +902,7 @@
 (define (db:test-set-log! db test-id logf)
   (if (string? logf)
       (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
-		   logf test-id)
+		       logf test-id)
       (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
 
 ;;======================================================================
@@ -1018,9 +1018,9 @@
     (thread-sleep! 15) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
     (loop start-time)))
-    
-(define (cdb:test-set-status-state test-id status state #!key (msg #f))
-  (debug:print 4 "INFO: Adding status/state to queue: " status "/" state)
+
+(define (cdb:test-set-status-state test-id status state msg)
+  (debug:print 4 "INFO: cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
   (mutex-lock! *incoming-mutex*)
   (if msg
       (set! *incoming-data* (cons (vector 'state-status-msg
@@ -1035,13 +1035,25 @@
   (if *cache-on*
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
-
+  
 (define (cdb:test-rollup-iterated-pass-fail test-id)
   (debug:print 4 "INFO: Adding " test-id " for iterated rollup to the queue")
   (mutex-lock! *incoming-mutex*)
   (set! *incoming-data* (cons (vector 'iterated-p/f-rollup
 				      (current-seconds)
 				      (list test-id test-id test-id test-id))
+			      *incoming-data*))
+  (mutex-unlock! *incoming-mutex*)
+  (if *cache-on*
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
+
+(define (cdb:pass-fail-counts test-id fail-count pass-count)
+  (debug:print 4 "INFO: Adding " test-id " for setting pass/fail counts to the queue")
+  (mutex-lock! *incoming-mutex*)
+  (set! *incoming-data* (cons (vector 'pass-fail-counts
+				      (current-seconds)
+				      (list fail-count pass-count test-id))
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
@@ -1057,6 +1069,7 @@
    (lambda (db . params)
      (let ((state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
 	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
+	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
 	   (iterated-rollup-stmt  (sqlite3:prepare db "UPDATE tests
                                              SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                                                 THEN 'FAIL'
@@ -1075,9 +1088,10 @@
        (sqlite3:with-transaction 
 	db
 	(lambda ()
+	  (debug:print 4 "INFO: flushing " data " to db")
 	  (for-each (lambda (entry)
 		      (let ((params (vector-ref entry 2)))
-			(debug:print 4 "INFO: flushing " entry " to db")
+			(debug:print 4 "INFO: Applying " entry " to params " params)
 			(case (vector-ref entry 0)
 			  ((state-status)
 			   (apply sqlite3:execute state-status-stmt     params))
@@ -1085,12 +1099,16 @@
 			   (apply sqlite3:execute state-status-msg-stmt params))
 			  ((iterated-p/f-rollup)
 			   (apply sqlite3:execute iterated-rollup-stmt  params))
+			  ((pass-fail-counts)
+			   (apply sqlite3:execute pass-fail-counts-stmt params))
 			  (else
 			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
 		    data)))
        (sqlite3:finalize! state-status-stmt)
        (sqlite3:finalize! state-status-msg-stmt)
        (sqlite3:finalize! iterated-rollup-stmt)
+       (sqlite3:finalize! pass-fail-counts-stmt)
+       (set! *last-db-access* (current-seconds))
        ))
    #f))
 
@@ -1257,7 +1275,9 @@
 	  (sqlite3:finalize! tdb)
 
 	  ;; Now rollup the counts to the central megatest.db
-	  (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" fail-count pass-count test-id)
+	  (rdb:pass-fail-counts test-id fail-count pass-count)
+	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
+	  ;;                     fail-count pass-count test-id)
 
 	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least one second later than the set
 	  
@@ -1413,8 +1433,8 @@
 	     ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
 	     (if (not ever-seen)
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
-	waitons)
-      (delete-duplicates result))))
+	 waitons)
+	(delete-duplicates result))))
 
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
@@ -1565,23 +1585,30 @@
 ;;======================================================================
 
 (define (rdb:open-run-close procname . remargs)
-   (if *runremote*
-       (let ((host (vector-ref *runremote* 0))
-	     (port (vector-ref *runremote* 1)))
-	 (apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
-       (apply open-run-close (eval procname) remargs)))
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	(apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
+      (apply open-run-close (eval procname) remargs)))
 
-(define (rdb:test-set-status-state test-id status state)
-   (if *runremote*
-       (let ((host (vector-ref *runremote* 0))
-	     (port (vector-ref *runremote* 1)))
-	 (apply (rpc:procedure 'cdb:test-set-status-state host port) test-id status state))
-       (cdb:test-set-status-state test-id status state)))
+(define (rdb:test-set-status-state test-id status state msg)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg))
+      (cdb:test-set-status-state test-id status state msg)))
 
 (define (rdb:test-rollup-iterated-pass-fail test-id)
-   (if *runremote*
-       (let ((host (vector-ref *runremote* 0))
-	     (port (vector-ref *runremote* 1)))
-	 (apply (rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
-       (cdb:test-rollup-iterated-pass-fail test-id)))
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	(apply (rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
+      (cdb:test-rollup-iterated-pass-fail test-id)))
+
+(define (rdb:pass-fail-counts test-id fail-count pass-count)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	(apply (rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
+      (cdb:pass-fail-counts test-id fail-count pass-count)))
 

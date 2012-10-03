@@ -60,6 +60,16 @@
 	   (lambda (procstr . params)
 	     (server:autoremote procstr params)))
 	  
+	  (rpc:publish-procedure!
+	   'serve:login
+	   (lambda (toppath)
+	     (set! *last-db-access* (current-seconds))
+	     (if (equal? *toppath* toppath)
+		 (begin
+		   (debug:print 2 "INFO: login successful")
+		   #t)
+		 #f)))
+
 	  ;;======================================================================
 	  ;; db specials here
 	  ;;======================================================================
@@ -67,21 +77,27 @@
 	  (rpc:publish-procedure!
 	   'rdb:open-run-close 
 	   (lambda (procname . remargs)
-	     (debug:print 4 "INFO: rdb:open-run-close " procname " " remargs)
+	     (debug:print 4 "INFO: Remote call of rdb:open-run-close " procname " " remargs)
 	     (set! *last-db-access* (current-seconds))
 	     (apply open-run-close (eval procname) remargs)))
 	  
 	  (rpc:publish-procedure!
 	   'cdb:test-set-status-state
-	   (lambda (test-id status state)
-	     (debug:print 4 "INFO: cdb:test-set-status-state " test-id " " status "/" state)
-	     (apply cdb:test-set-status-state test-id status statue)))
+	   (lambda (test-id status state msg)
+	     (debug:print 4 "INFO: Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
+	     (cdb:test-set-status-state test-id status state msg)))
 
 	  (rpc:publish-procedure!
 	   'cdb:test-rollup-iterated-pass-fail
 	   (lambda (test-id)
-	     (debug:print 4 "INFO: cdb:test-rollup-iterated-pass-fail " test-id)
+	     (debug:print 4 "INFO: Remote call of cdb:test-rollup-iterated-pass-fail " test-id)
 	     (apply cdb:test-rollup-iterated-pass-fail test-id)))
+
+	  (rpc:publish-procedure!
+	   'cdb:pass-fail-counts
+	   (lambda (test-id fail-count pass-count)
+	     (debug:print 4 "INFO: Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
+	     (apply cdb:pass-fail-counts test-id fail count-pass-count)))
 
 	  ;;======================================================================
 	  ;; end of publish-procedure section
@@ -105,7 +121,7 @@
     (thread-sleep! 20) ;; no need to do this very often
     (let ((numrunning (db:get-count-tests-running db)))
       (if (or (not (> numrunning 0))
-	      (> *last-db-access* (+ (current-seconds) 20)))
+	      (> *last-db-access* (+ (current-seconds) 60)))
 	  (begin
 	    (debug:print 0 "INFO: Starting to shutdown the server side")
 	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"); ;;  AND val like ?;"
@@ -140,11 +156,12 @@
 	      (handle-exceptions
 	       exn
 	       (begin
-		 (print "Exception: " ((condition-property-accessor 'exn 'message) exn))
-		 (open-run-close 
-		  (lambda (db . param) 
-		    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
-		  #f)
+		 (debug:print 0 "ERROR: Failed to open a connection to the server at host: " host " port: " port)
+		 (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+		 ;; (open-run-close 
+		 ;;  (lambda (db . param) 
+		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
+		 ;;  #f)
 		 (set! *runremote* #f))
 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 			((rpc:procedure 'serve:login host portn) *toppath*))
