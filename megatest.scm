@@ -718,10 +718,10 @@ Built from " megatest-fossil-hash ))
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
 		      ;; (sqlite3:finalize! db)
 		      (exit 6)))
-		(let ((msg (args:get-arg "-m")))
-		  ;; Convert to rpc
-		  ;; (rdb:open-run-close 'tests:test-set-status! #f test-id state newstatus msg otherdata))))
-		  (tests:test-set-status! db test-id state newstatus msg otherdata))))
+		(let* ((msg    (args:get-arg "-m"))
+		       (numoth (length (hash-table-keys otherdata))))
+		  ;; Convert to rpc inside the tests:test-set-status! call, not here
+		  (tests:test-set-status! test-id state newstatus msg otherdata))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 

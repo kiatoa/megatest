@@ -43,11 +43,18 @@
   (or (eq? exitcode 0)
       (and logpro (eq? exitcode 2))))
 
+;; if handed a string, process it, else look for MT_CMDINFO
+(define (launch:get-cmdinfo-assoc-list #!key (encoded-cmd #f))
+  (let ((enccmd (if encoded-cmd encoded-cmd (getenv "MT_CMDINFO"))))
+    (if enccdm
+	(read (open-input-string (base64:base64-decode enccmd)))
+	'())))
+
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
-                        ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
+	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
 	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
@@ -109,7 +116,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
-	  (open-run-close tests:test-set-status! #f test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -127,7 +134,7 @@
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 (open-run-close tests:test-set-status! #f test-id "RUNNING" "n/a" #f #f)
+				 (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
@@ -200,8 +207,8 @@
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
-                                                        ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						        (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo itemdat #f logfna))
+						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
+						       (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo itemdat #f logfna))
 						     (if logpro-used
 							 (open-run-close db:test-set-log! #f test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -225,19 +232,19 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "WARN" 
-									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
-									    #f))
+							  (tests:test-set-status! test-id "RUNNING" "WARN" 
+									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
+									  #f))
 							 ((pass)
-							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "PASS" #f #f))
+							  (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (open-run-close tests:test-set-status! #f test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
-					     (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
+						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
 		 (monitorjob   (lambda ()
 				 (let* ((start-seconds (current-seconds))
 					(calc-minutes  (lambda ()
@@ -273,8 +280,8 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (open-run-close tests:test-set-status! #f test-id "KILLED"  "FAIL"
-								       (args:get-arg "-m") #f)
+						     (tests:test-set-status! test-id "KILLED"  "FAIL"
+								     (args:get-arg "-m") #f)
 						     (sqlite3:finalize! tdb)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
@@ -294,19 +301,19 @@
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (open-run-close tests:test-set-status! #f test-id 
-				      (if kill-job? "KILLED" "COMPLETED")
-				      (cond
-				       ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
-				       ((eq? rollup-status 0)
-					;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
-					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
-				       ((eq? rollup-status 1) "FAIL")
-				       ((eq? rollup-status 2)
-					;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
-					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				       (else "FAIL"))
-				      (args:get-arg "-m") #f)))
+		    (tests:test-set-status! test-id 
+				    (if kill-job? "KILLED" "COMPLETED")
+				    (cond
+				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
+				     ((eq? rollup-status 0)
+				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
+				     ((eq? rollup-status 1) "FAIL")
+				     ((eq? rollup-status 2)
+				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
+				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
+				     (else "FAIL"))
+				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
@@ -401,7 +408,7 @@
 
 	 ;; ensure this exists first as links to subtests must be created there
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
-		     (if rd rd (conc *toppath* "/runs"))))
+		      (if rd rd (conc *toppath* "/runs"))))
 
 	 (lnkbase  (conc linktree "/" target "/" runname))
 	 (lnkpath  (conc lnkbase "/" testname))
@@ -493,12 +500,12 @@
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
-	 (list "MT_RUN_AREA_HOME" *toppath*)
-	 (list "MT_TEST_NAME" test-name)
-	 ;; (list "MT_ITEM_INFO" (conc itemdat)) 
-	 (list "MT_RUNNAME"   runname)
-	 ;; (list "MT_TARGET"    mt_target)
-	 ))
+    (list "MT_RUN_AREA_HOME" *toppath*)
+    (list "MT_TEST_NAME" test-name)
+    ;; (list "MT_ITEM_INFO" (conc itemdat)) 
+    (list "MT_RUNNAME"   runname)
+    ;; (list "MT_TARGET"    mt_target)
+    ))
   (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
@@ -568,7 +575,7 @@
     (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
-    (open-run-close tests:test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

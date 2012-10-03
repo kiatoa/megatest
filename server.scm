@@ -72,10 +72,10 @@
 	     (apply open-run-close (eval procname) remargs)))
 	  
 	  (rpc:publish-procedure!
-	   'cdb:test-set-state-status
+	   'cdb:test-set-status-state
 	   (lambda (test-id status state)
-	     (debug:print 4 "INFO: cdb:test-set-state-status " procname " " remargs)
-	     (apply cdb:test-set-state-status remargs)))
+	     (debug:print 4 "INFO: cdb:test-set-status-state " procname " " remargs)
+	     (apply cdb:test-set-status-state remargs)))
 
 	  ;;======================================================================
 	  ;; end of publish-procedure section

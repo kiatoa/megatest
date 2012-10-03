@@ -113,8 +113,9 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! db test-id state status comment dat)
-  (let* ((real-status status)
+(define (tests:test-set-status! test-id state status comment dat)
+  (let* ((db          #f)
+	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
 	 (testdat     (open-run-close db:get-test-info-by-id db test-id))
 	 (run-id      (db:test-get-run_id testdat))
@@ -123,7 +124,7 @@
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (test:get-previous-test-run-record db run-id test-name item-path)))
+		       (let ((prev-test (open-run-close test:get-previous-test-run-record db run-id test-name item-path)))
 			 (if prev-test ;; true if we found a previous test in this run series
 			     (let ((prev-status (db:test-get-status   prev-test))
 				   (prev-state  (db:test-get-state    prev-test))
@@ -141,7 +142,7 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	;; (rdb:open-run-close 'cdb:test-set-state-status #f test-id real-status state)) ;; this one works
-	(cdb:test-set-state-status test-id real-status state))
+	(cdb:test-set-status-state test-id real-status state))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)
@@ -204,6 +205,7 @@
   (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	(orig-dir       (current-directory))
 	(logf           #f))
+    ;; This query finds the path and changes the directory to it for the test
     (sqlite3:for-each-row 
      (lambda (path final_logf)
        (set! logf final_logf)
@@ -439,29 +441,4 @@
 
 (define (test:archive-tests db keynames target)
   #f)
-
-;;======================================================================
-;; R P C
-;;======================================================================
-
-(define (rtests:register-test db run-id test-name item-path)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rtests:register-test host port) run-id test-name item-path))
-      (tests:register-test db run-id test-name item-path)))
-
-(define (rtests:test-set-status!  db test-id state status comment dat)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
-      (tests:test-set-status! db test-id state status comment dat)))
-
-(define (rtests:test-set-toplog! db run-id test-name logf)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-            (port (vector-ref *runremote* 1)))
-        ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
-      (tests:test-set-toplog! db run-id test-name logf)))
 

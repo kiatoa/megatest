@@ -1019,15 +1019,18 @@
     (db:write-cached-data)
     (loop start-time)))
     
-(define (cdb:test-set-state-status test-id status state)
+(define (cdb:test-set-status-state test-id status state #!key (msg #f))
   (debug:print 4 "INFO: Adding status/state to queue: " status "/" state)
   (mutex-lock! *incoming-mutex*)
-  (set! *incoming-data* (cons (vector 'state-status
-				      (current-seconds)
-				      (list state
-					    status 
-					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
-			      *incoming-data*))
+  (if msg
+      (set! *incoming-data* (cons (vector 'state-status-msg
+					  (current-seconds)
+					  (list state status msg test-id))
+				  *incoming-data*))
+      (set! *incoming-data* (cons (vector 'state-status
+					  (current-seconds)
+					  (list state status test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+				  *incoming-data*)))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
@@ -1054,10 +1057,11 @@
 (define (db:write-cached-data)
   (open-run-close
    (lambda (db . params)
-     (let ((meta-stmt         (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-	   (state-status-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
-	   (step-stmt         (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-	   (data              #f))
+     (let ((meta-stmt             (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
+	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
+	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
+	   (step-stmt             (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+	   (data                  #f))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
        (set! *incoming-data* '())
@@ -1076,12 +1080,15 @@
 			 (apply sqlite3:execute step-stmt (vector-ref entry 2)))
 			((state-status)
 			 (apply sqlite3:execute state-status-stmt (vector-ref entry 2)))
+			((state-status-msg)
+			 (apply sqlite3:execute state-status-msg-stmt (vector-ref entry 2)))
 			(else
 			 (debug:print 0 "ERROR: Queued entry not recognised " entry))))
 		    data)))
        (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
        (sqlite3:finalize! step-stmt)
        (sqlite3:finalize! state-status-stmt)
+       (sqlite3:finalize! state-status-msg-stmt)
        ))
    #f))
 
@@ -1124,7 +1131,7 @@
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
-        (thread-sleep! 0.1) ;; give other processes a chance here
+        ;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
 	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
 	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
 	    (sqlite3:execute
