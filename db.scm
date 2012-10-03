@@ -1015,7 +1015,7 @@
 
 (define (db:updater)
   (let loop ((start-time (current-time)))
-    (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
+    (thread-sleep! 15) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
     (loop start-time)))
     
@@ -1036,19 +1036,17 @@
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
 
-;; (define (remote:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
-;;   (mutex-lock! *incoming-mutex*)
-;;   (set! *incoming-data* (cons (vector 'meta-info
-;; 				      (current-seconds)
-;; 				      (list cpuload
-;; 					    diskfree
-;; 					    minutes
-;; 					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
-;; 			      *incoming-data*))
-;;   (mutex-unlock! *incoming-mutex*)
-;;   (if *cache-on*
-;;       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
-;;       (db:write-cached-data db)))
+(define (cdb:test-rollup-iterated-pass-fail test-id)
+  (debug:print 4 "INFO: Adding " test-id " for iterated rollup to the queue")
+  (mutex-lock! *incoming-mutex*)
+  (set! *incoming-data* (cons (vector 'iterated-p/f-rollup
+				      (current-seconds)
+				      (list test-id test-id test-id test-id))
+			      *incoming-data*))
+  (mutex-unlock! *incoming-mutex*)
+  (if *cache-on*
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1057,10 +1055,16 @@
 (define (db:write-cached-data)
   (open-run-close
    (lambda (db . params)
-     (let ((meta-stmt             (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
+     (let ((state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
 	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
-	   (step-stmt             (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
+	   (iterated-rollup-stmt  (sqlite3:prepare db "UPDATE tests
+                                             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                                THEN 'FAIL'
+                                             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                                             THEN 'PASS'
+                                             ELSE status
+                                         END WHERE id=?;"))
 	   (data                  #f))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
@@ -1072,49 +1076,23 @@
 	db
 	(lambda ()
 	  (for-each (lambda (entry)
-		      (debug:print 4 "INFO: flushing " entry " to db")
-		      (case (vector-ref entry 0)
-			((meta-info)
-			 (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-			((step-status)
-			 (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-			((state-status)
-			 (apply sqlite3:execute state-status-stmt (vector-ref entry 2)))
-			((state-status-msg)
-			 (apply sqlite3:execute state-status-msg-stmt (vector-ref entry 2)))
-			(else
-			 (debug:print 0 "ERROR: Queued entry not recognised " entry))))
+		      (let ((params (vector-ref entry 2)))
+			(debug:print 4 "INFO: flushing " entry " to db")
+			(case (vector-ref entry 0)
+			  ((state-status)
+			   (apply sqlite3:execute state-status-stmt     params))
+			  ((state-status-msg)
+			   (apply sqlite3:execute state-status-msg-stmt params))
+			  ((iterated-p/f-rollup)
+			   (apply sqlite3:execute iterated-rollup-stmt  params))
+			  (else
+			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
 		    data)))
-       (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-       (sqlite3:finalize! step-stmt)
        (sqlite3:finalize! state-status-stmt)
        (sqlite3:finalize! state-status-msg-stmt)
+       (sqlite3:finalize! iterated-rollup-stmt)
        ))
    #f))
-
-;; (define (db:write-cached-data db)
-;;   (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-;; 	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-;; 	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-;;     (if (> (length data) 0)
-;; 	(debug:print 4 "Writing cached data " data))
-;;     (mutex-lock! *incoming-mutex*)
-;;     (sqlite3:with-transaction 
-;;      db
-;;      (lambda ()
-;;        (for-each (lambda (entry)
-;; 		   (case (vector-ref entry 0)
-;; 		     ((meta-info)
-;; 		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-;; 		     ((step-status)
-;; 		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-;; 		     (else
-;; 		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-;; 		 data)))
-;;     (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-;;     (sqlite3:finalize! step-stmt)
-;;     (set! *incoming-data* '())
-;;     (mutex-unlock! *incoming-mutex*)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -1281,20 +1259,22 @@
 	  ;; Now rollup the counts to the central megatest.db
 	  (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" fail-count pass-count test-id)
 
-	  (thread-sleep! 0.1) ;; play nice with other tests
-
+	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least one second later than the set
+	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (sqlite3:execute
-	   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
-	   "UPDATE tests
-                      SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                         THEN 'FAIL'
-                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                           (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                      THEN 'PASS'
-                      ELSE status
-                  END WHERE id=?;"
-	   test-id test-id test-id test-id)))))
+	  (cdb:test-rollup-iterated-pass-fail test-id)
+	  ;; (sqlite3:execute
+	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
+	  ;;  "UPDATE tests
+          ;;             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+          ;;                THEN 'FAIL'
+          ;;             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+          ;;                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+          ;;             THEN 'PASS'
+          ;;             ELSE status
+          ;;         END WHERE id=?;"
+	  ;;  test-id test-id test-id test-id)
+	  ))))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?
@@ -1590,4 +1570,11 @@
 	     (port (vector-ref *runremote* 1)))
 	 (apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
        (apply open-run-close (eval procname) remargs)))
+
+;; (define (rdb:test-set-status-state procname . remargs)
+;;    (if *runremote*
+;;        (let ((host (vector-ref *runremote* 0))
+;; 	     (port (vector-ref *runremote* 1)))
+;; 	 (apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
+;;        (apply open-run-close (eval procname) remargs)))
 
