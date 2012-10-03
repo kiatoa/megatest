@@ -74,8 +74,14 @@
 	  (rpc:publish-procedure!
 	   'cdb:test-set-status-state
 	   (lambda (test-id status state)
-	     (debug:print 4 "INFO: cdb:test-set-status-state " procname " " remargs)
-	     (apply cdb:test-set-status-state remargs)))
+	     (debug:print 4 "INFO: cdb:test-set-status-state " test-id " " status "/" state)
+	     (apply cdb:test-set-status-state test-id status statue)))
+
+	  (rpc:publish-procedure!
+	   'cdb:test-rollup-iterated-pass-fail
+	   (lambda (test-id)
+	     (debug:print 4 "INFO: cdb:test-rollup-iterated-pass-fail " test-id)
+	     (apply cdb:test-rollup-iterated-pass-fail test-id)))
 
 	  ;;======================================================================
 	  ;; end of publish-procedure section

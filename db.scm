@@ -1262,7 +1262,7 @@
 	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least one second later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (cdb:test-rollup-iterated-pass-fail test-id)
+	  (rdb:test-rollup-iterated-pass-fail test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
@@ -1571,10 +1571,17 @@
 	 (apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
        (apply open-run-close (eval procname) remargs)))
 
-;; (define (rdb:test-set-status-state procname . remargs)
-;;    (if *runremote*
-;;        (let ((host (vector-ref *runremote* 0))
-;; 	     (port (vector-ref *runremote* 1)))
-;; 	 (apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
-;;        (apply open-run-close (eval procname) remargs)))
+(define (rdb:test-set-status-state test-id status state)
+   (if *runremote*
+       (let ((host (vector-ref *runremote* 0))
+	     (port (vector-ref *runremote* 1)))
+	 (apply (rpc:procedure 'cdb:test-set-status-state host port) test-id status state))
+       (cdb:test-set-status-state test-id status state)))
+
+(define (rdb:test-rollup-iterated-pass-fail test-id)
+   (if *runremote*
+       (let ((host (vector-ref *runremote* 0))
+	     (port (vector-ref *runremote* 1)))
+	 (apply (rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
+       (cdb:test-rollup-iterated-pass-fail test-id)))
 

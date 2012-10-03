@@ -142,7 +142,7 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	;; (rdb:open-run-close 'cdb:test-set-state-status #f test-id real-status state)) ;; this one works
-	(cdb:test-set-status-state test-id real-status state))
+	(rdb:test-set-status-state test-id real-status state))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)
