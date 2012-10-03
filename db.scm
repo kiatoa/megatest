@@ -1014,6 +1014,7 @@
 ;;======================================================================
 
 (define (db:updater)
+  (debug:print 4 "INFO: Starting cache processing")
   (let loop ((start-time (current-time)))
     (thread-sleep! 15) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)

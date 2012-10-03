@@ -108,6 +108,7 @@
 		     (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
 		     (sqlite3:finalize! db)))
 	  (thread-start! th1)
+	  (debug:print 0 "Server started...")
 	  (thread-start! th2)
 	  ;; (thread-join!  th2)
 	  ;; return th2 for the calling process to do a join with 
