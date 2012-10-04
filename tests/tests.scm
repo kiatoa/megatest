@@ -2,6 +2,14 @@
 
 (define test-work-dir (current-directory))
 
+;; read in all the _record files
+(let ((files (glob "*_records.scm")))
+  (for-each
+   (lambda (file)
+     (print "Loading " file)
+     (load file))
+   files))
+
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))
 (test "Read a config that doesn't exist" #t (hash-table? (read-config "nada.config" #f #f)))
@@ -54,11 +62,11 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(tests:register-test *db* 1 "nada" "")
+	(db:tests-register-test *db* 1 "nada" "")
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
 (test #f "NOT_STARTED"    
       (begin
-	(open-run-close tests:register-test #f 1 "nada" "")
+	(open-run-close db:tests-register-test #f 1 "nada" "")
 	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
@@ -124,25 +132,27 @@
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
 
+(set! *verbosity* 20)
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
-		       (lambda (db target runname keys keynames keyvallst)
-			 (let ((test-patts "runfirst"))
-			   (runs:run-tests  db target runname test-patts user (make-hash-table))))))
+		       (lambda (target runname keys keynames keyvallst)
+			 (let ((test-patts "test1"))
+			   (runs:run-tests target runname test-patts user (make-hash-table))
+			   ))))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
       (begin
-	(teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
+	(db:teststep-set-status! db 1 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
-	(teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
-	(set! test-id (db:test-get-id (car (db-get-tests-for-run db 1 "runfirst" ""))))
+	(db:teststep-set-status! db 1 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
 	(number? test-id)))
 
 (test "Get nice table for steps" "2.0s"
       (begin
-	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "firststep") 4)))
+	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "test1") 4)))
 
 (hash-table-set! args:arg-hash ":runname" "rollup")
 

@@ -381,10 +381,6 @@ Built from " megatest-fossil-hash ))
      "-runall"
      "run all tests"
      (lambda (target runname keys keynames keyvallst)
-;;       (let ((flags (make-hash-table)))
-;;	 (for-each (lambda (parm)
-;;		     (hash-table-set! flags parm (args:get-arg parm)))
-;;		   (list "-rerun" "-force" "-itempatt"))
 	 (runs:run-tests target
 			 runname
 			 (args:get-arg "-runtests")
@@ -605,7 +601,7 @@ Built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 	  (if (and state status)
-	      (open-run-close db:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
+	      (open-run-close db:teststep-set-status! db test-id step state status (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
@@ -675,7 +671,7 @@ Built from " megatest-fossil-hash ))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
+		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -694,7 +690,7 @@ Built from " megatest-fossil-hash ))
 			  (change-directory testpath)
 			  (open-run-close db:test-set-log! db test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
+		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -795,7 +791,7 @@ Built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* db)
 	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
+		(server:client-setup))
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager

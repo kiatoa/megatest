@@ -190,7 +190,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (open-run-close db:teststep-set-status! #f test-id stepname "start" "-" itemdat #f #f)
+						   (open-run-close db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -208,7 +208,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo itemdat #f logfna))
+						       (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
 							 (open-run-close db:test-set-log! #f test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -453,6 +453,8 @@
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
+
+    (if (symbolic-link? lnkpath) (delete-file lnkpath))
     (if (not (or (file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
 	(create-symbolic-link toptest-path lnkpath))
@@ -468,8 +470,10 @@
 		       " - creating link from: " test-path "\n"
 		       "                   to: " lnktarget)
 	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
-	  (if (not (file-exists? lnktarget))
-	      (create-symbolic-link test-path lnktarget))))
+
+	  ;; If there is already a symlink delete it and recreate it.
+	  (if (symbolic-link? lnktarget)     (delete-file lnktarget))
+	  (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget))))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 

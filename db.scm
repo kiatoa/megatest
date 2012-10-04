@@ -1437,7 +1437,7 @@
 	 waitons)
 	(delete-duplicates result))))
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   (let* ((tdb       (db:open-test-db-by-test-id db test-id))
 	 (state     (check-valid-items "state" state-in))

@@ -9,10 +9,12 @@ IPADDR := "-"
 SERVER := 
 DEBUG  := 1
 
-all : test1 test 2 test3
+all : test1 test2 test3 test4 test5
 
 test1 : cleanprep
+	rm -f simplerun/megatest.db
 	mkdir -p simplelinks simpleruns
+	cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm
 	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
