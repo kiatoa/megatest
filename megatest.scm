@@ -795,7 +795,7 @@ Built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* db)
 	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
+		(server:client-setup))
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager

@@ -54,11 +54,12 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(tests:register-test *db* 1 "nada" "")
+	(db:tests-register-test *db* 1 "nada" "")
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
+
 (test #f "NOT_STARTED"    
       (begin
-	(open-run-close tests:register-test #f 1 "nada" "")
+	(open-run-close db:tests-register-test #f 1 "nada" "")
 	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
@@ -127,17 +128,20 @@
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
-		       (lambda (db target runname keys keynames keyvallst)
+		       (lambda (target runname keys keynames keyvallst)
 			 (let ((test-patts "runfirst"))
-			   (runs:run-tests  db target runname test-patts user (make-hash-table))))))
+			   (runs:run-tests target runname test-patts user (make-hash-table))))))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
       (begin
-	(teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
+	(db:teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
 	(sleep 2)
-	(teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
-	(set! test-id (db:test-get-id (car (db-get-tests-for-run db 1 "runfirst" ""))))
+	(db:teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
+	(set! test-id (vector-ref (car (let ((tests (open-run-close db:get-tests-for-run #f 1 "runfirst" "" '() '())))
+					 (print "tests: " tests)
+					 tests))
+				  0))
 	(number? test-id)))
 
 (test "Get nice table for steps" "2.0s"
