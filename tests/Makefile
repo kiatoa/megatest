@@ -13,12 +13,13 @@ all : test1 test2 test3 test4 test5
 
 test1 : cleanprep
 	rm -f simplerun/megatest.db
+	rm -rf simplelinks/ simpleruns/
 	mkdir -p simplelinks simpleruns
 	cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm
 	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -runtests ez_pass -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
+	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst -reqtarg ubuntu/nfs/none -itempatt a/1 :runname $(RUNNAME)_a $(SERVER)
 
 test3 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
