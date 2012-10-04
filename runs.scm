@@ -417,8 +417,8 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  ;; no loop here, just drop though and use the loop at the bottom 
 		  (run:test run-id runname keyvallst test-record flags #f)
+		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 (else ;; must be we have unmet prerequisites

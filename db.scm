@@ -884,6 +884,12 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
 
+(define (db:test-set-rundir-by-test-id! db test-id rundir)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET rundir=? WHERE id=?"
+   rundir test-id))
+
 ;; 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res (hash-table-ref/default *test-paths* test-id #f)))
