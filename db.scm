@@ -884,6 +884,12 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
 
+(define (db:test-set-rundir-by-test-id! db test-id rundir)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET rundir=? WHERE id=?"
+   rundir test-id))
+
 ;; 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res (hash-table-ref/default *test-paths* test-id #f)))
@@ -1437,7 +1443,7 @@
 	 waitons)
 	(delete-duplicates result))))
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   (let* ((tdb       (db:open-test-db-by-test-id db test-id))
 	 (state     (check-valid-items "state" state-in))

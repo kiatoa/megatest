@@ -301,9 +301,32 @@
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
     (runs:run-tests-queue run-id runname test-records keyvallst flags)
-    (debug:print 1 "INFO: running queue one more time to catch any changed test states")
-    (runs:run-tests-queue run-id runname test-records keyvallst flags)
     (debug:print 4 "INFO: All done by here")))
+
+(define (runs:calc-fails prereqs-not-met)
+  (filter (lambda (test)
+	    (and (vector? test) ;; not (string? test))
+		 (equal? (db:test-get-state test) "COMPLETED")
+		 (not (member (db:test-get-status test)
+			      '("PASS" "WARN" "CHECK" "WAIVED")))))
+	  prereqs-not-met))
+
+(define (runs:calc-not-completed prereqs-not-met)
+  (filter
+   (lambda (t)
+     (or (not (vector? t))
+	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+   prereqs-not-met))
+
+(define (runs:pretty-string lst)
+  (map (lambda (t)
+	 (if (not (vector? t))
+	     (conc t)
+	     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
+       lst))
+
+(define (runs:make-full-test-name testname itempath)
+  (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvallst flags)
@@ -321,6 +344,7 @@
 		   (tal         (cdr sorted-test-names))
 		   (reruns      '()))
 	  (if (not (null? reruns))(debug:print 4 "INFO: reruns=" reruns))
+	  ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (test-name   (tests:testqueue-get-testname test-record))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
@@ -331,26 +355,7 @@
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 		 (items       (tests:testqueue-get-items      test-record))
 		 (item-path   (item-list->path itemdat))
-		 (newtal      (append tal (list hed)))
-		 (calc-fails  (lambda (prereqs-not-met)
-				(filter (lambda (test)
-					  (and (vector? test) ;; not (string? test))
-					       (equal? (db:test-get-state test) "COMPLETED")
-					       (not (member (db:test-get-status test)
-							    '("PASS" "WARN" "CHECK" "WAIVED")))))
-					prereqs-not-met)))
-		 (calc-not-completed (lambda (prereqs-not-met)
-				       (filter
-					(lambda (t)
-					  (or (not (vector? t))
-					      (not (equal? "COMPLETED" (db:test-get-state t)))))
-					prereqs-not-met)))
-		 (pretty-string (lambda (lst)
-				  (map (lambda (t)
-					 (if (not (vector? t))
-					     (conc t)
-					     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
-				       lst))))
+		 (newtal      (append tal (list hed))))
 	    
 	    (debug:print 6
 			 "test-name: " test-name
@@ -359,7 +364,9 @@
 			 "\n  items:       " items
 			 "\n  item-path:   " item-path
 			 "\n  waitons:     " waitons
-			 "\n  num-retries: " num-retries)
+			 "\n  num-retries: " num-retries
+			 "\n  tal:         " tal
+			 "\n  reruns:      " reruns)
 
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -368,12 +375,12 @@
 		  (debug:print 0 "ERROR: test " test-name " has listed itself as a waiton, please correct this!")
 		  (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
-	    (cond
+	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
 	      (let* ((have-resources  (open-run-close runs:can-run-more-tests #f test-record)) ;; look at the test jobgroup and tot jobs running
 		     (prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
-		     (fails           (calc-fails prereqs-not-met))
-		     (non-completed   (calc-not-completed prereqs-not-met)))
+		     (fails           (runs:calc-fails prereqs-not-met))
+		     (non-completed   (runs:calc-not-completed prereqs-not-met)))
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
 			     (string-intersperse 
 			      (map (lambda (t)
@@ -382,19 +389,23 @@
 					 (conc " WARNING: t is not a vector=" t )))
 				   prereqs-not-met) ", ") " fails: " fails)
 		(debug:print 4 "INFO: hed=" hed)
+
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
-		(cond
-		 ((not (patt-list-match item-path item-patts))
+
+		(cond ;; INNER COND #1 for a launchable test
+		 ;; Check item path against item-patts
+		 ((and (not (patt-list-match item-path item-patts))
+		       (not (equal? item-path "")))
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
-		 ((not (hash-table-ref/default test-registery (conc test-name "/" item-path) #f))
+		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
-		  (hash-table-set! test-registery (conc test-name "/" item-path) #t)
+		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
@@ -406,8 +417,10 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  ;; no loop here, just drop though and use the loop at the bottom 
-		  (run:test run-id runname keyvallst test-record flags #f))
+		  (run:test run-id runname keyvallst test-record flags #f)
+		  (thread-sleep! *global-delta*)
+		  (if (not (null? tal))
+		      (loop (car tal)(cdr tal) reruns)))
 		 (else ;; must be we have unmet prerequisites
 		    (debug:print 4 "FAILS: " fails)
 		    ;; If one or more of the prereqs-not-met are FAIL then we can issue
@@ -429,7 +442,7 @@
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 				  (thread-sleep! *global-delta*)
-				  (loop hed tal reruns)))))))))
+				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -438,10 +451,6 @@
 		       (> (length items) 0)
 		       (> (length (car items)) 0))
 		  (pp items))
-	      ;; (if (>= *verbosity* 5)
-	      ;;     (begin
-	      ;;       (print "items: ")     (pp (item-assoc->item-list items))
-	      ;;       (print "itemstable: ")(pp (item-table->item-list itemstable))))
 	      (for-each
 	       (lambda (my-itemdat)
 		 (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
@@ -459,6 +468,7 @@
 	      (if (not (null? tal))
 		  (begin
 		    (thread-sleep! *global-delta*)
+		    (debug:print 4 "INFO: End of items list, looping with next")
 		    (loop (car tal)(cdr tal) reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
@@ -467,19 +477,20 @@
 	      (let ((can-run-more    (open-run-close runs:can-run-more-tests #f test-record)))
 		(if can-run-more
 		    (let* ((prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
-			   (fails           (calc-fails prereqs-not-met))
-			   (non-completed   (calc-not-completed prereqs-not-met)))
+			   (fails           (runs:calc-fails prereqs-not-met))
+			   (non-completed   (runs:calc-not-completed prereqs-not-met)))
 		      (debug:print 8 "INFO: can-run-more: " can-run-more
 				   "\n testname:        " hed
-				   "\n prereqs-not-met: " (pretty-string prereqs-not-met)
-				   "\n non-completed:   " (pretty-string non-completed) 
-				   "\n fails:           " (pretty-string fails)
+				   "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
+				   "\n non-completed:   " (runs:pretty-string non-completed) 
+				   "\n fails:           " (runs:pretty-string fails)
 				   "\n testmode:        " testmode
 				   "\n num-retries:     " num-retries
 				   "\n (eq? testmode 'toplevel): " (eq? testmode 'toplevel)
 				   "\n (null? non-completed):    " (null? non-completed)
 				   "\n reruns: " reruns)
-		      (cond 
+
+		      (cond ;; INNER COND #2
 		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
 			    ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
 			    (and (eq? testmode 'toplevel)
@@ -511,45 +522,47 @@
 			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
-			;; 	     "\n  hed:            " hed 
-			;; 	     "\n fails:           " (string-intersperse (map db:test-get-testname fails) ",")
-			;; 	     "\n testmode:        " testmode
-			;; 	     "\n prereqs-not-met: " (pretty-string prereqs-not-met)
-			;; 	     "\n items:           " items)
 			(thread-sleep! *global-delta*)
-			(loop (car newtal)(cdr newtal) reruns))))
+			(loop (car newtal)(cdr newtal) reruns)))) ;; END OF IF CAN RUN MORE
+
 		    ;; if can't run more just loop with next possible test
 		    (begin
 		      (debug:print 4 "INFO: processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
 		      (thread-sleep! (+ 1 *global-delta*))
-		      (loop (car newtal)(cdr newtal) reruns)))))
+		      (loop (car newtal)(cdr newtal) reruns))))) ;; END OF (or (procedure? items)(eq? items 'have-procedure))
 	     
 	     ;; this case should not happen, added to help catch any bugs
 	     ((and (list? items) itemdat)
 	      (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
-	      (exit 1))))
-	  
-	  ;; we get here on "drop through" - loop for next test in queue
-	  (if (null? tal)
-	      (begin
-		;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
-		(debug:print 1 "INFO: All tests launched")
-		(thread-sleep! 0.5)
-		;; FIXME! This harsh exit should not be necessary....
-		(if (not *runremote*)(exit)) ;; 
-		#f) ;; return a #f as a hint that we are done
-	      ;; Here we need to check that all the tests remaining to be run are eligible to run
-	      ;; and are not blocked by failed
+	      (exit 1))
+	     ((not (null? reruns))
 	      (let* ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		     (junked (lset-difference equal? tal newlst)))
-		(debug:print 4 "INFO: full drop through, if reruns is less than 100 we will force retry them: " reruns)
+		(debug:print 4 "INFO: full drop through, if reruns is less than 100 we will force retry them, reruns=" reruns ", tal=" tal)
 		(if (< num-retries max-retries)
 		    (set! newlst (append reruns newlst)))
 		(set! num-retries (+ num-retries 1))
 		(thread-sleep! *global-delta*)
 		(if (not (null? newlst))
 		    ;; since reruns have been tacked on to newlst create new reruns from junked
-		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))))))
+		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))
+	     ((not (null? tal))
+	      (debug:print 4 "INFO: I'm pretty sure I shouldn't get here."))
+	     (else
+	      (debug:print 4 "INFO: Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
+	     )))) ;; LET* ((test-record
+
+    ;; we get here on "drop through" - loop for next test in queue
+    ;; FIXME!!!! THIS SHOULD NOT REQUIRE AN EXIT!!!!!!!
+    
+    (debug:print 1 "INFO: All tests launched")
+    (thread-sleep! 0.5)
+    ;; FIXME! This harsh exit should not be necessary....
+    ;; (if (not *runremote*)(exit)) ;; 
+    #f)) ;; return a #f as a hint that we are done
+  ;; Here we need to check that all the tests remaining to be run are eligible to run
+  ;; and are not blocked by failed
+  
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test run-id runname keyvallst test-record flags parent-test)

@@ -2,6 +2,14 @@
 
 (define test-work-dir (current-directory))
 
+;; read in all the _record files
+(let ((files (glob "*_records.scm")))
+  (for-each
+   (lambda (file)
+     (print "Loading " file)
+     (load file))
+   files))
+
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))
 (test "Read a config that doesn't exist" #t (hash-table? (read-config "nada.config" #f #f)))
@@ -125,35 +133,36 @@
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
 
+;; (set! *verbosity* 20)
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
 		       (lambda (target runname keys keynames keyvallst)
-			 (let ((test-patts "runfirst"))
-			   (runs:run-tests target runname test-patts user (make-hash-table))))))
+			 (let ((test-patts "test%"))
+			   (runs:run-tests target runname test-patts user (make-hash-table))
+			   ))))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
       (begin
-	(db:teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
+	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
-	(db:teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
-	(set! test-id (vector-ref (car (let ((tests (open-run-close db:get-tests-for-run #f 1 "runfirst" "" '() '())))
-					 (print "tests: " tests)
-					 tests))
-				  0))
+	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 2 "test1" "" '() '()))))
 	(number? test-id)))
 
-(test "Get nice table for steps" "2.0s"
+(sleep 5)
+(test "Get nice table for steps" "2s"
       (begin
-	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "firststep") 4)))
+	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
 
-(hash-table-set! args:arg-hash ":runname" "rollup")
-
-(test "Remove the rollup run" #t (begin (remove-runs) #t))
 (test "Rollup the run(s)" #t (begin
-			       (runs:rollup-run db keys)
+			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")
 			       #t))
+
+(hash-table-set! args:arg-hash ":runname" "%")
+
+(test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())
