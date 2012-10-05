@@ -62,12 +62,14 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(db:tests-register-test *db* 1 "nada" "")
+	(rdb:tests-register-test *db* 1 "nada" "")
+	;; (rdb:flush-queue)
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
 
 (test #f "NOT_STARTED"    
       (begin
-	(open-run-close db:tests-register-test #f 1 "nada" "")
+	(rdb:tests-register-test #f 1 "nada" "")
+	;; (rdb:flush-queue)
 	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
@@ -174,7 +176,6 @@
 	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
 	(number? test-id)))
 
-(sleep 4)
 (test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
 			      (print "Rundir" rundir)
 			      (string? rundir)))
@@ -185,6 +186,77 @@
 (test "Get nice table for steps" "2s"
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
+
+;;======================================================================
+;; R E M O T E   C A L L S 
+;;======================================================================
+
+;; start a server process
+(define server-pid (process-run "../../bin/megatest" '("-server" "-" "-debug" "10")))
+(sleep 2)
+(define start-wait (current-seconds))
+(server:client-setup)
+;; (set! *verbosity* 10)
+(for-each (lambda (params)
+	    (rdb:tests-register-test 1 (conc "test" (random 20)) "")
+	    (apply rdb:test-set-status-state test-id params)
+	    (rdb:pass-fail-counts test-id (random 100) (random 100))
+	    (rdb:test-rollup-iterated-pass-fail test-id)
+	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
+	  '(("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ))
+;; now set all tests to completed
+(rdb:flush-queue)
+(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" "%" '() '())))
+  (print "Setting " (length tests) " to COMPLETED/PASS")
+  (for-each
+   (lambda (test)
+     (rdb:test-set-status-state (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
+   tests))
+
+(print "Waiting for server to be done, should be about 20 seconds")
+(process-wait server-pid)
+(test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
+			      (print "Server ran for " run-delta " seconds")
+			      (> run-delta 20)))
 
 (test "Rollup the run(s)" #t (begin
 			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")

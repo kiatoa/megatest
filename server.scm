@@ -38,7 +38,11 @@
   (debug:print 0 "Attempting to start the server ...")
   (let ((host:port      (db:get-var db "SERVER"))) ;; do whe already have a server running?
     (if host:port 
-	(set! *runremote* #t)
+	(set! *runremote* (let* ((lst  (string-split host:port ":"))
+				 (port (if (> (length lst) 1)
+					   (string->number (cadr lst))
+					   #f)))
+			    (if port (vector (car lst) port) #f)))
 	(let* ((rpc:listener   (server:find-free-port-and-open (rpc:default-server-port)))
 	       (th1            (make-thread
 				(cute (rpc:make-server rpc:listener) "rpc:server")
@@ -91,13 +95,25 @@
 	   'cdb:test-rollup-iterated-pass-fail
 	   (lambda (test-id)
 	     (debug:print 4 "INFO: Remote call of cdb:test-rollup-iterated-pass-fail " test-id)
-	     (apply cdb:test-rollup-iterated-pass-fail test-id)))
+	     (cdb:test-rollup-iterated-pass-fail test-id)))
 
 	  (rpc:publish-procedure!
 	   'cdb:pass-fail-counts
 	   (lambda (test-id fail-count pass-count)
 	     (debug:print 4 "INFO: Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
-	     (apply cdb:pass-fail-counts test-id fail count-pass-count)))
+	     (cdb:pass-fail-counts test-id fail-count pass-count)))
+
+	  (rpc:publish-procedure!
+	   'cdb:tests-register-test
+	   (lambda (run-id test-name item-path)
+	     (debug:print 4 "INFO: Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
+	     (cdb:tests-register-test run-id test-name item-path)))
+
+	  (rpc:publish-procedure!
+	   'cdb:flush-queue
+	   (lambda ()
+	     (debug:print 4 "INFO: Remote call of cdb:flush-queue")
+	     (cdb:flush-queue)))
 
 	  ;;======================================================================
 	  ;; end of publish-procedure section
@@ -105,8 +121,22 @@
 
 	  (set! *rpc:listener* rpc:listener)
 	  (on-exit (lambda ()
-		     (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port)
-		     (sqlite3:finalize! db)))
+		     (open-run-close
+		      (lambda (db . params)
+			(sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port))
+		      #f ;; for db
+		      #f) ;; for a param
+		     (let loop ((n 0))
+		       (let ((queue-len 0))
+			 (thread-sleep! (random 5))
+			 (mutex-lock! *incoming-mutex*)
+			 (set! queue-len (length *incoming-data*))
+			 (mutex-unlock! *incoming-mutex*)
+			 (if (> queue-len 0)
+			     (begin
+			       (debug:print 0 "INFO: Queue not flushed, waiting ...")
+			       (loop (+ n 1)))))
+		      )))
 	  (thread-start! th1)
 	  (debug:print 0 "Server started...")
 	  (thread-start! th2)
@@ -115,7 +145,7 @@
 	  th2
 	  )))) ;; rpc:server)))
 
-(define (server:keep-running db)
+(define (server:keep-running db host:port)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   (let loop ((count 0))
@@ -125,11 +155,13 @@
 	      (> *last-db-access* (+ (current-seconds) 60)))
 	  (begin
 	    (debug:print 0 "INFO: Starting to shutdown the server side")
-	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"); ;;  AND val like ?;"
-			  ;; host:port) ;; need to delete only *my* server entry (future use)
+	    ;; need to delete only *my* server entry (future use)
+	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' AND val like ?;"  host:port)
 	    (thread-sleep! 10)
 	    (debug:print 0 "INFO: Server shutdown complete. Exiting")
-	    (exit))))
+	    (exit))
+	  (debug:print 0 "INFO: Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	  ))
     (loop (+ 1 count))))
 
 (define (server:find-free-port-and-open port)

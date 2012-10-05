@@ -404,7 +404,7 @@
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
-		  (open-run-close db:tests-register-test #f run-id test-name item-path)
+		  (rdb:tests-register-test run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
 		  (loop (car newtal)(cdr newtal) reruns))
@@ -616,7 +616,8 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (open-run-close db:tests-register-test db run-id test-name item-path)
+		  (rdb:tests-register-test run-id test-name item-path)
+		  (rdb:flush-queue)
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print 4 "INFO: test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
@@ -825,8 +826,8 @@
 	      (exit 1)))
 	(if (args:get-arg "-server")
 	    (open-run-close server:start db (args:get-arg "-server"))
-	    (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
-			 (args:get-arg "-runtests")))
+ 	    (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
+ 			 (args:get-arg "-runtests")))
 		(server:client-setup)))
 	(set! keys (open-run-close db:get-keys db))
 	;; have enough to process -target or -reqtarg here

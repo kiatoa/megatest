@@ -603,19 +603,19 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (db:tests-register-test db run-id test-name item-path)
-  (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (for-each 
-     (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth))
-     item-paths)
-    #f))
+;; (define (db:tests-register-test db run-id test-name item-path)
+;;   (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+;;   (let ((item-paths (if (equal? item-path "")
+;; 			(list item-path)
+;; 			(list item-path ""))))
+;;     (for-each 
+;;      (lambda (pth)
+;;        (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+;; 			run-id 
+;; 			test-name
+;; 			pth))
+;;      item-paths)
+;;     #f))
 
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
@@ -728,7 +728,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART','NOT_STARTED');")
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
@@ -1027,20 +1027,21 @@
 (define (db:updater)
   (debug:print 4 "INFO: Starting cache processing")
   (let loop ((start-time (current-time)))
-    (thread-sleep! 15) ;; move save time around to minimize regular collisions?
+    (thread-sleep! 5) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
     (loop start-time)))
 
 (define (cdb:test-set-status-state test-id status state msg)
   (debug:print 4 "INFO: cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
   (mutex-lock! *incoming-mutex*)
+  (set! *last-db-access* (current-seconds))
   (if msg
       (set! *incoming-data* (cons (vector 'state-status-msg
-					  (current-seconds)
+					  (current-milliseconds)
 					  (list state status msg test-id))
 				  *incoming-data*))
       (set! *incoming-data* (cons (vector 'state-status
-					  (current-seconds)
+					  (current-milliseconds)
 					  (list state status test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 				  *incoming-data*)))
   (mutex-unlock! *incoming-mutex*)
@@ -1051,8 +1052,9 @@
 (define (cdb:test-rollup-iterated-pass-fail test-id)
   (debug:print 4 "INFO: Adding " test-id " for iterated rollup to the queue")
   (mutex-lock! *incoming-mutex*)
+  (set! *last-db-access* (current-seconds))
   (set! *incoming-data* (cons (vector 'iterated-p/f-rollup
-				      (current-seconds)
+				      (current-milliseconds)
 				      (list test-id test-id test-id test-id))
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
@@ -1063,14 +1065,31 @@
 (define (cdb:pass-fail-counts test-id fail-count pass-count)
   (debug:print 4 "INFO: Adding " test-id " for setting pass/fail counts to the queue")
   (mutex-lock! *incoming-mutex*)
+  (set! *last-db-access* (current-seconds))
   (set! *incoming-data* (cons (vector 'pass-fail-counts
-				      (current-seconds)
+				      (current-milliseconds)
 				      (list fail-count pass-count test-id))
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
+
+(define (cdb:tests-register-test run-id test-name item-path)
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (debug:print 4 "INFO: Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
+    (mutex-lock! *incoming-mutex*)
+    (set! *last-db-access* (current-seconds))
+    (set! *incoming-data* (cons (vector 'register-test
+					(current-milliseconds)
+					(list run-id test-name item-path)) ;; fail-count pass-count test-id))
+				*incoming-data*))
+    (mutex-unlock! *incoming-mutex*)
+    (if *cache-on*
+	(debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+	(db:write-cached-data))))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1079,7 +1098,8 @@
 (define (db:write-cached-data)
   (open-run-close
    (lambda (db . params)
-     (let ((state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
+     (let ((register-test-stmt    (sqlite3:prepare db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');"))
+	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
 	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
 	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
 	   (iterated-rollup-stmt  (sqlite3:prepare db "UPDATE tests
@@ -1113,6 +1133,8 @@
 			   (apply sqlite3:execute iterated-rollup-stmt  params))
 			  ((pass-fail-counts)
 			   (apply sqlite3:execute pass-fail-counts-stmt params))
+			  ((register-test)
+			   (apply sqlite3:execute register-test-stmt    params))
 			  (else
 			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
 		    data)))
@@ -1120,9 +1142,12 @@
        (sqlite3:finalize! state-status-msg-stmt)
        (sqlite3:finalize! iterated-rollup-stmt)
        (sqlite3:finalize! pass-fail-counts-stmt)
-       (set! *last-db-access* (current-seconds))
+       (sqlite3:finalize! register-test-stmt)
+       ;; (set! *last-db-access* (current-seconds))
        ))
    #f))
+
+(define cdb:flush-queue db:write-cached-data)
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
@@ -1614,13 +1639,27 @@
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	(apply (rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
+	((rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
       (cdb:test-rollup-iterated-pass-fail test-id)))
 
 (define (rdb:pass-fail-counts test-id fail-count pass-count)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	(apply (rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
+	((rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
       (cdb:pass-fail-counts test-id fail-count pass-count)))
+
+(define (rdb:tests-register-test run-id test-name item-path)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'cdb:tests-register-test host port) run-id test-name item-path))
+      (cdb:tests-register-test run-id test-name item-path)))
+
+(define (rdb:flush-queue)
+  (if *runremote*
+      (let ((host (vector-ref *runremote* 0))
+	    (port (vector-ref *runremote* 1)))
+	((rpc:procedure 'cdb:flush-queue host port)))
+      (cdb:flush-queue)))
 
