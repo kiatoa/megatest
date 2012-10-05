@@ -132,15 +132,38 @@
 (sqlite3#finalize! *tdb*)
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
-
+(define tconfig #f)
+(test "get a testconfig" #t (let ((tconf (tests:get-testconfig "test1" 'return-procs)))
+			      (set! tconfig tconf)
+			      (hash-table? tconf)))
+(db:clean-all-caches)
 ;; (set! *verbosity* 20)
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
 		       (lambda (target runname keys keynames keyvallst)
 			 (let ((test-patts "test%"))
-			   (runs:run-tests target runname test-patts user (make-hash-table))
-			   ))))
+			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
+			   (run:test 1 ;; run-id
+				     (args:get-arg ":runname")
+				     (keys:target->keyval keys target)
+				     (vector
+				      "test1"           ;; testname
+				      tconfig           ;; testconfig
+				      '()               ;; waitons
+				      0                 ;; priority
+				      #f                ;; items
+				      #f                ;; itemsdat
+				      #f                ;; spare
+				      )
+				     args:arg-hash      ;; flags (e.g. -itemspatt)
+				     #f)))))
+
+(test "cache is coherent" #t (let ((cached-info (db:get-test-info-cached-by-id db 2))
+				   (non-cached  (db:get-test-info-not-cached-by-id db 2)))
+			       (print "\nCached:    " cached-info)
+			       (print "Noncached: " non-cached)
+			       (equal? cached-info non-cached)))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
@@ -148,10 +171,17 @@
 	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 2 "test1" "" '() '()))))
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
 	(number? test-id)))
 
-(sleep 5)
+(sleep 4)
+(test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
+			      (print "Rundir" rundir)
+			      (string? rundir)))
+(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (db:open-test-db-by-test-id db test-id)))
+			      (sqlite3#finalize! tdb)
+			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
+(test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
 (test "Get nice table for steps" "2s"
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))

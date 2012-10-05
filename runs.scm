@@ -458,7 +458,7 @@
 					   newrec))
 			(my-item-path (item-list->path my-itemdat)))
 		   (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		       (let ((newtestname (conc hed "/" my-item-path)))    ;; test names are unique on testname/item-path
+		       (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
 			 (tests:testqueue-set-items!     new-test-record #f)
 			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
 			 (tests:testqueue-set-item_path! new-test-record my-item-path)

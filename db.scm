@@ -820,6 +820,10 @@
 
 (define *last-test-cache-delete* (current-seconds))
 
+(define (db:clean-all-caches)
+  (set! *test-info* (make-hash-table))
+  (set! *test-id-cache* (make-hash-table)))
+
 ;; Get test data using test_id
 (define (db:get-test-info-cached-by-id db test-id)
   ;; is all this crap really worth it? I somehow doubt it.
@@ -836,7 +840,8 @@
 	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
 	#f)
       (let* ((res (hash-table-ref/default *test-info* test-id #f)))
-	(if res
+	(if (and res
+		 (member (db:test-get-state res) '("RUNNING" "COMPLETED")))
 	    (db:patch-tdb-data-into-test-info db test-id res)
 	    ;; if no cached value then full read and write to cache
 	    (begin
@@ -866,7 +871,7 @@
 	 test-id)
 	res)))
 
-(define db:get-test-info-by-id db:get-test-info-cached-by-id)
+(define db:get-test-info-by-id db:get-test-info-not-cached-by-id)
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
