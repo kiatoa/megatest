@@ -404,7 +404,7 @@
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
-		  (rdb:tests-register-test run-id test-name item-path)
+		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
 		  (loop (car newtal)(cdr newtal) reruns))
@@ -616,7 +616,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rdb:tests-register-test run-id test-name item-path)
+		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print 4 "INFO: test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))

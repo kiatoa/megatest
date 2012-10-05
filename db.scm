@@ -603,19 +603,19 @@
 ;;  T E S T S
 ;;======================================================================
 
-;; (define (db:tests-register-test db run-id test-name item-path)
-;;   (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-;;   (let ((item-paths (if (equal? item-path "")
-;; 			(list item-path)
-;; 			(list item-path ""))))
-;;     (for-each 
-;;      (lambda (pth)
-;;        (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-;; 			run-id 
-;; 			test-name
-;; 			pth))
-;;      item-paths)
-;;     #f))
+(define (db:tests-register-test db run-id test-name item-path)
+  (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (for-each 
+     (lambda (pth)
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+			run-id 
+			test-name
+			pth))
+     item-paths)
+    #f))
 
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
