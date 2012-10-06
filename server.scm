@@ -171,7 +171,8 @@
      (print "Failed to bind to port " (rpc:default-server-port) ", trying next port")
      (server:find-free-port-and-open (+ port 1)))
    (rpc:default-server-port port)
-   (tcp-listen (rpc:default-server-port))))
+   (tcp-read-timeout 120000)
+   (tcp-listen (rpc:default-server-port) )))
 
 (define (server:client-setup)
   (if *runremote*

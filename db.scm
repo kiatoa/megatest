@@ -1296,7 +1296,7 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup db test-id status)
-  (let ((tdb (db:open-test-db-by-test-id db test-id))
+  (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id))
 	(fail-count 0)
 	(pass-count 0))
     (if tdb
@@ -1316,7 +1316,7 @@
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
-	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least one second later than the set
+	  (thread-sleep! 0.01) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
 	  (rdb:test-rollup-iterated-pass-fail test-id)
@@ -1632,7 +1632,14 @@
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "EXCEPTION: rpc call failed?")
+	   (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain)
+	   (cdb:test-set-status-state test-id status state msg))
+	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
       (cdb:test-set-status-state test-id status state msg)))
 
 (define (rdb:test-rollup-iterated-pass-fail test-id)
