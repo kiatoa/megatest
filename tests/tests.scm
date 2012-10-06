@@ -192,13 +192,14 @@
 ;;======================================================================
 
 ;; start a server process
-(define server-pid (process-run "../../bin/megatest" '("-server" "-" "-debug" "10")))
+(set! *verbosity* 10)
+(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
 (sleep 2)
 (define start-wait (current-seconds))
 (server:client-setup)
-;; (set! *verbosity* 10)
+(print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
-	    (rdb:tests-register-test 1 (conc "test" (random 20)) "")
+	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
 	    (apply rdb:test-set-status-state test-id params)
 	    (rdb:pass-fail-counts test-id (random 100) (random 100))
 	    (rdb:test-rollup-iterated-pass-fail test-id)

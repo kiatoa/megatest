@@ -65,7 +65,7 @@
 	     (server:autoremote procstr params)))
 	  
 	  (rpc:publish-procedure!
-	   'serve:login
+	   'server:login
 	   (lambda (toppath)
 	     (set! *last-db-access* (current-seconds))
 	     (if (equal? *toppath* toppath)
@@ -105,9 +105,9 @@
 
 	  (rpc:publish-procedure!
 	   'cdb:tests-register-test
-	   (lambda (run-id test-name item-path)
+	   (lambda (db run-id test-name item-path)
 	     (debug:print 4 "INFO: Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
-	     (cdb:tests-register-test run-id test-name item-path)))
+	     (cdb:tests-register-test db run-id test-name item-path)))
 
 	  (rpc:publish-procedure!
 	   'cdb:flush-queue
@@ -197,7 +197,7 @@
 		 ;;  #f)
 		 (set! *runremote* #f))
 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-			((rpc:procedure 'serve:login host portn) *toppath*))
+			((rpc:procedure 'server:login host portn) *toppath*))
 		   (begin
 		     (debug:print 2 "INFO: Connected to " host ":" port)
 		     (set! *runremote* (vector host portn)))
