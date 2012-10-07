@@ -1049,11 +1049,11 @@
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
   
-(define (cdb:test-rollup-iterated-pass-fail test-id)
-  (debug:print 4 "INFO: Adding " test-id " for iterated rollup to the queue")
+(define (cdb:test-rollup-test_data-pass-fail test-id)
+  (debug:print 4 "INFO: Adding " test-id " for test_data rollup to the queue")
   (mutex-lock! *incoming-mutex*)
   (set! *last-db-access* (current-seconds))
-  (set! *incoming-data* (cons (vector 'iterated-p/f-rollup
+  (set! *incoming-data* (cons (vector 'test_data-pf-rollup
 				      (current-milliseconds)
 				      (list test-id test-id test-id test-id))
 			      *incoming-data*))
@@ -1102,7 +1102,7 @@
 	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
 	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
 	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
-	   (iterated-rollup-stmt  (sqlite3:prepare db "UPDATE tests
+	   (test_data-rollup-stmt  (sqlite3:prepare db "UPDATE tests
                                              SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                                                 THEN 'FAIL'
                                              WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
@@ -1110,7 +1110,8 @@
                                              THEN 'PASS'
                                              ELSE status
                                          END WHERE id=?;"))
-	   (data                  #f))
+	   (data                  #f)
+	   (rollups               (make-hash-table)))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
        (set! *incoming-data* '())
@@ -1129,27 +1130,37 @@
 			   (apply sqlite3:execute state-status-stmt     params))
 			  ((state-status-msg)
 			   (apply sqlite3:execute state-status-msg-stmt params))
-			  ((iterated-p/f-rollup)
-			   (apply sqlite3:execute iterated-rollup-stmt  params))
+			  ((test_data-pf-rollup)
+			   ;; (hash-table-set! rollups (car params) params))
+			   (apply sqlite3:execute test_data-rollup-stmt  params))
 			  ((pass-fail-counts)
+			   (debug:print 0 "INFO: pass fail count params are " params)
 			   (apply sqlite3:execute pass-fail-counts-stmt params))
 			  ((register-test)
 			   (apply sqlite3:execute register-test-stmt    params))
 			  (else
 			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
 		    data)))
+       ;; now do any rollups
+       ;; (for-each
+       ;;  (lambda (test-id)
+       ;;    (apply sqlite3:execute test_data-rollup-stmt (hash-table-ref rollups test-id)))
+       ;;  (hash-table-keys rollups))
        (sqlite3:finalize! state-status-stmt)
        (sqlite3:finalize! state-status-msg-stmt)
-       (sqlite3:finalize! iterated-rollup-stmt)
+       (sqlite3:finalize! test_data-rollup-stmt)
        (sqlite3:finalize! pass-fail-counts-stmt)
        (sqlite3:finalize! register-test-stmt)
-       ;; (set! *last-db-access* (current-seconds))
+       (let ((cache-size (length data)))
+	 (if (> cache-size *max-cache-size*)
+	     (set! *max-cache-size* cache-size)))
        ))
    #f))
 
 (define cdb:flush-queue db:write-cached-data)
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (rdb:flush-queue)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
@@ -1316,10 +1327,10 @@
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
-	  (thread-sleep! 0.01) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
+	  (thread-sleep! 10) ;; play nice with the queue by ensuring the rollup is at least 10s later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (rdb:test-rollup-iterated-pass-fail test-id)
+	  (rdb:test-rollup-test_data-pass-fail test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
@@ -1642,12 +1653,12 @@
 	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
       (cdb:test-set-status-state test-id status state msg)))
 
-(define (rdb:test-rollup-iterated-pass-fail test-id)
+(define (rdb:test-rollup-test_data-pass-fail test-id)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:test-rollup-iterated-pass-fail host port) test-id))
-      (cdb:test-rollup-iterated-pass-fail test-id)))
+	((rpc:procedure 'cdb:test-rollup-test_data-pass-fail host port) test-id))
+      (cdb:test-rollup-test_data-pass-fail test-id)))
 
 (define (rdb:pass-fail-counts test-id fail-count pass-count)
   (if *runremote*

@@ -42,7 +42,8 @@
 (define *verbosity*         1)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
-(define *last-db-access*    0)  ;; update when db is accessed via server
+(define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
+(define *max-cache-size*    0)
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))

@@ -92,10 +92,10 @@
 	     (cdb:test-set-status-state test-id status state msg)))
 
 	  (rpc:publish-procedure!
-	   'cdb:test-rollup-iterated-pass-fail
+	   'cdb:test-rollup-test_data-pass-fail
 	   (lambda (test-id)
-	     (debug:print 4 "INFO: Remote call of cdb:test-rollup-iterated-pass-fail " test-id)
-	     (cdb:test-rollup-iterated-pass-fail test-id)))
+	     (debug:print 4 "INFO: Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
+	     (cdb:test-rollup-test_data-pass-fail test-id)))
 
 	  (rpc:publish-procedure!
 	   'cdb:pass-fail-counts
@@ -158,6 +158,7 @@
 	    ;; need to delete only *my* server entry (future use)
 	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' AND val like ?;"  host:port)
 	    (thread-sleep! 10)
+	    (debug:print 0 "INFO: Max cached queries was " *max-cache-size*)
 	    (debug:print 0 "INFO: Server shutdown complete. Exiting")
 	    (exit))
 	  (debug:print 0 "INFO: Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
