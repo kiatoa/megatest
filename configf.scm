@@ -215,12 +215,14 @@
 		     (set! var-flag #f)
 		     (loop (configf:read-line inp res) curr-section-name #f #f))))))))
   
-(define (find-and-read-config fname #!key (environ-patt #f)(given-toppath #f))
+;; pathenvvar will set the named var to the path of the config
+(define (find-and-read-config fname #!key (environ-patt #f)(given-toppath #f)(pathenvvar #f))
   (let* ((curr-dir   (current-directory))
          (configinfo (find-config fname toppath: given-toppath))
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo)))
     (if toppath (change-directory toppath)) 
+    (if (and toppath pathenvvar)(setenv pathenvvar toppath))
     (let ((configdat  (if configfile (read-config configfile #f #t environ-patt: environ-patt) #f))) ;; (make-hash-table))))
       (if toppath (change-directory curr-dir))
       (list configdat toppath configfile fname))))

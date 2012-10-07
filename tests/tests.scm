@@ -2,6 +2,14 @@
 
 (define test-work-dir (current-directory))
 
+;; read in all the _record files
+(let ((files (glob "*_records.scm")))
+  (for-each
+   (lambda (file)
+     (print "Loading " file)
+     (load file))
+   files))
+
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))
 (test "Read a config that doesn't exist" #t (hash-table? (read-config "nada.config" #f #f)))
@@ -54,8 +62,15 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(tests:register-test *db* 1 "nada" "")
+	(rdb:tests-register-test *db* 1 "nada" "")
+	;; (rdb:flush-queue)
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
+
+(test #f "NOT_STARTED"    
+      (begin
+	(rdb:tests-register-test #f 1 "nada" "")
+	;; (rdb:flush-queue)
+	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
@@ -104,37 +119,153 @@
 ; (hash-table-set! args:arg-hash "-keepgoing" #t)
 (hash-table-set! args:arg-hash "-itempatt" "%")
 (hash-table-set! args:arg-hash "-testpatt" "%")
+(hash-table-set! args:arg-hash "-target" "ubuntu/r1.2")
 (test "Setup for a run"       #t (begin (setup-for-run) #t))
 
+(define *tdb* #f)
+
+(define testdbpath (conc "/tmp/" (getenv "USER") "/megatest_testing"))
+(system (conc "rm -f " testdbpath "/testdat.db;mkdir -p " testdbpath))
+
+(print "Using " testdbpath " for test db")
+(test #f #t (let ((db (open-test-db testdbpath)))
+	      (set! *tdb* db)
+	      (sqlite3#database? db)))
+(sqlite3#finalize! *tdb*)
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
-
+(define tconfig #f)
+(test "get a testconfig" #t (let ((tconf (tests:get-testconfig "test1" 'return-procs)))
+			      (set! tconfig tconf)
+			      (hash-table? tconf)))
+(db:clean-all-caches)
+;; (set! *verbosity* 20)
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
-		       "run a test" 
-		       (lambda (db keys keynames keyvallst)
-			 (let ((test-names '("runfirst")))
-			   (run-tests db test-names)))))
+		       "run a test"
+		       (lambda (target runname keys keynames keyvallst)
+			 (let ((test-patts "test%"))
+			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
+			   (run:test 1 ;; run-id
+				     (args:get-arg ":runname")
+				     (keys:target->keyval keys target)
+				     (vector
+				      "test1"           ;; testname
+				      tconfig           ;; testconfig
+				      '()               ;; waitons
+				      0                 ;; priority
+				      #f                ;; items
+				      #f                ;; itemsdat
+				      #f                ;; spare
+				      )
+				     args:arg-hash      ;; flags (e.g. -itemspatt)
+				     #f)))))
+
+(test "cache is coherent" #t (let ((cached-info (db:get-test-info-cached-by-id db 2))
+				   (non-cached  (db:get-test-info-not-cached-by-id db 2)))
+			       (print "\nCached:    " cached-info)
+			       (print "Noncached: " non-cached)
+			       (equal? cached-info non-cached)))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
       (begin
-	(teststep-set-status! db 1 "runfirst" "firststep" "start" 0 '() "This is a comment")
+	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
-	(teststep-set-status! db 1 "runfirst" "firststep" "end" "pass" '() "This is a different comment")
-	(set! test-id (db:test-get-id (car (db-get-tests-for-run db 1 "runfirst" ""))))
+	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
 	(number? test-id)))
 
-(test "Get nice table for steps" "2.0s"
+(test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
+			      (print "Rundir" rundir)
+			      (string? rundir)))
+(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (db:open-test-db-by-test-id db test-id)))
+			      (sqlite3#finalize! tdb)
+			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
+(test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
+(test "Get nice table for steps" "2s"
       (begin
-	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "firststep") 4)))
+	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
 
-(hash-table-set! args:arg-hash ":runname" "rollup")
+;;======================================================================
+;; R E M O T E   C A L L S 
+;;======================================================================
 
-(test "Remove the rollup run" #t (begin (remove-runs) #t))
+;; start a server process
+(set! *verbosity* 10)
+(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
+(sleep 2)
+(define start-wait (current-seconds))
+(server:client-setup)
+(print "Starting intensive cache and rpc test")
+(for-each (lambda (params)
+	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
+	    (apply rdb:test-set-status-state test-id params)
+	    (rdb:pass-fail-counts test-id (random 100) (random 100))
+	    (rdb:test-rollup-test_data-pass-fail test-id)
+	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
+	  '(("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("COMPLETED"    "PASS" #f)
+	    ("NOT_STARTED"  "FAIL" "Just testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ("KILLED"       "UNKNOWN" "More testing")
+	    ))
+;; now set all tests to completed
+(rdb:flush-queue)
+(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" "%" '() '())))
+  (print "Setting " (length tests) " to COMPLETED/PASS")
+  (for-each
+   (lambda (test)
+     (rdb:test-set-status-state (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
+   tests))
+
+(print "Waiting for server to be done, should be about 20 seconds")
+(process-wait server-pid)
+(test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
+			      (print "Server ran for " run-delta " seconds")
+			      (> run-delta 20)))
+
 (test "Rollup the run(s)" #t (begin
-			       (runs:rollup-run db keys)
+			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")
 			       #t))
+
+(hash-table-set! args:arg-hash ":runname" "%")
+
+(test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())

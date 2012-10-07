@@ -16,16 +16,17 @@
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
-;; (define-inline (db:test-get-value        vec) (printable (vector-ref vec 15)))
-;; (define-inline (db:test-get-expected_value vec)(printable (vector-ref vec 16)))
-;; (define-inline (db:test-get-tol          vec) (printable (vector-ref vec 17)))
-;; (define-inline (db:test-get-units        vec) (printable (vector-ref vec 15))) ;; 18)))
-(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15))) ;; 19)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16))) ;; 20)))
 
+(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
+(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+
+(define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
+(define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
 (define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
 (define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
 (define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
+(define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
+(define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
 
 ;; get rows and header from 
 (define-inline (db:get-header vec)(vector-ref vec 0))
@@ -68,6 +69,18 @@
 (define-inline (db:test-data-get-comment          vec)    (vector-ref  vec 8))
 (define-inline (db:test-data-get-status           vec)    (vector-ref  vec 9))
 (define-inline (db:test-data-get-type             vec)    (vector-ref  vec 10))
+
+(define-inline (db:test-data-set-id!              vec val)(vector-set!  vec 0  val))
+(define-inline (db:test-data-set-test_id!         vec val)(vector-set!  vec 1  val))
+(define-inline (db:test-data-set-category!        vec val)(vector-set!  vec 2  val))
+(define-inline (db:test-data-set-variable!        vec val)(vector-set!  vec 3  val))
+(define-inline (db:test-data-set-value!           vec val)(vector-set!  vec 4  val))
+(define-inline (db:test-data-set-expected!        vec val)(vector-set!  vec 5  val))
+(define-inline (db:test-data-set-tol!             vec val)(vector-set!  vec 6  val))
+(define-inline (db:test-data-set-units!           vec val)(vector-set!  vec 7  val))
+(define-inline (db:test-data-set-comment!         vec val)(vector-set!  vec 8  val))
+(define-inline (db:test-data-set-status!          vec val)(vector-set!  vec 9  val))
+(define-inline (db:test-data-set-type!            vec val)(vector-set!  vec 10 val))
 
 ;;======================================================================
 ;; S T E P S 

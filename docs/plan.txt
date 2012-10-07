@@ -1,0 +1,13 @@
+
+Move test specific db to test dir
+=================================
+
+. Create teststats.db
+. Redirect test run stats to teststats.db
+. Redirect test steps data to teststats.db
+. Redirect test_data to teststats.db
+. Direct dboard to get stats from teststats.db
+. Redirect kill requests to teststats.db
+. Kill requests need to kill all processes in the tree
+. Roll up overall stats to megatest.db every five minutes or when test done
+. Add any necessary tests

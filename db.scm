@@ -36,6 +36,24 @@
 (define *incoming-mutex*     (make-mutex))
 (define *cache-on* #f)
 
+(define (db:set-sync db)
+  (let* ((syncval  (config-lookup *configdat* "setup"     "synchronous"))
+	 (val      (cond   ;; 0 | OFF | 1 | NORMAL | 2 | FULL;
+		    ((not syncval) #f)
+		    ((string->number syncval)
+		     (let ((val (string->number syncval)))
+		       (if (member val '(0 1 2)) val #f)))
+		    ((string-match (regexp "yes" #t) syncval) 1)
+		    ((string-match (regexp "no"  #t) syncval) 0)
+		    ((string-match (regexp "(off|normal|full)" #t) syncval) syncval)
+		    (else 
+		     (debug:print 0 "ERROR: synchronous must be 0,1,2,OFF,NORMAL or FULL, you provided: " syncval)
+		     #f))))
+    (if val
+	(begin
+	  (debug:print 2 "INFO: Setting pragma synchronous to " val)
+	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
+
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
@@ -47,12 +65,57 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (if (config-lookup *configdat* "setup"     "synchronous")
-	(begin
-	  (debug:print 4 "INFO: Turning on pragma synchronous")
-	  (sqlite3:execute db "PRAGMA synchronous = 0;"))
-	(debug:print 4 "INFO: NOT turning on pragma synchronous"))
+    (db:set-sync db)
     db))
+
+;; keeping it around for debugging purposes only
+(define (open-run-close-no-exception-handling  proc idb . params)
+  (let* ((db   (if idb idb (open-db)))
+	 (res #f))
+    (set! res (apply proc db params))
+    (if (not idb)(sqlite3:finalize! db))
+    res))
+
+(define (open-run-close-exception-handling proc idb . params)
+  (let ((runner (lambda ()
+		  (let* ((db   (if idb idb (open-db)))
+			 (res #f))
+		    (set! res (apply proc db params))
+		    (if (not idb)(sqlite3:finalize! db))
+		    res))))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "EXCEPTION: database probably overloaded?")
+       (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+       (print-call-chain)
+       (thread-sleep! (random 120))
+       (debug:print 0 "trying db call one more time....")
+       (runner))
+     (runner))))
+
+(define open-run-close open-run-close-exception-handling)
+
+(define *global-delta* 0)
+(define *last-global-delta-printed* 0)
+
+(define (open-run-close-measure  proc idb . params)
+  (let* ((start-ms (current-milliseconds))
+	 (db       (if idb idb (open-db)))
+         (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
+
+    (db:set-sync db)
+    (set! res      (apply proc db params))
+    (if (not idb)(sqlite3:finalize! db))
+    ;; scale by 10, average with current value.
+    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
+						 (if throttle throttle 0.01)))
+			    2))
+    (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
+	(begin
+	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
+	  (set! *last-global-delta-printed* *global-delta*)))
+    res))
 
 (define (db:initialize db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
@@ -70,7 +133,7 @@
 			(system (conc "rm -f " dbpath))
 			(exit 1)))))
 	      keys)
-    ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    (sqlite3:execute db "PRAGMA synchronous = OFF;")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
 		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
@@ -156,6 +219,76 @@
     ;; Must do this *after* running patch db !! No more. 
     (db:set-var db "MEGATEST_VERSION" megatest-version)
     ))
+
+;; Create the sqlite db for the individual test(s)
+(define (open-test-db testpath) 
+  (if (and (directory? testpath)
+	   (file-read-access? testpath))
+      (let* ((dbpath    (conc testpath "/testdat.db"))
+	     (dbexists  (file-exists? dbpath))
+	     (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					       (string->number (args:get-arg "-override-timeout"))
+					       36000))))
+	(debug:print 4 "INFO: test dbpath=" dbpath)
+	(sqlite3:set-busy-handler! db handler)
+	(if (not dbexists)
+	    (begin
+	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	      (debug:print 0 "Initialized test database " dbpath)
+	      (db:testdb-initialize db)))
+	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	db)
+      #f))
+
+;; find and open the testdat.db file for an existing test
+(define (db:open-test-db-by-test-id db test-id)
+  (let* ((test-path (db:test-get-rundir-from-test-id db test-id)))
+    (open-test-db test-path)))
+
+(define (db:testdb-initialize db)
+  (for-each
+   (lambda (sqlcmd)
+     (sqlite3:execute db sqlcmd))
+   (list "CREATE TABLE IF NOT EXISTS test_rundat (
+              id INTEGER PRIMARY KEY,
+              update_time TIMESTAMP,
+              cpuload INTEGER DEFAULT -1,
+              diskfree INTEGER DEFAULT -1,
+              diskusage INTGER DEFAULT -1,
+              run_duration INTEGER DEFAULT 0);"
+	 "CREATE TABLE IF NOT EXISTS test_data (
+              id INTEGER PRIMARY KEY,
+              test_id INTEGER,
+              category TEXT DEFAULT '',
+              variable TEXT,
+	      value REAL,
+	      expected REAL,
+	      tol REAL,
+              units TEXT,
+              comment TEXT DEFAULT '',
+              status TEXT DEFAULT 'n/a',
+              type TEXT DEFAULT '',
+              CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));"
+	 "CREATE TABLE IF NOT EXISTS test_steps (
+              id INTEGER PRIMARY KEY,
+              test_id INTEGER, 
+              stepname TEXT, 
+              state TEXT DEFAULT 'NOT_STARTED', 
+              status TEXT DEFAULT 'n/a',
+              event_time TIMESTAMP,
+              comment TEXT DEFAULT '',
+              logfile TEXT DEFAULT '',
+              CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));"
+	 ;; test_meta can be used for handing commands to the test
+	 ;; e.g. KILLREQ
+	 ;;      the ackstate is set to 1 once the command has been completed
+	 "CREATE TABLE IF NOT EXISTS test_meta (
+              id INTEGER PRIMARY KEY,
+              var TEXT,
+              val TEXT,
+              ackstate INTEGER DEFAULT 0,
+              CONSTRAINT metadat_constraint UNIQUE (var));")))
 
 ;;======================================================================
 ;; TODO:
@@ -247,24 +380,35 @@
 ;;======================================================================
 
 ;; returns number if string->number is successful, string otherwise
+;; also updates *global-delta*
 (define (db:get-var db var)
-  (let ((res #f))
+  (let* ((start-ms (current-milliseconds))
+         (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
+		     (if t (string->number t) t)))
+	 (res      #f))
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
      db "SELECT val FROM metadat WHERE var=?;" var)
+    ;; convert to number if can
     (if (string? res)
 	(let ((valnum (string->number res)))
-	  (if valnum valnum res))
-	res)))
+	  (if valnum (set! res valnum))))
+    ;; scale by 10, average with current value.
+    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
+						 (if throttle throttle 0.01)))
+			    2))
+    (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
+	(begin
+	  (debug:print 4 "INFO: launch throttle factor=" *global-delta*)
+	  (set! *last-global-delta-printed* *global-delta*)))
+    res))
 
 (define (db:set-var db var val)
   (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
-
-(define *db-keys* #f)
 
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
@@ -328,13 +472,13 @@
 		           ;; Generate: " AND x LIKE 'keypatt' ..."
 		           (if (null? keypatts) ""
 		               (conc " AND "
-		         	    (string-join 
-		         	     (map (lambda (keypatt)
-		         		    (let ((key  (car keypatt))
-		         			  (patt (cadr keypatt)))
-		         		      (db:patt->like key patt)))
-		         		  keypatts)
-		         	     " AND ")))
+				     (string-join 
+				      (map (lambda (keypatt)
+					     (let ((key  (car keypatt))
+						   (patt (cadr keypatt)))
+					       (db:patt->like key patt)))
+					   keypatts)
+				      " AND ")))
 		           " ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
@@ -382,11 +526,11 @@
 	(let ((finalres (vector header res)))
 	  (hash-table-set! *run-info-cache* run-id finalres)
 	  finalres))))
-  
+
 (define (db:set-comment-for-run db run-id comment)
   (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
-;; does not (obviously!) removed dependent data. 
+;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
@@ -426,32 +570,53 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
-  (let* ((keys (get-keys db))
-	 (res  '()))
-    (debug:print 6 "keys: " keys " run-id: " run-id)
-    (for-each 
-     (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	 ;; (debug:print 0 "qry: " qry)
-	 (sqlite3:for-each-row 
-	  (lambda (key-val)
-	    (set! res (cons key-val res)))
-	  db qry run-id)))
-     keys)
-    (reverse res)))
+  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
+    (if mykeyvals 
+	mykeyvals
+	(let* ((keys (get-keys db))
+	       (res  '()))
+	  (debug:print 6 "keys: " keys " run-id: " run-id)
+	  (for-each 
+	   (lambda (key)
+	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+	       ;; (debug:print 0 "qry: " qry)
+	       (sqlite3:for-each-row 
+		(lambda (key-val)
+		  (set! res (cons key-val res)))
+		db qry run-id)))
+	   keys)
+	  (let ((final-res (reverse res)))
+	    (hash-table-set! *keyvals* run-id final-res)
+	    final-res)))))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target db run-id)
-  (if *target*
-      *target*
-      (let* ((keyvals (rdb:get-key-vals db run-id))
-	     (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
-	(set! *target* thekey)
-	thekey)))
+  (let ((mytarg (hash-table-ref/default *target* run-id #f)))
+    (if mytarg
+	mytarg
+	(let* ((keyvals (db:get-key-vals db run-id))
+	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+	  (hash-table-set! *target* run-id thekey)
+	  thekey))))
 
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
+
+(define (db:tests-register-test db run-id test-name item-path)
+  (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (for-each 
+     (lambda (pth)
+       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+			run-id 
+			test-name
+			pth))
+     item-paths)
+    #f))
+
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
@@ -493,27 +658,37 @@
     res))
 
 ;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db run-id test-name itemdat)
+(define (db:delete-test-step-records db test-id)
   ;; Breaking it into two queries for better file access interleaving
-  (let ((ids '()))
-    (sqlite3:for-each-row (lambda (id)
-			    (set! ids (cons id ids)))
-			  db
-			  "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
-			  run-id test-name (item-list->path itemdat))
-    (for-each (lambda (id)
-		(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" id)
-		(thread-sleep! 0.1) ;; give others access to the db
-                (sqlite3:execute db "DELETE FROM test_data WHERE test_id=?;" id)
-                (thread-sleep! 0.1)) ;; give others access to the db
-	      ids)))
-;;"DELETE FROM test_steps WHERE test_id in (SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?);" 
-		   
+  (let* ((tdb (db:open-test-db-by-test-id db test-id)))
+    ;; test db's can go away - must check every time
+    (if tdb
+	(begin
+	  (sqlite3:execute tdb "DELETE FROM test_steps;")
+	  (sqlite3:execute tdb "DELETE FROM test_data;")
+	  (sqlite3:finalize! tdb)))))
+
 ;; 
-(define (db:delete-test-records db test-id)
-  (sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
-  (sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
-  (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+(define (db:delete-test-records db tdb test-id #!key (force #f))
+  (if tdb 
+      (begin
+	(sqlite3:execute tdb "DELETE FROM test_steps;")
+	(sqlite3:execute tdb "DELETE FROM test_data;")))
+  ;; (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+  (if db 
+      (begin
+	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
+	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
+	(if force
+	    (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id)
+	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE id=?;" test-id)))))
+
+(define (db:delete-tests-for-run db run-id)
+  (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
+
+(define (db:delete-old-deleted-test-records db)
+  (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
+    (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
@@ -531,10 +706,17 @@
 (define (db:delete-tests-in-state db run-id state)
   (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
 
+;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
-  (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
-  (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-  (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))
+  (cond
+   ((and newstate newstatus newcomment)
+    (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
+   ((and newstate newstatus)
+    (sqlite3:exectute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+   (else
+    (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+    (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))))
 
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
@@ -546,7 +728,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART';")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART','NOT_STARTED');")
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
@@ -573,32 +755,126 @@
      "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ') AND run_id=?;" run-id)
     res))
 
-;; NB// Sync this with runs:get-test-info
-(define (db:get-test-info db run-id testname item-path)
-  (let ((res #f))
+;; map run-id, testname item-path to test-id
+(define (db:get-test-id-cached db run-id testname item-path)
+  (let* ((test-key (conc run-id "-" testname "-" item-path))
+	 (res      (hash-table-ref/default *test-ids* test-key #f)))
+    (if res 
+	res
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
+	     (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
+	   db 
+	   "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+	   run-id testname item-path)
+	  (hash-table-set! *test-ids* test-key res)
+	  res))))
+
+;; map run-id, testname item-path to test-id
+(define (db:get-test-id-not-cached db run-id testname item-path)
+  (let* ((res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
+     (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
+       (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
      db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     "SELECT id FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
      run-id testname item-path)
     res))
 
+(define db:get-test-id db:get-test-id-cached)
+
+;; given a test-info record, patch in the latest data from the testdat.db file
+;; found in the test run directory
+(define (db:patch-tdb-data-into-test-info db test-id res)
+  (let ((tdb (db:open-test-db-by-test-id db test-id)))
+    ;; get state and status from megatest.db in real time
+    ;; other fields that perhaps should be updated:
+    ;;   fail_count
+    ;;   pass_count
+    ;;   final_logf
+    (sqlite3:for-each-row
+     (lambda (state status final_logf)
+       (db:test-set-state!        res state)
+       (db:test-set-status!       res status)
+       (db:test-set-final_logf!   res final_logf))
+     db
+     "SELECT state,status,final_logf FROM tests WHERE id=?;"
+     test-id)
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (update_time cpuload disk_free run_duration)
+	     (db:test-set-cpuload!      res cpuload)
+	     (db:test-set-diskfree!     res disk_free)
+	     (db:test-set-run_duration! res run_duration))
+	   tdb
+	   "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY id DESC LIMIT 1;")
+	  (sqlite3:finalize! tdb))
+	;; if the test db is not found what to do?
+	;; 1. set state to DELETED
+	;; 2. set status to n/a
+	(begin
+	  (db:test-set-state!  res "NOT_STARTED")
+	  (db:test-set-status! res "n/a")))))
+
+(define *last-test-cache-delete* (current-seconds))
+
+(define (db:clean-all-caches)
+  (set! *test-info* (make-hash-table))
+  (set! *test-id-cache* (make-hash-table)))
+
 ;; Get test data using test_id
-(define (db:get-test-data-by-id db test-id)
+(define (db:get-test-info-cached-by-id db test-id)
+  ;; is all this crap really worth it? I somehow doubt it.
+  (let* ((last-delete-str (db:get-var db "DELETED_TESTS"))
+	 (last-delete     (if (string? last-delete-str)(string->number last-delete-str) #f)))
+    (if (and last-delete (> last-delete *last-test-cache-delete*))
+	(begin
+	  (set! *test-info* (make-hash-table))
+	  (set! *test-id-cache* (make-hash-table))
+	  (set! *last-test-cache-delete* last-delete)
+	  (debug:print 4 "INFO: Clearing test data cache"))))
   (if (not test-id)
       (begin
-	(debug:print 0 "INFO: db:get-test-data-by-id called with test-id=" test-id)
+	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
+	#f)
+      (let* ((res (hash-table-ref/default *test-info* test-id #f)))
+	(if (and res
+		 (member (db:test-get-state res) '("RUNNING" "COMPLETED")))
+	    (db:patch-tdb-data-into-test-info db test-id res)
+	    ;; if no cached value then full read and write to cache
+	    (begin
+	      (sqlite3:for-each-row
+	       (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+		 ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+		 (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+	       db 
+	       "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+	       test-id)
+	      (if res (db:patch-tdb-data-into-test-info db test-id res))
+	      res)))))
+
+;; Get test data using test_id
+(define (db:get-test-info-not-cached-by-id db test-id)
+  (if (not test-id)
+      (begin
+	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
 	#f)
       (let ((res #f))
 	(sqlite3:for-each-row
 	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
 	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
 	 db 
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
 	res)))
 
+(define db:get-test-info-by-id db:get-test-info-not-cached-by-id)
+
+(define (db:get-test-info db run-id testname item-path)
+  (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
 
 (define (db:test-set-comment db test-id comment)
   (sqlite3:execute 
@@ -613,10 +889,31 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
 
+(define (db:test-set-rundir-by-test-id! db test-id rundir)
+  (sqlite3:execute 
+   db 
+   "UPDATE tests SET rundir=? WHERE id=?"
+   rundir test-id))
+
+;; 
+(define (db:test-get-rundir-from-test-id db test-id)
+  (let ((res (hash-table-ref/default *test-paths* test-id #f)))
+    (if res
+	res
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (tpath)
+	     (set! res tpath))
+	   db 
+	   "SELECT rundir FROM tests WHERE id=?;"
+	   test-id)
+	  (hash-table-set! *test-paths* test-id res)
+	  res))))
+
 (define (db:test-set-log! db test-id logf)
   (if (string? logf)
       (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
-		   logf test-id)
+		       logf test-id)
       (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
 
 ;;======================================================================
@@ -727,51 +1024,142 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS
 ;;======================================================================
 
-(define (db:updater db)
+(define (db:updater)
+  (debug:print 4 "INFO: Starting cache processing")
   (let loop ((start-time (current-time)))
-    (thread-sleep! 0.5) ;; move save time around to minimize regular collisions?
-    (db:write-cached-data db)
+    (thread-sleep! 5) ;; move save time around to minimize regular collisions?
+    (db:write-cached-data)
     (loop start-time)))
-    
-(define (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+
+(define (cdb:test-set-status-state test-id status state msg)
+  (debug:print 4 "INFO: cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
   (mutex-lock! *incoming-mutex*)
-  (set! *incoming-data* (cons (vector 'meta-info
-				      (current-seconds)
-				      (list cpuload
-					    diskfree
-					    minutes
-					    test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+  (set! *last-db-access* (current-seconds))
+  (if msg
+      (set! *incoming-data* (cons (vector 'state-status-msg
+					  (current-milliseconds)
+					  (list state status msg test-id))
+				  *incoming-data*))
+      (set! *incoming-data* (cons (vector 'state-status
+					  (current-milliseconds)
+					  (list state status test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+				  *incoming-data*)))
+  (mutex-unlock! *incoming-mutex*)
+  (if *cache-on*
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
+  
+(define (cdb:test-rollup-test_data-pass-fail test-id)
+  (debug:print 4 "INFO: Adding " test-id " for test_data rollup to the queue")
+  (mutex-lock! *incoming-mutex*)
+  (set! *last-db-access* (current-seconds))
+  (set! *incoming-data* (cons (vector 'test_data-pf-rollup
+				      (current-milliseconds)
+				      (list test-id test-id test-id test-id))
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write as part of test-update-meta-info")
-      (db:write-cached-data db)))
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
 
-(define (db:write-cached-data db)
-  (let ((meta-stmt (sqlite3:prepare db "UPDATE tests SET cpuload=?,diskfree=?,run_duration=?,state='RUNNING' WHERE id=? AND state NOT IN ('COMPLETED','KILLREQ','KILLED');"))
-	(step-stmt (sqlite3:prepare db "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);")) ;; strftime('%s','now')#f)
-	(data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1))))))
-    (if (> (length data) 0)
-	(debug:print 4 "Writing cached data " data))
+(define (cdb:pass-fail-counts test-id fail-count pass-count)
+  (debug:print 4 "INFO: Adding " test-id " for setting pass/fail counts to the queue")
+  (mutex-lock! *incoming-mutex*)
+  (set! *last-db-access* (current-seconds))
+  (set! *incoming-data* (cons (vector 'pass-fail-counts
+				      (current-milliseconds)
+				      (list fail-count pass-count test-id))
+			      *incoming-data*))
+  (mutex-unlock! *incoming-mutex*)
+  (if *cache-on*
+      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (db:write-cached-data)))
+
+(define (cdb:tests-register-test db run-id test-name item-path #!key (force-write #f))
+  (let ((item-paths (if (equal? item-path "")
+			(list item-path)
+			(list item-path ""))))
+    (debug:print 4 "INFO: Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
     (mutex-lock! *incoming-mutex*)
-    (sqlite3:with-transaction 
-     db
-     (lambda ()
-       (for-each (lambda (entry)
-		   (case (vector-ref entry 0)
-		     ((meta-info)
-		      (apply sqlite3:execute meta-stmt (vector-ref entry 2)))
-		     ((step-status)
-		      (apply sqlite3:execute step-stmt (vector-ref entry 2)))
-		     (else
-		      (debug:print 0 "ERROR: Queued entry not recognised " entry))))
-		 data)))
-    (sqlite3:finalize! meta-stmt) ;; sqlite is the bottleneck, clear the statements asap?
-    (sqlite3:finalize! step-stmt)
-    (set! *incoming-data* '())
-    (mutex-unlock! *incoming-mutex*)))
+    (set! *last-db-access* (current-seconds))
+    (set! *incoming-data* (cons (vector 'register-test
+					(current-milliseconds)
+					(list run-id test-name item-path)) ;; fail-count pass-count test-id))
+				*incoming-data*))
+    (mutex-unlock! *incoming-mutex*)
+    (if (and (not force-write) *cache-on*)
+	(debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+	(db:write-cached-data))))
+
+;; The queue is a list of vectors where the zeroth slot indicates the type of query to
+;; apply and the second slot is the time of the query and the third entry is a list of 
+;; values to be applied
+;;
+(define (db:write-cached-data)
+  (open-run-close
+   (lambda (db . params)
+     (let ((register-test-stmt    (sqlite3:prepare db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');"))
+	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
+	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
+	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
+	   (test_data-rollup-stmt  (sqlite3:prepare db "UPDATE tests
+                                             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                                THEN 'FAIL'
+                                             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                                             THEN 'PASS'
+                                             ELSE status
+                                         END WHERE id=?;"))
+	   (data                  #f)
+	   (rollups               (make-hash-table)))
+       (mutex-lock! *incoming-mutex*)
+       (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+       (set! *incoming-data* '())
+       (mutex-unlock! *incoming-mutex*)
+       (if (> (length data) 0)
+	   (debug:print 4 "INFO: Writing cached data " data))
+       (sqlite3:with-transaction 
+	db
+	(lambda ()
+	  (debug:print 4 "INFO: flushing " data " to db")
+	  (for-each (lambda (entry)
+		      (let ((params (vector-ref entry 2)))
+			(debug:print 4 "INFO: Applying " entry " to params " params)
+			(case (vector-ref entry 0)
+			  ((state-status)
+			   (apply sqlite3:execute state-status-stmt     params))
+			  ((state-status-msg)
+			   (apply sqlite3:execute state-status-msg-stmt params))
+			  ((test_data-pf-rollup)
+			   ;; (hash-table-set! rollups (car params) params))
+			   (apply sqlite3:execute test_data-rollup-stmt  params))
+			  ((pass-fail-counts)
+			   (apply sqlite3:execute pass-fail-counts-stmt params))
+			  ((register-test)
+			   (apply sqlite3:execute register-test-stmt    params))
+			  (else
+			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
+		    data)))
+       ;; now do any rollups
+       ;; (for-each
+       ;;  (lambda (test-id)
+       ;;    (apply sqlite3:execute test_data-rollup-stmt (hash-table-ref rollups test-id)))
+       ;;  (hash-table-keys rollups))
+       (sqlite3:finalize! state-status-stmt)
+       (sqlite3:finalize! state-status-msg-stmt)
+       (sqlite3:finalize! test_data-rollup-stmt)
+       (sqlite3:finalize! pass-fail-counts-stmt)
+       (sqlite3:finalize! register-test-stmt)
+       (let ((cache-size (length data)))
+	 (if (> cache-size *max-cache-size*)
+	     (set! *max-cache-size* cache-size)))
+       ))
+   #f))
+
+(define cdb:flush-queue db:write-cached-data)
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+  (rdb:flush-queue)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
@@ -786,7 +1174,7 @@
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
-        (thread-sleep! 0.1) ;; give other processes a chance here
+        ;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
 	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
 	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
 	    (sqlite3:execute
@@ -800,7 +1188,6 @@
 	     run-id test-name run-id test-name))
 	#f)
       #f))
-
 
 ;;======================================================================
 ;; Tests meta data
@@ -830,81 +1217,88 @@
 
 (define (db:csv->test-data db test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((csvlist (csv->list (make-csv-reader
-			     (open-input-string csvdata)
-			     '((strip-leading-whitespace? #t)
-			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
-    (for-each 
-     (lambda (csvrow)
-       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
-	      (category    (list-ref padded-row 0))
-	      (variable    (list-ref padded-row 1))
-	      (value       (any->number-if-possible (list-ref padded-row 2)))
-	      (expected    (any->number-if-possible (list-ref padded-row 3)))
-	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
-	      (units       (list-ref padded-row 5))
-	      (comment     (list-ref padded-row 6))
-	      (status      (let ((s (list-ref padded-row 7)))
-			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
-						     (string-match (regexp "^n/a$") s)))
-				 #f
-				 s))) ;; if specified on the input then use, else calculate
-	      (type        (list-ref padded-row 8)))
-	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
-	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
+  (let ((tdb     (db:open-test-db-by-test-id db test-id)))
+    (if tdb
+	(let ((csvlist (csv->list (make-csv-reader
+				   (open-input-string csvdata)
+				   '((strip-leading-whitespace? #t)
+				     (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
+	  (for-each 
+	   (lambda (csvrow)
+	     (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
+		    (category    (list-ref padded-row 0))
+		    (variable    (list-ref padded-row 1))
+		    (value       (any->number-if-possible (list-ref padded-row 2)))
+		    (expected    (any->number-if-possible (list-ref padded-row 3)))
+		    (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
+		    (units       (list-ref padded-row 5))
+		    (comment     (list-ref padded-row 6))
+		    (status      (let ((s (list-ref padded-row 7)))
+				   (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
+							   (string-match (regexp "^n/a$") s)))
+				       #f
+				       s))) ;; if specified on the input then use, else calculate
+		    (type        (list-ref padded-row 8)))
+	       ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	       (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
 
-	 (if (and (or (not expected)(equal? expected ""))
-		  (or (not tol)     (equal? expected ""))
-		  (or (not units)   (equal? expected "")))
-	     (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
-			 (set! expected new-expected)
-			 (set! tol      new-tol)
-			 (set! units    new-units)))
+	       (if (and (or (not expected)(equal? expected ""))
+			(or (not tol)     (equal? expected ""))
+			(or (not units)   (equal? expected "")))
+		   (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
+			       (set! expected new-expected)
+			       (set! tol      new-tol)
+			       (set! units    new-units)))
 
-	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 ;; calculate status if NOT specified
-	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
-	     (if (number? tol) ;; if tol is a number then we do the standard comparison
-		 (let* ((max-val (+ expected tol))
-			(min-val (- expected tol))
-			(result  (and (>=  value min-val)(<= value max-val))))
-		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
-		   (set! status (if result "pass" "fail")))
-		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
-		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
-			 ((>)  (if (>  value expected) "pass" "fail"))
-			 ((<)  (if (<  value expected) "pass" "fail"))
-			 ((>=) (if (>= value expected) "pass" "fail"))
-			 ((<=) (if (<= value expected) "pass" "fail"))
-			 (else (conc "ERROR: bad tol comparator " tol))))))
-	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
-		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
-			  test-id category variable value expected tol units (if comment comment "") status type)))
-     csvlist)))
+	       (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	       ;; calculate status if NOT specified
+	       (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
+		   (if (number? tol) ;; if tol is a number then we do the standard comparison
+		       (let* ((max-val (+ expected tol))
+			      (min-val (- expected tol))
+			      (result  (and (>=  value min-val)(<= value max-val))))
+			 (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+			 (set! status (if result "pass" "fail")))
+		       (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
+			     (case (string->symbol tol) ;; tol should be >, <, >=, <=
+			       ((>)  (if (>  value expected) "pass" "fail"))
+			       ((<)  (if (<  value expected) "pass" "fail"))
+			       ((>=) (if (>= value expected) "pass" "fail"))
+			       ((<=) (if (<= value expected) "pass" "fail"))
+			       (else (conc "ERROR: bad tol comparator " tol))))))
+	       (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	       (sqlite3:execute tdb "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+				test-id category variable value expected tol units (if comment comment "") status type)
+	       (sqlite3:finalize! tdb)))
+	   csvlist)))))
 
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt)
-  (let ((res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test_id category variable value expected tol units comment status type)
-       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-     db
-     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-    (reverse res)))
+  (let ((tdb  (db:open-test-db-by-test-id db test-id)))
+    (if tdb
+	(let ((res '()))
+	  (sqlite3:for-each-row 
+	   (lambda (id test_id category variable value expected tol units comment status type)
+	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+	   tdb
+	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+	  (sqlite3:finalize! tdb)
+	  (reverse res))
+	'())))
 
 (define (db:load-test-data db test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (rdb:csv->test-data db test-id lin)
+	  (db:csv->test-data db test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
-  (rdb:test-data-rollup db test-id #f))
+  (db:test-data-rollup db test-id #f))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -912,26 +1306,42 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup db test-id status)
-  (sqlite3:execute 
-   db 
-   "UPDATE tests 
-      SET fail_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail'),
-          pass_count=(SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass')
-      WHERE id=?;"
-   test-id test-id test-id)
-  ;; if the test is not FAIL then set status based on the fail and pass counts.
-  (thread-sleep! 1)
-  (sqlite3:execute
-   db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
-   "UPDATE tests
-      SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                         THEN 'FAIL'
-                      WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                           (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                         THEN 'PASS'
-                      ELSE status
-                  END WHERE id=?;"
-   test-id test-id test-id test-id))
+  (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id))
+	(fail-count 0)
+	(pass-count 0))
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row
+	   (lambda (fcount pcount)
+	     (set! fail-count fcount)
+	     (set! pass-count pcount))
+	   tdb 
+	   "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
+                   (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
+	   test-id test-id)
+	  (sqlite3:finalize! tdb)
+
+	  ;; Now rollup the counts to the central megatest.db
+	  (rdb:pass-fail-counts test-id fail-count pass-count)
+	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
+	  ;;                     fail-count pass-count test-id)
+
+	  (thread-sleep! 10) ;; play nice with the queue by ensuring the rollup is at least 10s later than the set
+	  
+	  ;; if the test is not FAIL then set status based on the fail and pass counts.
+	  (rdb:test-rollup-test_data-pass-fail test-id)
+	  ;; (sqlite3:execute
+	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
+	  ;;  "UPDATE tests
+          ;;             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+          ;;                THEN 'FAIL'
+          ;;             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+          ;;                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+          ;;             THEN 'PASS'
+          ;;             ELSE status
+          ;;         END WHERE id=?;"
+	  ;;  test-id test-id test-id test-id)
+	  ))))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?
@@ -946,14 +1356,19 @@
 
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test db test-id)
-  (let ((res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test-id stepname state status event-time logfile)
-       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-     db
-     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-     test-id)
-    (reverse res)))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id))
+	 (res '()))
+    (if tdb
+	(begin
+	  (sqlite3:for-each-row 
+	   (lambda (id test-id stepname state status event-time logfile)
+	     (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	   tdb
+	   "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	   test-id)
+	  (sqlite3:finalize! tdb)
+	  (reverse res))
+	'())))
 
 ;; get a pretty table to summarize steps
 ;;
@@ -1022,6 +1437,7 @@
 ;; Note: do not convert to remote as it calls remote under the hood
 ;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
+;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 (define (db:get-prereqs-not-met db run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
@@ -1033,7 +1449,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (rdb:get-tests-for-run db run-id waitontest-name #f '() '()))
+	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name #f '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
@@ -1064,25 +1480,26 @@
 	     ;; (if (not ever-seen)(set! result (cons waitontest-name result)))))
 	     (if (not ever-seen)
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
-	waitons)
-      (delete-duplicates result))))
+	 waitons)
+	(delete-duplicates result))))
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile)
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
-  (let* ((state     (check-valid-items "state" state-in))
+  (let* ((tdb       (db:open-test-db-by-test-id db test-id))
+	 (state     (check-valid-items "state" state-in))
 	 (status    (check-valid-items "status" status-in)))
     (if (or (not state)(not status))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (mutex-lock! *incoming-mutex*)
-    (set! *incoming-data* (cons (vector 'step-status
-					(current-seconds)
-					;; FIXME - this should not update the logfile unless it is specified.
-					(list test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
-				*incoming-data*))
-    (mutex-unlock! *incoming-mutex*)
-    (if (not *cache-on*)(db:write-cached-data db))
-    #t))
+    (if tdb
+	(begin
+	  (sqlite3:execute 
+	   tdb
+	   "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+	   test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile ""))
+	  (sqlite3:finalize! tdb)
+	  #t)
+	#f)))
 
 ;;======================================================================
 ;; Extract ods file from the db
@@ -1214,201 +1631,53 @@
 ;; REMOTE DB ACCESS VIA RPC
 ;;======================================================================
 
-(define (rdb:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
+(define (rdb:open-run-close procname . remargs)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:set-tests-state-status host port)
-	 run-id testnames currstate currstatus newstate newstatus))
-      (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)))
+	(apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
+      (apply open-run-close (eval procname) remargs)))
 
-(define (rdb:teststep-set-status! db test-id teststep-name state-in status-in itemdat comment logfile)
-  (let ((item-path (item-list->path itemdat)))
-    (if *runremote*
-	(let ((host (vector-ref *runremote* 0))
-	      (port (vector-ref *runremote* 1)))
-	  ((rpc:procedure 'rdb:teststep-set-status! host port)
-	   test-id teststep-name state-in status-in item-path comment logfile))
-	(db:teststep-set-status! db test-id teststep-name state-in status-in item-path comment logfile))))
-
-(define (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+(define (rdb:test-set-status-state test-id status state msg)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-update-meta-info host port)
-	 test-id minutes cpuload diskfree tmpfree))
-      (db:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "EXCEPTION: rpc call failed?")
+	   (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain)
+	   (cdb:test-set-status-state test-id status state msg))
+	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
+      (cdb:test-set-status-state test-id status state msg)))
 
-(define (rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+(define (rdb:test-rollup-test_data-pass-fail test-id)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-state-status-by-run-id-testname host port)
-	  run-id test-name item-path status state))
-      (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)))
+	((rpc:procedure 'cdb:test-rollup-test_data-pass-fail host port) test-id))
+      (cdb:test-rollup-test_data-pass-fail test-id)))
 
-(define (rdb:csv->test-data db test-id csvdata)
+(define (rdb:pass-fail-counts test-id fail-count pass-count)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:csv->test-data host port)
-	 test-id csvdata))
-      (db:csv->test-data db test-id csvdata)))
+	((rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
+      (cdb:pass-fail-counts test-id fail-count pass-count)))
 
-(define (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+;; currently forces a flush of the queue
+(define (rdb:tests-register-test db run-id test-name item-path)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:roll-up-pass-fail-counts host port)
-	 run-id test-name item-path status))
-      (db:roll-up-pass-fail-counts db run-id test-name item-path status)))
+	((rpc:procedure 'cdb:tests-register-test host port) db run-id test-name item-path force-write: #t))
+      (cdb:tests-register-test db run-id test-name item-path force-write: #t)))
 
-(define (rdb:test-set-comment db test-id comment)
+(define (rdb:flush-queue)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-comment host port)
-	 test-id comment))
-      (db:test-set-comment db test-id comment)))
+	((rpc:procedure 'cdb:flush-queue host port)))
+      (cdb:flush-queue)))
 
-(define (rdb:test-set-log! db test-id logf)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-log! host port) test-id logf))
-      (db:test-set-log! db test-id logf)))
-
-(define (rdb:get-runs db runnamepatt numruns startrunoffset keypatts)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-runs host port)
-	 runnamepatt numruns startrunoffset keypatts))
-      (db:get-runs db runnamepatt numruns startrunoffset keypatts)))
-
-(define (rdb:get-tests-for-run db run-id testpatt itempatt states statuses #!key (not-in #t))
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-tests-for-run host port)
-	  run-id testpatt itempatt states statuses not-in: not-in))
-      (db:get-tests-for-run db run-id testpatt itempatt states statuses not-in: not-in)))
-
-(define (rdb:get-test-data-by-id db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rpc:get-test-data-by-id host port)
-	 test-id))
-      (db:get-test-data-by-id db test-id)))
-      
-(define (rdb:get-keys db)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	(if *db-keys* *db-keys* 
-	    (let ((keys ((rpc:procedure 'rdb:get-keys host port))))
-	      (set! *db-keys* keys)
-	      keys)))
-      (db:get-keys db)))
-	 
-(define (rdb:get-num-runs db runpatt)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-num-runs host port) runpatt))
-      (db:get-num-runs db runpatt)))
-
-(define (rdb:test-set-state-status-by-id db test-id newstate newstatus newcomment)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-set-state-status-by-id host port)
-	 test-id newstate newstatus newcomment))
-      (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)))
-
-(define (rdb:get-key-val-pairs db run-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-key-val-pairs host port) run-id))
-      (db:get-key-val-pairs db run-id)))
-	 
-(define (rdb:get-key-vals db run-id)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-key-vals host port) run-id))
-      (db:get-key-vals db run-id)))
-
-(define (rdb:testmeta-get-record db testname)
-   (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:testmeta-get-record host port) testname))
-      (db:testmeta-get-record db testname)))
-
-(define (rdb:get-test-data-by-id db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-test-data-by-id host port) test-id))
-      (db:get-test-data-by-id db test-id)))
-
-(define (rdb:get-run-info db run-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-run-info host port) run-id))
-      (db:get-run-info db run-id)))
-
-(define (rdb:get-steps-for-test db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-steps-for-test host port) test-id))
-      (db:get-steps-for-test db test-id)))
-
-(define (rdb:get-steps-table db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-steps-table host port) test-id))
-      (db:get-steps-table db test-id)))
-
-(define (rdb:read-test-data db test-id categorypatt)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:read-test-data host port) test-id categorypatt))
-      (db:read-test-data db test-id categorypatt)))
-
-(define (rdb:get-test-info db run-id testname item-path)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:get-test-info host port) run-id testname item-path))
-      (db:get-test-info db run-id testname item-path)))
-
-(define (rdb:delete-test-records db test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:delete-test-records host port) test-id))
-      (db:delete-test-records db test-id)))
-
-(define (rdb:test-data-rollup db test-id status)
-    (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rdb:test-data-rollup host port) test-id status))
-      (db:test-data-rollup db test-id status)))
-
-(define (rdb:test-get-paths-matching db keynames target fname)
-   (if *runremote*
-       (let ((host (vector-ref *runremote* 0))
-	     (port (vector-ref *runremote* 1)))
-	 ((rpc:procedure 'rdb:test-get-paths-matching host port) keynames target fname))
-       (db:test-get-paths-matching db keynames target fname)))
-
- 

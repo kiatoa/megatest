@@ -9,31 +9,41 @@ IPADDR := "-"
 SERVER := 
 DEBUG  := 1
 
-all : test1 test 2 test3
+all : test1 test2 test3 test4 test5
 
 test1 : cleanprep
+	rm -f simplerun/megatest.db
+	rm -rf simplelinks/ simpleruns/
 	mkdir -p simplelinks simpleruns
+	cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm
 	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -runtests ez_pass -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
+	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst -reqtarg ubuntu/nfs/none -itempatt a/1 :runname $(RUNNAME)_a $(SERVER)
 
 test3 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
 
 test4 : fullprep
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(SERVER)
+	cd fullrun;$(MEGATEST) $(SERVER) &
+	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v
 
+# NOTE: Only one instance can be a server
 test5 : fullprep
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -v $(SERVER) 2&>1 aa.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -v $(SERVER) 2&>1 ab.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -v $(SERVER) 2&>1 ac.log &
-	cd fullrun;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -v $(SERVER) 2&>1 ad.log &	
+	cd fullrun;$(MEGATEST) $(SERVER) &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -debug $(DEBUG) > aa.log 2> aa.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -debug $(DEBUG) > ab.log 2> ab.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -debug $(DEBUG) > ac.log 2> ac.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -debug $(DEBUG) > ad.log 2> ad.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ae -debug $(DEBUG) > ae.log 2> ae.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_af -debug $(DEBUG) > af.log 2> af.log &	
+
+test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
 
 cleanprep : ../*.scm Makefile */*.config
-	sqlite3 megatest.db "delete from metadat where var='SERVER';"
+	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
 	touch cleanprep

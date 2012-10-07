@@ -43,11 +43,18 @@
   (or (eq? exitcode 0)
       (and logpro (eq? exitcode 2))))
 
+;; if handed a string, process it, else look for MT_CMDINFO
+(define (launch:get-cmdinfo-assoc-list #!key (encoded-cmd #f))
+  (let ((enccmd (if encoded-cmd encoded-cmd (getenv "MT_CMDINFO"))))
+    (if enccdm
+	(read (open-input-string (base64:base64-decode enccmd)))
+	'())))
+
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
-                        ;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
+	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
 	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
 	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
@@ -65,7 +72,6 @@
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
-	       (db        #f)
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -93,23 +99,24 @@
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
+		;; (sqlite3:finalize! db)
+		;; (sqlite3:finalize! tdb)
 		(exit 1)))
-	  (change-directory *toppath*)
-	  ;; now can find our db
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
-	  ;; (set! *cache-on* #t)
-	  (set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+	  ;; Can setup as client for server mode now
+	  (server:client-setup)
+
+	  (change-directory *toppath*) 
+	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
-	  (set-run-config-vars db run-id)
+
+	  (open-run-close set-run-config-vars #f run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (set-megatest-env-vars db run-id)
+	  (open-run-close set-megatest-env-vars #f run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (test-set-meta-info db run-id test-name itemdat)
-	  (test-set-status! db test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
+	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -119,11 +126,6 @@
 	  ;; any previous runs
 	  ;; (db:test-remove-steps db run-id testname itemdat)
 	  
-	  ;; from here on out we will open and close the db
-	  ;; on every access to reduce the probablitiy of 
-	  ;; contention or stuck access on nfs.
-	  (sqlite3:finalize! db)
-
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
 		 (exit-info    (vector #t #t #t))
@@ -132,7 +134,7 @@
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 
+				 (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
@@ -154,10 +156,7 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '()))
-					    (db         (open-db)))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
+					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -191,7 +190,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (rdb:teststep-set-status! db test-id stepname "start" "-" itemdat #f #f)
+						   (open-run-close db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -208,10 +207,10 @@
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
-                                                        ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						        (rdb:teststep-set-status! db test-id stepname "end" exinfo itemdat #f logfna))
+						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
+						       (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
-							 (rdb:test-set-log! db test-id (conc stepname ".html")))
+							 (open-run-close db:test-set-log! #f test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -233,19 +232,19 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (test-set-status! db test-id "RUNNING" "WARN" 
-									    (if (eq? this-step-status 'warn) "Logpro warning found" #f)
-									    #f))
+							  (tests:test-set-status! test-id "RUNNING" "WARN" 
+									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
+									  #f))
 							 ((pass)
-							  (test-set-status! db test-id "RUNNING" "PASS" #f #f))
+							  (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (test-set-status! db test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
-					     (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
+						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
 		 (monitorjob   (lambda ()
 				 (let* ((start-seconds (current-seconds))
 					(calc-minutes  (lambda ()
@@ -256,16 +255,9 @@
 							    start-seconds)))))
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
-				     (let* ((db       (open-db))
-					    (cpuload  (get-cpu-load))
-					    (diskfree (get-df (current-directory)))
-					    (tmpfree  (get-df "/tmp")))
-				       (if (not (args:get-arg "-server"))
-					   (server:client-setup db))
-				       (if (not cpuload)  (begin (debug:print 0 "WARNING: CPULOAD not found.")  (set! cpuload "n/a")))
-				       (if (not diskfree) (begin (debug:print 0 "WARNING: DISKFREE not found.") (set! diskfree "n/a")))
-				       (set! kill-job? (test-get-kill-request db run-id test-name itemdat))
-				       (rdb:test-update-meta-info db test-id minutes cpuload diskfree tmpfree)
+				     (begin
+				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
+				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -288,13 +280,13 @@
 						       (system (conc "kill -9 " pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (test-set-status! db test-id "KILLED"  "FAIL"
-								       (args:get-arg "-m") #f)
-						     (sqlite3:finalize! db)
+						     (tests:test-set-status! test-id "KILLED"  "FAIL"
+								     (args:get-arg "-m") #f)
+						     (sqlite3:finalize! tdb)
 						     (exit 1))))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
-				       (sqlite3:finalize! db)
+				       ;; (sqlite3:finalize! db)
 				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
 				       (loop (calc-minutes)))))))
 		 (th1          (make-thread monitorjob))
@@ -304,45 +296,35 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (mutex-lock! m)
-	    (set! db (open-db))
-	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (rdb:get-test-info db run-id test-name item-path)))
+		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (test-set-status! db test-id 
-				      (if kill-job? "KILLED" "COMPLETED")
-				      ;; Old logic:
-				      ;; (if (vector-ref exit-info 1) ;; look at the exit-status, #t means it at least ran
-				      ;;     (if (and (not kill-job?) 
-				      ;;         (eq? (vector-ref exit-info 2) 0)) ;; we can now use rollup-status instead
-				      ;;         "PASS"
-				      ;;         "FAIL")
-				      ;;     "FAIL") 
-				      ;; New logic based on rollup-status
-				      (cond
-				       ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
-				       ((eq? rollup-status 0)
-					;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
-					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
-				       ((eq? rollup-status 1) "FAIL")
-				       ((eq? rollup-status 2)
-					;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
-					(if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				       (else "FAIL"))
-				      (args:get-arg "-m") #f)))
+		    (tests:test-set-status! test-id 
+				    (if kill-job? "KILLED" "COMPLETED")
+				    (cond
+				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
+				     ((eq? rollup-status 0)
+				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
+				     ((eq? rollup-status 1) "FAIL")
+				     ((eq? rollup-status 2)
+				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
+				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
+				     (else "FAIL"))
+				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items db run-id test-name #f)) ;; don't force - just update if no
+		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
 	    ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    (sqlite3:finalize! db)
+	    ;; (sqlite3:finalize! db)
+	    ;; (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
@@ -355,7 +337,8 @@
   (set! *configinfo* (find-and-read-config 
 		      (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
 		      environ-patt: "env-override"
-		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")))
+		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+		      pathenvvar: "MT_RUN_AREA_HOME"))
   (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
   (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
   (if *toppath*
@@ -403,7 +386,7 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-src-path disk-path testname itemdat)
+(define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
   (let* ((run-info (db:get-run-info db run-id))
 	 (item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
@@ -425,14 +408,14 @@
 
 	 ;; ensure this exists first as links to subtests must be created there
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
-		     (if rd rd (conc *toppath* "/runs"))))
+		      (if rd rd (conc *toppath* "/runs"))))
 
 	 (lnkbase  (conc linktree "/" target "/" runname))
 	 (lnkpath  (conc lnkbase "/" testname))
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (db:test-set-rundir! db run-id testname item-path lnkpathf)
+    (db:test-set-rundir-by-test-id! db test-id lnkpathf)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -451,7 +434,7 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (db:get-test-info db run-id testname item-path))
+	(let* ((testinfo       (db:get-test-info-by-id db test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  (db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
@@ -470,6 +453,8 @@
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
+
+    (if (symbolic-link? lnkpath) (delete-file lnkpath))
     (if (not (or (file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
 	(create-symbolic-link toptest-path lnkpath))
@@ -485,8 +470,10 @@
 		       " - creating link from: " test-path "\n"
 		       "                   to: " lnktarget)
 	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
-	  (if (not (file-exists? lnktarget))
-	      (create-symbolic-link test-path lnktarget))))
+
+	  ;; If there is already a symlink delete it and recreate it.
+	  (if (symbolic-link? lnktarget)     (delete-file lnktarget))
+	  (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget))))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
@@ -517,12 +504,12 @@
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
-	 (list "MT_RUN_AREA_HOME" *toppath*)
-	 (list "MT_TEST_NAME" test-name)
-	 ;; (list "MT_ITEM_INFO" (conc itemdat)) 
-	 (list "MT_RUNNAME"   runname)
-	 ;; (list "MT_TARGET"    mt_target)
-	 ))
+    (list "MT_RUN_AREA_HOME" *toppath*)
+    (list "MT_TEST_NAME" test-name)
+    ;; (list "MT_ITEM_INFO" (conc itemdat)) 
+    (list "MT_RUNNAME"   runname)
+    ;; (list "MT_TARGET"    mt_target)
+    ))
   (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
 	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
@@ -551,8 +538,8 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (testinfo   (rdb:get-test-info db run-id test-name item-path))
-	 (test-id    (db:test-get-id testinfo))
+	 (test-id    (open-run-close db:get-test-id db run-id test-name item-path))
+	 (testinfo   (open-run-close db:get-test-info-by-id db test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
     (if hosts (set! hosts (string-split hosts)))
@@ -563,7 +550,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (create-work-area db run-id test-path diskpath test-name itemdat)))
+	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print 2 "INFO: Using work area " work-area))
@@ -589,8 +576,10 @@
 							  (list 'runname   runname)
 							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
-    (db:delete-test-step-records db run-id test-name itemdat)
+    (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
+    (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+    (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
@@ -604,7 +593,6 @@
     ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching " work-area)
-    (test-set-status! db test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
@@ -635,7 +623,7 @@
       (if (not launch-results)
 	  (begin
 	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-	    (sqlite3:finalize! db)
+	    ;; (sqlite3:finalize! db)
 	    ;; good ole "exit" seems not to work
 	    ;; (_exit 9)
 	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list

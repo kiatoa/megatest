@@ -28,6 +28,7 @@
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
+(include "megatest-fossil-hash.scm")
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -113,7 +114,8 @@ Examples
 # Get test path, use '.' to get a single path or a specific path/file pattern
 megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
-Called as " (string-intersperse (argv) " ")))
+Called as " (string-intersperse (argv) " ") "
+Built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
@@ -206,10 +208,15 @@ Called as " (string-intersperse (argv) " ")))
 ;;======================================================================
 
 (set! *verbosity* (cond
-		   ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		   ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
 		   ((args:get-arg "-v")    2)
 		   ((args:get-arg "-q")    0)
 		   (else                   1)))
+
+(if (not (number? *verbosity*))
+    (begin
+      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
+      (exit)))
 
 ;;======================================================================
 ;; Misc general calls
@@ -226,7 +233,7 @@ Called as " (string-intersperse (argv) " ")))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on db action)
+(define (operate-on action)
   (cond
    ((not (args:get-arg ":runname"))
     (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
@@ -243,106 +250,99 @@ Called as " (string-intersperse (argv) " ")))
 	  (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
 	  (exit 1))
 	;; put test parameters into convenient variables
-	(runs:operate-on  db
-			  action
+	(runs:operate-on  action
 			  (args:get-arg ":runname")
 			  (args:get-arg "-testpatt")
 			  (args:get-arg "-itempatt")
 			  state: (args:get-arg ":state") 
 			  status: (args:get-arg ":status")
 			  new-state-status: (args:get-arg "-set-state-status")))
-    (sqlite3:finalize! db)
     (set! *didsomething* #t))))
 	  
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
      "remove runs"
-     (lambda (db target runname keys keynames keyvallst)
-       (operate-on db 'remove-runs))))
+     (lambda (target runname keys keynames keyvallst)
+       (operate-on 'remove-runs))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
-     (lambda (db target runname keys keynames keyvallst)
-       (operate-on db 'set-state-status))))
+     (lambda (target runname keys keynames keyvallst)
+       (operate-on 'set-state-status))))
 
 ;;======================================================================
 ;; Query runs
 ;;======================================================================
 
 (if (args:get-arg "-list-runs")
-    (let* ((db       (begin
-		       (setup-for-run)
-		       (open-db)))
-	   (runpatt  (args:get-arg "-list-runs"))
-	   (testpatt (args:get-arg "-testpatt"))
-	   (itempatt (args:get-arg "-itempatt"))
-	   (runsdat  (rdb:get-runs db runpatt #f #f '()))
-	   (runs     (db:get-rows runsdat))
-	   (header   (db:get-header runsdat))
-	   (keys     (rdb:get-keys db))
-	   (keynames (map key:get-fieldname keys)))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      ;; Each run
-      (for-each 
-       (lambda (run)
-	 (debug:print 1 "Run: "
-		(string-intersperse (map (lambda (x)
-					   (db:get-value-by-header run header x))
-					 keynames) "/")
-		"/"
-		(db:get-value-by-header run header "runname")
-		" status: " (db:get-value-by-header run header "state"))
-	 (let ((run-id (db:get-value-by-header run header "id")))
-	   (let ((tests (rdb:get-tests-for-run db run-id testpatt itempatt '() '())))
-	     ;; Each test
-	     (for-each 
-	      (lambda (test)
-		(format #t
-			"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-			(conc (db:test-get-testname test)
-			      (if (equal? (db:test-get-item-path test) "")
-				  "" 
-				  (conc "(" (db:test-get-item-path test) ")")))
-			(db:test-get-state test)
-			(db:test-get-status test)
-			(db:test-get-run_duration test)
-			(db:test-get-event_time test)
-			(db:test-get-host test))
- 		(if (not (or (equal? (db:test-get-status test) "PASS")
-			     (equal? (db:test-get-status test) "WARN")
-			     (equal? (db:test-get-state test)  "NOT_STARTED")))
-		    (begin
-		      (print "         cpuload:  " (db:test-get-cpuload test)
-			     "\n         diskfree: " (db:test-get-diskfree test)
-			     "\n         uname:    " (db:test-get-uname test)
-			     "\n         rundir:   " (db:test-get-rundir test)
-			     )
-		      ;; Each test
-		      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
-			(for-each 
-			 (lambda (step)
-			   (format #t 
-				   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-				   (db:step-get-stepname step)
-				   (db:step-get-state step)
-				   (db:step-get-status step)
-				   (db:step-get-event_time step)))
-			 steps)))))
-		tests))))
-       runs)
-      (set! *didsomething* #t)
-      ))
+    (if (setup-for-run)
+	(let* ((db       #f)
+	       (runpatt  (args:get-arg "-list-runs"))
+	       (testpatt (args:get-arg "-testpatt"))
+	       (itempatt (args:get-arg "-itempatt"))
+	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
+	       (runs     (db:get-rows runsdat))
+	       (header   (db:get-header runsdat))
+	       (keys     (open-run-close db:get-keys db))
+	       (keynames (map key:get-fieldname keys)))
+	  ;; Each run
+	  (for-each 
+	   (lambda (run)
+	     (debug:print 1 "Run: "
+			  (string-intersperse (map (lambda (x)
+						     (db:get-value-by-header run header x))
+						   keynames) "/")
+			  "/"
+			  (db:get-value-by-header run header "runname")
+			  " status: " (db:get-value-by-header run header "state"))
+	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
+	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
+		 ;; Each test
+		 (for-each 
+		  (lambda (test)
+		    (format #t
+			    "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+			    (conc (db:test-get-testname test)
+				  (if (equal? (db:test-get-item-path test) "")
+				      "" 
+				      (conc "(" (db:test-get-item-path test) ")")))
+			    (db:test-get-state test)
+			    (db:test-get-status test)
+			    (db:test-get-run_duration test)
+			    (db:test-get-event_time test)
+			    (db:test-get-host test))
+		    (if (not (or (equal? (db:test-get-status test) "PASS")
+				 (equal? (db:test-get-status test) "WARN")
+				 (equal? (db:test-get-state test)  "NOT_STARTED")))
+			(begin
+			  (print "         cpuload:  " (db:test-get-cpuload test)
+				 "\n         diskfree: " (db:test-get-diskfree test)
+				 "\n         uname:    " (db:test-get-uname test)
+				 "\n         rundir:   " (db:test-get-rundir test)
+				 )
+			  ;; Each test
+			  (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
+			    (for-each 
+			     (lambda (step)
+			       (format #t 
+				       "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+				       (db:step-get-stepname step)
+				       (db:step-get-state step)
+				       (db:step-get-status step)
+				       (db:step-get-event_time step)))
+			     steps)))))
+		  tests))))
+	   runs)
+	  (set! *didsomething* #t)
+	  )))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;======================================================================
-(if (and (args:get-arg "-server")
-	 (not (or (args:get-arg "-runall")
-		  (args:get-arg "-runtests"))))
+(if (args:get-arg "-server")
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
       (debug:print 0 "INFO: Starting the standalone server")
@@ -350,7 +350,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
 		 (th2 (server:start db (args:get-arg "-server")))
 		 (th3 (make-thread (lambda ()
-				      (server:keep-running db)))))
+				     (server:keep-running db host:port)))))
 	    (thread-start! th3)
 	    (thread-join! th3))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
@@ -378,13 +378,8 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (db target runname keys keynames keyvallst)
-;;       (let ((flags (make-hash-table)))
-;;	 (for-each (lambda (parm)
-;;		     (hash-table-set! flags parm (args:get-arg parm)))
-;;		   (list "-rerun" "-force" "-itempatt"))
-	 (runs:run-tests db
-			 target
+     (lambda (target runname keys keynames keyvallst)
+	 (runs:run-tests target
 			 runname
 			 (args:get-arg "-runtests")
 			 user
@@ -411,9 +406,8 @@ Called as " (string-intersperse (argv) " ")))
   (general-run-call 
    "-runtests" 
    "run a test" 
-   (lambda (db target runname keys keynames keyvallst)
-     (runs:run-tests db
-		     target
+   (lambda (target runname keys keynames keyvallst)
+     (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
 		     user
@@ -427,9 +421,8 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call 
      "-rollup" 
      "rollup tests" 
-     (lambda (db target runname keys keynames keyvallst)
-       (runs:rollup-run db
-			keys
+     (lambda (target runname keys keynames keyvallst)
+       (runs:rollup-run keys
 			(keys->alist keys "na")
 			(args:get-arg ":runname") 
 			user))))
@@ -442,8 +435,8 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call 
      (if (args:get-arg "-lock") "-lock" "-unlock")
      "lock/unlock tests" 
-     (lambda (db target runname keys keynames keyvallst)
-       (runs:handle-locking db
+     (lambda (target runname keys keynames keyvallst)
+       (runs:handle-locking 
 		  target
 		  keys
 		  (args:get-arg ":runname") 
@@ -480,13 +473,10 @@ Called as " (string-intersperse (argv) " ")))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (set! db (open-db))    
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (rdb:get-keys db))
+		 (keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		 (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -495,9 +485,10 @@ Called as " (string-intersperse (argv) " ")))
 	(general-run-call 
 	 "-test-files"
 	 "Get paths to test"
-	 (lambda (db target runname keys keynames keyvallst)
-	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (rdb:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+	 (lambda (target runname keys keynames keyvallst)
+	   (let* ((db       #f)
+		  (itempatt (args:get-arg "-itempatt"))
+		  (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -530,13 +521,10 @@ Called as " (string-intersperse (argv) " ")))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (set! db (open-db))   
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
 	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (rdb:get-keys db))
+		 (keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (db:test-get-paths-matching db keynames target)))
+		 (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -545,9 +533,10 @@ Called as " (string-intersperse (argv) " ")))
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
-	 (lambda (db target runname keys keynames keyvallst)
-	   (let* ((itempatt (args:get-arg "-itempatt"))
-		  (paths    (db:test-get-paths-matching db keynames target)))
+	 (lambda (target runname keys keynames keyvallst)
+	   (let* ((db       #f)
+		  (itempatt (args:get-arg "-itempatt"))
+		  (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -560,13 +549,14 @@ Called as " (string-intersperse (argv) " ")))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (db target runname keys keynames keyvallst)
-       (let ((outputfile (args:get-arg "-extract-ods"))
+     (lambda (target runname keys keynames keyvallst)
+       (let ((db         #f)
+	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
-	 (db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
+	 (open-run-close db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
 ;; execute the test
@@ -608,15 +598,12 @@ Called as " (string-intersperse (argv) " ")))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
 	  (if (and state status)
-	      (rdb:teststep-set-status! db test-id step state status itemdat (args:get-arg "-m") logfile)
+	      (open-run-close db:teststep-set-status! db test-id step state status (args:get-arg "-m") logfile)
 	      (begin
 		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 		(exit 6)))
-	  (sqlite3:finalize! db)
+	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
@@ -647,24 +634,25 @@ Called as " (string-intersperse (argv) " ")))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
-	  (set! db (open-db))
-	  (if (not (args:get-arg "-server"))
-	      (server:client-setup db))
+
+	  ;; can setup as client for server mode now
+	  (server:client-setup)
+
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      (db:load-test-data db test-id))
+	      (open-run-close db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(rdb:test-set-log! db test-id logfname)))
+		(open-run-close db:test-set-log! db test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
-	      (rtests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (open-run-close tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (open-run-close tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
 		    (debug:print 0 "ERROR: nothing specified to run!")
-		    (sqlite3:finalize! db)
+		    (if db (sqlite3:finalize! db))
 		    (exit 6))
 		  (let* ((stepname   (args:get-arg "-runstep"))
 			 (logprofile (args:get-arg "-logpro"))
@@ -681,19 +669,13 @@ Called as " (string-intersperse (argv) " ")))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (rdb:teststep-set-status! db test-id stepname "start" "n/a" itemdat (args:get-arg "-m") logfile)
-		    ;; close the db
-		    ;; (sqlite3:finalize! db)
+		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
 		    (change-directory testpath)
-		    ;; re-open the db
-		    ;; (set! db (open-db))
-		    ;; (if (not (args:get-arg "-server"))
-		    ;;     (server:client-setup db))
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
@@ -704,15 +686,10 @@ Called as " (string-intersperse (argv) " ")))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (rdb:test-set-log! db test-id htmllogfile)))
+			  (open-run-close db:test-set-log! db test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      (rdb:teststep-set-status! db test-id stepname "end" exitstat itemdat msg logfile))
-		    ;; (sqlite3:finalize! db)
-		    ;;(if (not (eq? exitstat 0))
-		    ;;	(exit 254)) ;; (exit exitstat) doesn't work?!?
-		  ;; open the db
-		  ;; mark the end of the test
-		  )))
+		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
+		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
 	      (let ((newstatus (cond
@@ -733,11 +710,13 @@ Called as " (string-intersperse (argv) " ")))
 			     (not status)))
 		    (begin
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-		      (sqlite3:finalize! db)
+		      ;; (sqlite3:finalize! db)
 		      (exit 6)))
-		(let ((msg (args:get-arg "-m")))
-		  (rtests:test-set-status! db test-id state newstatus msg otherdata))))
-	  (sqlite3:finalize! db)
+		(let* ((msg    (args:get-arg "-m"))
+		       (numoth (length (hash-table-keys otherdata))))
+		  ;; Convert to rpc inside the tests:test-set-status! call, not here
+		  (tests:test-set-status! test-id state newstatus msg otherdata))))
+	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -751,12 +730,9 @@ Called as " (string-intersperse (argv) " ")))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! db (open-db))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      (set! keys (rdb:get-keys db))
+      (set! keys (open-run-close db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
-      (sqlite3:finalize! db)
+      (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")
@@ -785,10 +761,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; now can find our db
-      (set! db (open-db))
-      (patch-db db)
-      (sqlite3:finalize! db)
+      (open-run-close patch-db #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -802,11 +775,7 @@ Called as " (string-intersperse (argv) " ")))
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       ;; now can find our db
-      (set! db (open-db))
-      (if (not (args:get-arg "-server"))
-	  (server:client-setup db))
-      (runs:update-all-test_meta db)
-      (sqlite3:finalize! db)
+      (open-run-close runs:update-all-test_meta db)
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -820,7 +789,7 @@ Called as " (string-intersperse (argv) " ")))
 	  (begin
 	    (set! *db* db)
 	    (if (not (args:get-arg "-server"))
-		(server:client-setup db))
+		(server:client-setup))
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager
@@ -837,6 +806,8 @@ Called as " (string-intersperse (argv) " ")))
 (if (not *didsomething*)
     (debug:print 0 help))
 
+;; (if *runremote* (rpc:close-all-connections!))
+    
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin

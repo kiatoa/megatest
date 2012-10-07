@@ -1,4 +1,4 @@
-k;;======================================================================
+;;======================================================================
 ;; Copyright 2006-2012, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -77,7 +77,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *db* (open-db))
+(define *db* #f) ;; (open-db))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
@@ -86,7 +86,7 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (rdb:get-keys  *db*))
+(define *keys*   (open-run-close db:get-keys  *db*))
 ;; (define *keys*   (db:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
@@ -96,7 +96,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (rdb:get-num-runs *db* "%"))
+(define *tot-run-count* (open-run-close db:get-num-runs *db* "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
@@ -117,10 +117,15 @@ Misc
 (define *hide-empty-runs* #f)
 
 (define *verbosity* (cond
-		     ((args:get-arg "-debug")(string->number (args:get-arg "-debug")))
+		     ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
 		     ((args:get-arg "-v")    2)
 		     ((args:get-arg "-q")    0)
 		     (else                   1)))
+
+(if (not (number? *verbosity*))
+    (begin
+      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
+      (exit)))
 
 (define uidat #f)
 
@@ -168,7 +173,7 @@ Misc
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
-	  (let* ((allruns     (rdb:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	  (let* ((allruns     (open-run-close db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
@@ -183,9 +188,9 @@ Misc
 		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (rdb:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+			       (tests    (let ((tsts (open-run-close db:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (rdb:get-key-vals *db* run-id)))
+			       (key-vals (open-run-close db:get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
@@ -447,7 +452,7 @@ Misc
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update))))
 	     (iup:hbox
-	      (iup:button "Quit" #:action (lambda (obj)(sqlite3:finalize! *db*)(exit)))
+	      (iup:button "Quit" #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
 	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
@@ -474,7 +479,7 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *state-ignore-hash* state #t)
 							  (hash-table-delete! *state-ignore-hash* state)))))
-		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED")))
+		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
@@ -639,14 +644,14 @@ Misc
 	  (lambda (x)
 	    (on-exit (lambda ()
 		       (sqlite3:finalize! *db*)))
-	    (examine-run *db* runid)))
+	    (open-run-close examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test")
     (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
-	(examine-test *db* testid)
+	(examine-test testid)
 	(begin
 	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
 	  (exit 1)))))

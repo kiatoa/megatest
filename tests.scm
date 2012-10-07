@@ -29,18 +29,6 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:register-test db run-id test-name item-path)
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (for-each 
-     (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth))
-     item-paths )))
-
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
@@ -106,7 +94,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (rdb:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -124,18 +112,20 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
-;; 
-(define (test-set-status! db test-id state status comment dat)
-  (let* ((real-status status)
+;; Do not rpc this one, do the underlying calls!!!
+(define (tests:test-set-status! test-id state status comment dat)
+  (debug:print 4 "INFO: tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
+  (let* ((db          #f)
+	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (db:get-test-data-by-id db test-id))
+	 (testdat     (open-run-close db:get-test-info-by-id db test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (test:get-previous-test-run-record db run-id test-name item-path)))
+		       (let ((prev-test (open-run-close test:get-previous-test-run-record db run-id test-name item-path)))
 			 (if prev-test ;; true if we found a previous test in this run series
 			     (let ((prev-status (db:test-get-status   prev-test))
 				   (prev-state  (db:test-get-state    prev-test))
@@ -152,12 +142,12 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(rdb:test-set-state-status-by-run-id-testname db run-id test-name item-path real-status state))
-
+	(rdb:test-set-status-state test-id real-status state #f))
+    
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, do not rpc it (yet)
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup db test-id status))
+	(db:test-data-rollup #f test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -191,20 +181,20 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (rdb:csv->test-data db test-id
+	    (open-run-close db:csv->test-data db test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (rdb:roll-up-pass-fail-counts db run-id test-name item-path status)
+    (open-run-close db:roll-up-pass-fail-counts db run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rdb:test-set-comment db test-id cmt)))
+	  (open-run-close db:test-set-comment db test-id cmt)))
     ))
 
-(define (test-set-toplog! db run-id test-name logf) 
+(define (tests:test-set-toplog! db run-id test-name logf) 
   (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
 		   logf run-id test-name))
 
@@ -215,6 +205,7 @@
   (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	(orig-dir       (current-directory))
 	(logf           #f))
+    ;; This query finds the path and changes the directory to it for the test
     (sqlite3:for-each-row 
      (lambda (path final_logf)
        (set! logf final_logf)
@@ -289,7 +280,7 @@
 		(release-dot-lock outputfilename)))
 	    (close-output-port oup)
 	    (change-directory orig-dir)
-	    (test-set-toplog! db run-id test-name outputfilename)
+	    (tests:test-set-toplog! db run-id test-name outputfilename)
 	    )))))
 
 (define (get-all-legal-tests)
@@ -366,7 +357,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (tdat        (db:get-test-info db run-id test-name item-path)))
+	      (test-id     (db:get-test-id db run-id test-name item-path))
+	      (tdat        (db:get-test-info-by-id db test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -381,7 +373,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let ((wtdat (db:get-test-info db run-id waiton ""))) 
+			       (let* ((parent-test-id (db:get-test-id db run-id waiton ""))
+				      (wtdat (db:get-test-info-by-id db test-id)))
 				 (if (or (member (db:test-get-status wtdat)
 						 '("FAIL" "KILLED"))
 					 (member (db:test-get-state wtdat)
@@ -398,25 +391,46 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request db run-id test-name itemdat)
-  (let* ((item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info db run-id test-name item-path)))
+(define (test-get-kill-request db test-id) ;; run-id test-name itemdat)
+  (let* (;; (item-path (item-list->path itemdat))
+	 (testdat   (db:get-test-info-by-id db test-id))) ;; run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
-(define (test-set-meta-info db run-id testname itemdat)
-  (let ((item-path (item-list->path itemdat))
-	(cpuload  (get-cpu-load))
-	(hostname (get-host-name))
-	(diskfree (get-df (current-directory)))
-	(uname    (get-uname "-srvpio")))
-    (sqlite3:execute db "UPDATE tests SET host=?,cpuload=?,diskfree=?,uname=? WHERE run_id=? AND testname=? AND item_path=?;"
-		  hostname
-		  cpuload
-		  diskfree
-		  uname
-		  run-id
-		  testname
-		  item-path)))
+(define (test:tdb-get-rundat-count tdb)
+  (if tdb
+      (let ((res 0))
+	(sqlite3:for-each-row
+	 (lambda (count)
+	   (set! res count))
+	 tdb
+	 "SELECT count(id) FROM test_rundat;")
+	res))
+  0)
+
+(define (test-set-meta-info db test-id run-id testname itemdat minutes)
+  (let* ((tdb         (db:open-test-db-by-test-id db test-id))
+	 (num-records (test:tdb-get-rundat-count tdb))
+	 (item-path   (item-list->path itemdat))
+	 (cpuload  (get-cpu-load))
+	 (diskfree (get-df (current-directory))))
+    (if (eq? (modulo num-records 10) 0) ;; every ten records update central
+	(begin
+	  (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE run_id=? AND testname=? AND item_path=?;"
+			   cpuload
+			   diskfree
+			   run-id
+			   testname
+			   item-path)
+	  (if minutes (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
+	  (if (eq? num-records 0)
+	      (let ((uname (get-uname "-srvpio"))
+		    (hostname (get-host-name)))
+		(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE run_id=? AND testname=? AND item_path=?;"
+				 uname hostname run-id testname item-path)))))
+                
+    (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+		     cpuload diskfree minutes)))
+	  
 
 ;;======================================================================
 ;; A R C H I V I N G
@@ -427,29 +441,4 @@
 
 (define (test:archive-tests db keynames target)
   #f)
-
-;;======================================================================
-;; R P C
-;;======================================================================
-
-(define (rtests:register-test db run-id test-name item-path)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rtests:register-test host port) run-id test-name item-path))
-      (tests:register-test db run-id test-name item-path)))
-
-(define (rtests:test-set-status!  db test-id state status comment dat)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'rtests:test-set-status! host port) test-id state status comment dat))
-      (test-set-status! db test-id state status comment dat)))
-
-(define (rtests:test-set-toplog! db run-id test-name logf)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-            (port (vector-ref *runremote* 1)))
-        ((rpc:procedure 'rtests:test-set-toplog! host port) run-id test-name logf))
-      (test-set-toplog! db run-id test-name logf)))
 
