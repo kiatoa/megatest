@@ -202,7 +202,7 @@
 	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
 	    (apply rdb:test-set-status-state test-id params)
 	    (rdb:pass-fail-counts test-id (random 100) (random 100))
-	    (rdb:test-rollup-iterated-pass-fail test-id)
+	    (rdb:test-rollup-test_data-pass-fail test-id)
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
 	  '(("COMPLETED"    "PASS" #f)
 	    ("NOT_STARTED"  "FAIL" "Just testing")
