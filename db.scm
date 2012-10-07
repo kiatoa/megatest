@@ -1134,7 +1134,6 @@
 			   ;; (hash-table-set! rollups (car params) params))
 			   (apply sqlite3:execute test_data-rollup-stmt  params))
 			  ((pass-fail-counts)
-			   (debug:print 0 "INFO: pass fail count params are " params)
 			   (apply sqlite3:execute pass-fail-counts-stmt params))
 			  ((register-test)
 			   (apply sqlite3:execute register-test-stmt    params))

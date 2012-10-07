@@ -806,6 +806,8 @@ Built from " megatest-fossil-hash ))
 (if (not *didsomething*)
     (debug:print 0 help))
 
+;; (if *runremote* (rpc:close-all-connections!))
+    
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
