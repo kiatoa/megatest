@@ -607,11 +607,11 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply cmd-run-proc-each-line
+	   (launch-results (apply cmd-run-with-stderr->list ;; cmd-run-proc-each-line
 				  (if useshell
 				      (string-intersperse fullcmd " ")
 				      (car fullcmd))
-				  print
+				  ;; conc
 				  (if useshell
 				      '()
 				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))

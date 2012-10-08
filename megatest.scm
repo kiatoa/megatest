@@ -98,6 +98,8 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -repl                   : start a repl (useful for extending megatest)
+  -debug N                : increase verbosity to N. (try 10 for lots of noise)
+  -logging                : turn on logging all debug output to logging.db
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -192,6 +194,7 @@ Built from " megatest-fossil-hash ))
 
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
+			"-logging"
 		       )
 		 args:arg-hash
 		 0))
@@ -217,6 +220,8 @@ Built from " megatest-fossil-hash ))
     (begin
       (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
       (exit)))
+
+(if (args:get-arg "-logging")(set! *logging* #t))
 
 ;;======================================================================
 ;; Misc general calls
