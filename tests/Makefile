@@ -53,7 +53,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dboard &
+	cd fullrun && $(BINPATH)/dashboard -rows 25 &
 
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %

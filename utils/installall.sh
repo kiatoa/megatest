@@ -11,8 +11,10 @@
 
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
+echo sudo apt-get install libwebkitgtk-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
-echo KTYPE can be 26 or 26g4
+echo KTYPE can be 26, 26g4, 32, or 32_64
+echo KTYPE=$KTYPE
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
 echo Hit ^C now to do that
@@ -40,9 +42,9 @@ else
   echo Using KTYPE=$KTYPE
 fi
 
-export CHICKEN_VERSION=4.7.3
+export CHICKEN_VERSION=4.8.0
 if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
-    wget http://code.call-cc.org/dev-snapshots/2011/08/17/chicken-${CHICKEN_VERSION}.tar.gz
+    wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz
 fi 
 
 BUILDHOME=$PWD
@@ -66,7 +68,7 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 
-for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils directory-utils hostinfo; do
+for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml ; do
   chicken-install $PROX $f
 done
 
@@ -77,15 +79,16 @@ for a in `ls */*.meta|cut -f1 -d/` ; do
     (cd $a;chicken-install)
 done
 
+export SQLITE3_VERSION=3071401
 echo Install sqlite3
-if ! [[ -e sqlite-autoconf-3070500.tar.gz ]]; then
-    wget http://www.sqlite.org/sqlite-autoconf-3070500.tar.gz
+if ! [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
+    wget http://www.sqlite.org/sqlite-autoconf-$SQLITE3_VERSION.tar.gz
 fi
 
 if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
-    if [[ -e sqlite-autoconf-3070500.tar.gz ]]; then
-	tar xfz sqlite-autoconf-3070500.tar.gz 
-	(cd sqlite-autoconf-3070500;./configure --prefix=$PREFIX;make;make install)
+    if [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
+	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
+	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
     fi
 fi
@@ -93,10 +96,16 @@ fi
 chicken-install $PROX sqlite3
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
-    export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
+    export ARCHSIZE=''
 else
-    export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.5_Linux${KTYPE}_64_lib.tar.gz"
+    export ARCHSIZE=64_
 fi
+    # export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
+export files="cd-5.5.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.8_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.6_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+# else
+#     # export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.5_Linux${KTYPE}_64_lib.tar.gz"
+#     export files="cd-5.5.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
+# fi
 
 mkdir $PREFIX/iuplib
 for a in `echo $files` ; do
