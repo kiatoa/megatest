@@ -92,6 +92,8 @@ for a in `ls */*.meta|cut -f1 -d/` ; do
     (cd $a;chicken-install)
 done
 
+export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
+export LD_LIBRARY_PATH=$LIBPATH
 
 export SQLITE3_VERSION=3071401
 echo Install sqlite3

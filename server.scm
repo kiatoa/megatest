@@ -151,8 +151,11 @@
   (let loop ((count 0))
     (thread-sleep! 20) ;; no need to do this very often
     (let ((numrunning (db:get-count-tests-running db)))
-      (if (or (not (> numrunning 0))
-	      (> *last-db-access* (+ (current-seconds) 60)))
+      (if (or (> numrunning 0)
+	      (> (+ *last-db-access* 60)(current-seconds)))
+	  (begin
+	    (debug:print 0 "INFO: Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	    (loop (+ 1 count)))
 	  (begin
 	    (debug:print 0 "INFO: Starting to shutdown the server side")
 	    ;; need to delete only *my* server entry (future use)
@@ -160,10 +163,8 @@
 	    (thread-sleep! 10)
 	    (debug:print 0 "INFO: Max cached queries was " *max-cache-size*)
 	    (debug:print 0 "INFO: Server shutdown complete. Exiting")
-	    (exit))
-	  (debug:print 0 "INFO: Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-	  ))
-    (loop (+ 1 count))))
+	    ;; (exit)))
+	    )))))
 
 (define (server:find-free-port-and-open port)
   (handle-exceptions
@@ -201,10 +202,10 @@
 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 			((rpc:procedure 'server:login host portn) *toppath*))
 		   (begin
-		     (debug:print 2 "INFO: Connected to " host ":" port)
+		     (debug:print 2 "INFO: Logged in and connected to " host ":" port)
 		     (set! *runremote* (vector host portn)))
 		   (begin
-		     (debug:print 2 "INFO: Failed to connect to " host ":" port)
+		     (debug:print 2 "INFO: Failed to login or connect to " host ":" port)
 		     (set! *runremote* #f)))))
 	    (debug:print 2 "INFO: no server available")))))
 
