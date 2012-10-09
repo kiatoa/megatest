@@ -13,12 +13,17 @@ echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
-echo KTYPE can be 26, 26g4, 32, or 32_64
+echo KTYPE can be 26, 26g4, or 32
 echo KTYPE=$KTYPE
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
+echo 
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 echo ADDITIONAL_LIBPATH=$ADDITIONAL_LIBPATH
+echo
+echo To use previous IUP libraries set USEOLDIUP to yes
+echo USEOLDIUP=$USEOLDIUP
+
 echo Hit ^C now to do that
 
 # A nice way to run this script:
@@ -55,9 +60,10 @@ if [[ $PREFIX == "" ]]; then
 fi
 
 export PATH=$PREFIX/bin:$PATH
+export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
+export LD_LIBRARY_PATH=$LIBPATH
 echo "export PATH=$PREFIX/bin:\$PATH" > setup-chicken4x.sh
-export LD_LIBRARY_PATH=$PREFIX/lib
-echo "export LD_LIBRARY_PATH=$PREFIX/lib" >> setup-chicken4x.sh
+echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> setup-chicken4x.sh
 
 echo PATH=$PATH
 echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
@@ -70,8 +76,13 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
     cd $BUILDHOME
 fi
 
-for f in readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml ; do
-  chicken-install $PROX $f
+# Some eggs are quoted since they are reserved to Bash
+for f in readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt ; do
+  if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
+    chicken-install $PROX $f
+  else
+    echo Skipping install of egg $f as it is already installed
+  fi
 done
 
 cd $BUILDHOME
@@ -80,6 +91,7 @@ for a in `ls */*.meta|cut -f1 -d/` ; do
     echo $a
     (cd $a;chicken-install)
 done
+
 
 export SQLITE3_VERSION=3071401
 echo Install sqlite3
@@ -103,17 +115,19 @@ else
     export ARCHSIZE=64_
 fi
     # export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
-export files="cd-5.5.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.8_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.6_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
-# else
-#     # export files="cd-5.4.1_Linux${KTYPE}_64_lib.tar.gz im-3.6.3_Linux${KTYPE}_64_lib.tar.gz iup-3.5_Linux${KTYPE}_64_lib.tar.gz"
-#     export files="cd-5.5.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
-# fi
+if [[ x$USEOLDIUP == "x" ]];then
+   export files="cd-5.5.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.8_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.6_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+else
+   echo WARNING: Using old IUP libraries
+   export files="cd-5.4.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.6.3_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.5_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+fi
 
 mkdir $PREFIX/iuplib
 for a in `echo $files` ; do
     if ! [[ -e $a ]] ; then
 	wget http://www.kiatoa.com/matt/iup/$a
     fi
+    echo Untarring $a into $BUILDHOME/lib
     (cd $PREFIX/lib;tar xfvz $BUILDHOME/$a;mv include/* ../include)
 done
 
@@ -133,10 +147,9 @@ make install
 
 
 cd $BUILDHOME
-export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
-export LD_LIBRARY_PATH=$LIBPATH
-CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" chicken-install $PROX -D no-library-checks iup
-CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" chicken-install $PROX -D no-library-checks canvas-draw
+export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks iup:1.0.2
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
 
 # export CD_REL=d704525ebe1c6d08
 # if ! [[ -e  Canvas_Draw-$CD_REL.zip ]]; then
