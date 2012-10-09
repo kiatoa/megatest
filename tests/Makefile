@@ -6,8 +6,17 @@ PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)
 IPADDR := "-"
 # Set SERVER to "-server -"
-SERVER := 
-DEBUG  := 1
+SERVER  = 
+DEBUG   = 1
+LOGGING = 
+
+OS  = $(shell grep ID /etc/*-release|cut -d= -f2)
+FS  = $(shell df -T .|tail -1|awk '{print $$2}')
+VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
+
+# The NEWTARGET causes some tests to fail. Do not use until this is fixed.
+NEWTARGET  = "-target $(OS)/$(FS)/$(VER)"
+TARGET     = "-target ubuntu/nfs/none"
 
 all : test1 test2 test3 test4 test5
 
@@ -26,17 +35,17 @@ test3 : fullprep
 
 test4 : fullprep
 	cd fullrun;$(MEGATEST) $(SERVER) &
-	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v
+	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
 test5 : fullprep
 	cd fullrun;$(MEGATEST) $(SERVER) &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -debug $(DEBUG) > aa.log 2> aa.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -debug $(DEBUG) > ab.log 2> ab.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -debug $(DEBUG) > ac.log 2> ac.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -debug $(DEBUG) > ad.log 2> ad.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ae -debug $(DEBUG) > ae.log 2> ae.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_af -debug $(DEBUG) > af.log 2> af.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -46,6 +55,7 @@ cleanprep : ../*.scm Makefile */*.config
 	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
+	rm -f fullrun/logging.db
 	touch cleanprep
 
 fullprep : cleanprep
