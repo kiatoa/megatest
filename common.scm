@@ -39,7 +39,7 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *verbosity*         1)
+
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
@@ -53,6 +53,10 @@
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
 (define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
+
+;; Debugging stuff
+(define *verbosity*         1)
+(define *logging*           #f)
 
 (define (get-with-default val default)
   (let ((val (args:get-arg val)))

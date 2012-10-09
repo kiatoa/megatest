@@ -26,17 +26,17 @@ test3 : fullprep
 
 test4 : fullprep
 	cd fullrun;$(MEGATEST) $(SERVER) &
-	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v
+	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v -logging
 
 # NOTE: Only one instance can be a server
 test5 : fullprep
 	cd fullrun;$(MEGATEST) $(SERVER) &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -debug $(DEBUG) > aa.log 2> aa.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -debug $(DEBUG) > ab.log 2> ab.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -debug $(DEBUG) > ac.log 2> ac.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -debug $(DEBUG) > ad.log 2> ad.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ae -debug $(DEBUG) > ae.log 2> ae.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_af -debug $(DEBUG) > af.log 2> af.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_aa -debug $(DEBUG) -logging > aa.log 2> aa.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ab -debug $(DEBUG) -logging > ab.log 2> ab.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ac -debug $(DEBUG) -logging > ac.log 2> ac.log &
+	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ad -debug $(DEBUG) -logging > ad.log 2> ad.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_ae -debug $(DEBUG) -logging > ae.log 2> ae.log &	
+#	cd fullrun;sleep 10;$(MEGATEST) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_af -debug $(DEBUG) -logging > af.log 2> af.log &	
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -46,6 +46,7 @@ cleanprep : ../*.scm Makefile */*.config
 	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
+	rm -f fullrun/logging.db
 	touch cleanprep
 
 fullprep : cleanprep

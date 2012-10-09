@@ -10,8 +10,11 @@
 ;;======================================================================
 
 (define-inline (debug:print n . params)
-  (if (<= n *verbosity*)
-      (apply print params)))
+  (begin
+    (if (<= n *verbosity*)
+	(apply print params))
+    (if *logging*
+	(apply db:log-event params))))
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string
