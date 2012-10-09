@@ -17,6 +17,8 @@ echo KTYPE can be 26, 26g4, 32, or 32_64
 echo KTYPE=$KTYPE
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
+echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
+echo ADDITIONAL_LIBPATH=$ADDITIONAL_LIBPATH
 echo Hit ^C now to do that
 
 # A nice way to run this script:
@@ -131,7 +133,7 @@ make install
 
 
 cd $BUILDHOME
-export LIBPATH=$PREFIX/lib
+export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
 export LD_LIBRARY_PATH=$LIBPATH
 CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" chicken-install $PROX -D no-library-checks iup
 CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" chicken-install $PROX -D no-library-checks canvas-draw
