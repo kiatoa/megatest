@@ -64,7 +64,7 @@ clean  :
 kill :
 	killall -v mtest main.sh dboard || true
 	rm -f fullrun/megatest.db fullrun/logging.db || true
-	killall -v -9 mtest || true
+	killall -v -9 mtest dboard || true
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done
