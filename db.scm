@@ -1075,7 +1075,7 @@
       (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
 
-(define (cdb:tests-register-test db run-id test-name item-path #!key (force-write #f))
+(define (cdb:tests-register-test run-id test-name item-path #!key (force-write #f))
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
@@ -1667,12 +1667,12 @@
       (cdb:pass-fail-counts test-id fail-count pass-count)))
 
 ;; currently forces a flush of the queue
-(define (rdb:tests-register-test db run-id test-name item-path)
+(define (rdb:tests-register-test run-id test-name item-path)
   (if *runremote*
       (let ((host (vector-ref *runremote* 0))
 	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:tests-register-test host port) db run-id test-name item-path force-write: #t))
-      (cdb:tests-register-test db run-id test-name item-path force-write: #t)))
+	((rpc:procedure 'cdb:tests-register-test host port) run-id test-name item-path force-write: #t))
+      (cdb:tests-register-test run-id test-name item-path force-write: #t)))
 
 (define (rdb:flush-queue)
   (if *runremote*
