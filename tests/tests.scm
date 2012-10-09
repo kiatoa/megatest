@@ -1,4 +1,5 @@
 (require-extension test)
+(require-extension regex)
 
 (define test-work-dir (current-directory))
 
@@ -9,6 +10,18 @@
      (print "Loading " file)
      (load file))
    files))
+
+;;======================================================================
+;; P R O C E S S E S
+;;======================================================================
+
+(test "cmd-run-with-stderr->list" '("No such file or directory")
+      (let ((reslst (cmd-run-with-stderr->list "ls" "/tmp/ihadbetternotexist")))
+	(string-search (regexp "No such file or directory")(car reslst))))
+
+;;======================================================================
+;; C O N F I G   F I L E S 
+;;======================================================================
 
 (define conffile #f)
 (test "Read a config" #t (hash-table? (read-config "test.config" #f #f)))

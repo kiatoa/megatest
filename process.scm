@@ -16,6 +16,37 @@
 (declare (unit process))
 (declare (uses common))
 
+(define (conservative-read port)
+  (let loop ((res ""))
+    (if (not (eof-object? (peek-char port)))
+	(loop (conc res (read-char port)))
+	res)))
+    
+(define (cmd-run-with-stderr->list cmd . params)
+  ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
+;;  (handle-exceptions
+;;   exn
+;;   (begin
+;;     (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
+;;     (print "       " ((condition-property-accessor 'exn 'message) exn))
+;;     #f)
+   (let-values (((fh fho pid fhe) (if (null? params)
+				      (process* cmd)
+				      (process* cmd params))))
+       (let loop ((curr (read-line fh))
+		  (result  '()))
+	 (let ((errstr (conservative-read fhe)))
+	   (if (not (string=? errstr ""))
+	       (set! result (append result (list errstr)))))
+       (if (not (eof-object? curr))
+	   (loop (read-line fh)
+		 (append result (list curr)))
+	   (begin
+	     (close-input-port fh)
+	     (close-input-port fhe)
+	     (close-output-port fho)
+	     result))))) ;; )
+
 (define (cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions
@@ -26,13 +57,14 @@
    (let-values (((fh fho pid) (if (null? params)
 				  (process cmd)
 				  (process cmd params))))
-     (let loop ((curr (read-line fh))
+       (let loop ((curr (read-line fh))
 		(result  '()))
        (if (not (eof-object? curr))
 	   (loop (read-line fh)
 		 (append result (list (proc curr))))
 	   (begin
 	     (close-input-port fh)
+	     (close-input-port fhe)
 	     (close-output-port fho)
 	     result))))))
 
