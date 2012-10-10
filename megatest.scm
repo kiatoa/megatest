@@ -352,7 +352,8 @@ Built from " megatest-fossil-hash ))
 		 (th3 (make-thread (lambda ()
 				     (server:keep-running db host:port)))))
 	    (thread-start! th3)
-	    (thread-join! th3))
+	    (thread-join! th3)
+	    (set! *didsomething* #t))
 	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 ;;======================================================================

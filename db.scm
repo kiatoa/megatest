@@ -728,7 +728,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART','NOT_STARTED');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
@@ -1027,7 +1027,7 @@
 (define (db:updater)
   (debug:print 4 "INFO: Starting cache processing")
   (let loop ((start-time (current-time)))
-    (thread-sleep! 5) ;; move save time around to minimize regular collisions?
+    (thread-sleep! 10) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
     (loop start-time)))
 
