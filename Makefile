@@ -13,7 +13,7 @@ OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
 
 HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
-MTESTHASH=$(shell fsl info|grep checkout:| awk '{print $$2}')
+MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 all : mtest dboard
 
 mtest: $(OFILES) megatest.o

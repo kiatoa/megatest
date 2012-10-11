@@ -117,20 +117,21 @@
 	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
 	 (num-running             (db:get-count-tests-running db))
 	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
-	 (max-concurrent-jobs     (config-lookup *configdat* "setup"     "max_concurrent_jobs"))
+	 (max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
+				    (if (and mcj (string->number mcj))
+					(string->number mcj)
+					#f)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
 	  (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
 	  (set! *last-num-running-tests* num-running)))
     (if (not (eq? 0 *globalexitstatus*))
-	#f
+	(list #f num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)
 	(let ((can-not-run-more (cond
 				 ;; if max-concurrent-jobs is set and the number running is greater 
 				 ;; than it than cannot run more jobs
-				 ((and max-concurrent-jobs
-				       (string->number max-concurrent-jobs)
-				       (>= num-running (string->number max-concurrent-jobs)))
+				 ((and max-concurrent-jobs (>= num-running max-concurrent-jobs))
 				  (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
 					       ", max_concurrent_jobs: " max-concurrent-jobs)
 				  #t)
@@ -142,7 +143,7 @@
 					       " in " jobgroup " exceeded, will not run " (tests:testqueue-get-testname test-record))
 				  #t)
 				 (else #f))))
-	  (not can-not-run-more)))))
+	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
 ;;======================================================================
 ;; New methodology. These routines will replace the above in time. For
@@ -377,10 +378,15 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let* ((have-resources  (open-run-close runs:can-run-more-tests #f test-record)) ;; look at the test jobgroup and tot jobs running
-		     (prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
-		     (fails           (runs:calc-fails prereqs-not-met))
-		     (non-completed   (runs:calc-not-completed prereqs-not-met)))
+	      (let* ((run-limits-info         (open-run-close runs:can-run-more-tests #f test-record)) ;; look at the test jobgroup and tot jobs running
+		     (have-resources          (car run-limits-info))
+		     (num-running             (list-ref run-limits-info 1))
+		     (num-running-in-jobgroup (list-ref run-limits-info 2))
+		     (max-concurrent-jobs     (list-ref run-limits-info 3))
+		     (job-group-limit         (list-ref run-limits-info 4))
+		     (prereqs-not-met         (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
+		     (fails                   (runs:calc-fails prereqs-not-met))
+		     (non-completed           (runs:calc-not-completed prereqs-not-met)))
 		(debug:print 8 "INFO: have-resources: " have-resources " prereqs-not-met: " 
 			     (string-intersperse 
 			      (map (lambda (t)
@@ -392,7 +398,7 @@
 
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
-
+		(debug:print 4 "INFO: run-limits-info = " run-limits-info)
 		(cond ;; INNER COND #1 for a launchable test
 		 ;; Check item path against item-patts
 		 ((and (not (patt-list-match item-path item-patts))
@@ -403,7 +409,8 @@
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
-		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
+		 ((and (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
+		       (and max-concurrent-jobs (> (- max-concurrent-jobs num-running) 5)))
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
@@ -629,13 +636,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED)
+	((NOT_STARTED COMPLETED DELETED)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((equal? (test:get-state testdat) "NOT_STARTED")(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)

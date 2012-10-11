@@ -2,11 +2,11 @@
 
 # ssh localhost "nohup $* > nbfake.log 2> nbfake.err < /dev/null"
 
-if [[ $TARGETHOST == ""  ]]; then
-  TARGETHOST=localhost
-fi
-
 # Can't always trust $PWD
 CURRWD=`pwd`
 
-ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+if [[ $TARGETHOST == ""  ]]; then
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &"
+else
+  ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+fi
