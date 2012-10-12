@@ -241,9 +241,6 @@ Built from " megatest-fossil-hash ))
    ((not (args:get-arg "-testpatt"))
     (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
     (exit 3))
-   ((not (args:get-arg "-itempatt"))
-    (print "ERROR: Missing required parameter for " action ", you must specify the items with -itempatt")
-    (exit 4))
    (else
     (if (not (car *configinfo*))
 	(begin

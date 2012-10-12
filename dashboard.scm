@@ -163,13 +163,13 @@ Misc
     (null? (filter (lambda (x)(> x 3)) delta))))
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
+(define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let ((modtime (file-modification-time *db-file-path*)))
     (if (or (and (> modtime *last-db-update-time*)
 		 (> (current-seconds)(+ *last-db-update-time* 5)))
 	    (> *delayed-update* 0))
 	(begin
-	  (debug:print 4 "INFO: update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " itemnamepatt: " itemnamepatt " keypatts: " keypatts)
+	  (debug:print 4 "INFO: update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
@@ -188,7 +188,7 @@ Misc
 		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (open-run-close db:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+			       (tests    (let ((tsts (open-run-close db:get-tests-for-run *db* run-id testnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
 			       (key-vals (open-run-close db:get-key-vals *db* run-id)))
 			  (if (> (length tests) maxtests)
@@ -603,8 +603,8 @@ Misc
     (begin
         (set! *num-tests* (string->number (or (args:get-arg "-rows")
 					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%" "%" '()))
-    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%" '()) 8) 20)))
+	(update-rundat "%" *num-runs* "%/%" '()))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -624,8 +624,8 @@ Misc
   ;; (if (db:been-changed)
   (begin
     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		   (hash-table-ref/default *searchpatts* "test-name" "%")
-		   (hash-table-ref/default *searchpatts* "item-name" "%")
+		   (hash-table-ref/default *searchpatts* "test-name" "%/%")
+		   ;; (hash-table-ref/default *searchpatts* "item-name" "%")
 		   (let ((res '()))
 		     (for-each (lambda (key)
 				 (if (not (equal? key "runname"))

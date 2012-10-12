@@ -234,7 +234,7 @@
 	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" '() '()))))
 	(number? test-id)))
 
 (test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))

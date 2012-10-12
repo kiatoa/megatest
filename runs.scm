@@ -704,7 +704,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (let* ((db           #f)
 	 (keys         (open-run-close db:get-keys db))
 	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))
@@ -723,7 +723,7 @@
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
 			       (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id")
-						      testpatt itempatt states statuses
+						      testpatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
 								 ((remove-runs) 'rundir)
@@ -780,7 +780,7 @@
 	   
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -921,7 +921,7 @@
   (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
 	 (new-run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))
 	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%" "%" '() '()))
+	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     (open-run-close db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
@@ -949,7 +949,7 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id testname item-path '() '())))
+	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
