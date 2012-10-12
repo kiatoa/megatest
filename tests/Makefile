@@ -29,6 +29,8 @@ test1 : cleanprep
 
 test2 : fullprep
 	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst -reqtarg ubuntu/nfs/none -itempatt a/1 :runname $(RUNNAME)_a $(SERVER)
+	cd fullrun;sleep 20;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status :state COMPLETED :status FORCED -testpatt runfirst -itempatt ''
+
 
 test3 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10

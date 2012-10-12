@@ -738,7 +738,7 @@
 								 (else          'event_time)))
 			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
-
+	   (debug:print 4 "INFO: runs:operate-on run=" run ", header=" header)
 	   (if (not (null? tests))
 	       (begin
 		 (case action
@@ -746,6 +746,8 @@
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
+		   ((print-run)
+		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header))
 		   (else
 		    (print "INFO: action not recognised " action)))
 		 (for-each
