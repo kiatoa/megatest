@@ -41,7 +41,8 @@
 	 (header   (cadr tmp))
 	 (res     '())
 	 (key-patt "")
-	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob")))
+	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
+	 (qry-str  #f))
     (for-each (lambda (keyval)
 		(let* ((key    (vector-ref keyval 0))
 		       (fulkey (conc ":" key))
@@ -53,11 +54,13 @@
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keys)
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
+    (debug:print 4 "INFO: runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
      (lambda (a . r)
        (set! res (cons (list->vector (cons a r)) res)))
      db 
-     (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";")
+     qry-str
      runnamepatt)
     (vector header res)))
 
@@ -747,7 +750,8 @@
 		   ((set-state-status)
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((print-run)
-		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header))
+		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
+		    action)
 		   (else
 		    (print "INFO: action not recognised " action)))
 		 (for-each
@@ -806,7 +810,8 @@
 		       ;; 	 (system (conc "rmdir -p " runpath))))
 		       )))))
 	 ))
-     runs)))
+     runs))
+  #t)
 
 ;;======================================================================
 ;; Routines for manipulating runs

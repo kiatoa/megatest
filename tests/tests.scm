@@ -88,7 +88,7 @@
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
 (define remargs (args:get-args
-		 '("bar" "foo" ":runname" "bob" ":sysname" "ubuntu" ":fsname" "nfs" ":datapath" "blah/foo" "nada")
+		 '("bar" "foo" ":runname" "bob" ":SYSTEM" "ubuntu" ":RELEASE" "v1.2" ":datapath" "blah/foo" "nada")
 		 (list ":runname" ":state" ":status")
 		 (list "-h")
 		 args:arg-hash
@@ -96,7 +96,7 @@
 
 (test "register-run" #t (number? (runs:register-run *db*
 						    (db:get-keys *db*)
-						    '(("SYSTEM" "key1")("OS" "key2"))
+						    '(("SYSTEM" "key1")("RELEASE" "key2"))
 						    "myrun" 
 						    "new"
 						    "n/a" 
@@ -107,8 +107,10 @@
 ;; D B
 ;;======================================================================
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
+(test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
+      (runs:get-runs-by-patt db keys "%"))
 (test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
-(test #f #t (list? (runs:operate-on 'print "%" "%" "%")))
+(test #f #t (runs:operate-on 'print "%" "%" "%"))
 
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
@@ -203,7 +205,7 @@
 			      (sqlite3#finalize! tdb)
 			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
 (test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
-(test "Get nice table for steps" "2s"
+(test "Get nice table for steps" "2.0s"
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
 
