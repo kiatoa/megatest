@@ -20,6 +20,29 @@
 	(string-search (regexp "No such file or directory")(car reslst))))
 
 ;;======================================================================
+;; T E S T   M A T C H I N G
+;;======================================================================
+(test #f '("abc") (tests:glob-like-match "abc" "abc"))
+(for-each 
+ (lambda (patt str expected)
+   (test (conc patt " " str "=>" expected) expected (tests:glob-like-match patt str)))
+ (list "abc"    "~abc" "~abc" "a*c"  "a%c")
+ (list "abc"    "abcd" "abc"  "ABC"  "ABC")
+ (list '("abc")  #t      #f     #f '("ABC"))
+ )
+
+(test #f #t (tests:match "abc/def" "abc" "def"))
+(for-each 
+ (lambda (patterns testname itempath expected)
+   (test (conc patterns " " testname "/" itempath "=>" expected)
+	 expected 
+	 (tests:match patterns testname itempath)))
+ (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d")
+ (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"        )
+ (list   ""  ""      "cde"    "cde"     "cde"     ""         )
+ (list   #t    #t       #t    #f           #f      #t))
+
+;;======================================================================
 ;; C O N F I G   F I L E S 
 ;;======================================================================
 

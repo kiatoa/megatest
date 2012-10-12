@@ -210,17 +210,8 @@
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
-    (for-each 
-     (lambda (patt)
-       (let ((tests (glob (conc *toppath* "/tests/" (string-translate patt "%" "*")))))
-	 (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-	 (set! test-names (append test-names 
-				  (map (lambda (testp)
-					 (last (string-split testp "/")))
-				       tests)))))
-     (if test-patts (string-split test-patts ",")(list "%")))
 
-     ;; now remove duplicates
+    (set! test-names (tests:get-valid-tests *toppath* test-patts test-names: test-names))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print 0 "INFO: test names " test-names)
@@ -306,7 +297,7 @@
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
-    (runs:run-tests-queue run-id runname test-records keyvallst flags)
+    (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     (debug:print 4 "INFO: All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -335,12 +326,11 @@
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue run-id runname test-records keyvallst flags)
+(define (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
-	(item-patts        (hash-table-ref/default flags "-itempatt" #f))
 	(test-registery    (make-hash-table))
 	(num-retries        0)
 	(max-retries       (config-lookup *configdat* "setup" "maxretries")))
@@ -406,11 +396,10 @@
 		(debug:print 4 "INFO: run-limits-info = " run-limits-info)
 		(cond ;; INNER COND #1 for a launchable test
 		 ;; Check item path against item-patts
-		 ((and (not (patt-list-match item-path item-patts))
-		       (not (equal? item-path "")))
+		 ((not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path)) ;; This test/itempath is not to be run
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
-		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
+		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
@@ -469,7 +458,7 @@
 					   (vector-copy! test-record newrec)
 					   newrec))
 			(my-item-path (item-list->path my-itemdat)))
-		   (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+		   (if (tests:match test-patts hed my-item-path) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
 		       (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
 			 (tests:testqueue-set-items!     new-test-record #f)
 			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)

@@ -29,6 +29,54 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
+(define (tests:get-valid-tests testsdir test-patts #!key (test-names '()))
+  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+    (delete-duplicates
+     (append test-names 
+	     (filter (lambda (testname)
+		       (tests:match test-patts testname #f))
+		     (map (lambda (testp)
+			    (last (string-split testp "/")))
+			  tests))))))
+
+;; tests:glob-like-match
+(define (tests:glob-like-match patt str) 
+  (let ((like (substring-index "%" patt)))
+    (let* ((notpatt  (equal? (substring-index "~" patt) 0))
+	   (newpatt  (if notpatt (substring patt 1) patt))
+	   (finpatt  (if like
+			(string-substitute (regexp "%") ".*" newpatt)
+			(string-substitute (regexp "\\*") ".*" newpatt)))
+	   (res      #f))
+      ;; (print "tests:glob-like-match => notpatt: " notpatt ", newpatt: " newpatt ", finpatt: " finpatt)
+      (set! res (string-match (regexp finpatt (if like #t #f)) str))
+      (if notpatt (not res) res))))
+
+;; if itempath is #f then look only at the testname part
+;;
+(define (tests:match patterns testname itempath)
+  (if (string? patterns)
+      (let ((patts (string-split patterns ",")))
+	(if (null? patts) ;;; no pattern(s) means no match
+	    #f
+	    (let loop ((patt (car patts))
+		       (tal  (cdr patts)))
+	      ;; (print "loop: patt: " patt ", tal " tal)
+	      (if (string=? patt "")
+		  #f ;; nothing ever matches empty string - policy
+		  (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
+			 (test-patt  (cadr patt-parts))
+			 (item-patt  (cadddr patt-parts)))
+		    ;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
+		    (if (and (tests:glob-like-match test-patt testname)
+			     (or (not itempath)
+				 (tests:glob-like-match (if item-patt item-patt "") itempath)))
+			#t
+			(if (null? tal)
+			    #f
+			    (loop (car tal)(cdr tal)))))))))))
+
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
