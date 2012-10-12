@@ -77,6 +77,28 @@
 			    #f
 			    (loop (car tal)(cdr tal)))))))))))
 
+;; if itempath is #f then look only at the testname part
+;;
+(define (tests:match->sqlqry patterns)
+  (if (string? patterns)
+      (let ((patts (string-split patterns ",")))
+	(if (null? patts) ;;; no pattern(s) means no match, we will do no query
+	    ""
+	    (let loop ((patt (car patts))
+		       (tal  (cdr patts))
+		       (res  '()))
+	      ;; (print "loop: patt: " patt ", tal " tal)
+	      (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
+		     (test-patt  (cadr patt-parts))
+		     (item-patt  (cadddr patt-parts))
+		     (test-qry   (db:patt->like "testname" test-patt))
+		     (item-qry   (db:patt->like "item_path" item-patt))
+		     (qry        (conc "(" test-qry " AND " item-qry ")")))
+		;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
+		(if (null? tal)
+		    (string-intersperse (append (reverse res)(list qry)) " OR ")
+		    (loop (car tal)(cdr tal)(cons qry res)))))))))
+
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)

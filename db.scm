@@ -623,7 +623,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt itempatt states statuses 
+(define (db:get-tests-for-run db run-id testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f) ;; 'rundir 'event_time
 			      )
@@ -637,9 +637,7 @@
 			       ""))
 	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
 			 " FROM tests WHERE run_id=? AND "
-			 ;; testname like ? AND item_path LIKE ? " 
-			 (db:patt->like "testname" testpatt) " AND "
-			 (db:patt->like "item_path" itempatt)
+			 (tests:match->sqlqry testpatt)
 			 state-status-qry
 			 (case sort-by
 			   ((rundir)     " ORDER BY length(rundir) DESC;")
@@ -922,8 +920,7 @@
 ;;======================================================================
 
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
-  (let* ((itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
-	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
@@ -933,9 +930,10 @@
 		       keynames 
 		       (string-split target "/"))
 		  " AND "))
+	 (testqry (tests:match->sqlqry testpatt))
 	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
-		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
-		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       keystr " AND r.runname LIKE '" runname "' AND " testqry
+		       "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
 		       "'ORDER BY t.event_time ASC;")))
     (debug:print 3 "qrystr: " qrystr)
     (sqlite3:for-each-row 

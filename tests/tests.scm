@@ -22,6 +22,8 @@
 ;;======================================================================
 ;; T E S T   M A T C H I N G
 ;;======================================================================
+
+;; tests:glob-like-match
 (test #f '("abc") (tests:glob-like-match "abc" "abc"))
 (for-each 
  (lambda (patt str expected)
@@ -31,6 +33,7 @@
  (list '("abc")  #t      #f     #f '("ABC"))
  )
 
+;; tests:match
 (test #f #t (tests:match "abc/def" "abc" "def"))
 (for-each 
  (lambda (patterns testname itempath expected)
@@ -41,6 +44,19 @@
  (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"        )
  (list   ""  ""      "cde"    "cde"     "cde"     ""         )
  (list   #t    #t       #t    #f           #f      #t))
+
+;; db:patt->like
+(test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
+(test #f "testname LIKE 't%' AND testname LIKE '%t'" (db:patt->like "testname" "t%,%t" comparator: " AND "))
+(test #f "item_path GLOB ''" (db:patt->like "item_path" ""))
+
+;; test:match->sqlqry
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname GLOB '' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,/b%"))
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,%/b%"))
+
+;; (exit)
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
@@ -231,6 +247,8 @@
 (test "Get nice table for steps" "2.0s"
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
+
+(exit)
 
 ;;======================================================================
 ;; R E M O T E   C A L L S 
