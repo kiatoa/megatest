@@ -83,7 +83,7 @@
   (if (string? patterns)
       (let ((patts (string-split patterns ",")))
 	(if (null? patts) ;;; no pattern(s) means no match, we will do no query
-	    ""
+	    #f
 	    (let loop ((patt (car patts))
 		       (tal  (cdr patts))
 		       (res  '()))
@@ -97,7 +97,8 @@
 		;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
 		(if (null? tal)
 		    (string-intersperse (append (reverse res)(list qry)) " OR ")
-		    (loop (car tal)(cdr tal)(cons qry res)))))))))
+		    (loop (car tal)(cdr tal)(cons qry res)))))))
+      #f))
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found

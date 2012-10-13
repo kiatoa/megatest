@@ -629,20 +629,30 @@
 			      )
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
-	 (states-str    (conc " state in ('" (string-intersperse states   "','") "')"))
-	 (statuses-str  (conc " status in ('" (string-intersperse statuses "','") "')"))
-	 (state-status-qry (if (or (not (null? states))
-				   (not (null? states)))
-			       (conc " AND " (if not-in "NOT" "") " (" states-str " AND " statuses-str ") ")
-			       ""))
-	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
-			 " FROM tests WHERE run_id=? AND ("
-			 (tests:match->sqlqry testpatt)
-			 state-status-qry
-			 (case sort-by
-			   ((rundir)     ") ORDER BY length(rundir) DESC;")
-			   ((event_time) ") ORDER BY event_time ASC;")
-			   (else         ");"))
+	 (states-qry      (if (null? states) 
+			      #f
+			      (conc " state "  
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse states   "','")
+				    "')")))
+	 (statuses-qry    (if (null? statuses)
+			      #f
+			      (conc " status "
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse statuses "','")
+				    "')")))
+	 (tests-match-qry (tests:match->sqlqry testpatt))
+	 (qry             (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+				" FROM tests WHERE run_id=? "
+				(if states-qry   (conc " AND " states-qry)   "")
+				(if statuses-qry (conc " AND " statuses-qry) "")
+				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+				(case sort-by
+				  ((rundir)     " ORDER BY length(rundir) DESC;")
+				  ((event_time) " ORDER BY event_time ASC;")
+				  (else         ";"))
 			 )))
     (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
