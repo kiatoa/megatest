@@ -218,6 +218,9 @@ Built from " megatest-fossil-hash ))
       (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
       (exit)))
 
+(if (> *verbosity* 3) ;; we are obviously debugging
+    (set! open-run-close open-run-close-no-exception-handling))
+
 ;;======================================================================
 ;; Misc general calls
 ;;======================================================================

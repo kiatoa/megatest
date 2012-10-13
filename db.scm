@@ -422,7 +422,7 @@
 	res)))
 
 (define (db:get-value-by-header row header field)
-  ;; (debug:print 2 "db:get-value-by-header row: " row " header: " header " field: " field)
+  (debug:print 4 "INFO: db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -711,7 +711,7 @@
    ((and newstate newstatus newcomment)
     (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
    ((and newstate newstatus)
-    (sqlite3:exectute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
    (else
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))

@@ -28,8 +28,8 @@ test1 : cleanprep
 	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_a $(SERVER)
-	cd fullrun;sleep 20;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status :state COMPLETED :status FORCED -testpatt runfirst/% 
+	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) $(SERVER)
+	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst 
 
 
 test3 : fullprep

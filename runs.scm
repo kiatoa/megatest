@@ -713,7 +713,11 @@
 	 (states       (if state  (string-split state  ",") '()))
 	 (statuses     (if status (string-split status ",") '()))
 	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f))))
-    (debug:print 2 "Header: " header " action: " action " new-state-status: " new-state-status)
+    (debug:print 4 "INFO: runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
+    (if (> 2 (length state-status))
+	(begin
+	  (debug:print 0 "ERROR: the parameter to -set-state-status is a comma delimited string. E.g. COMPLETED,FAIL")
+	  (exit)))
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
@@ -722,7 +726,7 @@
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id")
+			       (open-run-close db:get-tests-for-run db run-id
 						      testpatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
@@ -750,7 +754,7 @@
 			   (run-dir   (db:test-get-rundir test))
 			   (test-id   (db:test-get-id test)))
 		      ;;   (tdb       (db:open-test-db run-dir)))
-		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
+		      (debug:print 1 "INFO: test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
 		      (case action
 			((remove-runs) ;; the tdb is for future possible. 
 			 (open-run-close db:delete-test-records db #f (db:test-get-id test))

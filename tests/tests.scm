@@ -248,7 +248,7 @@
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
 
-(exit)
+;; (exit)
 
 ;;======================================================================
 ;; R E M O T E   C A L L S 
