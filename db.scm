@@ -636,13 +636,13 @@
 			       (conc " AND " (if not-in "NOT" "") " (" states-str " AND " statuses-str ") ")
 			       ""))
 	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
-			 " FROM tests WHERE run_id=? AND "
+			 " FROM tests WHERE run_id=? AND ("
 			 (tests:match->sqlqry testpatt)
 			 state-status-qry
 			 (case sort-by
-			   ((rundir)     " ORDER BY length(rundir) DESC;")
-			   ((event_time) " ORDER BY event_time ASC;")
-			   (else         ";"))
+			   ((rundir)     ") ORDER BY length(rundir) DESC;")
+			   ((event_time) ") ORDER BY event_time ASC;")
+			   (else         ");"))
 			 )))
     (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
@@ -1448,7 +1448,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name #f '() '()))
+	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
