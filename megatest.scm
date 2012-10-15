@@ -42,20 +42,19 @@ Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
                             CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
-  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
-                            -itempatt be set. Optionally use :state and :status
+  -remove-runs            : remove the data for a run, requires :runname and -testpatt
+                            Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -rollup                 : fill run (set by :runname)  with latest test(s) from
-                            prior runs with same keys
+  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
+                            from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
   -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
-  -testpatt patt          : % is wildcard
-  -itempatt patt          : % is wildcard
+  -testpatt patt1/patt2,patt3/...  : % is wildcard
   :runname                : required, name for this particular test run
   :state                  : Applies to runs, tests or steps depending on context
   :status                 : Applies to runs, tests or steps depending on context
@@ -417,14 +416,17 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-rollup")
-    (general-run-call 
-     "-rollup" 
-     "rollup tests" 
-     (lambda (target runname keys keynames keyvallst)
-       (runs:rollup-run keys
-			(keys->alist keys "na")
-			(args:get-arg ":runname") 
-			user))))
+    (begin
+      (debug:print 0 "ERROR: Rollup is currently not working. If you need it please submit a ticket at http://www.kiatoa.com/fossils/megatest")
+      (exit 4)))
+;;     (general-run-call 
+;;      "-rollup" 
+;;      "rollup tests" 
+;;      (lambda (target runname keys keynames keyvallst)
+;;        (runs:rollup-run keys
+;; 			(keys->alist keys "na")
+;; 			(args:get-arg ":runname") 
+;; 			user))))
 
 ;;======================================================================
 ;; Lock or unlock a run

@@ -46,12 +46,14 @@ test5 : fullprep
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
 
 test6: fullprep
-	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
-	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
+	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
+	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
+	cd fullrun;$(MEGATEST) -rollup :runname newrun -target ubuntu/nfs/none -debug 10
+
 
 cleanprep : ../*.scm Makefile */*.config
 	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi

@@ -943,8 +943,8 @@
 	 (testqry (tests:match->sqlqry testpatt))
 	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
 		       keystr " AND r.runname LIKE '" runname "' AND " testqry
-		       "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
-		       "'ORDER BY t.event_time ASC;")))
+		       " AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       "' ORDER BY t.event_time ASC;")))
     (debug:print 3 "qrystr: " qrystr)
     (sqlite3:for-each-row 
      (lambda (p)

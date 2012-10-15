@@ -431,14 +431,15 @@ Misc
 	    (iup:frame 
 	     #:title "filter test and items"
 	     (iup:hbox
-	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+	      (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
 				      (mark-for-update)
 				      (update-search "test-name" val)))
-	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			   #:action (lambda (obj unk val)
-				      (mark-for-update)
-				      (update-search "item-name" val)))))
+	      ;;(iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+	      ;;  	   #:action (lambda (obj unk val)
+	      ;;  		      (mark-for-update)
+	      ;;  		      (update-search "item-name" val))
+	      ))
 	    (iup:vbox
 	     (iup:hbox
 	      (iup:button "Sort" #:action (lambda (obj)
