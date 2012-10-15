@@ -51,7 +51,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print 2 "INFO: Setting pragma synchronous to " val)
+	  (debug:print 4 "INFO: Setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))

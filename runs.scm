@@ -751,37 +751,45 @@
 		  (lambda (test)
 		    (let* ((item-path (db:test-get-item-path test))
 			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test))
+			   (run-dir   (db:test-get-rundir test))    ;; run dir is from the link tree
+			   (real-dir  (if (file-exists? run-dir)
+					  (resolve-pathname run-dir)
+					  #f))
 			   (test-id   (db:test-get-id test)))
 		      ;;   (tdb       (db:open-test-db run-dir)))
-		      (debug:print 1 "INFO: test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
+		      (debug:print 4 "INFO: test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
 		      (case action
 			((remove-runs) ;; the tdb is for future possible. 
 			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
-			 (debug:print 1 "INFO: Attempting to remove dir " run-dir)
-			 (if (and (> (string-length run-dir) 5)
-				  (file-exists? run-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-			     (let* ((realpath (resolve-pathname run-dir)))
-			       (debug:print 1 "INFO: Real path of is " realpath)
-			       (if (file-exists? realpath)
-				   (if (> (system (conc "rm -rf " realpath)) 0)
-				       (debug:print 0 "ERROR: There was a problem removing " realpath " with rm -f"))
-				   (debug:print 0 "WARNING: test run dir " realpath " appears to not exist"))
-			       (if (file-exists? run-dir) ;; the link
-				   (if (symbolic-link? run-dir)
-				       (delete-file run-dir)
-				       (if (directory? run-dir)
-					   (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-					       (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-					       (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
-					   (debug:print 0 "ERROR: refusing to remove " run-dir " as it is neither a symlink nor a directory")
-					   ))))
-			     (debug:print 0 "WARNING: directory already removed " run-dir)))
+			 (debug:print 1 "INFO: Attempting to remove dir " real-dir " and link " run-dir)
+			 (if (and real-dir 
+				  (> (string-length real-dir) 5)
+				  (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+			     (begin ;; let* ((realpath (resolve-pathname run-dir)))
+			       (debug:print 1 "INFO: Recursively removing " real-dir)
+			       (if (file-exists? real-dir)
+				   (if (> (system (conc "rm -rf " real-dir)) 0)
+				       (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
+				   (debug:print 0 "WARNING: test run dir " real-dir " appears to not exist")))
+			     (debug:print 0 "WARNING: directory " real-dir " does not exist"))
+			 (if (symbolic-link? run-dir)
+			     (begin
+			       (debug:print 1 "INFO: Removing symlink " run-dir)
+			       (delete-file run-dir))
+			     (if (directory? run-dir)
+				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+				     (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
+				 (debug:print 0 "ERROR: refusing to remove " run-dir " as it either doesn't exist or is not a symlink or directory")
+				 )))
 			((set-state-status)
 			 (debug:print 2 "INFO: new state " (car state-status) ", new status " (cadr state-status))
 			 (open-run-close db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
-		  tests)))
-	   
+		  (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
+						 (dirb (db:test-get-rundir b)))
+					     (if (and (string? dira)(string? dirb))
+						 (> (string-length dira)(string-length dirb))
+						 #f)))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
 	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
