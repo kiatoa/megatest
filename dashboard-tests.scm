@@ -135,12 +135,14 @@
 			  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
 				     ))
 			keydat)
-		   (list (iup:label "runname "))))
+		   (list (iup:label "runname ")(iup:label "run-id"))))
     (apply iup:vbox
 	   (append (map (lambda (keyval)
 			  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
 			keydat)
-		   (list (iup:label runname)(iup:label "" #:expand "VERTICAL")))))))
+		   (list (iup:label runname)
+			 (iup:label (conc (db:test-get-run_id testdat)))
+			 (iup:label "" #:expand "VERTICAL")))))))
   
 ;;======================================================================
 ;; Host info panel
@@ -350,18 +352,18 @@
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -runtests " testname " -target " keystring " :runname " runname 
-				   " -itempatt " (if (equal? item-path "")
-						     "%" 
-						     item-path)
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname " runname 
+				   " -runtests " (conc testname "/" (if (equal? item-path "")
+									"%" 
+									item-path))
 				   ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
-				     (if (equal? item-path "")
-					 "%"
-					 item-path)
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+				     " -testpatt " (conc testname "/" (if (equal? item-path "")
+									  "%"
+									  item-path))
 				     " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
