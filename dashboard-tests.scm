@@ -13,7 +13,7 @@
 ;; Test info panel
 ;;======================================================================
 
-(use format)
+(use format fmt)
 (require-library iup)
 (import (prefix iup iup:))
 
@@ -83,6 +83,10 @@
 ;;======================================================================
 ;; Test meta panel
 ;;======================================================================
+
+(define (test-meta-panel-get-description testmeta)
+  (fmt #f (with-width 40 (wrap-lines (db:testmeta-get-description testmeta)))))
+
 (define (test-meta-panel testmeta store-meta)
   (iup:frame 
    #:title "Test Meta Data" ; #:expand "YES"
@@ -113,8 +117,9 @@
 			 (iup:label (db:testmeta-get-tags testmeta) #:expand "HORIZONTAL")
 			 (lambda (testmeta)(db:testmeta-get-tags testmeta)))
 	    (store-meta "description" 
-			 (iup:label (db:testmeta-get-description testmeta) #:size "x50"); #:expand "HORIZONTAL")
-			 (lambda (testmeta)(db:testmeta-get-description testmeta)))
+			 (iup:label (test-meta-panel-get-description testmeta) #:size "x50"); #:expand "HORIZONTAL")
+			 (lambda (testmeta)
+			   (test-meta-panel-get-description testmeta)))
 	    )))))
 
 
