@@ -394,7 +394,9 @@ Built from " megatest-fossil-hash ))
      (lambda (target runname keys keynames keyvallst)
 	 (runs:run-tests target
 			 runname
-			 (args:get-arg "-runtests")
+			 (if (args:get-arg "-testpatt")
+			     (args:get-arg "-testpatt")
+			     "%/%")
 			 user
 			 args:arg-hash)))) ;; )
 

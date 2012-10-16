@@ -29,6 +29,8 @@ test1 : cleanprep
 
 test2 : fullprep
 	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) $(SERVER) -debug $(DEBUG) $(LOGGING)
+	cd fullrun;megatest -runall -target ubunut/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
+	cd fullrun;megatest -runtests %/,%/ai -target ubunut/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
 	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
 

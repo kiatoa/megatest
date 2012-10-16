@@ -389,7 +389,7 @@
 					 (conc (db:test-get-state t) "/" (db:test-get-status t))
 					 (conc " WARNING: t is not a vector=" t )))
 				   prereqs-not-met) ", ") " fails: " fails)
-		(debug:print 4 "INFO: hed=" hed)
+		(debug:print 4 "INFO: hed=" hed "\n  test-record=" test-record "\n  test-name: " test-name "\n  item-path: " item-path "\n  test-patts: " test-patts)
 
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
@@ -405,6 +405,7 @@
 		      (loop (car tal)(cdr tal) reruns)))
 		 ((and (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
 		       (and max-concurrent-jobs (> (- max-concurrent-jobs num-running) 5)))
+		  (debug:print 4 "INFO: Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
@@ -489,7 +490,9 @@
 				   "\n num-retries:     " num-retries
 				   "\n (eq? testmode 'toplevel): " (eq? testmode 'toplevel)
 				   "\n (null? non-completed):    " (null? non-completed)
-				   "\n reruns: " reruns)
+				   "\n reruns:          " reruns
+				   "\n items:           " items
+				   "\n can-run-more:    " can-run-more)
 
 		      (cond ;; INNER COND #2
 		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
@@ -512,7 +515,13 @@
 		       ((null? fails)
 			(debug:print 4 "INFO: fails is null, moving on in the queue but keeping " hed " for now")
 			(thread-sleep! *global-delta*)
-			(loop (car newtal)(cdr newtal) reruns)) ;; an issue with prereqs not yet met?
+			;; only increment num-retries when there are no tests runing
+			(if (eq? 0 (list-ref can-run-more 1))
+			    (set! num-retries (+ num-retries 1)))
+			(if (> num-retries  max-retries)
+			    (if (not (null? tal))
+				(loop (car tal)(cdr tal) reruns))
+			    (loop (car newtal)(cdr newtal) reruns))) ;; an issue with prereqs not yet met?
 		       ((and (not (null? fails))(eq? testmode 'normal))
 			(debug:print 1 "INFO: test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 				     (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
