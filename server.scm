@@ -55,6 +55,7 @@
 				   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 				   #f))
 	       (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
+	  (debug:print 0 "Server started on " host:port)
 	  (db:set-var db "SERVER" host:port)
 	  (set! *cache-on* #t)
 	  
@@ -138,7 +139,7 @@
 			       (loop (+ n 1)))))
 		      )))
 	  (thread-start! th1)
-	  (debug:print 0 "Server started...")
+	  ;; (debug:print 0 "Server started on port " (rpc:default-server-port) "...")
 	  (thread-start! th2)
 	  ;; (thread-join!  th2)
 	  ;; return th2 for the calling process to do a join with 
@@ -173,8 +174,8 @@
      (print "Failed to bind to port " (rpc:default-server-port) ", trying next port")
      (server:find-free-port-and-open (+ port 1)))
    (rpc:default-server-port port)
-   (tcp-read-timeout 120000)
-   (tcp-listen (rpc:default-server-port) )))
+   (tcp-read-timeout 240000)
+   (tcp-listen (rpc:default-server-port) 10000)))
 
 (define (server:client-setup)
   (if *runremote*

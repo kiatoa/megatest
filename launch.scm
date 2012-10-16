@@ -542,7 +542,8 @@
 	 (test-id    (open-run-close db:get-test-id db run-id test-name item-path))
 	 (testinfo   (open-run-close db:get-test-info-by-id db test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
-	 (debug-param (if (args:get-arg "-debug")(list "-debug" (args:get-arg "-debug")) '())))
+	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
+			      (if (args:get-arg "-logging")(list "-logging") '()))))
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))

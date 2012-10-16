@@ -220,6 +220,10 @@
     (db:set-var db "MEGATEST_VERSION" megatest-version)
     ))
 
+;;======================================================================
+;; T E S T   S P E C I F I C   D B 
+;;======================================================================
+
 ;; Create the sqlite db for the individual test(s)
 (define (open-test-db testpath) 
   (if (and (directory? testpath)
@@ -289,6 +293,31 @@
               val TEXT,
               ackstate INTEGER DEFAULT 0,
               CONSTRAINT metadat_constraint UNIQUE (var));")))
+
+;;======================================================================
+;; L O G G I N G    D B 
+;;======================================================================
+
+(define (open-logging-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
+	 (dbexists  (file-exists? dbpath))
+	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					   (string->number (args:get-arg "-override-timeout"))
+					   36000)))) ;; 136000)))
+    (sqlite3:set-busy-handler! db handler)
+    (if (not dbexists)
+	(begin
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT);")
+	  (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))))
+    db))
+
+(define (db:log-event . loglst)
+  (let ((db      (open-logging-db))
+	(logline (apply conc loglst)))
+    (sqlite3:execute db "INSERT INTO log (logline) VALUES (?);" logline)
+    (sqlite3:finalize! db)
+    logline))
 
 ;;======================================================================
 ;; TODO:

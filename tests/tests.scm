@@ -309,7 +309,7 @@
 	    ))
 ;; now set all tests to completed
 (rdb:flush-queue)
-(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" "%" '() '())))
+(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" '() '())))
   (print "Setting " (length tests) " to COMPLETED/PASS")
   (for-each
    (lambda (test)
