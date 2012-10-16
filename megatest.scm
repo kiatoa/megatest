@@ -42,20 +42,19 @@ Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
                             CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
-  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
-                            -itempatt be set. Optionally use :state and :status
+  -remove-runs            : remove the data for a run, requires :runname and -testpatt
+                            Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -rollup                 : fill run (set by :runname)  with latest test(s) from
-                            prior runs with same keys
+  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
+                            from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
   -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
-  -testpatt patt          : % is wildcard
-  -itempatt patt          : % is wildcard
+  -testpatt patt1/patt2,patt3/...  : % is wildcard
   :runname                : required, name for this particular test run
   :state                  : Applies to runs, tests or steps depending on context
   :status                 : Applies to runs, tests or steps depending on context
@@ -98,8 +97,6 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -repl                   : start a repl (useful for extending megatest)
-  -debug N                : increase verbosity to N. (try 10 for lots of noise)
-  -logging                : turn on logging all debug output to logging.db
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -194,7 +191,6 @@ Built from " megatest-fossil-hash ))
 
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
-			"-logging"
 		       )
 		 args:arg-hash
 		 0))
@@ -220,8 +216,24 @@ Built from " megatest-fossil-hash ))
     (begin
       (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
       (exit)))
-
+ 
 (if (args:get-arg "-logging")(set! *logging* #t))
+
+(if (> *verbosity* 3) ;; we are obviously debugging
+    (set! open-run-close open-run-close-no-exception-handling))
+
+;; to try and not burden Kim too much...
+(if (args:get-arg "-itempatt")
+    (let ((old-testpatt (args:get-arg "-testpatt")))
+      (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
+      (hash-table-set! args:arg-hash "-testpatt" (conc old-testpatt "/" (args:get-arg "-itempatt")))
+      (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
+      (if (args:get-arg "-runtests")
+	  (begin
+	    (debug:print 0 "NOTE: Also modifying -runtests")
+	    (hash-table-set! args:arg-hash "-runtests" (conc (args:get-arg "-runtests") "/" 
+							     (args:get-arg "-itempatt")))))
+      ))
 
 ;;======================================================================
 ;; Misc general calls
@@ -246,9 +258,6 @@ Built from " megatest-fossil-hash ))
    ((not (args:get-arg "-testpatt"))
     (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
     (exit 3))
-   ((not (args:get-arg "-itempatt"))
-    (print "ERROR: Missing required parameter for " action ", you must specify the items with -itempatt")
-    (exit 4))
    (else
     (if (not (car *configinfo*))
 	(begin
@@ -258,7 +267,6 @@ Built from " megatest-fossil-hash ))
 	(runs:operate-on  action
 			  (args:get-arg ":runname")
 			  (args:get-arg "-testpatt")
-			  (args:get-arg "-itempatt")
 			  state: (args:get-arg ":state") 
 			  status: (args:get-arg ":status")
 			  new-state-status: (args:get-arg "-set-state-status")))
@@ -287,7 +295,6 @@ Built from " megatest-fossil-hash ))
 	(let* ((db       #f)
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (args:get-arg "-testpatt"))
-	       (itempatt (args:get-arg "-itempatt"))
 	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
@@ -304,7 +311,7 @@ Built from " megatest-fossil-hash ))
 			  (db:get-value-by-header run header "runname")
 			  " status: " (db:get-value-by-header run header "state"))
 	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
-	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
+	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
 		 ;; Each test
 		 (for-each 
 		  (lambda (test)
@@ -424,14 +431,17 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-rollup")
-    (general-run-call 
-     "-rollup" 
-     "rollup tests" 
-     (lambda (target runname keys keynames keyvallst)
-       (runs:rollup-run keys
-			(keys->alist keys "na")
-			(args:get-arg ":runname") 
-			user))))
+    (begin
+      (debug:print 0 "ERROR: Rollup is currently not working. If you need it please submit a ticket at http://www.kiatoa.com/fossils/megatest")
+      (exit 4)))
+;;     (general-run-call 
+;;      "-rollup" 
+;;      "rollup tests" 
+;;      (lambda (target runname keys keynames keyvallst)
+;;        (runs:rollup-run keys
+;; 			(keys->alist keys "na")
+;; 			(args:get-arg ":runname") 
+;; 			user))))
 
 ;;======================================================================
 ;; Lock or unlock a run
@@ -479,8 +489,7 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (open-run-close db:get-keys db))
+	  (let* ((keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
 		 (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)

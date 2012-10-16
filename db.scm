@@ -51,7 +51,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print 2 "INFO: Setting pragma synchronous to " val)
+	  (debug:print 4 "INFO: Setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -451,7 +451,7 @@
 	res)))
 
 (define (db:get-value-by-header row header field)
-  ;; (debug:print 2 "db:get-value-by-header row: " row " header: " header " field: " field)
+  (debug:print 4 "INFO: db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -477,7 +477,8 @@
 		   (string-split pattstr ",")
 		   '("%"))))
     (string-intersperse (map (lambda (patt)
-			       (conc fieldname " LIKE '" patt "'"))
+			       (let ((wildtype (if (substring-index "%" patt) "LIKE" "GLOB")))
+				 (conc fieldname " " wildtype " '" patt "'")))
 			     (if (null? patts)
 				 '("")
 				 patts))
@@ -651,28 +652,36 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt itempatt states statuses 
+(define (db:get-tests-for-run db run-id testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f) ;; 'rundir 'event_time
 			      )
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
-	 (states-str    (conc " state in ('" (string-intersperse states   "','") "')"))
-	 (statuses-str  (conc " status in ('" (string-intersperse statuses "','") "')"))
-	 (state-status-qry (if (or (not (null? states))
-				   (not (null? states)))
-			       (conc " AND " (if not-in "NOT" "") " (" states-str " AND " statuses-str ") ")
-			       ""))
-	 (qry      (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
-			 " FROM tests WHERE run_id=? AND "
-			 ;; testname like ? AND item_path LIKE ? " 
-			 (db:patt->like "testname" testpatt) " AND "
-			 (db:patt->like "item_path" itempatt)
-			 state-status-qry
-			 (case sort-by
-			   ((rundir)     " ORDER BY length(rundir) DESC;")
-			   ((event_time) " ORDER BY event_time ASC;")
-			   (else         ";"))
+	 (states-qry      (if (null? states) 
+			      #f
+			      (conc " state "  
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse states   "','")
+				    "')")))
+	 (statuses-qry    (if (null? statuses)
+			      #f
+			      (conc " status "
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse statuses "','")
+				    "')")))
+	 (tests-match-qry (tests:match->sqlqry testpatt))
+	 (qry             (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+				" FROM tests WHERE run_id=? "
+				(if states-qry   (conc " AND " states-qry)   "")
+				(if statuses-qry (conc " AND " statuses-qry) "")
+				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+				(case sort-by
+				  ((rundir)     " ORDER BY length(rundir) DESC;")
+				  ((event_time) " ORDER BY event_time ASC;")
+				  (else         ";"))
 			 )))
     (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
@@ -741,7 +750,7 @@
    ((and newstate newstatus newcomment)
     (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
    ((and newstate newstatus)
-    (sqlite3:exectute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
    (else
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
@@ -950,8 +959,7 @@
 ;;======================================================================
 
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
-  (let* ((itempatt   (if (args:get-arg "-itempatt")(args:get-arg "-itempatt") "%"))
-	 (testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
@@ -961,10 +969,11 @@
 		       keynames 
 		       (string-split target "/"))
 		  " AND "))
+	 (testqry (tests:match->sqlqry testpatt))
 	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
-		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
-		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
-		       "'ORDER BY t.event_time ASC;")))
+		       keystr " AND r.runname LIKE '" runname "' AND " testqry
+		       " AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
+		       "' ORDER BY t.event_time ASC;")))
     (debug:print 3 "qrystr: " qrystr)
     (sqlite3:for-each-row 
      (lambda (p)
@@ -1478,7 +1487,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name #f '() '()))
+	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))

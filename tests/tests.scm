@@ -20,6 +20,45 @@
 	(string-search (regexp "No such file or directory")(car reslst))))
 
 ;;======================================================================
+;; T E S T   M A T C H I N G
+;;======================================================================
+
+;; tests:glob-like-match
+(test #f '("abc") (tests:glob-like-match "abc" "abc"))
+(for-each 
+ (lambda (patt str expected)
+   (test (conc patt " " str "=>" expected) expected (tests:glob-like-match patt str)))
+ (list "abc"    "~abc" "~abc" "a*c"  "a%c")
+ (list "abc"    "abcd" "abc"  "ABC"  "ABC")
+ (list '("abc")  #t      #f     #f '("ABC"))
+ )
+
+;; tests:match
+(test #f #t (tests:match "abc/def" "abc" "def"))
+(for-each 
+ (lambda (patterns testname itempath expected)
+   (test (conc patterns " " testname "/" itempath "=>" expected)
+	 expected 
+	 (tests:match patterns testname itempath)))
+ (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d")
+ (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"        )
+ (list   ""  ""      "cde"    "cde"     "cde"     ""         )
+ (list   #t    #t       #t    #f           #f      #t))
+
+;; db:patt->like
+(test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
+(test #f "testname LIKE 't%' AND testname LIKE '%t'" (db:patt->like "testname" "t%,%t" comparator: " AND "))
+(test #f "item_path GLOB ''" (db:patt->like "item_path" ""))
+
+;; test:match->sqlqry
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname GLOB '' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,/b%"))
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,%/b%"))
+
+;; (exit)
+
+;;======================================================================
 ;; C O N F I G   F I L E S 
 ;;======================================================================
 
@@ -88,7 +127,7 @@
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
 (define remargs (args:get-args
-		 '("bar" "foo" ":runname" "bob" ":sysname" "ubuntu" ":fsname" "nfs" ":datapath" "blah/foo" "nada")
+		 '("bar" "foo" ":runname" "bob" ":SYSTEM" "ubuntu" ":RELEASE" "v1.2" ":datapath" "blah/foo" "nada")
 		 (list ":runname" ":state" ":status")
 		 (list "-h")
 		 args:arg-hash
@@ -96,12 +135,21 @@
 
 (test "register-run" #t (number? (runs:register-run *db*
 						    (db:get-keys *db*)
-						    '(("SYSTEM" "key1")("OS" "key2"))
+						    '(("SYSTEM" "key1")("RELEASE" "key2"))
 						    "myrun" 
 						    "new"
 						    "n/a" 
 						    "bob")))
 (define keys (db:get-keys *db*))
+
+;;======================================================================
+;; D B
+;;======================================================================
+(test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
+(test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
+      (runs:get-runs-by-patt db keys "%"))
+(test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
+(test #f #t (runs:operate-on 'print "%" "%" "%"))
 
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
@@ -186,7 +234,7 @@
 	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
+	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" '() '()))))
 	(number? test-id)))
 
 (test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
@@ -196,9 +244,11 @@
 			      (sqlite3#finalize! tdb)
 			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
 (test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
-(test "Get nice table for steps" "2s"
+(test "Get nice table for steps" "2.0s"
       (begin
 	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
+
+;; (exit)
 
 ;;======================================================================
 ;; R E M O T E   C A L L S 
@@ -259,7 +309,7 @@
 	    ))
 ;; now set all tests to completed
 (rdb:flush-queue)
-(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" "%" '() '())))
+(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" '() '())))
   (print "Setting " (length tests) " to COMPLETED/PASS")
   (for-each
    (lambda (test)

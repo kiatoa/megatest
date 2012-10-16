@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2011, Matthew Welland.
+;; Copyright 2006-2012, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -34,28 +34,33 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (runs:get-runs-by-patt db keys runnamepatt . params) ;; test-name)
+(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
   (let* ((keyvallst (keys->vallist keys))
 	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
-	 (key-patt ""))
+	 (key-patt "")
+	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
+	 (qry-str  #f))
     (for-each (lambda (keyval)
 		(let* ((key    (vector-ref keyval 0))
 		       (fulkey (conc ":" key))
-		       (patt   (args:get-arg fulkey)))
+		       (patt   (args:get-arg fulkey))
+		       (wildtype (if (substring-index "%" patt) "like" "glob")))
 		  (if patt
-		      (set! key-patt (conc key-patt " AND " key " like '" patt "'"))
+		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keys)
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
+    (debug:print 4 "INFO: runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
      (lambda (a . r)
        (set! res (cons (list->vector (cons a r)) res)))
      db 
-     (conc "SELECT " keystr " FROM runs WHERE runname like ? " key-patt ";")
+     qry-str
      runnamepatt)
     (vector header res)))
 
@@ -205,17 +210,8 @@
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
-    (for-each 
-     (lambda (patt)
-       (let ((tests (glob (conc *toppath* "/tests/" (string-translate patt "%" "*")))))
-	 (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-	 (set! test-names (append test-names 
-				  (map (lambda (testp)
-					 (last (string-split testp "/")))
-				       tests)))))
-     (if test-patts (string-split test-patts ",")(list "%")))
 
-     ;; now remove duplicates
+    (set! test-names (tests:get-valid-tests *toppath* test-patts test-names: test-names))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print 0 "INFO: test names " test-names)
@@ -301,7 +297,7 @@
 	(debug:print 1 "INFO: Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print 4 "INFO: test-records=" (hash-table->alist test-records))
-    (runs:run-tests-queue run-id runname test-records keyvallst flags)
+    (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     (debug:print 4 "INFO: All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -330,12 +326,11 @@
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue run-id runname test-records keyvallst flags)
+(define (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
-	(item-patts        (hash-table-ref/default flags "-itempatt" #f))
 	(test-registery    (make-hash-table))
 	(num-retries        0)
 	(max-retries       (config-lookup *configdat* "setup" "maxretries")))
@@ -401,11 +396,10 @@
 		(debug:print 4 "INFO: run-limits-info = " run-limits-info)
 		(cond ;; INNER COND #1 for a launchable test
 		 ;; Check item path against item-patts
-		 ((and (not (patt-list-match item-path item-patts))
-		       (not (equal? item-path "")))
+		 ((not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path)) ;; This test/itempath is not to be run
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
-		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " item-patts)
+		  (debug:print 1 "INFO: Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
@@ -464,7 +458,7 @@
 					   (vector-copy! test-record newrec)
 					   newrec))
 			(my-item-path (item-list->path my-itemdat)))
-		   (if (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+		   (if (tests:match test-patts hed my-item-path) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
 		       (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
 			 (tests:testqueue-set-items!     new-test-record #f)
 			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
@@ -710,7 +704,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action runnamepatt testpatt itempatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (let* ((db           #f)
 	 (keys         (open-run-close db:get-keys db))
 	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))
@@ -719,7 +713,11 @@
 	 (states       (if state  (string-split state  ",") '()))
 	 (statuses     (if status (string-split status ",") '()))
 	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f))))
-    (debug:print 2 "Header: " header " action: " action " new-state-status: " new-state-status)
+    (debug:print 4 "INFO: runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
+    (if (> 2 (length state-status))
+	(begin
+	  (debug:print 0 "ERROR: the parameter to -set-state-status is a comma delimited string. E.g. COMPLETED,FAIL")
+	  (exit)))
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
@@ -728,15 +726,15 @@
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id")
-						      testpatt itempatt states statuses
+			       (open-run-close db:get-tests-for-run db run-id
+						      testpatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
 								 ((remove-runs) 'rundir)
 								 (else          'event_time)))
 			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
-
+	   (debug:print 4 "INFO: runs:operate-on run=" run ", header=" header)
 	   (if (not (null? tests))
 	       (begin
 		 (case action
@@ -744,46 +742,57 @@
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
+		   ((print-run)
+		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
+		    action)
 		   (else
 		    (print "INFO: action not recognised " action)))
 		 (for-each
 		  (lambda (test)
 		    (let* ((item-path (db:test-get-item-path test))
 			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test))
+			   (run-dir   (db:test-get-rundir test))    ;; run dir is from the link tree
+			   (real-dir  (if (file-exists? run-dir)
+					  (resolve-pathname run-dir)
+					  #f))
 			   (test-id   (db:test-get-id test)))
 		      ;;   (tdb       (db:open-test-db run-dir)))
-		      (debug:print 1 "  " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
+		      (debug:print 4 "INFO: test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
 		      (case action
 			((remove-runs) ;; the tdb is for future possible. 
 			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
-			 (debug:print 1 "INFO: Attempting to remove dir " run-dir)
-			 (if (and (> (string-length run-dir) 5)
-				  (file-exists? run-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-			     (let* ((realpath (resolve-pathname run-dir)))
-			       (debug:print 1 "INFO: Real path of is " realpath)
-			       (if (file-exists? realpath)
-				   (if (> (system (conc "rm -rf " realpath)) 0)
-				       (debug:print 0 "ERROR: There was a problem removing " realpath " with rm -f"))
-				   (debug:print 0 "WARNING: test run dir " realpath " appears to not exist"))
-			       (if (file-exists? run-dir) ;; the link
-				   (if (symbolic-link? run-dir)
-				       (delete-file run-dir)
-				       (if (directory? run-dir)
-					   (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-					       (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-					       (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
-					   (debug:print 0 "ERROR: refusing to remove " run-dir " as it is neither a symlink nor a directory")
-					   ))))
-			     (debug:print 0 "WARNING: directory already removed " run-dir)))
+			 (debug:print 1 "INFO: Attempting to remove dir " real-dir " and link " run-dir)
+			 (if (and real-dir 
+				  (> (string-length real-dir) 5)
+				  (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+			     (begin ;; let* ((realpath (resolve-pathname run-dir)))
+			       (debug:print 1 "INFO: Recursively removing " real-dir)
+			       (if (file-exists? real-dir)
+				   (if (> (system (conc "rm -rf " real-dir)) 0)
+				       (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
+				   (debug:print 0 "WARNING: test run dir " real-dir " appears to not exist")))
+			     (debug:print 0 "WARNING: directory " real-dir " does not exist"))
+			 (if (symbolic-link? run-dir)
+			     (begin
+			       (debug:print 1 "INFO: Removing symlink " run-dir)
+			       (delete-file run-dir))
+			     (if (directory? run-dir)
+				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+				     (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
+				 (debug:print 0 "ERROR: refusing to remove " run-dir " as it either doesn't exist or is not a symlink or directory")
+				 )))
 			((set-state-status)
 			 (debug:print 2 "INFO: new state " (car state-status) ", new status " (cadr state-status))
 			 (open-run-close db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
-		  tests)))
-	   
+		  (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
+						 (dirb (db:test-get-rundir b)))
+					     (if (and (string? dira)(string? dirb))
+						 (> (string-length dira)(string-length dirb))
+						 #f)))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -802,7 +811,8 @@
 		       ;; 	 (system (conc "rmdir -p " runpath))))
 		       )))))
 	 ))
-     runs)))
+     runs))
+  #t)
 
 ;;======================================================================
 ;; Routines for manipulating runs
@@ -923,7 +933,7 @@
   (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
 	 (new-run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))
 	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%" "%" '() '()))
+	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     (open-run-close db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
@@ -951,7 +961,7 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id testname item-path '() '())))
+	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
