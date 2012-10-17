@@ -223,18 +223,23 @@ Built from " megatest-fossil-hash ))
 (if (> *verbosity* 3) ;; we are obviously debugging
     (set! open-run-close open-run-close-no-exception-handling))
 
+;; a,b,c % => a/%,b/%,c/%
+(define (tack-on-patt srcstr patt)
+  (let ((strlst (string-split srcstr ",")))
+    (conc (string-intersperse strlst (conc "/" patt ",")) "/" patt)))
+
 ;; to try and not burden Kim too much...
 (if (args:get-arg "-itempatt")
     (let ((old-testpatt (args:get-arg "-testpatt")))
       ;; (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
       (if (args:get-arg "-testpatt")
-	  (hash-table-set! args:arg-hash "-testpatt" (conc old-testpatt "/" (args:get-arg "-itempatt"))))
+	  (hash-table-set! args:arg-hash "-testpatt" (tack-on-patt old-testpatt (args:get-arg "-itempatt"))))
       ;; (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
       (if (args:get-arg "-runtests")
 	  (begin
 	    ;; (debug:print 0 "NOTE: Also modifying -runtests")
-	    (hash-table-set! args:arg-hash "-runtests" (conc (args:get-arg "-runtests") "/" 
-							     (args:get-arg "-itempatt")))))
+	    (hash-table-set! args:arg-hash "-runtests" (tack-on-patt (args:get-arg "-runtests")
+								     (args:get-arg "-itempatt")))))
       ))
 
 ;;======================================================================
