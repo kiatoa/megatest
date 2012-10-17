@@ -226,7 +226,13 @@ Built from " megatest-fossil-hash ))
 ;; a,b,c % => a/%,b/%,c/%
 (define (tack-on-patt srcstr patt)
   (let ((strlst (string-split srcstr ",")))
-    (conc (string-intersperse strlst (conc "/" patt ",")) "/" patt)))
+    (string-intersperse 
+     (map (lambda (str)
+	    (if (substring-index "/" str)
+		(conc str "/" patt)
+		str))
+	  strlst)
+	   ",")))
 
 ;; to try and not burden Kim too much...
 (if (args:get-arg "-itempatt")
