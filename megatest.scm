@@ -228,7 +228,7 @@ Built from " megatest-fossil-hash ))
   (let ((strlst (string-split srcstr ",")))
     (string-intersperse 
      (map (lambda (str)
-	    (if (substring-index "/" str)
+	    (if (not (substring-index "/" str))
 		(conc str "/" patt)
 		str))
 	  strlst)
