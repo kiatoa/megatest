@@ -189,6 +189,7 @@ Built from " megatest-fossil-hash ))
 			"-update-meta"
 			"-gen-megatest-area"
 
+			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )

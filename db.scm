@@ -304,7 +304,7 @@
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
-					   36000)))) ;; 136000)))
+					   136000)))) ;; 136000)))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(begin
