@@ -9,8 +9,6 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format)
-
 (define (debug:calc-verbosity vstr)
   (cond
    (vstr
@@ -31,19 +29,19 @@
 	#f)
       #t))
 
-(define-inline (debug:debug-mode n)
+(define (debug:debug-mode n)
   (or (and (number? *verbosity*)
 	   (<= n *verbosity*))
       (and (list? *verbosity*)
 	   (member n *verbosity*))))
 
-(define-inline (debug:print n . params)
+(define (debug:print n . params)
   (if (debug:debug-mode n)
       (begin
 	(apply print params)
 	(if *logging* (apply db:log-event params)))))
 
-(define-inline (debug:print-info n . params)
+(define (debug:print-info n . params)
   (if (debug:debug-mode n)
       (let ((res (format#format #f "INFO:~2d ~a" n (apply conc params))))
 	(print res)

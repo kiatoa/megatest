@@ -68,6 +68,13 @@
 		  (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
 			 (test-patt  (cadr patt-parts))
 			 (item-patt  (cadddr patt-parts)))
+		    ;; special case: test vs. test/
+		    ;;   test  => "test" "%"
+		    ;;   test/ => "test" ""
+		    (if (and (not (substring-index "/" patt)) ;; no slash in the original
+			     (or (not item-patt)
+				 (equal? item-patt "")))      ;; should always be true that item-patt is ""
+			(set! item-patt "%"))
 		    ;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
 		    (if (and (tests:glob-like-match test-patt testname)
 			     (or (not itempath)
