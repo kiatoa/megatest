@@ -411,8 +411,8 @@
 		  (thread-sleep! *global-delta*)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
-		  (thread-sleep! (+ 1 *global-delta*))
 		  (debug:print 1 "INFO: no resources to run new tests, waiting ...")
+		  (thread-sleep! (+ 0.01 *global-delta*))
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
@@ -431,7 +431,7 @@
 			(begin
 			  ;; couldn't run, take a breather
 			  (debug:print 4 "INFO: Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-			  (thread-sleep! (+ 1 *global-delta*)) ;; long sleep here - no resources, may as well be patient
+			  (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
 			  (loop (car newtal)(cdr newtal) reruns))
 			;; the waiton is FAIL so no point in trying to run hed ever again
@@ -443,7 +443,7 @@
 				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-				  (thread-sleep! *global-delta*)
+				  (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
 	     ;; case where an items came in as a list been processed
@@ -469,8 +469,8 @@
 	       items)
 	      (if (not (null? tal))
 		  (begin
-		    (thread-sleep! *global-delta*)
-		    (debug:print 4 "INFO: End of items list, looping with next")
+		    (debug:print 4 "INFO: End of items list, looping with next after short delay")
+		    (thread-sleep! (+ 0.01 *global-delta*))
 		    (loop (car tal)(cdr tal) reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
@@ -493,7 +493,7 @@
 				   "\n reruns:          " reruns
 				   "\n items:           " items
 				   "\n can-run-more:    " can-run-more)
-
+		      ;; (thread-sleep! (+ 0.01 *global-delta*))
 		      (cond ;; INNER COND #2
 		       ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
 			    ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
@@ -514,10 +514,13 @@
 				  (exit 1))))))
 		       ((null? fails)
 			(debug:print 4 "INFO: fails is null, moving on in the queue but keeping " hed " for now")
-			(thread-sleep! *global-delta*)
 			;; only increment num-retries when there are no tests runing
 			(if (eq? 0 (list-ref can-run-more 1))
-			    (set! num-retries (+ num-retries 1)))
+			    (begin
+			      (if (> num-retries 100) ;; first 100 retries are low time cost
+				  (thread-sleep! (+ 2 *global-delta*))
+				  (thread-sleep! (+ 0.01 *global-delta*)))
+			      (set! num-retries (+ num-retries 1))))
 			(if (> num-retries  max-retries)
 			    (if (not (null? tal))
 				(loop (car tal)(cdr tal) reruns))
@@ -532,7 +535,7 @@
 			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
-			(thread-sleep! *global-delta*)
+			(thread-sleep! (+ 1 *global-delta*))
 			(loop (car newtal)(cdr newtal) reruns)))) ;; END OF IF CAN RUN MORE
 
 		    ;; if can't run more just loop with next possible test
@@ -552,7 +555,7 @@
 		(if (< num-retries max-retries)
 		    (set! newlst (append reruns newlst)))
 		(set! num-retries (+ num-retries 1))
-		(thread-sleep! *global-delta*)
+		(thread-sleep! (+ 1 *global-delta*))
 		(if (not (null? newlst))
 		    ;; since reruns have been tacked on to newlst create new reruns from junked
 		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))
