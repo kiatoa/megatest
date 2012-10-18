@@ -77,7 +77,7 @@
 				  itemsdat))))
 	(let ((debuglevel 5))
 	  (debug:print 5 "item-assoc->item-list: itemsdat => itemlst ")
-	  (if (>= *verbosity* 5)
+	  (if (debug:debug-mode 5)
 	      (begin
 		(pp itemsdat)
 		(print " => ")

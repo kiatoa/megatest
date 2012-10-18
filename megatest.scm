@@ -37,6 +37,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
@@ -165,6 +166,7 @@ Built from " megatest-fossil-hash ))
 			"-test-files"  ;; -test-paths is for listing all
 			) 
 		 (list  "-h"
+			"-version"
 		        "-force"
 		        "-xterm"
 		        "-showkeys"
@@ -201,26 +203,23 @@ Built from " megatest-fossil-hash ))
       (print help)
       (exit)))
 
+(if (args:get-arg "-version")
+    (begin
+      (print megatest-version)
+      (exit)))
+
 (define *didsomething* #f)
 
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
 
-(set! *verbosity* (cond
-		   ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
-		   ((args:get-arg "-v")    2)
-		   ((args:get-arg "-q")    0)
-		   (else                   1)))
+(set! *verbosity* (debug:calc-verbosity (args:get-arg "-debug")))
+(debug:check-verbosity *verbosity* (args:get-arg "-debug"))
 
-(if (not (number? *verbosity*))
-    (begin
-      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
-      (exit)))
- 
 (if (args:get-arg "-logging")(set! *logging* #t))
 
-(if (> *verbosity* 3) ;; we are obviously debugging
+(if (debug:debug-mode 3) ;; we are obviously debugging
     (set! open-run-close open-run-close-no-exception-handling))
 
 ;; a,b,c % => a/%,b/%,c/%
@@ -370,7 +369,7 @@ Built from " megatest-fossil-hash ))
 (if (args:get-arg "-server")
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
-      (debug:print 0 "INFO: Starting the standalone server")
+      (debug:print-info 0 "Starting the standalone server")
       (if db 
 	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
 		 (th2 (server:start db (args:get-arg "-server")))
@@ -701,7 +700,7 @@ Built from " megatest-fossil-hash ))
 		    ;; mark the start of the test
 		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
-		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
+		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
@@ -711,7 +710,7 @@ Built from " megatest-fossil-hash ))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (debug:print 2 "INFO: running \"" cmd "\"")
+			  (debug:print-info 2 "running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
