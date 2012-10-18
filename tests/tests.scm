@@ -40,10 +40,10 @@
    (test (conc patterns " " testname "/" itempath "=>" expected)
 	 expected 
 	 (tests:match patterns testname itempath)))
- (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a")
- (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"  )
- (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"   )
- (list   #t    #t       #t    #f           #f      #t           #t       #t       #f    ))
+ (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/")
+ (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a")
+ (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b")
+ (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f))
 
 ;; db:patt->like
 (test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
