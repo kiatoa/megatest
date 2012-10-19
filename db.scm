@@ -51,7 +51,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print-info 4 "Setting pragma synchronous to " val)
+	  (debug:print-info 11 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -61,7 +61,7 @@
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (debug:print-info 4 "dbpath=" dbpath)
+    (debug:print-info 11 "open-db, dbpath=" dbpath)
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -70,18 +70,22 @@
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
+  (debug:print-info 11 "open-run-close-no-exception-handling START, idb=" idb ", params=" params)
   (let* ((db   (if idb idb (open-db)))
 	 (res #f))
     (set! res (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
+    (debug:print-info 11 "open-run-close-no-exception-handling END" )
     res))
 
 (define (open-run-close-exception-handling proc idb . params)
+  (debug:print-info 11 "open-run-close-exception-handling START, idb=" idb ", params=" params)
   (let ((runner (lambda ()
 		  (let* ((db   (if idb idb (open-db)))
 			 (res #f))
 		    (set! res (apply proc db params))
 		    (if (not idb)(sqlite3:finalize! db))
+		    (debug:print-info 11 "open-run-close-no-exception-handling END" )
 		    res))))
     (handle-exceptions
      exn
@@ -90,7 +94,7 @@
        (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain)
        (thread-sleep! (random 120))
-       (debug:print 0 "trying db call one more time....")
+       (debug:print-info 0 "trying db call one more time....")
        (runner))
      (runner))))
 
@@ -100,10 +104,10 @@
 (define *last-global-delta-printed* 0)
 
 (define (open-run-close-measure  proc idb . params)
+  (debug:print-info 11 "open-run-close-measure START, idb=" idb ", params=" params)
   (let* ((start-ms (current-milliseconds))
 	 (db       (if idb idb (open-db)))
          (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
-
     (db:set-sync db)
     (set! res      (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
@@ -115,9 +119,11 @@
 	(begin
 	  (debug:print-info 1 "launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
+    (debug:print-info 11 "open-run-close-measure END" )
     res))
 
 (define (db:initialize db)
+  (debug:print-info 11 "db:initialize START")
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
@@ -218,6 +224,7 @@
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
     ;; Must do this *after* running patch db !! No more. 
     (db:set-var db "MEGATEST_VERSION" megatest-version)
+    (debug:print-info 11 "db:initialize END")
     ))
 
 ;;======================================================================
@@ -226,6 +233,7 @@
 
 ;; Create the sqlite db for the individual test(s)
 (define (open-test-db testpath) 
+  (debug:print-info 11 "open-test-db " testpath)
   (if (and (directory? testpath)
 	   (file-read-access? testpath))
       (let* ((dbpath    (conc testpath "/testdat.db"))
@@ -233,8 +241,7 @@
 	     (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
-					       36000))))
-	(debug:print-info 4 "test dbpath=" dbpath)
+					       136000))))
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
 	    (begin
@@ -242,8 +249,11 @@
 	      (debug:print 0 "Initialized test database " dbpath)
 	      (db:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	(debug:print-info 11 "open-test-db END (sucessful)" testpath)
 	db)
-      #f))
+      (begin
+	(debug:print-info 11 "open-test-db END (unsucessful)" testpath)
+	#f)))
 
 ;; find and open the testdat.db file for an existing test
 (define (db:open-test-db-by-test-id db test-id)
@@ -251,6 +261,7 @@
     (open-test-db test-path)))
 
 (define (db:testdb-initialize db)
+  (debug:print 11 "db:testdb-initialize START")
   (for-each
    (lambda (sqlcmd)
      (sqlite3:execute db sqlcmd))
@@ -292,7 +303,8 @@
               var TEXT,
               val TEXT,
               ackstate INTEGER DEFAULT 0,
-              CONSTRAINT metadat_constraint UNIQUE (var));")))
+              CONSTRAINT metadat_constraint UNIQUE (var));"))
+  (debug:print 11 "db:testdb-initialize END"))
 
 ;;======================================================================
 ;; L O G G I N G    D B 
@@ -411,6 +423,7 @@
 ;; returns number if string->number is successful, string otherwise
 ;; also updates *global-delta*
 (define (db:get-var db var)
+  (debug:print-info 11 "db:get-var START " var)
   (let* ((start-ms (current-milliseconds))
          (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
 		     (if t (string->number t) t)))
@@ -431,10 +444,14 @@
 	(begin
 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
+    (debug:print-info 11 "db:get-var END " var)
     res))
 
 (define (db:set-var db var val)
-  (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
+  (debug:print-info 11 "db:set-var START " var " " val)
+  (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)
+  (debug:print-info 11 "db:set-var END " var " " val)
+)
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
@@ -442,12 +459,14 @@
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
       (let ((res '()))
+	(debug:print-info 11 "db:get-keys START (cache miss)")
 	(sqlite3:for-each-row 
 	 (lambda (key keytype)
 	   (set! res (cons (vector key keytype) res)))
 	 db
 	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
 	(set! *db-keys* res)
+	(debug:print-info 11 "db:get-keys END (cache miss)")
 	res)))
 
 (define (db:get-value-by-header row header field)
@@ -516,23 +535,26 @@
 		           (if (number? offset)
 		               (conc " OFFSET " offset)
 		               ""))))
-    (debug:print-info 8 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
+    (debug:print-info 11 "db:get-runs START qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
      db
      qrystr
      )
+    (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
 ;; just get count of runs
 (define (db:get-num-runs db runpatt)
   (let ((numruns 0))
+    (debug:print-info 11 "db:get-num-runs START " runpatt)
     (sqlite3:for-each-row 
      (lambda (count)
        (set! numruns count))
      db
      "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
+    (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
@@ -546,26 +568,31 @@
 				remfields))
 	     (keystr    (conc (keys->keystr keys) ","
 			      (string-intersperse remfields ","))))
-	;; (debug:print 0 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(sqlite3:for-each-row
 	 (lambda (a . x)
 	   (set! res (apply vector a x)))
 	 db
 	 (conc "SELECT " keystr " FROM runs WHERE id=?;")
 	 run-id)
+	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(let ((finalres (vector header res)))
 	  (hash-table-set! *run-info-cache* run-id finalres)
 	  finalres))))
 
 (define (db:set-comment-for-run db run-id comment)
-  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
+  (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
+  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id)
+  (debug:print-info 11 "db:set-comment-for-run END run-id: " run-id " comment: " comment))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
 (define (db:update-run-event_time db run-id)
-  (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)) 
+  (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
+  (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)
+  (debug:print-info 11 "db:update-run-event_time END run-id: " run-id)) 
 
 (define (db:lock/unlock-run db run-id lock unlock user)
   (let ((newlockval (if lock "locked"
@@ -586,7 +613,7 @@
 (define (db:get-key-val-pairs db run-id)
   (let* ((keys (get-keys db))
 	 (res  '()))
-    (debug:print 6 "keys: " keys " run-id: " run-id)
+    (debug:print-info 11 "db:get-key-val-pairs START keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
@@ -596,6 +623,7 @@
 	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
 	  db qry run-id)))
      keys)
+    (debug:print-info 11 "db:get-key-val-pairs END keys: " keys " run-id: " run-id)
     (reverse res)))
 
 ;; get key vals for a given run-id
@@ -605,7 +633,7 @@
 	mykeyvals
 	(let* ((keys (get-keys db))
 	       (res  '()))
-	  (debug:print 6 "keys: " keys " run-id: " run-id)
+	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
 	  (for-each 
 	   (lambda (key)
 	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
@@ -615,6 +643,7 @@
 		  (set! res (cons key-val res)))
 		db qry run-id)))
 	   keys)
+	  (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
 	  (let ((final-res (reverse res)))
 	    (hash-table-set! *keyvals* run-id final-res)
 	    final-res)))))
@@ -634,7 +663,7 @@
 ;;======================================================================
 
 (define (db:tests-register-test db run-id test-name item-path)
-  (debug:print-info 4 "db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (debug:print-info 11 "db:tests-register-test START db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
@@ -645,6 +674,7 @@
 			test-name
 			pth))
      item-paths)
+  (debug:print-info 11 "db:tests-register-test END db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
     #f))
 
 
@@ -656,6 +686,7 @@
 			      #!key (not-in #t)
 			      (sort-by #f) ;; 'rundir 'event_time
 			      )
+  (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
@@ -693,6 +724,7 @@
      ;; (if testpatt testpatt "%")
      ;; (if itempatt itempatt "%"))
      )
+    (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; this one is a bit broken BUG FIXME
