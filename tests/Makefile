@@ -29,6 +29,10 @@ test1 : cleanprep
 
 test2 : fullprep
 	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) $(SERVER) -debug $(DEBUG) $(LOGGING)
+	cd fullrun;megatest -runall -target ubunut/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
+	cd fullrun;megatest -runtests %/,%/ai -target ubunut/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
+	cd fullrun;megatest -runtests runfirst/%,%/ai -target ubunut/nfs/none :runname $(RUNNAME)_02 -debug $(DEBUG)
+	cd fullrun;megatest -runtests %/,%/winter -target ubunut/nfs/none :runname $(RUNNAME)_03  -debug $(DEBUG)
 	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
 
@@ -36,18 +40,18 @@ test3 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
 
 test4 : fullprep
-	cd fullrun;$(MEGATEST) $(SERVER) &
+	cd fullrun;$(MEGATEST) $(SERVER) $(LOGGING)&
 	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
 test5 : fullprep
-	cd fullrun;$(MEGATEST) $(SERVER) &
+	cd fullrun;$(MEGATEST) $(SERVER) $(LOGGING) &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
+	# cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+	# cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v

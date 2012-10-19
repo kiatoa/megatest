@@ -37,6 +37,7 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
@@ -165,6 +166,7 @@ Built from " megatest-fossil-hash ))
 			"-test-files"  ;; -test-paths is for listing all
 			) 
 		 (list  "-h"
+			"-version"
 		        "-force"
 		        "-xterm"
 		        "-showkeys"
@@ -189,6 +191,7 @@ Built from " megatest-fossil-hash ))
 			"-update-meta"
 			"-gen-megatest-area"
 
+			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 		       )
@@ -200,39 +203,48 @@ Built from " megatest-fossil-hash ))
       (print help)
       (exit)))
 
+(if (args:get-arg "-version")
+    (begin
+      (print megatest-version)
+      (exit)))
+
 (define *didsomething* #f)
 
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
 
-(set! *verbosity* (cond
-		   ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
-		   ((args:get-arg "-v")    2)
-		   ((args:get-arg "-q")    0)
-		   (else                   1)))
+(set! *verbosity* (debug:calc-verbosity (args:get-arg "-debug")))
+(debug:check-verbosity *verbosity* (args:get-arg "-debug"))
 
-(if (not (number? *verbosity*))
-    (begin
-      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
-      (exit)))
- 
 (if (args:get-arg "-logging")(set! *logging* #t))
 
-(if (> *verbosity* 3) ;; we are obviously debugging
+(if (debug:debug-mode 3) ;; we are obviously debugging
     (set! open-run-close open-run-close-no-exception-handling))
+
+;; a,b,c % => a/%,b/%,c/%
+(define (tack-on-patt srcstr patt)
+  (let ((strlst (string-split srcstr ",")))
+    (string-intersperse 
+     (map (lambda (str)
+	    (if (not (substring-index "/" str))
+		(conc str "/" patt)
+		str))
+	  strlst)
+	   ",")))
 
 ;; to try and not burden Kim too much...
 (if (args:get-arg "-itempatt")
     (let ((old-testpatt (args:get-arg "-testpatt")))
-      (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
-      (hash-table-set! args:arg-hash "-testpatt" (conc old-testpatt "/" (args:get-arg "-itempatt")))
-      (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
+      ;; (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
+      (if (args:get-arg "-testpatt")
+	  (hash-table-set! args:arg-hash "-testpatt" (tack-on-patt old-testpatt (args:get-arg "-itempatt"))))
+      ;; (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
       (if (args:get-arg "-runtests")
 	  (begin
-	    (debug:print 0 "NOTE: Also modifying -runtests")
-	    (hash-table-set! args:arg-hash "-runtests" (conc (args:get-arg "-runtests") "/" 
-							     (args:get-arg "-itempatt")))))
+	    ;; (debug:print 0 "NOTE: Also modifying -runtests")
+	    (hash-table-set! args:arg-hash "-runtests" (tack-on-patt (args:get-arg "-runtests")
+								     (args:get-arg "-itempatt")))))
       ))
 
 ;;======================================================================
@@ -357,7 +369,7 @@ Built from " megatest-fossil-hash ))
 (if (args:get-arg "-server")
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
-      (debug:print 0 "INFO: Starting the standalone server")
+      (debug:print-info 0 "Starting the standalone server")
       (if db 
 	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
 		 (th2 (server:start db (args:get-arg "-server")))
@@ -394,7 +406,9 @@ Built from " megatest-fossil-hash ))
      (lambda (target runname keys keynames keyvallst)
 	 (runs:run-tests target
 			 runname
-			 (args:get-arg "-runtests")
+			 (if (args:get-arg "-testpatt")
+			     (args:get-arg "-testpatt")
+			     "%/%")
 			 user
 			 args:arg-hash)))) ;; )
 
@@ -686,7 +700,7 @@ Built from " megatest-fossil-hash ))
 		    ;; mark the start of the test
 		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
-		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
+		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
@@ -696,7 +710,7 @@ Built from " megatest-fossil-hash ))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (debug:print 2 "INFO: running \"" cmd "\"")
+			  (debug:print-info 2 "running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary

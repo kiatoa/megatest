@@ -101,7 +101,7 @@
 	(let ((outres (string-intersperse 
 		       res
 		       "\n")))
-	  (debug:print 4 "INFO: shell result:\n" outres)
+	  (debug:print-info 4 "shell result:\n" outres)
 	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
@@ -126,10 +126,10 @@
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
-  (debug:print 4 "INFO: read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections)
+  (debug:print-info 4 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections)
   (if (not (file-exists? path))
       (begin 
-	(debug:print 4 "INFO: read-config - file not found " path " current path: " (current-directory))
+	(debug:print-info 4 "read-config - file not found " path " current path: " (current-directory))
 	(if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
@@ -137,7 +137,7 @@
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
 		   (lead     #f))
-	  (debug:print 8 "INFO: curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
+	  (debug:print-info 8 "curr-section-name: " curr-section-name " var-flag: " var-flag "\n   inl: \"" inl "\"")
 	  (if (eof-object? inl) 
 	      (begin
 		(close-input-port inp)
@@ -165,7 +165,7 @@
 									    (let* ((cmdres  (cmd-run->list cmd))
 										   (status  (cadr cmdres))
 										   (res     (car  cmdres)))
-									      (debug:print 4 "INFO: " inl "\n => " (string-intersperse res "\n"))
+									      (debug:print-info 4 "" inl "\n => " (string-intersperse res "\n"))
 									      (if (not (eq? status 0))
 										  (begin
 										    (debug:print 0 "ERROR: problem with " inl ", return code " status
@@ -188,10 +188,10 @@
 							     (realval (if envar
 									  (config:eval-string-in-environment val)
 									  val)))
-							(debug:print 6 "INFO: read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
+							(debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
 							(if envar
 							    (begin
-							      ;; (debug:print 4 "INFO: read-config key=" key ", val=" val ", realval=" realval)
+							      ;; (debug:print-info 4 "read-config key=" key ", val=" val ", realval=" realval)
 							      (setenv key realval)))
 							(hash-table-set! res curr-section-name 
 									 (config:assoc-safe-add alist key realval))

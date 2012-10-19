@@ -68,6 +68,13 @@
 		  (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
 			 (test-patt  (cadr patt-parts))
 			 (item-patt  (cadddr patt-parts)))
+		    ;; special case: test vs. test/
+		    ;;   test  => "test" "%"
+		    ;;   test/ => "test" ""
+		    (if (and (not (substring-index "/" patt)) ;; no slash in the original
+			     (or (not item-patt)
+				 (equal? item-patt "")))      ;; should always be true that item-patt is ""
+			(set! item-patt "%"))
 		    ;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
 		    (if (and (tests:glob-like-match test-patt testname)
 			     (or (not itempath)
@@ -185,7 +192,7 @@
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat)
-  (debug:print 4 "INFO: tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
+  (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
@@ -357,7 +364,7 @@
 (define (get-all-legal-tests)
   (let* ((tests  (glob (conc *toppath* "/tests/*")))
 	 (res    '()))
-    (debug:print 4 "INFO: Looking at tests " (string-intersperse tests ","))
+    (debug:print-info 4 "Looking at tests " (string-intersperse tests ","))
     (for-each (lambda (testpath)
 		(if (file-exists? (conc testpath "/testconfig"))
 		    (set! res (cons (last (string-split testpath "/")) res))))

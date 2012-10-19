@@ -441,7 +441,7 @@
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
-		(debug:print 2 "INFO: Creating " toptest-path " and link " lnkpath)
+		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
 		(create-directory toptest-path #t)
 		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
@@ -451,7 +451,7 @@
     ;; level
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
-	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
+	  (debug:print-info 2 "Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
 
     (if (symbolic-link? lnkpath) (delete-file lnkpath))
@@ -486,7 +486,7 @@
     ;;   (system  (conc "ln -sf " test-path " " testlink)))
     (if (directory? test-path)
 	(begin
-	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-src-path "/ " test-path "/"))
+	  (let* ((cmd    (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
@@ -555,7 +555,7 @@
 	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
-	  (debug:print 2 "INFO: Using work area " work-area))
+	  (debug:print-info 2 "Using work area " work-area))
 	(begin
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)
@@ -578,7 +578,7 @@
 							  (list 'runname   runname)
 							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
-    (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
+    (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
