@@ -116,16 +116,8 @@ Misc
 (define *tests-sort-reverse* #f)
 (define *hide-empty-runs* #f)
 
-(define *verbosity* (cond
-		     ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
-		     ((args:get-arg "-v")    2)
-		     ((args:get-arg "-q")    0)
-		     (else                   1)))
-
-(if (not (number? *verbosity*))
-    (begin
-      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
-      (exit)))
+(set! *verbosity* (debug:calc-verbosity (args:get-arg "-debug")))
+(debug:check-verbosity *verbosity* (args:get-arg "-debug"))
 
 (define uidat #f)
 
@@ -169,7 +161,7 @@ Misc
 		 (> (current-seconds)(+ *last-db-update-time* 5)))
 	    (> *delayed-update* 0))
 	(begin
-	  (debug:print 4 "INFO: update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
+	  (debug:print-info 4 "update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))

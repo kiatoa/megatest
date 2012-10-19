@@ -178,7 +178,7 @@
 ;; 
 (define (tasks:start-monitor db tdb)
   (if (> (tasks:get-num-alive-monitors tdb) 2) ;; have two running, no need for more
-      (debug:print 1 "INFO: Not starting monitor, already have more than two running")
+      (debug:print-info 1 "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
 	     (monitordbf     (conc *toppath* "/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))

@@ -51,7 +51,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print 4 "INFO: Setting pragma synchronous to " val)
+	  (debug:print-info 4 "Setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -61,7 +61,7 @@
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (debug:print 4 "INFO: dbpath=" dbpath)
+    (debug:print-info 4 "dbpath=" dbpath)
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -113,7 +113,7 @@
 			    2))
     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 	(begin
-	  (debug:print 1 "INFO: launch throttle factor=" *global-delta*)
+	  (debug:print-info 1 "launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
     res))
 
@@ -234,7 +234,7 @@
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
 					       36000))))
-	(debug:print 4 "INFO: test dbpath=" dbpath)
+	(debug:print-info 4 "test dbpath=" dbpath)
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
 	    (begin
@@ -429,7 +429,7 @@
 			    2))
     (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
 	(begin
-	  (debug:print 4 "INFO: launch throttle factor=" *global-delta*)
+	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
     res))
 
@@ -451,7 +451,7 @@
 	res)))
 
 (define (db:get-value-by-header row header field)
-  (debug:print 4 "INFO: db:get-value-by-header row: " row " header: " header " field: " field)
+  (debug:print-info 4 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -516,7 +516,7 @@
 		           (if (number? offset)
 		               (conc " OFFSET " offset)
 		               ""))))
-    (debug:print 8 "INFO: db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
+    (debug:print-info 8 "db:get-runs qrystr: " qrystr "\nkeypatts: " keypatts "\n  offset: " offset " limit: " count)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (cons (apply vector a x) res)))
@@ -575,7 +575,7 @@
     (sqlite3:execute db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
     (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 		     user (conc newlockval " " run-id))
-    (debug:print 1 "INFO: " newlockval " run number " run-id)))
+    (debug:print-info 1 "" newlockval " run number " run-id)))
 
 ;;======================================================================
 ;; K E Y S
@@ -634,7 +634,7 @@
 ;;======================================================================
 
 (define (db:tests-register-test db run-id test-name item-path)
-  (debug:print 4 "INFO: db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (debug:print-info 4 "db:tests-register-test db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
@@ -683,7 +683,7 @@
 				  ((event_time) " ORDER BY event_time ASC;")
 				  (else         ";"))
 			 )))
-    (debug:print 8 "INFO: db:get-tests-for-run qry=" qry)
+    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
      (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
        (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
@@ -872,10 +872,10 @@
 	  (set! *test-info* (make-hash-table))
 	  (set! *test-id-cache* (make-hash-table))
 	  (set! *last-test-cache-delete* last-delete)
-	  (debug:print 4 "INFO: Clearing test data cache"))))
+	  (debug:print-info 4 "Clearing test data cache"))))
   (if (not test-id)
       (begin
-	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
+	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
 	#f)
       (let* ((res (hash-table-ref/default *test-info* test-id #f)))
 	(if (and res
@@ -897,7 +897,7 @@
 (define (db:get-test-info-not-cached-by-id db test-id)
   (if (not test-id)
       (begin
-	(debug:print 4 "INFO: db:get-test-info-by-id called with test-id=" test-id)
+	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
 	#f)
       (let ((res #f))
 	(sqlite3:for-each-row
@@ -999,7 +999,7 @@
 	  (if path
 	      (let* ((db     (open-db path: (cadr pathdat)))
 		     (newres (db:test-get-paths-matching db keynames target fname)))
-		(debug:print 4 "INFO: Trying " (car pathdat) " at " (cadr pathdat))
+		(debug:print-info 4 "Trying " (car pathdat) " at " (cadr pathdat))
 		(sqlite3:finalize! db)
 		(if (not (null? newres))
 		    (car newres)
@@ -1063,14 +1063,14 @@
 ;;======================================================================
 
 (define (db:updater)
-  (debug:print 4 "INFO: Starting cache processing")
+  (debug:print-info 4 "Starting cache processing")
   (let loop ((start-time (current-time)))
     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
     (loop start-time)))
 
 (define (cdb:test-set-status-state test-id status state msg)
-  (debug:print 4 "INFO: cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
+  (debug:print-info 4 "cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
   (mutex-lock! *incoming-mutex*)
   (set! *last-db-access* (current-seconds))
   (if msg
@@ -1084,11 +1084,11 @@
 				  *incoming-data*)))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
   
 (define (cdb:test-rollup-test_data-pass-fail test-id)
-  (debug:print 4 "INFO: Adding " test-id " for test_data rollup to the queue")
+  (debug:print-info 4 "Adding " test-id " for test_data rollup to the queue")
   (mutex-lock! *incoming-mutex*)
   (set! *last-db-access* (current-seconds))
   (set! *incoming-data* (cons (vector 'test_data-pf-rollup
@@ -1097,11 +1097,11 @@
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
 
 (define (cdb:pass-fail-counts test-id fail-count pass-count)
-  (debug:print 4 "INFO: Adding " test-id " for setting pass/fail counts to the queue")
+  (debug:print-info 4 "Adding " test-id " for setting pass/fail counts to the queue")
   (mutex-lock! *incoming-mutex*)
   (set! *last-db-access* (current-seconds))
   (set! *incoming-data* (cons (vector 'pass-fail-counts
@@ -1110,14 +1110,14 @@
 			      *incoming-data*))
   (mutex-unlock! *incoming-mutex*)
   (if *cache-on*
-      (debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
 
 (define (cdb:tests-register-test db run-id test-name item-path #!key (force-write #f))
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (debug:print 4 "INFO: Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
+    (debug:print-info 4 "Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
     (mutex-lock! *incoming-mutex*)
     (set! *last-db-access* (current-seconds))
     (set! *incoming-data* (cons (vector 'register-test
@@ -1126,7 +1126,7 @@
 				*incoming-data*))
     (mutex-unlock! *incoming-mutex*)
     (if (and (not force-write) *cache-on*)
-	(debug:print 6 "INFO: *cache-on* is " *cache-on* ", skipping cache write")
+	(debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
 	(db:write-cached-data))))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
@@ -1155,14 +1155,14 @@
        (set! *incoming-data* '())
        (mutex-unlock! *incoming-mutex*)
        (if (> (length data) 0)
-	   (debug:print 4 "INFO: Writing cached data " data))
+	   (debug:print-info 4 "Writing cached data " data))
        (sqlite3:with-transaction 
 	db
 	(lambda ()
-	  (debug:print 4 "INFO: flushing " data " to db")
+	  (debug:print-info 4 "flushing " data " to db")
 	  (for-each (lambda (entry)
 		      (let ((params (vector-ref entry 2)))
-			(debug:print 4 "INFO: Applying " entry " to params " params)
+			(debug:print-info 4 "Applying " entry " to params " params)
 			(case (vector-ref entry 0)
 			  ((state-status)
 			   (apply sqlite3:execute state-status-stmt     params))
@@ -1622,7 +1622,7 @@
 									      ;; for now throw away newpath and use the log-fpath conc'd with pathmod
 									      (set! newpath (conc pathmod log-fpath))
 									      (if windows (string-translate newpath "/" "\\") newpath))
-									    (if (> *verbosity* 1)
+									    (if (debug:debug-mode 1)
 										(conc final-log " not-found")
 										"")))
 					  (vector->list vb))

@@ -71,7 +71,7 @@
 	     (set! *last-db-access* (current-seconds))
 	     (if (equal? *toppath* toppath)
 		 (begin
-		   (debug:print 2 "INFO: login successful")
+		   (debug:print-info 2 "login successful")
 		   #t)
 		 #f)))
 
@@ -82,38 +82,38 @@
 	  (rpc:publish-procedure!
 	   'rdb:open-run-close 
 	   (lambda (procname . remargs)
-	     (debug:print 4 "INFO: Remote call of rdb:open-run-close " procname " " remargs)
+	     (debug:print-info 4 "Remote call of rdb:open-run-close " procname " " remargs)
 	     (set! *last-db-access* (current-seconds))
 	     (apply open-run-close (eval procname) remargs)))
 	  
 	  (rpc:publish-procedure!
 	   'cdb:test-set-status-state
 	   (lambda (test-id status state msg)
-	     (debug:print 4 "INFO: Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
+	     (debug:print-info 4 "Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
 	     (cdb:test-set-status-state test-id status state msg)))
 
 	  (rpc:publish-procedure!
 	   'cdb:test-rollup-test_data-pass-fail
 	   (lambda (test-id)
-	     (debug:print 4 "INFO: Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
+	     (debug:print-info 4 "Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
 	     (cdb:test-rollup-test_data-pass-fail test-id)))
 
 	  (rpc:publish-procedure!
 	   'cdb:pass-fail-counts
 	   (lambda (test-id fail-count pass-count)
-	     (debug:print 4 "INFO: Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
+	     (debug:print-info 4 "Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
 	     (cdb:pass-fail-counts test-id fail-count pass-count)))
 
 	  (rpc:publish-procedure!
 	   'cdb:tests-register-test
 	   (lambda (db run-id test-name item-path)
-	     (debug:print 4 "INFO: Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
+	     (debug:print-info 4 "Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
 	     (cdb:tests-register-test db run-id test-name item-path)))
 
 	  (rpc:publish-procedure!
 	   'cdb:flush-queue
 	   (lambda ()
-	     (debug:print 4 "INFO: Remote call of cdb:flush-queue")
+	     (debug:print-info 4 "Remote call of cdb:flush-queue")
 	     (cdb:flush-queue)))
 
 	  ;;======================================================================
@@ -135,7 +135,7 @@
 			 (mutex-unlock! *incoming-mutex*)
 			 (if (> queue-len 0)
 			     (begin
-			       (debug:print 0 "INFO: Queue not flushed, waiting ...")
+			       (debug:print-info 0 "Queue not flushed, waiting ...")
 			       (loop (+ n 1)))))
 		      )))
 	  (thread-start! th1)
@@ -155,15 +155,15 @@
       (if (or (> numrunning 0)
 	      (> (+ *last-db-access* 60)(current-seconds)))
 	  (begin
-	    (debug:print 0 "INFO: Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	    (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
 	    (loop (+ 1 count)))
 	  (begin
-	    (debug:print 0 "INFO: Starting to shutdown the server side")
+	    (debug:print-info 0 "Starting to shutdown the server side")
 	    ;; need to delete only *my* server entry (future use)
 	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' AND val like ?;"  host:port)
 	    (thread-sleep! 10)
-	    (debug:print 0 "INFO: Max cached queries was " *max-cache-size*)
-	    (debug:print 0 "INFO: Server shutdown complete. Exiting")
+	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+	    (debug:print-info 0 "Server shutdown complete. Exiting")
 	    ;; (exit)))
 	    )))))
 
@@ -189,7 +189,7 @@
 	(if (and port
 		 (string->number port))
 	    (let ((portn (string->number port)))
-	      (debug:print 2 "INFO: Setting up to connect to host " host ":" port)
+	      (debug:print-info 2 "Setting up to connect to host " host ":" port)
 	      (handle-exceptions
 	       exn
 	       (begin
@@ -203,10 +203,10 @@
 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 			((rpc:procedure 'server:login host portn) *toppath*))
 		   (begin
-		     (debug:print 2 "INFO: Logged in and connected to " host ":" port)
+		     (debug:print-info 2 "Logged in and connected to " host ":" port)
 		     (set! *runremote* (vector host portn)))
 		   (begin
-		     (debug:print 2 "INFO: Failed to login or connect to " host ":" port)
+		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
 		     (set! *runremote* #f)))))
-	    (debug:print 2 "INFO: no server available")))))
+	    (debug:print-info 2 "no server available")))))
 

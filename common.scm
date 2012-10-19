@@ -83,13 +83,13 @@
     (if num num val)))
 
 (define (patt-list-match item patts)
-  (debug:print 8 "INFO: patt-list-match item=" item " patts=" patts)
+  (debug:print-info 8 "patt-list-match item=" item " patts=" patts)
   (if (and item patts)  ;; here we are filtering for matches with -itempatt
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
 	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
-	     (debug:print 10 "INFO: patt " patt " modpatt " modpatt)
+	     (debug:print-info 10 "patt " patt " modpatt " modpatt)
 	     (if (string-match (regexp modpatt) item)
 		 (set! res #t))))
 	 (string-split patts ","))
