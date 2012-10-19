@@ -246,7 +246,7 @@
 	(if (not dbexists)
 	    (begin
 	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
-	      (debug:print 0 "Initialized test database " dbpath)
+	      (debug:print-info 11 "Initialized test database " dbpath)
 	      (db:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	(debug:print-info 11 "open-test-db END (sucessful)" testpath)
@@ -320,14 +320,14 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(begin
-	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT);")
+	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
 	  (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))))
     db))
 
 (define (db:log-event . loglst)
   (let ((db      (open-logging-db))
 	(logline (apply conc loglst)))
-    (sqlite3:execute db "INSERT INTO log (logline) VALUES (?);" logline)
+    (sqlite3:execute db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);" logline (current-directory)(string-intersperse (argv) " ")(current-process-id))
     (sqlite3:finalize! db)
     logline))
 
@@ -1396,7 +1396,7 @@
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
-	  (thread-sleep! 10) ;; play nice with the queue by ensuring the rollup is at least 10s later than the set
+	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
 	  (rdb:test-rollup-test_data-pass-fail test-id)

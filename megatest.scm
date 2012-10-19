@@ -214,8 +214,7 @@ Built from " megatest-fossil-hash ))
 ;; Misc setup stuff
 ;;======================================================================
 
-(set! *verbosity* (debug:calc-verbosity (args:get-arg "-debug")))
-(debug:check-verbosity *verbosity* (args:get-arg "-debug"))
+(debug:setup)
 
 (if (args:get-arg "-logging")(set! *logging* #t))
 

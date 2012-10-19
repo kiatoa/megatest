@@ -35,17 +35,32 @@
       (and (list? *verbosity*)
 	   (member n *verbosity*))))
 
+(define (debug:setup)
+  (let ((debugstr (or (args:get-arg "-debug")
+		      (getenv "MT_DEBUG_MODE"))))
+    (set! *verbosity* (debug:calc-verbosity debugstr))
+    (debug:check-verbosity *verbosity* debugstr)
+    (if (or (args:get-arg "-debug")
+	    (not (getenv "MT_DEBUG_MODE")))
+	(setenv "MT_DEBUG_MODE" (if (list? *verbosity*)
+				    (string-intersperse (map conc *verbosity*) ",")
+				    (conc *verbosity*))))))
+  
+
 (define (debug:print n . params)
   (if (debug:debug-mode n)
-      (begin
-	(apply print params)
-	(if *logging* (apply db:log-event params)))))
+      (with-output-to-port (current-error-port)
+	(lambda ()
+	  (apply print params)
+	  (if *logging* (apply db:log-event params))))))
 
 (define (debug:print-info n . params)
   (if (debug:debug-mode n)
-      (let ((res (format#format #f "INFO:~2d ~a" n (apply conc params))))
-	(print res)
-	(if *logging* (db:log-event res)))))
+      (with-output-to-port (current-error-port)
+	(lambda ()
+	  (let ((res (format#format #f "INFO:~2d ~a" n (apply conc params))))
+	    (print res)
+	    (if *logging* (db:log-event res)))))))
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string

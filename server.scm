@@ -82,38 +82,38 @@
 	  (rpc:publish-procedure!
 	   'rdb:open-run-close 
 	   (lambda (procname . remargs)
-	     (debug:print-info 4 "Remote call of rdb:open-run-close " procname " " remargs)
+	     (debug:print-info 12 "Remote call of rdb:open-run-close " procname " " remargs)
 	     (set! *last-db-access* (current-seconds))
 	     (apply open-run-close (eval procname) remargs)))
 	  
 	  (rpc:publish-procedure!
 	   'cdb:test-set-status-state
 	   (lambda (test-id status state msg)
-	     (debug:print-info 4 "Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
+	     (debug:print-info 12 "Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
 	     (cdb:test-set-status-state test-id status state msg)))
 
 	  (rpc:publish-procedure!
 	   'cdb:test-rollup-test_data-pass-fail
 	   (lambda (test-id)
-	     (debug:print-info 4 "Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
+	     (debug:print-info 12 "Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
 	     (cdb:test-rollup-test_data-pass-fail test-id)))
 
 	  (rpc:publish-procedure!
 	   'cdb:pass-fail-counts
 	   (lambda (test-id fail-count pass-count)
-	     (debug:print-info 4 "Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
+	     (debug:print-info 12 "Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
 	     (cdb:pass-fail-counts test-id fail-count pass-count)))
 
 	  (rpc:publish-procedure!
 	   'cdb:tests-register-test
 	   (lambda (db run-id test-name item-path)
-	     (debug:print-info 4 "Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
+	     (debug:print-info 12 "Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
 	     (cdb:tests-register-test db run-id test-name item-path)))
 
 	  (rpc:publish-procedure!
 	   'cdb:flush-queue
 	   (lambda ()
-	     (debug:print-info 4 "Remote call of cdb:flush-queue")
+	     (debug:print-info 12 "Remote call of cdb:flush-queue")
 	     (cdb:flush-queue)))
 
 	  ;;======================================================================

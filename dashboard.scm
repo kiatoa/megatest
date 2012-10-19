@@ -116,8 +116,7 @@ Misc
 (define *tests-sort-reverse* #f)
 (define *hide-empty-runs* #f)
 
-(set! *verbosity* (debug:calc-verbosity (args:get-arg "-debug")))
-(debug:check-verbosity *verbosity* (args:get-arg "-debug"))
+(debug:setup)
 
 (define uidat #f)
 
