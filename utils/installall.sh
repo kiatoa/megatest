@@ -160,6 +160,15 @@ if ! [[ -e ${ZEROMQ}.tar.gz ]] ; then
     wget http://download.zeromq.org/${ZEROMQ}.tar.gz
 fi
 
+if ! [[ -e libuuid ]] ; then
+    wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
+    cd e2fsprogs-1.42.5
+    mkdir build
+    ./configure --prefix=$PREFIX
+    cd lib/uuid
+    make install
+fi
+
 if [[ -e ${ZEROMQ}.tar.gz ]] ; then
     tar xfz ${ZEROMQ}.tar.gz
     cd ${ZEROMQ}
