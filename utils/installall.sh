@@ -55,6 +55,8 @@ if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then
 fi 
 
 BUILDHOME=$PWD
+DEPLOYTARG=$BUILDHOME/deploy
+
 if [[ $PREFIX == "" ]]; then
    PREFIX=$PWD/inst
 fi
@@ -79,7 +81,7 @@ fi
 # Some eggs are quoted since they are reserved to Bash
 for f in readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt ; do
   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
-    chicken-install $PROX $f
+    chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
   else
     echo Skipping install of egg $f as it is already installed
   fi
@@ -105,11 +107,11 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
     if [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
 	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
 	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
-	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install -prefix $DEPLOYTARG -deploy $PROX sqlite3
     fi
 fi
 
-chicken-install $PROX sqlite3
+# chicken-install $PROX sqlite3
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
@@ -131,6 +133,7 @@ for a in `echo $files` ; do
     fi
     echo Untarring $a into $BUILDHOME/lib
     (cd $PREFIX/lib;tar xfvz $BUILDHOME/$a;mv include/* ../include)
+    (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
 done
 
 # ffcall obtained from:
@@ -150,54 +153,59 @@ make install
 
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks  -feature disable-iup-web iup
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
-
-# http://download.zeromq.org/zeromq-2.2.0.tar.gz
-ZEROMQ=zeromq-2.2.0
-if ! [[ -e ${ZEROMQ}.tar.gz ]] ; then
-    wget http://download.zeromq.org/${ZEROMQ}.tar.gz
-fi
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 if ! [[ -e libuuid ]] ; then
     wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
+    tar xfz e2fsprogs-1.42.5.tar.gz
     cd e2fsprogs-1.42.5
     mkdir build
-    ./configure --prefix=$PREFIX
+    cd build
+    ../configure --prefix=$PREFIX
     cd lib/uuid
     make install
 fi
 
-if [[ -e ${ZEROMQ}.tar.gz ]] ; then
+# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
+# zpatchlev=-rc2
+# http://download.zeromq.org/zeromq-2.2.0.tar.gz
+ZEROMQ=zeromq-2.2.0
+# ZEROMQ=zeromq-3.2.1
+if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
+    wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
+fi
+
+if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     tar xfz ${ZEROMQ}.tar.gz
     cd ${ZEROMQ}
     ./configure --prefix=$PREFIX
     make
     make install
-    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
+    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -deploy -prefix $DEPLOYTARG zmq
 fi
 
 cd $BUILDHOME  
 
-WEBKIT=WebKit-r131972
-if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then
-   #    http://builds.nightly.webkit.org/files/trunk/src/WebKit-r131972.tar.bz2
-   wget http://builds.nightly.webkit.org/files/trunk/src/${WEBKIT}.tar.bz2
-fi
-
-if [[ x$only_it_worked == $I_wish ]] ;then
-   if [[ -e ${WEBKIT}.tar.bz2 ]] ; then
-      tar xfj ${WEBKIT}.tar.bz2
-      cd $WEBKIT
-      ./autogen.sh
-      ./configure --prefix=$PREFIX
-      make
-      make install
-   fi
-fi
-
-cd $BUILHOME
+## WEBKIT=WebKit-r131972
+## if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then
+##    #    http://builds.nightly.webkit.org/files/trunk/src/WebKit-r131972.tar.bz2
+##    wget http://builds.nightly.webkit.org/files/trunk/src/${WEBKIT}.tar.bz2
+## fi
+## 
+## if [[ x$only_it_worked == $I_wish ]] ;then
+##    if [[ -e ${WEBKIT}.tar.bz2 ]] ; then
+##       tar xfj ${WEBKIT}.tar.bz2
+##       cd $WEBKIT
+##       ./autogen.sh
+##       ./configure --prefix=$PREFIX
+##       make
+##       make install
+##    fi
+## fi
+## 
+## cd $BUILHOME
 
 # export CD_REL=d704525ebe1c6d08
 # if ! [[ -e  Canvas_Draw-$CD_REL.zip ]]; then
