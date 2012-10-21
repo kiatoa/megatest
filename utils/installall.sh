@@ -150,7 +150,8 @@ make install
 
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks iup:1.0.2
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks  -feature disable-iup-web iup
+# iup:1.0.2 
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
 
 # http://download.zeromq.org/zeromq-2.2.0.tar.gz
