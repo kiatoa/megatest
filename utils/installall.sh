@@ -153,6 +153,42 @@ export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks iup:1.0.2
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
 
+# http://download.zeromq.org/zeromq-2.2.0.tar.gz
+ZEROMQ=zeromq-2.2.0
+if ! [[ -e ${ZEROMQ}.tar.gz ]] ; then
+    wget http://download.zeromq.org/${ZEROMQ}.tar.gz
+fi
+
+if [[ -e ${ZEROMQ}.tar.gz ]] ; then
+    tar xfz ${ZEROMQ}.tar.gz
+    cd ${ZEROMQ}
+    ./configure --prefix=$PREFIX
+    make
+    make install
+    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
+fi
+
+cd $BUILDHOME  
+
+WEBKIT=WebKit-r131972
+if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then
+   #    http://builds.nightly.webkit.org/files/trunk/src/WebKit-r131972.tar.bz2
+   wget http://builds.nightly.webkit.org/files/trunk/src/${WEBKIT}.tar.bz2
+fi
+
+if [[ x$only_it_worked == $I_wish ]] ;then
+   if [[ -e ${WEBKIT}.tar.bz2 ]] ; then
+      tar xfj ${WEBKIT}.tar.bz2
+      cd $WEBKIT
+      ./autogen.sh
+      ./configure --prefix=$PREFIX
+      make
+      make install
+   fi
+fi
+
+cd $BUILHOME
+
 # export CD_REL=d704525ebe1c6d08
 # if ! [[ -e  Canvas_Draw-$CD_REL.zip ]]; then
 #     wget http://www.kiatoa.com/matt/iup/Canvas_Draw-$CD_REL.zip
