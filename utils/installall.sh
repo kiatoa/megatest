@@ -127,7 +127,7 @@ else
    export files="cd-5.4.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.6.3_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.5_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
 fi
 
-mkdir $PREFIX/iuplib
+mkdir -p $PREFIX/iuplib
 for a in `echo $files` ; do
     if ! [[ -e $a ]] ; then
 	wget http://www.kiatoa.com/matt/iup/$a
@@ -162,10 +162,11 @@ if ! [[ -e libuuid ]] ; then
     wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
     tar xfz e2fsprogs-1.42.5.tar.gz
     cd e2fsprogs-1.42.5
-    mkdir build
+    mkdir -p build
     cd build
     ../configure --prefix=$PREFIX --enable-elf-shlibs
-    # cd lib/uuid
+    make
+    cd lib/uuid
     make install
 fi
 
