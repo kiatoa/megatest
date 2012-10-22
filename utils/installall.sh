@@ -109,6 +109,7 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
 	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
 	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install -prefix $DEPLOYTARG -deploy $PROX sqlite3
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
     fi
 fi
 
@@ -161,9 +162,11 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-c
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-UTIL_LINUX=2.22
+# UTIL_LINUX=2.22
+UTIL_LINUX=2.20.1
 if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-    wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
+    wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
+    # wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
 fi
 if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
     tar xfz util-linux-${UTIL_LINUX}.tar.gz

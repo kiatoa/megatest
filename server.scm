@@ -47,7 +47,7 @@
 	       (th1            (make-thread
 				(cute (rpc:make-server rpc:listener) "rpc:server")
 				'rpc:server))
-	       (th2            (make-thread (lambda ()(db:updater))))
+	       ;; (th2            (make-thread (lambda ()(db:updater))))
 	       (hostname       (if (string=? "-" hostn)
 				   (get-host-name) 
 				   hostn))
@@ -138,12 +138,13 @@
 			       (debug:print-info 0 "Queue not flushed, waiting ...")
 			       (loop (+ n 1)))))
 		      )))
+	  (db:updater)
 	  (thread-start! th1)
 	  ;; (debug:print 0 "Server started on port " (rpc:default-server-port) "...")
-	  (thread-start! th2)
+	  ;; (thread-start! th2)
 	  ;; (thread-join!  th2)
 	  ;; return th2 for the calling process to do a join with 
-	  th2
+	  th1
 	  )))) ;; rpc:server)))
 
 (define (server:keep-running db host:port)
