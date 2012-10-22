@@ -162,8 +162,8 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-c
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-# UTIL_LINUX=2.22
-UTIL_LINUX=2.20.1
+UTIL_LINUX=2.22
+# UTIL_LINUX=2.20.1
 if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
     wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
     # wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
@@ -187,7 +187,6 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
 --disable-losetup		  \
 --disable-fsck			  \
 --disable-partx			  \
---disable-uuidd			  \
 --disable-mountpoint		  \
 --disable-fallocate		  \
 --disable-unshare		  \
