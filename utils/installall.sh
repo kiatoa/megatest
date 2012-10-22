@@ -160,19 +160,62 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-c
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
-if ! [[ -e e2fsprogs-1.42.5.tar.gz ]] ; then
-    wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
+# wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
+UTIL_LINUX=2.22
+if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
+    wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
 fi
-if [[ -e e2fsprogs-1.42.5.tar.gz ]] ; then
-    tar xfz e2fsprogs-1.42.5.tar.gz
-    cd e2fsprogs-1.42.5
+if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
+    tar xfz util-linux-${UTIL_LINUX}.tar.gz
+    cd util-linux-${UTIL_LINUX}
     mkdir -p build
     cd build
-    ../configure --prefix=$PREFIX --enable-elf-shlibs
+    ../configure --prefix=$PREFIX \
+--disable-silent-rules            \
+--disable-dependency-tracking	  \
+--disable-libtool-lock		  \
+--disable-largefile		  \
+--disable-nls			  \
+--disable-rpath			  \
+--disable-tls			  \
+--disable-libblkid		  \
+--disable-libmount		  \
+--disable-mount			  \
+--disable-losetup		  \
+--disable-fsck			  \
+--disable-partx			  \
+--disable-uuidd			  \
+--disable-mountpoint		  \
+--disable-fallocate		  \
+--disable-unshare		  \
+--disable-eject			  \
+--disable-agetty		  \
+--disable-cramfs		  \
+--disable-switch_root		  \
+--disable-pivot_root		  \
+--disable-kill			  \
+--disable-utmpdump		  \
+--disable-rename		  \
+--disable-chsh-only-listed	  \
+--disable-login			  \
+--disable-sulogin		  \
+--disable-su			  \
+--disable-schedutils		  \
+--disable-wall			  \
+--disable-pg-bell		  \
+--disable-require-password	  \
+--disable-use-tty-group		  \
+--disable-makeinstall-chown       \
+--disable-makeinstall-setuid      \
+--without-ncurses                 
+
     make
-    cd lib/uuid
     make install
+    cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
 fi
+
+
+cd $BUILDHOME
 
 # http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
 # zpatchlev=-rc2
@@ -186,7 +229,8 @@ fi
 if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     tar xfz ${ZEROMQ}.tar.gz
     cd ${ZEROMQ}
-    ./configure --prefix=$PREFIX
+    ln -s $PREFIX/include/uuid src
+    LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
     make
     make install
     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
