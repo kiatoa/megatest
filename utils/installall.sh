@@ -164,8 +164,8 @@ if ! [[ -e libuuid ]] ; then
     cd e2fsprogs-1.42.5
     mkdir build
     cd build
-    ../configure --prefix=$PREFIX
-    cd lib/uuid
+    ../configure --prefix=$PREFIX --enable-elf-shlibs
+    # cd lib/uuid
     make install
 fi
 
