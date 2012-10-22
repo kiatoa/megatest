@@ -79,8 +79,9 @@ if ! [[ -e $PREFIX/bin/csi ]]; then
 fi
 
 # Some eggs are quoted since they are reserved to Bash
-for f in readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt ; do
+for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt ; do
   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
+    chicken-install $PROX $f
     chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
   else
     echo Skipping install of egg $f as it is already installed
