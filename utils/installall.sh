@@ -164,11 +164,11 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-c
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-UTIL_LINUX=2.20.1
+UTIL_LINUX=2.21
 # UTIL_LINUX=2.20.1
 if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-    wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
-    # wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
+    # wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
+    wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
 fi
 
 if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
@@ -232,10 +232,10 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
   --disable-unshare       \
   --disable-rename        \
   --disable-schedutils    \
+  --disable-libblkid      \
   --disable-wall
    make install
 
-#   --disable-libblkid      \
 #   --disable-chsh-only-listed
 #   --disable-pg-bell       let pg not ring the bell on invalid keys
 #   --disable-require-password
