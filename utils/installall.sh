@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 # Copyright 2007-2010, Matthew Welland.
 # 
 #  This program is made available under the GNU GPL version 2.0 or
@@ -82,7 +84,7 @@ fi
 for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt ; do
   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
     chicken-install $PROX $f
-    chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
+    # chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
   else
     echo Skipping install of egg $f as it is already installed
   fi
@@ -108,7 +110,7 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
     if [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
 	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
 	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
-	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install -prefix $DEPLOYTARG -deploy $PROX sqlite3
+	# CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install -prefix $DEPLOYTARG -deploy $PROX sqlite3
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
     fi
 fi
@@ -135,7 +137,7 @@ for a in `echo $files` ; do
     fi
     echo Untarring $a into $BUILDHOME/lib
     (cd $PREFIX/lib;tar xfvz $BUILDHOME/$a;mv include/* ../include)
-    (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
+    # (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
 done
 
 # ffcall obtained from:
@@ -156,32 +158,35 @@ make install
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web iup
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
+# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
+# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-UTIL_LINUX=2.22
+UTIL_LINUX=2.20.1
 # UTIL_LINUX=2.20.1
 if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
     wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
     # wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
 fi
+
 if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
     tar xfz util-linux-${UTIL_LINUX}.tar.gz
     cd util-linux-${UTIL_LINUX}
     mkdir -p build
     cd build
+    if [[ $UTIL_LINUX = "2.22" ]] ; then
     ../configure --prefix=$PREFIX \
---disable-silent-rules            \
---disable-dependency-tracking	  \
+--enable-shared                   \
+--disable-use-tty-group		  \
+--disable-makeinstall-chown       \
+--disable-makeinstall-setuid      \
 --disable-libtool-lock		  \
---disable-largefile		  \
---disable-nls			  \
---disable-rpath			  \
---disable-tls			  \
---disable-libblkid		  \
+--disable-login			  \
+--disable-sulogin		  \
+--disable-su			  \
+--disable-schedutils		  \
 --disable-libmount		  \
 --disable-mount			  \
 --disable-losetup		  \
@@ -196,21 +201,49 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
 --disable-switch_root		  \
 --disable-pivot_root		  \
 --disable-kill			  \
+--disable-libblkid		  \
 --disable-utmpdump		  \
 --disable-rename		  \
 --disable-chsh-only-listed	  \
---disable-login			  \
---disable-sulogin		  \
---disable-su			  \
---disable-schedutils		  \
 --disable-wall			  \
 --disable-pg-bell		  \
 --disable-require-password	  \
---disable-use-tty-group		  \
---disable-makeinstall-chown       \
---disable-makeinstall-setuid      \
+--disable-libtool-lock		  \
+--disable-nls			  \
+--disable-dmesg                   \
 --without-ncurses                 
+    else
+      ../configure --prefix=$PREFIX \
+  --enable-shared         \
+  --disable-mount         \
+  --disable-fsck          \
+  --disable-partx         \
+  --disable-largefile     \
+  --disable-tls           \
+  --disable-libmount      \
+  --disable-mountpoint    \
+  --disable-nls           \
+  --disable-rpath         \
+  --disable-agetty        \
+  --disable-cramfs        \
+  --disable-switch_root   \
+  --disable-pivot_root    \
+  --disable-fallocate     \
+  --disable-unshare       \
+  --disable-rename        \
+  --disable-schedutils    \
+  --disable-wall
+   make install
 
+#   --disable-libblkid      \
+#   --disable-chsh-only-listed
+#   --disable-pg-bell       let pg not ring the bell on invalid keys
+#   --disable-require-password
+#   --disable-use-tty-group do not install wall and write setgid tty
+#   --disable-makeinstall-chown
+#   --disable-makeinstall-setuid
+    fi
+    
     make
     make install
     cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
@@ -232,11 +265,12 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     tar xfz ${ZEROMQ}.tar.gz
     cd ${ZEROMQ}
     ln -s $PREFIX/include/uuid src
-    LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
+    # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
+    LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --prefix=$PREFIX 
     make
     make install
     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
-    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -deploy -prefix $DEPLOYTARG zmq
+    # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -deploy -prefix $DEPLOYTARG zmq
 fi
 
 cd $BUILDHOME  
