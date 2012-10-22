@@ -154,9 +154,11 @@ make install
 
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web iup
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -pogsrefix $DEPLOYTARG canvas-draw
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
 if ! [[ -e e2fsprogs-1.42.5.tar.gz ]] ; then
     wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
@@ -187,6 +189,7 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     ./configure --prefix=$PREFIX
     make
     make install
+    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -deploy -prefix $DEPLOYTARG zmq
 fi
 
