@@ -156,10 +156,12 @@ cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -pogsrefix $DEPLOYTARG canvas-draw
 
-if ! [[ -e libuuid ]] ; then
+if ! [[ -e e2fsprogs-1.42.5.tar.gz ]] ; then
     wget wget http://www.kiatoa.com/matt/iup/e2fsprogs-1.42.5.tar.gz
+fi
+if [[ -e e2fsprogs-1.42.5.tar.gz ]] ; then
     tar xfz e2fsprogs-1.42.5.tar.gz
     cd e2fsprogs-1.42.5
     mkdir -p build
