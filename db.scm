@@ -1094,6 +1094,7 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS
 ;;======================================================================
 
+;; db:updater is run in a thread to write out the cached data periodically
 (define (db:updater)
   (debug:print-info 4 "Starting cache processing")
   (let loop ((start-time (current-time)))
@@ -1101,6 +1102,56 @@
     (db:write-cached-data)
     (loop start-time)))
 
+;; cdb:cached-access is called by the server loop to dispatch commands or queue up
+;; db accesses
+;;
+;; params := qry-name cached? val1 val2 val3 ...
+(define (cdb:cached-access params)
+  (if (< (length params) 2)
+      "ERROR"
+      (let ((qry-name (car params))
+	    (cached?  (cadr params))
+	    (remparam (list-tail params 2))) 
+	(debug:print-info 12 "cdb:cached-access qry-name=" qry-name " params=" params)
+	;; Any special calls are dispatched here. 
+	;; Remainder are put in the db queue
+	(case qry-name
+	  ((login) ;; login checks that the megatest path matches
+	   (if (null? remparam)
+	       #f ;; no path - fail!
+	       (let ((calling-path (car remparam)))
+		 (if (equal? calling-path *toppath*)
+		     #t      ;; path matches - pass! Should vet the caller at this time ...
+		     #f))))  ;; else fail to login
+	  (else
+	   (mutex-lock! *incoming-mutex*)
+	   (set! *last-db-access* (current-seconds))
+	   (set! *incoming-data* (cons 
+				  (vector qry-name
+					  (current-milliseconds)
+					  params)
+				  *incoming-data*))
+	   (mutex-unlock! *incoming-mutex*)
+	   ;; NOTE: if cached? is #f then this call must be run immediately
+	   ;;       but first all calls in the queue are run first in the order
+	   ;;       of their time stamp
+	   (if (and cached? *cache-on*)
+	       (begin
+		 (debug:print-info 12 "*cache-on* is " *cache-on* ", skipping cache write")
+		 "CACHED")
+	       (begin
+		 (db:write-cached-data)
+		 "WRITTEN")))))))
+
+(define (cdb:client-call zmq-socket . params)
+  (debug:print-info 11 "zmq-socket " params)
+  (let ((zdat (with-output-to-string (lambda ()(serialize params))))
+	(res  #f))
+    (send-message zmq-socket zdat)
+    (set! res (receive-message zdat))
+    (debug:print-info 11 "zmq-socket " (car params) " res=" res)
+    res))
+  
 (define (cdb:test-set-status-state test-id status state msg)
   (debug:print-info 4 "cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
   (mutex-lock! *incoming-mutex*)
@@ -1119,47 +1170,17 @@
       (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
       (db:write-cached-data)))
   
-(define (cdb:test-rollup-test_data-pass-fail test-id)
-  (debug:print-info 4 "Adding " test-id " for test_data rollup to the queue")
-  (mutex-lock! *incoming-mutex*)
-  (set! *last-db-access* (current-seconds))
-  (set! *incoming-data* (cons (vector 'test_data-pf-rollup
-				      (current-milliseconds)
-				      (list test-id test-id test-id test-id))
-			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-      (db:write-cached-data)))
+(define (cdb:test-rollup-test_data-pass-fail zmqsocket test-id)
+  (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id))
 
-(define (cdb:pass-fail-counts test-id fail-count pass-count)
-  (debug:print-info 4 "Adding " test-id " for setting pass/fail counts to the queue")
-  (mutex-lock! *incoming-mutex*)
-  (set! *last-db-access* (current-seconds))
-  (set! *incoming-data* (cons (vector 'pass-fail-counts
-				      (current-milliseconds)
-				      (list fail-count pass-count test-id))
-			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-      (db:write-cached-data)))
+(define (cdb:pass-fail-counts zmqsocket test-id fail-count pass-count)
+  (cdb:client-call zmqsocket 'pass-fail-counts fail-count pass-count test-id))
 
-(define (cdb:tests-register-test db run-id test-name item-path #!key (force-write #f))
+(define (cdb:tests-register-test zmqsocket db run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (debug:print-info 4 "Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
-    (mutex-lock! *incoming-mutex*)
-    (set! *last-db-access* (current-seconds))
-    (set! *incoming-data* (cons (vector 'register-test
-					(current-milliseconds)
-					(list run-id test-name item-path)) ;; fail-count pass-count test-id))
-				*incoming-data*))
-    (mutex-unlock! *incoming-mutex*)
-    (if (and (not force-write) *cache-on*)
-	(debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-	(db:write-cached-data))))
+    (cdb:client-call zmqsocket 'register-test run-id test-name item-path)))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 

@@ -1,7 +1,7 @@
 (use zmq srfi-18 posix)
 
 (define s (make-socket 'rep))
-(bind-socket s "tcp://127.0.0.1:5563")
+(bind-socket s "tcp://*:5563")
 
 (print "Start server...")
 (let loop ()
@@ -9,7 +9,7 @@
 	 (name (caddr (string-split msg " ")))
 	 (resp (conc "World " name)))
     (print "Received request: [" msg "]")
-    (thread-sleep! 0.01)
+    (thread-sleep! 0.0001)
     (print "Sending response \"" resp "\"")
     (send-message s resp)
     (loop)))
