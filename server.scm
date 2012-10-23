@@ -129,11 +129,11 @@
 		 (debug:print 0 "ERROR: Failed to open a connection to the server at host: " host " port: " port)
 		 (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 		 (set! *runremote* #f))
-	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-			((rpc:procedure 'server:login host portn) *toppath*))
+	       (if (and (connect-socket zmq-socket hostinfo)
+			(cdb:client-call zmq-socket 'login #t *toppath*))
 		   (begin
 		     (debug:print-info 2 "Logged in and connected to " host ":" port)
-		     (set! *runremote* (vector host portn)))
+		     (set! *runremote* zmq-socket))
 		   (begin
 		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
 		     (set! *runremote* #f)))))

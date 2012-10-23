@@ -1123,6 +1123,8 @@
 		 (if (equal? calling-path *toppath*)
 		     #t      ;; path matches - pass! Should vet the caller at this time ...
 		     #f))))  ;; else fail to login
+	  ((flush)
+	   (
 	  (else
 	   (mutex-lock! *incoming-mutex*)
 	   (set! *last-db-access* (current-seconds))
