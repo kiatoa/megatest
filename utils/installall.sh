@@ -236,6 +236,9 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
   --disable-wall
    make install
 
+#  --disable-makeinstall-chown \
+#  --disable-makeinstall-setuid \
+
 #   --disable-chsh-only-listed
 #   --disable-pg-bell       let pg not ring the bell on invalid keys
 #   --disable-require-password
