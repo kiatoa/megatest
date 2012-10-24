@@ -1181,65 +1181,83 @@
 (define (cdb:flush-queue zmqsocket)
   (cdb:client-call zmqsocket 'flush #f))
 
+(define db:queries 
+  '((register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+    (state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+    (state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+    (pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+    (test_data-pf-rollup    "UPDATE tests
+                               SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                 THEN 'FAIL'
+                               WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                 (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                               THEN 'PASS'
+                               ELSE status
+                               END WHERE id=?;")
+    (rollup-tests-pass-fail "UPDATE tests 
+                               SET fail_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                                   pass_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+                               WHERE run_id=? AND testname=? AND item_path='';")))
+
+(define db:special-queries   '(rollup-tests-pass-fail))
+(define db:run-local-queries '(rollup-tests-pass-fail))
+
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
 (define (db:write-cached-data)
   (open-run-close
-   (lambda (db . params)
-     (let ((register-test-stmt    (sqlite3:prepare db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');"))
-	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
-	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
-	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
-	   (test_data-rollup-stmt  (sqlite3:prepare db "UPDATE tests
-                                             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                                                THEN 'FAIL'
-                                             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                                                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                                             THEN 'PASS'
-                                             ELSE status
-                                         END WHERE id=?;"))
-	   (data                  #f)
-	   (rollups               (make-hash-table)))
+   (lambda (db . junkparams)
+     (let ((queries    (make-hash-table))
+	   (data       #f))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
        (set! *incoming-data* '())
        (mutex-unlock! *incoming-mutex*)
        (if (> (length data) 0)
 	   (debug:print-info 4 "Writing cached data " data))
-       (sqlite3:with-transaction 
-	db
-	(lambda ()
-	  (debug:print-info 4 "flushing " data " to db")
-	  (for-each (lambda (entry)
-		      (let ((params (vector-ref entry 2)))
-			;; (debug:print-info 4 "Applying " entry " to params " params)
-			(case (vector-ref entry 0)
-			  ((state-status)
-			   (apply sqlite3:execute state-status-stmt     params))
-			  ((state-status-msg)
-			   (apply sqlite3:execute state-status-msg-stmt params))
-			  ((test_data-pf-rollup)
-			   ;; (hash-table-set! rollups (car params) params))
-			   (apply sqlite3:execute test_data-rollup-stmt  params))
-			  ((pass-fail-counts)
-			   (apply sqlite3:execute pass-fail-counts-stmt params))
-			  ((register-test)
-			   (apply sqlite3:execute register-test-stmt    params))
-			  (else
-			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
-		    data)))
-       ;; now do any rollups
-       ;; (for-each
-       ;;  (lambda (test-id)
-       ;;    (apply sqlite3:execute test_data-rollup-stmt (hash-table-ref rollups test-id)))
-       ;;  (hash-table-keys rollups))
-       (sqlite3:finalize! state-status-stmt)
-       (sqlite3:finalize! state-status-msg-stmt)
-       (sqlite3:finalize! test_data-rollup-stmt)
-       (sqlite3:finalize! pass-fail-counts-stmt)
-       (sqlite3:finalize! register-test-stmt)
+       ;; prepare the needed statements
+       (for-each (lambda (request-item)
+		   (let ((stmt-key (vector-ref request-item 0)))
+		     (if (not (hash-table-ref/default queries stmt-key #f))
+			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (if stmt
+			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
+			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+		 data)
+       (let outerloop ((special-qry #f)
+		       (stmts       data))
+	 (if special-qry
+	     ;; handle a query that cannot be part of the grouped queries
+	     (let* ((stmt-key (vector-ref special-qry 0))
+		    (qry      (hash-table-ref queries stmt-key))
+		    (params   (vector-ref speical-qry 2)))
+	       (apply sqlite3:execute db qry params)
+	       (if (not (null? stmts))
+		   (outerloop #f stmts)))
+	     ;; handle normal queries
+	     (sqlite3:with-transaction 
+	      db
+	      (lambda ()
+		(debug:print-info 11 "flushing " stmts " to db")
+		(if (not (null? stmts))
+		    (let innerloop ((hed (car stmts))
+				    (tal (cdr stmts)))
+		      (let ((params   (vector-ref hed 2))
+			    (stmt-key (vector-ref hed 0)))
+			(if (not (member stmt-key db:special-queries))
+			    (begin
+			      (debug:print-info 11 "Executing " stmt-key " for " params)
+			      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+			      (if (not (null? tal))
+				  (innerloop (car tal)(cdr tal))))
+			    (outerloop hed tal)))))))))
+       (for-each (lambda (stmt-key)
+		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		 (hash-table-keys queries))
        (let ((cache-size (length data)))
 	 (if (> cache-size *max-cache-size*)
 	     (set! *max-cache-size* cache-size)))
