@@ -277,7 +277,7 @@
 								  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
 								  (system (conc "kill -9 " p-id))))))
 							(car processes))
-						       (system (conc "kill -9 " pid))))
+						       (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
@@ -298,6 +298,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
+	      ;; Am I completed?
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)

@@ -114,7 +114,7 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(rdb:tests-register-test *db* 1 "nada" "")
+	(cdb:tests-register-test *remoterun* 1 "nada" "")
 	;; (rdb:flush-queue)
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
 
@@ -145,6 +145,7 @@
 ;;======================================================================
 ;; D B
 ;;======================================================================
+
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
 (test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
       (runs:get-runs-by-patt db keys "%"))
@@ -256,14 +257,18 @@
 
 ;; start a server process
 (set! *verbosity* 10)
-(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
-(sleep 2)
+;; (define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
+;; (sleep 2)
+
+(define th1 (make-thread server:launch))
+(thread-start! th1)
+
 (define start-wait (current-seconds))
 (server:client-setup)
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
 	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
-	    (apply rdb:test-set-status-state test-id params)
+	    (apply cdb:test-set-status-state *remoterun* test-id params)
 	    (rdb:pass-fail-counts test-id (random 100) (random 100))
 	    (rdb:test-rollup-test_data-pass-fail test-id)
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level

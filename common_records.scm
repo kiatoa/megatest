@@ -58,8 +58,8 @@
   (if (debug:debug-mode n)
       (with-output-to-port (current-error-port)
 	(lambda ()
-	  (let ((res (format#format #f "INFO:~2d ~a" n (apply conc params))))
-	    (print res)
+	  (let ((res #f));; (format#format #f "INFO:~2d ~a" n (apply conc params))))
+	    (apply print "INFO: (" n ") " params) ;; res)
 	    (if *logging* (db:log-event res)))))))
 
 ;; if a value is printable (i.e. string or number) return the value

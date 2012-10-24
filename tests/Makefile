@@ -67,7 +67,8 @@ cleanprep : ../*.scm Makefile */*.config
 	touch cleanprep
 
 fullprep : cleanprep
-	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt % -itempatt %
+	cd fullrun;$(MEGATEST) -server - -debug $(DEBUG) &
+	sleep 5;cd fullrun;$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt %/%
 	cd fullrun;$(BINPATH)/dboard -rows 15 &
 
 dashboard : cleanprep

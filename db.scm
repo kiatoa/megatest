@@ -16,7 +16,7 @@
 (require-extension (srfi 18) extras tcp rpc)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n zmq)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit db))
@@ -55,13 +55,14 @@
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (if (not *toppath*)(setup-for-run))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (debug:print-info 11 "open-db, dbpath=" dbpath)
+    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -70,7 +71,7 @@
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
-  (debug:print-info 11 "open-run-close-no-exception-handling START, idb=" idb ", params=" params)
+  (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (let* ((db   (if idb idb (open-db)))
 	 (res #f))
     (set! res (apply proc db params))
@@ -444,14 +445,18 @@
 	(begin
 	  (debug:print-info 4 "launch throttle factor=" *global-delta*)
 	  (set! *last-global-delta-printed* *global-delta*)))
-    (debug:print-info 11 "db:get-var END " var)
+    (debug:print-info 11 "db:get-var END " var " val=" res)
     res))
 
 (define (db:set-var db var val)
   (debug:print-info 11 "db:set-var START " var " " val)
   (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)
-  (debug:print-info 11 "db:set-var END " var " " val)
-)
+  (debug:print-info 11 "db:set-var END " var " " val))
+
+(define (db:del-var db var)
+  (debug:print-info 11 "db:del-var START " var)
+  (sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var)
+  (debug:print-info 11 "db:del-var END " var))
 
 ;; use a global for some primitive caching, it is just silly to re-read the db 
 ;; over and over again for the keys since they never change
@@ -1075,10 +1080,7 @@
                             t.fail_count 
                             t.pass_count 
                             t.archived   
-
-
-
- FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
+                           FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
 		       keystr " AND r.runname LIKE '" runname "' AND item_path LIKE '" itempatt "' AND testname LIKE '"
 		       testpatt "' AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
 		       "'ORDER BY t.event_time ASC;")))
@@ -1094,72 +1096,113 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS
 ;;======================================================================
 
+;; db:updater is run in a thread to write out the cached data periodically
 (define (db:updater)
   (debug:print-info 4 "Starting cache processing")
-  (let loop ((start-time (current-time)))
+  (let loop ()
     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
     (db:write-cached-data)
-    (loop start-time)))
+    (loop)))
 
-(define (cdb:test-set-status-state test-id status state msg)
-  (debug:print-info 4 "cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
-  (mutex-lock! *incoming-mutex*)
-  (set! *last-db-access* (current-seconds))
-  (if msg
-      (set! *incoming-data* (cons (vector 'state-status-msg
+;; cdb:cached-access is called by the server loop to dispatch commands or queue up
+;; db accesses
+;;
+;; params := qry-name cached? val1 val2 val3 ...
+(define (cdb:cached-access params)
+  (debug:print-info 12 "cdb:cached-access params=" params)
+  (if (< (length params) 2)
+      "ERROR"
+      (let ((qry-name (car params))
+	    (cached?  (cadr params))
+	    (remparam (list-tail params 2))) 
+	(debug:print-info 12 "cdb:cached-access qry-name=" qry-name " params=" params)
+	;; Any special calls are dispatched here. 
+	;; Remainder are put in the db queue
+	(case qry-name
+	  ((login) ;; login checks that the megatest path matches
+	   (if (null? remparam)
+	       #f ;; no path - fail!
+	       (let ((calling-path (car remparam)))
+		 (if (equal? calling-path *toppath*)
+		     #t      ;; path matches - pass! Should vet the caller at this time ...
+		     #f))))  ;; else fail to login
+	  ((flush)
+	   (db:write-cached-data)
+	   #t)
+	  (else
+	   (mutex-lock! *incoming-mutex*)
+	   (set! *last-db-access* (current-seconds))
+	   (set! *incoming-data* (cons 
+				  (vector qry-name
 					  (current-milliseconds)
-					  (list state status msg test-id))
+					  remparam)
 				  *incoming-data*))
-      (set! *incoming-data* (cons (vector 'state-status
-					  (current-milliseconds)
-					  (list state status test-id)) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
-				  *incoming-data*)))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-      (db:write-cached-data)))
+	   (mutex-unlock! *incoming-mutex*)
+	   ;; NOTE: if cached? is #f then this call must be run immediately
+	   ;;       but first all calls in the queue are run first in the order
+	   ;;       of their time stamp
+	   (if (and cached? *cache-on*)
+	       (begin
+		 (debug:print-info 12 "*cache-on* is " *cache-on* ", skipping cache write")
+		 "CACHED")
+	       (begin
+		 (db:write-cached-data)
+		 "WRITTEN")))))))
+
+(define (db:obj->string obj)(with-output-to-string (lambda ()(serialize obj))))
+(define (db:string->obj msg)(with-input-from-string msg (lambda ()(deserialize))))
+
+(define (cdb:client-call zmq-socket . params)
+  (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
+  (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
+	(res  #f))
+    (send-message zmq-socket zdat)
+    (set! res (db:string->obj (receive-message zmq-socket zdat)))
+    (debug:print-info 11 "zmq-socket " (car params) " res=" res)
+    res))
   
-(define (cdb:test-rollup-test_data-pass-fail test-id)
-  (debug:print-info 4 "Adding " test-id " for test_data rollup to the queue")
-  (mutex-lock! *incoming-mutex*)
-  (set! *last-db-access* (current-seconds))
-  (set! *incoming-data* (cons (vector 'test_data-pf-rollup
-				      (current-milliseconds)
-				      (list test-id test-id test-id test-id))
-			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-      (db:write-cached-data)))
+(define (cdb:test-set-status-state zmqsocket test-id status state msg)
+  (if msg
+      (cdb:client-call zmqsocket 'state-status-msg #t state status msg test-id)
+      (cdb:client-call zmqsocket 'state-status #t state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
-(define (cdb:pass-fail-counts test-id fail-count pass-count)
-  (debug:print-info 4 "Adding " test-id " for setting pass/fail counts to the queue")
-  (mutex-lock! *incoming-mutex*)
-  (set! *last-db-access* (current-seconds))
-  (set! *incoming-data* (cons (vector 'pass-fail-counts
-				      (current-milliseconds)
-				      (list fail-count pass-count test-id))
-			      *incoming-data*))
-  (mutex-unlock! *incoming-mutex*)
-  (if *cache-on*
-      (debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-      (db:write-cached-data)))
+(define (cdb:test-rollup-test_data-pass-fail zmqsocket test-id)
+  (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id test-id))
 
-(define (cdb:tests-register-test db run-id test-name item-path #!key (force-write #f))
+(define (cdb:pass-fail-counts zmqsocket test-id fail-count pass-count)
+  (cdb:client-call zmqsocket 'pass-fail-counts #t fail-count pass-count test-id))
+
+(define (cdb:tests-register-test zmqsocket run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (debug:print-info 4 "Adding " run-id ", " test-name "/" item-path " for setting pass/fail counts to the queue")
-    (mutex-lock! *incoming-mutex*)
-    (set! *last-db-access* (current-seconds))
-    (set! *incoming-data* (cons (vector 'register-test
-					(current-milliseconds)
-					(list run-id test-name item-path)) ;; fail-count pass-count test-id))
-				*incoming-data*))
-    (mutex-unlock! *incoming-mutex*)
-    (if (and (not force-write) *cache-on*)
-	(debug:print-info 6 "*cache-on* is " *cache-on* ", skipping cache write")
-	(db:write-cached-data))))
+    (cdb:client-call zmqsocket 'register-test #t run-id test-name item-path)))
+
+(define (cdb:flush-queue zmqsocket)
+  (cdb:client-call zmqsocket 'flush #f))
+
+(define db:queries 
+  '((register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+    (state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+    (state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+    (pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+    (test_data-pf-rollup    "UPDATE tests
+                               SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                 THEN 'FAIL'
+                               WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                 (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                               THEN 'PASS'
+                               ELSE status
+                               END WHERE id=?;")
+    (rollup-tests-pass-fail "UPDATE tests 
+                               SET fail_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                                   pass_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+                               WHERE run_id=? AND testname=? AND item_path='';")))
+
+(define db:special-queries   '(rollup-tests-pass-fail))
+(define db:run-local-queries '(rollup-tests-pass-fail))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1167,69 +1210,62 @@
 ;;
 (define (db:write-cached-data)
   (open-run-close
-   (lambda (db . params)
-     (let ((register-test-stmt    (sqlite3:prepare db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');"))
-	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
-	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
-	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
-	   (test_data-rollup-stmt  (sqlite3:prepare db "UPDATE tests
-                                             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                                                THEN 'FAIL'
-                                             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                                                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                                             THEN 'PASS'
-                                             ELSE status
-                                         END WHERE id=?;"))
-	   (data                  #f)
-	   (rollups               (make-hash-table)))
+   (lambda (db . junkparams)
+     (let ((queries    (make-hash-table))
+	   (data       #f))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
        (set! *incoming-data* '())
        (mutex-unlock! *incoming-mutex*)
        (if (> (length data) 0)
 	   (debug:print-info 4 "Writing cached data " data))
-       (sqlite3:with-transaction 
-	db
-	(lambda ()
-	  (debug:print-info 4 "flushing " data " to db")
-	  (for-each (lambda (entry)
-		      (let ((params (vector-ref entry 2)))
-			(debug:print-info 4 "Applying " entry " to params " params)
-			(case (vector-ref entry 0)
-			  ((state-status)
-			   (apply sqlite3:execute state-status-stmt     params))
-			  ((state-status-msg)
-			   (apply sqlite3:execute state-status-msg-stmt params))
-			  ((test_data-pf-rollup)
-			   ;; (hash-table-set! rollups (car params) params))
-			   (apply sqlite3:execute test_data-rollup-stmt  params))
-			  ((pass-fail-counts)
-			   (apply sqlite3:execute pass-fail-counts-stmt params))
-			  ((register-test)
-			   (apply sqlite3:execute register-test-stmt    params))
-			  (else
-			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
-		    data)))
-       ;; now do any rollups
-       ;; (for-each
-       ;;  (lambda (test-id)
-       ;;    (apply sqlite3:execute test_data-rollup-stmt (hash-table-ref rollups test-id)))
-       ;;  (hash-table-keys rollups))
-       (sqlite3:finalize! state-status-stmt)
-       (sqlite3:finalize! state-status-msg-stmt)
-       (sqlite3:finalize! test_data-rollup-stmt)
-       (sqlite3:finalize! pass-fail-counts-stmt)
-       (sqlite3:finalize! register-test-stmt)
+       ;; prepare the needed statements
+       (for-each (lambda (request-item)
+		   (let ((stmt-key (vector-ref request-item 0)))
+		     (if (not (hash-table-ref/default queries stmt-key #f))
+			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (if stmt
+			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
+			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+		 data)
+       (let outerloop ((special-qry #f)
+		       (stmts       data))
+	 (if special-qry
+	     ;; handle a query that cannot be part of the grouped queries
+	     (let* ((stmt-key (vector-ref special-qry 0))
+		    (qry      (hash-table-ref queries stmt-key))
+		    (params   (vector-ref speical-qry 2)))
+	       (apply sqlite3:execute db qry params)
+	       (if (not (null? stmts))
+		   (outerloop #f stmts)))
+	     ;; handle normal queries
+	     (sqlite3:with-transaction 
+	      db
+	      (lambda ()
+		(debug:print-info 11 "flushing " stmts " to db")
+		(if (not (null? stmts))
+		    (let innerloop ((hed (car stmts))
+				    (tal (cdr stmts)))
+		      (let ((params   (vector-ref hed 2))
+			    (stmt-key (vector-ref hed 0)))
+			(if (not (member stmt-key db:special-queries))
+			    (begin
+			      (debug:print-info 11 "Executing " stmt-key " for " params)
+			      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+			      (if (not (null? tal))
+				  (innerloop (car tal)(cdr tal))))
+			    (outerloop hed tal)))))))))
+       (for-each (lambda (stmt-key)
+		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		 (hash-table-keys queries))
        (let ((cache-size (length data)))
 	 (if (> cache-size *max-cache-size*)
 	     (set! *max-cache-size* cache-size)))
        ))
    #f))
 
-(define cdb:flush-queue db:write-cached-data)
-
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
-  (rdb:flush-queue)
+  (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
@@ -1257,6 +1293,7 @@
                        WHERE run_id=? AND testname=? AND item_path='';"
 	     run-id test-name run-id test-name))
 	#f)
+
       #f))
 
 ;;======================================================================
@@ -1392,14 +1429,14 @@
 	  (sqlite3:finalize! tdb)
 
 	  ;; Now rollup the counts to the central megatest.db
-	  (rdb:pass-fail-counts test-id fail-count pass-count)
+	  (cdb:pass-fail-counts *runremote* test-id fail-count pass-count)
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
 	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (rdb:test-rollup-test_data-pass-fail test-id)
+	  (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
@@ -1701,53 +1738,46 @@
 ;; REMOTE DB ACCESS VIA RPC
 ;;======================================================================
 
-(define (rdb:open-run-close procname . remargs)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	(apply (rpc:procedure 'rdb:open-run-close host port) procname remargs))
-      (apply open-run-close (eval procname) remargs)))
-
-(define (rdb:test-set-status-state test-id status state msg)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	(handle-exceptions
-	 exn
-	 (begin
-	   (debug:print 0 "EXCEPTION: rpc call failed?")
-	   (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-	   (print-call-chain)
-	   (cdb:test-set-status-state test-id status state msg))
-	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
-      (cdb:test-set-status-state test-id status state msg)))
-
-(define (rdb:test-rollup-test_data-pass-fail test-id)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:test-rollup-test_data-pass-fail host port) test-id))
-      (cdb:test-rollup-test_data-pass-fail test-id)))
-
-(define (rdb:pass-fail-counts test-id fail-count pass-count)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
-      (cdb:pass-fail-counts test-id fail-count pass-count)))
-
-;; currently forces a flush of the queue
-(define (rdb:tests-register-test db run-id test-name item-path)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:tests-register-test host port) db run-id test-name item-path force-write: #t))
-      (cdb:tests-register-test db run-id test-name item-path force-write: #t)))
-
-(define (rdb:flush-queue)
-  (if *runremote*
-      (let ((host (vector-ref *runremote* 0))
-	    (port (vector-ref *runremote* 1)))
-	((rpc:procedure 'cdb:flush-queue host port)))
-      (cdb:flush-queue)))
-
+;; (define (rdb:test-set-status-state test-id status state msg)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	(handle-exceptions
+;; 	 exn
+;; 	 (begin
+;; 	   (debug:print 0 "EXCEPTION: rpc call failed?")
+;; 	   (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+;; 	   (print-call-chain)
+;; 	   (cdb:test-set-status-state test-id status state msg))
+;; 	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
+;;       (cdb:test-set-status-state test-id status state msg)))
+;; 
+;; (define (rdb:test-rollup-test_data-pass-fail test-id)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'cdb:test-rollup-test_data-pass-fail host port) test-id))
+;;       (cdb:test-rollup-test_data-pass-fail test-id)))
+;; 
+;; (define (rdb:pass-fail-counts test-id fail-count pass-count)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
+;;       (cdb:pass-fail-counts test-id fail-count pass-count)))
+;; 
+;; ;; currently forces a flush of the queue
+;; (define (rdb:tests-register-test db run-id test-name item-path)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'cdb:tests-register-test host port) db run-id test-name item-path force-write: #t))
+;;       (cdb:tests-register-test db run-id test-name item-path force-write: #t)))
+;; 
+;; (define (rdb:flush-queue)
+;;   (if *runremote*
+;;       (let ((host (vector-ref *runremote* 0))
+;; 	    (port (vector-ref *runremote* 1)))
+;; 	((rpc:procedure 'cdb:flush-queue host port)))
+;;       (cdb:flush-queue)))
+;; 

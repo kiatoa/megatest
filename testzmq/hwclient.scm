@@ -1,7 +1,7 @@
 (use zmq posix)
 
 (define s (make-socket 'req))
-(connect-socket s "tcp://127.0.0.1:5563")
+(connect-socket s "tcp://*:5563")
 
 (define myname (cadr (argv)))
 

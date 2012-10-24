@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos zmq) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -256,6 +256,14 @@ Built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
+;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
+;;   we start the server if not running else start the client thread
+;;======================================================================
+(if (args:get-arg "-server")
+    (server:launch)
+    (server:client-launch))
+
+;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================
 
@@ -363,23 +371,6 @@ Built from " megatest-fossil-hash ))
 	  )))
 
 ;;======================================================================
-;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
-;;======================================================================
-(if (args:get-arg "-server")
-    (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
-      (debug:print-info 0 "Starting the standalone server")
-      (if db 
-	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
-		 (th2 (server:start db (args:get-arg "-server")))
-		 (th3 (make-thread (lambda ()
-				     (server:keep-running db host:port)))))
-	    (thread-start! th3)
-	    (thread-join! th3)
-	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
-
-;;======================================================================
 ;; full run
 ;;======================================================================
 
@@ -399,17 +390,30 @@ Built from " megatest-fossil-hash ))
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
 (if (args:get-arg "-runall")
-    (general-run-call 
-     "-runall"
-     "run all tests"
-     (lambda (target runname keys keynames keyvallst)
+    (let ((server-thread #f))
+      (if (args:get-arg "-server")
+	  (let ((toppath (setup-for-run))
+		(db      (open-db)))
+	    (if db 
+		(let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
+		       (th2 (server:start db (args:get-arg "-server")))
+		       (th3 (make-thread (lambda ()
+					   (server:keep-running db host:port)))))
+		  (thread-start! th3)
+		  (set! server-thread th3)))))
+      (general-run-call 
+       "-runall"
+       "run all tests"
+       (lambda (target runname keys keynames keyvallst)
 	 (runs:run-tests target
 			 runname
 			 (if (args:get-arg "-testpatt")
 			     (args:get-arg "-testpatt")
 			     "%/%")
 			 user
-			 args:arg-hash)))) ;; )
+			 args:arg-hash)))
+      (if server-thread 
+	  (thread-join! server-thread))))
 
 ;;======================================================================
 ;; run one test
@@ -830,6 +834,10 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
+
+;; this is the socket if we are a client
+(if (socket? *runremote*)
+    (close-socket *runremote*))
 
 (if (not *didsomething*)
     (debug:print 0 help))
