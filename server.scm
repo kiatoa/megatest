@@ -28,11 +28,12 @@
   (let ((host:port      (open-run-close db:get-var #f "SERVER"))) ;; do whe already have a server running?
     (if host:port 
 	(begin
-	  (debug:print 0 "ERROR: server already running.")
+	  (debug:print 0 "WARNING: server already running.")
 	  (if (server:client-setup)
 	      (begin 
-		(debug:print-info 0 "Server is alive, exiting")
-		(exit))
+		(debug:print-info 0 "Server is alive, not starting another")
+		;;(exit)
+		)
 	      (begin
 		(debug:print-info 0 "Server is dead, removing flag and trying again")
 		(open-run-close db:del-var #f "SERVER")

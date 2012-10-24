@@ -71,7 +71,7 @@
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
-  (debug:print-info 11 "open-run-close-no-exception-handling START, idb=" idb ", params=" params)
+  (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (let* ((db   (if idb idb (open-db)))
 	 (res #f))
     (set! res (apply proc db params))
@@ -1156,9 +1156,7 @@
   (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
 	(res  #f))
-    (print "cdb:client-call before send message, params=" params)
     (send-message zmq-socket zdat)
-    (print "cdb:client-call after send message")
     (set! res (db:string->obj (receive-message zmq-socket zdat)))
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
@@ -1169,7 +1167,7 @@
       (cdb:client-call zmqsocket 'state-status #t state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
 (define (cdb:test-rollup-test_data-pass-fail zmqsocket test-id)
-  (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id))
+  (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id test-id))
 
 (define (cdb:pass-fail-counts zmqsocket test-id fail-count pass-count)
   (cdb:client-call zmqsocket 'pass-fail-counts #t fail-count pass-count test-id))
@@ -1413,14 +1411,14 @@
 	  (sqlite3:finalize! tdb)
 
 	  ;; Now rollup the counts to the central megatest.db
-	  (cdb:pass-fail-counts *remoterun* test-id fail-count pass-count)
+	  (cdb:pass-fail-counts *runremote* test-id fail-count pass-count)
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
 	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (cdb:test-rollup-test_data-pass-fail *remoterun* test-id)
+	  (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
