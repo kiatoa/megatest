@@ -773,7 +773,7 @@
 		      (case action
 			((remove-runs) ;; the tdb is for future possible. 
 			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
-			 (debug:print-info 1 "Attempting to remove dir " real-dir " and link " run-dir)
+			 (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
 			 (if (and real-dir 
 				  (> (string-length real-dir) 5)
 				  (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
@@ -782,8 +782,10 @@
 			       (if (file-exists? real-dir)
 				   (if (> (system (conc "rm -rf " real-dir)) 0)
 				       (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
-				   (debug:print 0 "WARNING: test run dir " real-dir " appears to not exist")))
-			     (debug:print 0 "WARNING: directory " real-dir " does not exist"))
+				   (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
+			     (if real-dir 
+				 (debug:print 0 "WARNING: directory " real-dir " does not exist")
+				 (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
 			 (if (symbolic-link? run-dir)
 			     (begin
 			       (debug:print-info 1 "Removing symlink " run-dir)
@@ -792,7 +794,9 @@
 				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
 				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
 				     (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
-				 (debug:print 0 "ERROR: refusing to remove " run-dir " as it either doesn't exist or is not a symlink or directory")
+				 (if run-dir
+				     (debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
+				     (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 				 )))
 			((set-state-status)
 			 (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
