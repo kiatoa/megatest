@@ -78,26 +78,29 @@
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (server:keep-running db)
+(define (server:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
-  (let loop ()
-    (thread-sleep! 20) ;; no need to do this very often
-    (let ((numrunning (db:get-count-tests-running db)))
-      (if (or (> numrunning 0)
-	      (> (+ *last-db-access* 60)(current-seconds)))
-	  (begin
-	    (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-	    (loop))
-	  (begin
-	    (debug:print-info 0 "Starting to shutdown the server side")
-	    ;; need to delete only *my* server entry (future use)
-	    (db:del-var db "SERVER")
-	    (thread-sleep! 10)
-	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    ;; (exit)))
-	    )))))
+  (let loop ((count 0))
+    (thread-sleep! 1) ;; no need to do this very often
+    (db:write-cached-data)
+    (if (< count 100)
+	(loop 0)
+	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
+	  (if (or (> numrunning 0)
+		  (> (+ *last-db-access* 60)(current-seconds)))
+	      (begin
+		(debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+		(loop (+ count 1)))
+	      (begin
+		(debug:print-info 0 "Starting to shutdown the server side")
+		;; need to delete only *my* server entry (future use)
+		(open-run-close db:del-var #f "SERVER")
+		(thread-sleep! 10)
+		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
+		(debug:print-info 0 "Server shutdown complete. Exiting")
+		;; (exit)))
+		))))))
 
 (define (server:find-free-port-and-open host s port)
   (let ((s (if s s (make-socket 'rep)))
@@ -152,4 +155,23 @@
 	  (sleep 5)
 	  (server:client-setup)))))
 
+(define (server:launch)
+  (let* ((toppath (setup-for-run)))
+    (debug:print-info 0 "Starting the standalone server")
+    (if *toppath* 
+	(let* ((th2 (make-thread (lambda ()
+				   (server:run (args:get-arg "-server")))))
+	       (th3 (make-thread (lambda ()
+				   (server:keep-running)))))
+	  (thread-start! th3)
+	  (thread-start! th2)
+	  (thread-join! th3)
+	  (set! *didsomething* #t))
+	(debug:print 0 "ERROR: Failed to setup for megatest"))))
 
+(define (server:client-launch)
+  (if (server:client-setup)
+      (debug:print-info 0 "connected as client")
+      (begin
+	(debug:print 0 "ERROR: Failed to connect as client")
+	(exit))))

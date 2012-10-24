@@ -260,25 +260,8 @@ Built from " megatest-fossil-hash ))
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
 (if (args:get-arg "-server")
-    (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
-      (debug:print-info 0 "Starting the standalone server")
-      (if db 
-	  (let* ((th2 (make-thread (lambda ()
-				     (server:run (args:get-arg "-server")))))
-		 (th3 (make-thread (lambda ()
-				     (server:keep-running db)))))
-	    (thread-start! th3)
-	    (thread-start! th2)
-	    (thread-join! th3)
-	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: Failed to setup for megatest")))
-    ;; not starting server? then start the client
-    (if (server:client-setup)
-	(debug:print-info 0 "connected as client")
-	(begin
-	  (debug:print 0 "ERROR: Failed to connect as client")
-	  (exit))))
+    (server:launch)
+    (server:client-launch))
 
 ;;======================================================================
 ;; Remove old run(s)
@@ -851,6 +834,10 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
+
+;; this is the socket if we are a client
+(if (socket? *runremote*)
+    (close-socket *runremote*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

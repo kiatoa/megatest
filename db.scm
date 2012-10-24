@@ -62,7 +62,7 @@
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (debug:print-info 11 "open-db, dbpath=" dbpath)
+    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
@@ -1135,7 +1135,7 @@
 	   (set! *incoming-data* (cons 
 				  (vector qry-name
 					  (current-milliseconds)
-					  params)
+					  remparam)
 				  *incoming-data*))
 	   (mutex-unlock! *incoming-mutex*)
 	   ;; NOTE: if cached? is #f then this call must be run immediately
@@ -1156,7 +1156,7 @@
   (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
 	(res  #f))
-    (print "cdb:client-call before send message")
+    (print "cdb:client-call before send message, params=" params)
     (send-message zmq-socket zdat)
     (print "cdb:client-call after send message")
     (set! res (db:string->obj (receive-message zmq-socket zdat)))
@@ -1165,20 +1165,23 @@
   
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg
-      (cdb:client-call zmqsocket 'state-status-msg state status msg test-id)
-      (cdb:client-call zmqsocket 'state-status state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+      (cdb:client-call zmqsocket 'state-status-msg #t state status msg test-id)
+      (cdb:client-call zmqsocket 'state-status #t state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
 (define (cdb:test-rollup-test_data-pass-fail zmqsocket test-id)
   (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id))
 
 (define (cdb:pass-fail-counts zmqsocket test-id fail-count pass-count)
-  (cdb:client-call zmqsocket 'pass-fail-counts fail-count pass-count test-id))
+  (cdb:client-call zmqsocket 'pass-fail-counts #t fail-count pass-count test-id))
 
-(define (cdb:tests-register-test zmqsocket db run-id test-name item-path)
+(define (cdb:tests-register-test zmqsocket run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (cdb:client-call zmqsocket 'register-test run-id test-name item-path)))
+    (cdb:client-call zmqsocket 'register-test #t run-id test-name item-path)))
+
+(define (cdb:flush-queue zmqsocket)
+  (cdb:client-call zmqsocket 'flush #f))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1213,7 +1216,7 @@
 	  (debug:print-info 4 "flushing " data " to db")
 	  (for-each (lambda (entry)
 		      (let ((params (vector-ref entry 2)))
-			(debug:print-info 4 "Applying " entry " to params " params)
+			;; (debug:print-info 4 "Applying " entry " to params " params)
 			(case (vector-ref entry 0)
 			  ((state-status)
 			   (apply sqlite3:execute state-status-stmt     params))
@@ -1245,22 +1248,8 @@
        ))
    #f))
 
-(define cdb:flush-queue db:write-cached-data)
-
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
-  
-
-
-
-
-  ;; NEEDED!?
-  ;; (rdb:flush-queue)
-
-
-
-
-
-
+  (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
@@ -1288,6 +1277,7 @@
                        WHERE run_id=? AND testname=? AND item_path='';"
 	     run-id test-name run-id test-name))
 	#f)
+
       #f))
 
 ;;======================================================================
@@ -1423,14 +1413,14 @@
 	  (sqlite3:finalize! tdb)
 
 	  ;; Now rollup the counts to the central megatest.db
-	  (rdb:pass-fail-counts test-id fail-count pass-count)
+	  (cdb:pass-fail-counts *remoterun* test-id fail-count pass-count)
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
 
 	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (rdb:test-rollup-test_data-pass-fail test-id)
+	  (cdb:test-rollup-test_data-pass-fail *remoterun* test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
