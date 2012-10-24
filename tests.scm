@@ -223,7 +223,7 @@
 	(cdb:test-set-status-state *runremote* test-id real-status state #f))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
-    ;; run area, do not rpc it (yet)
+    ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
 	(db:test-data-rollup #f test-id status))
 
@@ -264,6 +264,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (open-run-close db:roll-up-pass-fail-counts db run-id test-name item-path status)
+    ;; (rdb:roll-up-pass-fail-counts run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))

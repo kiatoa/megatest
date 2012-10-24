@@ -298,6 +298,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
+	      ;; Am I completed?
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)

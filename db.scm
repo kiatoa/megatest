@@ -1153,13 +1153,19 @@
 (define (db:string->obj msg)(with-input-from-string msg (lambda ()(deserialize))))
 
 (define (cdb:client-call zmq-socket . params)
-  (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
-  (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
-	(res  #f))
-    (send-message zmq-socket zdat)
-    (set! res (db:string->obj (receive-message zmq-socket zdat)))
-    (debug:print-info 11 "zmq-socket " (car params) " res=" res)
-    res))
+  (if (and (> (length params) 1)
+	   (member (car params) db:run-local-queries))
+      (let ((remparam (list-tail params 2)))
+	(apply open-run-close (lambda (db)
+				(sqlite3:execute db (car (alist-ref (car params) db:queries))))
+	       remparam))
+      (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
+	    (res  #f))
+	(debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
+	(send-message zmq-socket zdat)
+	(set! res (db:string->obj (receive-message zmq-socket zdat)))
+	(debug:print-info 11 "zmq-socket " (car params) " res=" res)
+	res)))
   
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg
@@ -1181,87 +1187,96 @@
 (define (cdb:flush-queue zmqsocket)
   (cdb:client-call zmqsocket 'flush #f))
 
+(define db:queries 
+  '((register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+    (state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+    (state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+    (pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+    (test_data-rollup       "UPDATE tests
+                               SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                 THEN 'FAIL'
+                               WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                 (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                               THEN 'PASS'
+                               ELSE status
+                               END WHERE id=?;")
+    (rollup-tests-pass-fail "UPDATE tests 
+                               SET fail_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+                                   pass_count=(SELECT count(id) FROM tests WHERE 
+                                     run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+                               WHERE run_id=? AND testname=? AND item_path='';")))
+
+(define db:special-queries   '(rollup-tests-pass-fail))
+(define db:run-local-queries '(rollup-tests-pass-fail))
+
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
 (define (db:write-cached-data)
   (open-run-close
-   (lambda (db . params)
-     (let ((register-test-stmt    (sqlite3:prepare db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');"))
-	   (state-status-stmt     (sqlite3:prepare db "UPDATE tests SET state=?,status=? WHERE id=?;"))
-	   (state-status-msg-stmt (sqlite3:prepare db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;"))
-	   (pass-fail-counts-stmt (sqlite3:prepare db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;"))
-	   (test_data-rollup-stmt  (sqlite3:prepare db "UPDATE tests
-                                             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                                                THEN 'FAIL'
-                                             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                                                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                                             THEN 'PASS'
-                                             ELSE status
-                                         END WHERE id=?;"))
-	   (data                  #f)
-	   (rollups               (make-hash-table)))
+   (lambda (db . junkparams)
+     (let ((queries    (make-hash-table))
+	   (data       #f))
        (mutex-lock! *incoming-mutex*)
        (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
        (set! *incoming-data* '())
        (mutex-unlock! *incoming-mutex*)
        (if (> (length data) 0)
 	   (debug:print-info 4 "Writing cached data " data))
-       (sqlite3:with-transaction 
-	db
-	(lambda ()
-	  (debug:print-info 4 "flushing " data " to db")
-	  (for-each (lambda (entry)
-		      (let ((params (vector-ref entry 2)))
-			;; (debug:print-info 4 "Applying " entry " to params " params)
-			(case (vector-ref entry 0)
-			  ((state-status)
-			   (apply sqlite3:execute state-status-stmt     params))
-			  ((state-status-msg)
-			   (apply sqlite3:execute state-status-msg-stmt params))
-			  ((test_data-pf-rollup)
-			   ;; (hash-table-set! rollups (car params) params))
-			   (apply sqlite3:execute test_data-rollup-stmt  params))
-			  ((pass-fail-counts)
-			   (apply sqlite3:execute pass-fail-counts-stmt params))
-			  ((register-test)
-			   (apply sqlite3:execute register-test-stmt    params))
-			  (else
-			   (debug:print 0 "ERROR: Queued entry not recognised " entry)))))
-		    data)))
-       ;; now do any rollups
-       ;; (for-each
-       ;;  (lambda (test-id)
-       ;;    (apply sqlite3:execute test_data-rollup-stmt (hash-table-ref rollups test-id)))
-       ;;  (hash-table-keys rollups))
-       (sqlite3:finalize! state-status-stmt)
-       (sqlite3:finalize! state-status-msg-stmt)
-       (sqlite3:finalize! test_data-rollup-stmt)
-       (sqlite3:finalize! pass-fail-counts-stmt)
-       (sqlite3:finalize! register-test-stmt)
+       ;; prepare the needed statements
+       (for-each (lambda (request-item)
+		   (let ((stmt-key (vector-ref request-item 0)))
+		     (if (not (hash-table-ref/default queries stmt-key #f))
+			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (if stmt
+			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
+			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+		 data)
+       (let outerloop ((stmts data))
+	 (sqlite3:with-transaction 
+	  db
+	  (lambda ()
+	    (debug:print-info 11 "flushing " stmts " to db")
+	    (if (not (null? stmts))
+		(let innerloop ((hed (car stmts))
+				(tal (cdr stmts)))
+		  (let ((params   (vector-ref hed 2))
+			(stmt-key (vector-ref hed 0)))
+		    (if (not (member stmt-key db:special-queries))
+			(begin
+			  (debug:print-info 11 "Executing " stmt-key " for " params)
+			  (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+			  (if (not (null? tal))
+			      (innerloop (car tal)(cdr tal))))
+			(outerloop (cons hed tal)))))))))
+       (for-each (lambda (stmt-key)
+		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		 (hash-table-keys queries))
        (let ((cache-size (length data)))
 	 (if (> cache-size *max-cache-size*)
 	     (set! *max-cache-size* cache-size)))
        ))
    #f))
 
+;; (define (rdb:roll-up-pass-fail-counts run-id test-name item-path status)
+;;   ;; the #f tells the remote that this is not to be cached
+;;   (cdb:client-call *runremote* 'roll-up-pass-fail-counts #f run-id test-name item-path status))
+
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
-  (cdb:flush-queue *runremote*)
+  ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
 	       (equal? status "FAIL")
 	       (equal? status "WAIVED")
 	       (equal? status "RUNNING")))
-      (begin
-	(sqlite3:execute 
-	 db
-	 "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-             WHERE run_id=? AND testname=? AND item_path='';"
-	 run-id test-name run-id test-name run-id test-name)
+      (let ((rollup-pass-fail (car (alist-ref db:queries 'rollup-pass-fail))))
+	;; (cdb:client-call *runremote* 'rollup-tests-pass-fail #t run-id test-name run-id test-name run-id test-name)
+	(sqlite3:execute db rollup-pass-fail  run-id test-name run-id test-name run-id test-name)
+	;; (thread-sleep! 1)
+	;; (cdb:flush-queue)
         ;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
 	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
 	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
