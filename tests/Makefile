@@ -63,7 +63,7 @@ cleanprep : ../*.scm Makefile */*.config
 	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
-	rm -f fullrun/logging.db
+	rm -f fullrun/logging.db fullrun/monitor.db
 	touch cleanprep
 
 fullprep : cleanprep

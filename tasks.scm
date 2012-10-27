@@ -73,14 +73,22 @@
 ;; Server and client management
 ;;======================================================================
 
+;; state: 'live, 'shutting-down, 'dead
 (define (tasks:server-register mdb pid hostname port priority state)
   (sqlite3:execute 
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?);"
    pid hostname port priority state))
 
-(define (tasks:server-deregister mdb pid hostname)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE pid=? AND hostname=?;" pid hostname))
+(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
+  (if pid
+      (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND pid=?;" hostname pid)
+      (if port
+	  (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
+	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
+
+(define (tasks:server-deregister-self mdb)
+  (tasks:server-deregister mdb pid: (current-process-id) (get-host-name)))
 
 (define (tasks:server-get-server-id mdb)
   ;; dunno yet
@@ -110,6 +118,16 @@
 
 (define (tasks:have-clients? mdb server-id)
   (null? (tasks:get-logged-in-clients mdb server-id)))
+
+(define (tasks:get-best-server mdb)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (id hostname port)
+       (set! res (list hostname port)))
+     mdb
+     "SELECT id,hostname,port FROM servers WHERE state='live' ORDER BY start_time DESC LIMIT 1;")
+    res))
+
 
 ;;======================================================================
 ;; Tasks and Task monitors

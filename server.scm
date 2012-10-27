@@ -24,20 +24,24 @@
 (include "common_records.scm")
 (include "db_records.scm")
 
+(define (server:make-server-url hostport)
+  (if (null? hostport)
+      #f
+      (conc "tcp://" hostname ":" port)))
+
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
-  (let ((host:port      (open-run-close db:get-var open-db "SERVER"))) ;; do whe already have a server running?
+  (let* ((hostport      (open-run-close tasks:get-best-server tasks:open-db)) ;; do whe already have a server running?
+	 (host:port (server:mak-server-url hostport)))
     (if host:port 
 	(begin
 	  (debug:print 0 "NOTE: server already running.")
 	  (if (server:client-setup)
 	      (begin 
-		(debug:print-info 0 "Server is alive, not starting another")
-		;;(exit)
-		)
+		(debug:print-info 0 "Server is alive, not starting another"))
 	      (begin
-		(debug:print-info 0 "Server is dead, removing flag and trying again")
-		(open-run-close db:del-var #f "SERVER")
+		(debug:print-info 0 "Server is dead, removing, deregistering it and trying again")
+		(open-run-close tasks:deregister tasks:open-db (car hostport) port: (cadr port))
 		(server:run hostn))))
 	(let* ((zmq-socket     #f)
 	       (hostname       (if (string=? "-" hostn)
@@ -53,7 +57,7 @@
 	  ;; what to do when we quit
 	  ;;
 	  (on-exit (lambda ()
-		     (open-run-close db:del-var #f "SERVER")
+		     (open-run-close tasks:server-deregister-self tasks:open-db)
 		     (let loop () 
 		       (let ((queue-len 0))
 			 (thread-sleep! (random 5))
@@ -118,7 +122,7 @@
        (bind-socket s zmq-url)
        (set! *runremote* #f)
        (debug:print 0 "Server started on " zmq-url)
-       (open-run-close db:set-var #f "SERVER" zmq-url)
+       (open-run-close tasks:server-register tasks:open-db (current-process-id) host p 0 'live)
        s))))
 
 (define (server:client-setup)
