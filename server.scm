@@ -19,6 +19,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses tests))
+(declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 
 (include "common_records.scm")
 (include "db_records.scm")

@@ -55,11 +55,61 @@
                                   port INTEGER,
                                   start_time TIMESTAMP,
                                   priority INTEGER,
-                                  state TEXT;")
+                                  state TEXT,
+                               CONSTRAINT servers_constraint UNIQUE (pid,hostname);")
+	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+                                  server_id INTEGER,
+                                  pid INTEGER,
+                                  hostname TEXT,
+                                  cmdline TEXT,
+                                  login_time TIMESTAMP,
+                                  logout_time TIMESTAMP DEFAULT -1,
+                                CONSTRAINT clients_constraint UNIQUE (pid,hostname);")
                                   
 	  ))
     mdb))
     
+;;======================================================================
+;; Server and client management
+;;======================================================================
+
+(define (tasks:server-register mdb pid hostname port priority state)
+  (sqlite3:execute 
+   mdb 
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?);"
+   pid hostname port priority state))
+
+(define (tasks:server-deregister mdb pid hostname)
+  (sqlite3:execute mdb "DELETE FROM servers WHERE pid=? AND hostname=?;" pid hostname))
+
+(define (tasks:server-get-server-id mdb)
+  ;; dunno yet
+  0)
+
+(define (tasks:client-register mdb pid hostname cmdline)
+  (sqlite3:execute
+   mdb
+   "INSERT OR REPLACE INTO clients (server_id,pid,hostname,cmdline,login_time) VALUES(?,?,?,?,strftime('%s','now'));")
+  (tasks:server-get-server-id mdb)
+  pid hostname cmdline)
+
+(define (tasks:client-logout mdb pid hostname cmdline)
+  (sqlite3:execute
+   mdb
+   "UPDATE clients SET logout_time=strftime('%s','now') WHERE pid=? AND hostname=? AND cmdline=?;"
+   pid hostname cmdline))
+
+(define (tasks:get-logged-in-clients mdb server-id)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id server-id pid hostname cmdline login-time logout-time)
+       (set! res (cons (vector id server-id pid hostname cmdline login-time lougout-time) res)))
+     mdb
+     "SELECT id,server_id,pid,hostname,cmdline,login_time,logout_time FROM clients WHERE server_id=?;"
+     server-id)))
+
+(define (tasks:have-clients? mdb server-id)
+  (null? (tasks:get-logged-in-clients mdb server-id)))
 
 ;;======================================================================
 ;; Tasks and Task monitors
