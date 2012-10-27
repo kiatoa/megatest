@@ -26,7 +26,7 @@
 
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
-  (let ((host:port      (open-run-close db:get-var #f "SERVER"))) ;; do whe already have a server running?
+  (let ((host:port      (open-run-close db:get-var open-db "SERVER"))) ;; do whe already have a server running?
     (if host:port 
 	(begin
 	  (debug:print 0 "NOTE: server already running.")

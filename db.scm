@@ -72,7 +72,11 @@
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
   (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
-  (let* ((db   (if idb idb (open-db)))
+  (let* ((db   (if idb 
+		   (if (procedure? idb)
+		       (idb)
+		       idb)
+		   (open-db)))
 	 (res #f))
     (set! res (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
@@ -80,24 +84,16 @@
     res))
 
 (define (open-run-close-exception-handling proc idb . params)
-  (debug:print-info 11 "open-run-close-exception-handling START, idb=" idb ", params=" params)
-  (let ((runner (lambda ()
-		  (let* ((db   (if idb idb (open-db)))
-			 (res #f))
-		    (set! res (apply proc db params))
-		    (if (not idb)(sqlite3:finalize! db))
-		    (debug:print-info 11 "open-run-close-no-exception-handling END" )
-		    res))))
-    (handle-exceptions
-     exn
-     (begin
-       (debug:print 0 "EXCEPTION: database probably overloaded?")
-       (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-       (print-call-chain)
-       (thread-sleep! (random 120))
-       (debug:print-info 0 "trying db call one more time....")
-       (runner))
-     (runner))))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "EXCEPTION: database probably overloaded?")
+     (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
+     (print-call-chain)
+     (thread-sleep! (random 120))
+     (debug:print-info 0 "trying db call one more time....")
+     (apply open-run-close-no-exception-handling proc idb params))
+   (apply open-run-close-no-exception-handling proc idb params)))
 
 (define open-run-close open-run-close-exception-handling)
 
