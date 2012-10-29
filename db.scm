@@ -960,11 +960,14 @@
    "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
    rundir run-id test-name item-path))
 
-(define (db:test-set-rundir-by-test-id! db test-id rundir)
-  (sqlite3:execute 
-   db 
-   "UPDATE tests SET rundir=? WHERE id=?"
-   rundir test-id))
+(define (cdb:test-set-rundir-by-test-id zmqsocket test-id rundir)
+  (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t test-id rundir))
+
+;; (define (db:test-set-rundir-by-test-id! db test-id rundir)
+;;   (sqlite3:execute 
+;;    db 
+;;    "UPDATE tests SET rundir=? WHERE id=?"
+;;    rundir test-id))
 
 ;; 
 (define (db:test-get-rundir-from-test-id db test-id)
@@ -1199,7 +1202,8 @@
                                    pass_count=(SELECT count(id) FROM tests WHERE 
                                      run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
                                WHERE run_id=? AND testname=? AND item_path='';")
-    (test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")))
+    (test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
+    (test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")))
 
 (define db:special-queries   '(rollup-tests-pass-fail))
 (define db:run-local-queries '(rollup-tests-pass-fail))

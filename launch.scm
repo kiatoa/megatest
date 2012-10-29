@@ -416,7 +416,7 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (db:test-set-rundir-by-test-id! db test-id lnkpathf)
+    (cdb:test-set-rundir-by-test-id *runremote* test-id lnkpathf)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))

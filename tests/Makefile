@@ -85,7 +85,7 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -f fullrun/megatest.db fullrun/logging.db || true
+	rm -f */megatest.db */logging.db */monitor.db || true
 	killall -v mtest dboard || true
 
 hardkill : kill
