@@ -20,6 +20,9 @@ TARGET     = "-target ubuntu/nfs/none"
 
 all : test1 test2 test3 test4 test5
 
+test0 : cleanprep
+	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)&
+
 test1 : cleanprep
 	rm -f simplerun/megatest.db
 	rm -rf simplelinks/ simpleruns/
@@ -63,7 +66,7 @@ cleanprep : ../*.scm Makefile */*.config
 	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
-	rm -f fullrun/logging.db fullrun/monitor.db
+	rm -f */logging.db */monitor.db
 	touch cleanprep
 
 fullprep : cleanprep
@@ -83,7 +86,10 @@ clean  :
 kill :
 	killall -v mtest main.sh dboard || true
 	rm -f fullrun/megatest.db fullrun/logging.db || true
-	killall -v -9 mtest dboard || true
+	killall -v mtest dboard || true
+
+hardkill : kill
+	sleep 5;killall -v mtest main.sh dboard -9
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done

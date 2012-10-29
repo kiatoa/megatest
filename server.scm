@@ -32,7 +32,7 @@
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
   (let* ((hostport      (open-run-close tasks:get-best-server tasks:open-db)) ;; do whe already have a server running?
-	 (host:port (server:mak-server-url hostport)))
+	 (host:port (server:make-server-url hostport)))
     (if host:port 
 	(begin
 	  (debug:print 0 "NOTE: server already running.")
@@ -42,7 +42,11 @@
 	      (begin
 		(debug:print-info 0 "Server is dead, removing, deregistering it and trying again")
 		(open-run-close tasks:deregister tasks:open-db (car hostport) port: (cadr port))
-		(server:run hostn))))
+		;; (server:run hostn)
+		(debug:print 0 "WOULD NORMALLY START ANOTHER SERVER HERE")
+		)
+	      )
+	  )
 	(let* ((zmq-socket     #f)
 	       (hostname       (if (string=? "-" hostn)
 				   (get-host-name) 
@@ -153,13 +157,15 @@
 		   (set! *runremote* #f)
 		   #f)))))
 	(begin
-	  (debug:print-info 2 "No server available, attempting to start one...")
-	  (system (conc "megatest -server - " (if (args:get-arg "-debug")
-						  (conc "-debug " (args:get-arg "-debug"))
-						  "")
-			" &"))
-	  (sleep 5)
-	  (server:client-setup)))))
+	  (debug:print-info 0 "NO SERVER RUNNING! PLEASE START ONE! E.g. \"megatest -server - &\"")
+	;;   (debug:print-info 2 "No server available, attempting to start one...")
+	;;   (system (conc (car (argv)) " -server - " (if (args:get-arg "-debug")
+	;; 					  (conc "-debug " (args:get-arg "-debug"))
+	;; 					  "")
+	;; 		" &"))
+	  ;; (sleep 5)
+	  ;; (server:client-setup)
+	  ))))
 
 (define (server:launch)
   (let* ((toppath (setup-for-run)))

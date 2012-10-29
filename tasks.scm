@@ -56,7 +56,7 @@
                                   start_time TIMESTAMP,
                                   priority INTEGER,
                                   state TEXT,
-                               CONSTRAINT servers_constraint UNIQUE (pid,hostname);")
+                               CONSTRAINT servers_constraint UNIQUE (pid,hostname));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
@@ -64,7 +64,7 @@
                                   cmdline TEXT,
                                   login_time TIMESTAMP,
                                   logout_time TIMESTAMP DEFAULT -1,
-                                CONSTRAINT clients_constraint UNIQUE (pid,hostname);")
+                                CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
                                   
 	  ))
     mdb))
@@ -77,7 +77,7 @@
 (define (tasks:server-register mdb pid hostname port priority state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?);"
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?,?);"
    pid hostname port priority state))
 
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
