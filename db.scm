@@ -981,11 +981,14 @@
 	  (hash-table-set! *test-paths* test-id res)
 	  res))))
 
-(define (db:test-set-log! db test-id logf)
-  (if (string? logf)
-      (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
-		       logf test-id)
-      (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
+(define (cdb:test-set-log! zmqsocket test-id logf)
+  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #t test-id logf)))
+
+;; (define (db:test-set-log! db test-id logf)
+;;   (if (string? logf)
+;;       (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
+;; 		       logf test-id)
+;;       (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1195,7 +1198,8 @@
                                      run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
                                    pass_count=(SELECT count(id) FROM tests WHERE 
                                      run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-                               WHERE run_id=? AND testname=? AND item_path='';")))
+                               WHERE run_id=? AND testname=? AND item_path='';")
+    (test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")))
 
 (define db:special-queries   '(rollup-tests-pass-fail))
 (define db:run-local-queries '(rollup-tests-pass-fail))
@@ -1230,7 +1234,7 @@
 	     ;; handle a query that cannot be part of the grouped queries
 	     (let* ((stmt-key (vector-ref special-qry 0))
 		    (qry      (hash-table-ref queries stmt-key))
-		    (params   (vector-ref speical-qry 2)))
+		    (params   (vector-ref special-qry 2)))
 	       (apply sqlite3:execute db qry params)
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
@@ -1728,52 +1732,3 @@
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
-
-
-;;======================================================================
-;; REMOTE DB ACCESS VIA RPC
-;;======================================================================
-
-;; (define (rdb:test-set-status-state test-id status state msg)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	(handle-exceptions
-;; 	 exn
-;; 	 (begin
-;; 	   (debug:print 0 "EXCEPTION: rpc call failed?")
-;; 	   (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-;; 	   (print-call-chain)
-;; 	   (cdb:test-set-status-state test-id status state msg))
-;; 	 ((rpc:procedure 'cdb:test-set-status-state host port) test-id status state msg)))
-;;       (cdb:test-set-status-state test-id status state msg)))
-;; 
-;; (define (rdb:test-rollup-test_data-pass-fail test-id)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'cdb:test-rollup-test_data-pass-fail host port) test-id))
-;;       (cdb:test-rollup-test_data-pass-fail test-id)))
-;; 
-;; (define (rdb:pass-fail-counts test-id fail-count pass-count)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'cdb:pass-fail-counts host port) test-id fail-count pass-count))
-;;       (cdb:pass-fail-counts test-id fail-count pass-count)))
-;; 
-;; ;; currently forces a flush of the queue
-;; (define (rdb:tests-register-test db run-id test-name item-path)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'cdb:tests-register-test host port) db run-id test-name item-path force-write: #t))
-;;       (cdb:tests-register-test db run-id test-name item-path force-write: #t)))
-;; 
-;; (define (rdb:flush-queue)
-;;   (if *runremote*
-;;       (let ((host (vector-ref *runremote* 0))
-;; 	    (port (vector-ref *runremote* 1)))
-;; 	((rpc:procedure 'cdb:flush-queue host port)))
-;;       (cdb:flush-queue)))
-;; 
