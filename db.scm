@@ -985,13 +985,7 @@
 	  res))))
 
 (define (cdb:test-set-log! zmqsocket test-id logf)
-  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #t test-id logf)))
-
-;; (define (db:test-set-log! db test-id logf)
-;;   (if (string? logf)
-;;       (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE id=?;"
-;; 		       logf test-id)
-;;       (debug:print 0 "ERROR: db:test-set-log! called with non-string log file name " logf)))
+  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f test-id logf)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1099,12 +1093,12 @@
 ;;======================================================================
 
 ;; db:updater is run in a thread to write out the cached data periodically
-(define (db:updater)
-  (debug:print-info 4 "Starting cache processing")
-  (let loop ()
-    (thread-sleep! 10) ;; move save time around to minimize regular collisions?
-    (db:write-cached-data)
-    (loop)))
+;; (define (db:updater)
+;;   (debug:print-info 4 "Starting cache processing")
+;;   (let loop ()
+;;     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
+;;     (db:write-cached-data)
+;;     (loop)))
 
 ;; cdb:cached-access is called by the server loop to dispatch commands or queue up
 ;; db accesses
@@ -1118,6 +1112,7 @@
 	    (cached?  (cadr params))
 	    (remparam (list-tail params 2))) 
 	(debug:print-info 12 "cdb:cached-access qry-name=" qry-name " params=" params)
+	(if (not cached?)(db:write-cached-data))
 	;; Any special calls are dispatched here. 
 	;; Remainder are put in the db queue
 	(case qry-name

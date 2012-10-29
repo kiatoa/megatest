@@ -183,7 +183,7 @@
 				   (server:keep-running)))))
 	  (thread-start! th3)
 	  (thread-start! th2)
-	  (thread-join! th3)
+	  (thread-join! th2)
 	  (set! *didsomething* #t))
 	(debug:print 0 "ERROR: Failed to setup for megatest"))))
 
