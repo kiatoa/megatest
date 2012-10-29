@@ -259,8 +259,18 @@ Built from " megatest-fossil-hash ))
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
+
 (if (args:get-arg "-server")
-    (server:launch)
+    (server:launch))
+
+(if (or (let ((res #f))
+	  (for-each
+	   (lambda (key)
+	     (if (args:get-arg key)(set! res #t)))
+	   (list "-h" "-version" "-gen-megatest-area" "-gen-megatest-test"))
+	  res)
+	(eq? (length (hash-table-keys args:arg-hash)) 0))
+    (debug:print-info 1 "No server needed")
     (server:client-launch))
 
 ;;======================================================================

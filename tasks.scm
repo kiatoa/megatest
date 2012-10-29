@@ -78,7 +78,7 @@
   (sqlite3:execute 
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?,?);"
-   pid hostname port priority state))
+   pid hostname port priority (conc state)))
 
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
   (if pid
@@ -120,7 +120,7 @@
   (null? (tasks:get-logged-in-clients mdb server-id)))
 
 (define (tasks:get-best-server mdb)
-  (let ((res '()))
+  (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id hostname port)
        (set! res (list hostname port)))

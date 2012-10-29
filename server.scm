@@ -25,12 +25,13 @@
 (include "db_records.scm")
 
 (define (server:make-server-url hostport)
-  (if (null? hostport)
+  (if (not hostport)
       #f
-      (conc "tcp://" hostname ":" port)))
+      (conc "tcp://" (car hostport) ":" (cadr hostport))))
 
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
+  (if (not *toppath*)(setup-for-run))
   (let* ((hostport      (open-run-close tasks:get-best-server tasks:open-db)) ;; do whe already have a server running?
 	 (host:port (server:make-server-url hostport)))
     (if host:port 
@@ -40,8 +41,8 @@
 	      (begin 
 		(debug:print-info 0 "Server is alive, not starting another"))
 	      (begin
-		(debug:print-info 0 "Server is dead, removing, deregistering it and trying again")
-		(open-run-close tasks:deregister tasks:open-db (car hostport) port: (cadr port))
+		(debug:print-info 0 "Server is dead, deregistering it, please try again")
+		(open-run-close tasks:server-deregister tasks:open-db (car hostport) port: (cadr port))
 		;; (server:run hostn)
 		(debug:print 0 "WOULD NORMALLY START ANOTHER SERVER HERE")
 		)
@@ -55,7 +56,7 @@
 						(string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 						#f)))
 				 (if ipstr ipstr hostname))))
-	  (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555))
+	  (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555 0))
 	  (set! *cache-on* #t)
 	  
 	  ;; what to do when we quit
@@ -112,7 +113,7 @@
 		;; (exit)))
 		))))))
 
-(define (server:find-free-port-and-open host s port)
+(define (server:find-free-port-and-open host s port trynum)
   (let ((s (if s s (make-socket 'rep)))
 	(p (if (number? port) port 5555)))
     (handle-exceptions
@@ -120,7 +121,10 @@
      (begin
        (debug:print 0 "Failed to bind to port " p ", trying next port")
        (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-       (server:find-free-port-and-open host s (+ p 1)))
+       (if (< trynum 100)
+	   (server:find-free-port-and-open host s (+ p 1) (+ trynum 1))
+	   (debug:print-info 0 "Tried ports from " (- p trynum) " to " p 
+			     " but all were in use. Please try a different port range by starting the server with parameter \" -port N\" where N is the starting port number to use")))
      (let ((zmq-url (conc "tcp://" host ":" p)))
        (print "Trying to start server on " zmq-url)
        (bind-socket s zmq-url)
@@ -130,7 +134,8 @@
        s))))
 
 (define (server:client-setup)
-  (let* ((hostinfo   (open-run-close db:get-var #f "SERVER"))
+  (if (not *toppath*)(setup-for-run))
+  (let* ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db))
 	 (zmq-socket (make-socket 'req)))
     (if hostinfo
 	(begin
@@ -141,19 +146,20 @@
 	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
 	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	     (open-run-close db:del-var #f "SERVER")
-	     (exit)
+	     (open-run-close tasks:server-deregister tasks:open-db (car hostinfo) port: (cadr hostinfo))
+	     ;; (exit) ;; why forced exit?
 	     #f)
-	   (let ((connect-ok #f))
-	     (connect-socket zmq-socket hostinfo)
+	   (let ((connect-ok #f)
+		 (conurl     (server:make-server-url hostinfo)))
+	     (connect-socket zmq-socket conurl)
 	     (set! connect-ok (cdb:client-call zmq-socket 'login #t *toppath*))
 	     (if connect-ok
 		 (begin
-		   (debug:print-info 2 "Logged in and connected to " hostinfo)
+		   (debug:print-info 2 "Logged in and connected to " conurl)
 		   (set! *runremote* zmq-socket)
 		   #t)
 		 (begin
-		   (debug:print-info 2 "Failed to login or connect to " hostinfo)
+		   (debug:print-info 2 "Failed to login or connect to " conurl)
 		   (set! *runremote* #f)
 		   #f)))))
 	(begin

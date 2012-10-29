@@ -1,5 +1,20 @@
+;; Copyright 2006-2012, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+
+;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
+
 (require-extension test)
 (require-extension regex)
+(require-extension srfi-18)
+(import srfi-18)
+(require-extension zmq)
+(import zmq)
 
 (define test-work-dir (current-directory))
 
@@ -10,6 +25,8 @@
      (print "Loading " file)
      (load file))
    files))
+
+(define *runremote* #f)
 
 ;;======================================================================
 ;; P R O C E S S E S
@@ -56,7 +73,32 @@
 (test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
       (tests:match->sqlqry "a/b,a%,%/b%"))
 
+;;======================================================================
+;; S E R V E R
+;;======================================================================
+
+(test "setup for run" #t (begin (setup-for-run)
+				(string? (getenv "MT_RUN_AREA_HOME"))))
+
+(test "server-register, get-best-server" '("bob" 1234) (let ((res #f))
+							 (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
+							 (set! res (open-run-close tasks:get-best-server tasks:open-db))
+							 res))
+(test "de-register server" #f (let ((res #f))
+				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
+				(open-run-close tasks:get-best-server tasks:open-db)))
+
+
 ;; (exit)
+
+(set! *verbosity* 10)
+(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
+(sleep 3)
+
+(define th1 (make-thread (lambda ()(server:client-setup))))
+(thread-start! th1)
+
+(test #f #t (socket? *runremote*))
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
@@ -80,8 +122,6 @@
 
 ;; (define *toppath* "tests")
 (define *db* #f)
-(test "setup for run" #t (begin (setup-for-run)
-				(string? (getenv "MT_RUN_AREA_HOME"))))
 (test "open-db" #t (begin
 		     (set! *db* (open-db))
 		     (if *db* #t #f)))
@@ -114,7 +154,7 @@
 
 (test "register-test, test info" "NOT_STARTED"
       (begin
-	(cdb:tests-register-test *remoterun* 1 "nada" "")
+	(cdb:tests-register-test *runremote* 1 "nada" "")
 	;; (rdb:flush-queue)
 	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
 
@@ -255,20 +295,12 @@
 ;; R E M O T E   C A L L S 
 ;;======================================================================
 
-;; start a server process
-(set! *verbosity* 10)
-;; (define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
-;; (sleep 2)
-
-(define th1 (make-thread server:launch))
-(thread-start! th1)
-
 (define start-wait (current-seconds))
 (server:client-setup)
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
 	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
-	    (apply cdb:test-set-status-state *remoterun* test-id params)
+	    (apply cdb:test-set-status-state *runremote* test-id params)
 	    (rdb:pass-fail-counts test-id (random 100) (random 100))
 	    (rdb:test-rollup-test_data-pass-fail test-id)
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
@@ -334,6 +366,8 @@
 (hash-table-set! args:arg-hash ":runname" "%")
 
 (test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
+
+(thread-join! th1 th2 th3)
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())
