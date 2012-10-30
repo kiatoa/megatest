@@ -110,7 +110,7 @@
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+  (let* ((keys    (cdb:remote-run db:get-keys #f))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f))
@@ -134,7 +134,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '())))
+		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path)'() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -146,7 +146,7 @@
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
 ;; can use wildcards. Also can likely be factored in with get test paths?
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+  (let* ((keys    (cdb:remote-run db:get-keys #f))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -172,7 +172,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '())))
+		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path) '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -196,7 +196,7 @@
   (let* ((db          #f)
 	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (open-run-close db:get-test-info-by-id db test-id))
+	 (testdat     (cdb:remote-run db:get-test-info-by-id #f test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -259,44 +259,41 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (open-run-close db:csv->test-data db test-id
+	    (cdb:remote-run db:csv->test-data #f test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (open-run-close db:roll-up-pass-fail-counts db run-id test-name item-path status)
+    (cdb:remote-run db:roll-up-pass-fail-counts #f run-id test-name item-path status)
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (open-run-close db:test-set-comment db test-id cmt)))
+	  (cdb:remote-run db:test-set-comment #f test-id cmt)))
     ))
 
+
 (define (tests:test-set-toplog! db run-id test-name logf) 
-  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
-		   logf run-id test-name))
+  (cdb:client-call *runremote* 'tests:test-set-toplog #t logf run-id test-name))
 
 (define (tests:summarize-items db run-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
-  (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
-	(orig-dir       (current-directory))
-	(logf           #f))
+  (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
+	 (orig-dir       (current-directory))
+	 (logf-info      (cdb:remote-run db:test-get-logfile-info #f run-id test-name))
+	 (logf           (if logf-info (cadr logf-info) #f))
+	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (sqlite3:for-each-row 
-     (lambda (path final_logf)
-       (set! logf final_logf)
-       (if (directory? path)
-	   (begin
-	     (print "Found path: " path)
-	     (change-directory path))
-	     ;; (set! outputfilename (conc path "/" outputfilename)))
-	   (print "No such path: " path)))
-     db 
-     "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
-     run-id test-name)
-    (print "summarize-items with logf " logf)
+    (set! logf (car logf-info))
+    (if (directory? path)
+	(begin
+	  (print "Found path: " path)
+	  (change-directory path))
+	;; (set! outputfilename (conc path "/" outputfilename)))
+	(print "No such path: " path))
+    (debug:print 1 "summarize-items with logf " logf)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
