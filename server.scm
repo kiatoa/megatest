@@ -28,6 +28,7 @@
   (if (not hostport)
       #f
       (conc "tcp://" (car hostport) ":" (cadr hostport))))
+(define *time-to-exit* #f)
 
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
@@ -84,6 +85,7 @@
 	      (set! res (cdb:cached-access params))
 	      (debug:print-info 12 "server=> processed res=" res)
 	      (send-message zmq-socket (db:obj->string res))
+	      (if *time-to-exit* (exit))
 	      (loop)))))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 

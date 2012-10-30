@@ -853,7 +853,7 @@
      run-id testname item-path)
     res))
 
-(define db:get-test-id db:get-test-id-cached)
+(define db:get-test-id db:get-test-id-not-cached)
 
 ;; given a test-info record, patch in the latest data from the testdat.db file
 ;; found in the test run directory
@@ -1126,6 +1126,21 @@
 	  ((flush)
 	   (db:write-cached-data)
 	   #t)
+	  ((immediate)
+	   (db:write-cached-data)
+	   (if (not (null? remparam))
+	       (apply (car remparam) (cdr remparam))
+	       "ERROR"))
+	  ((killserver)
+	   (db:write-cached-data)
+	   (debug:print-info 0 "Remotely killed server on host " (get-host-name) " pid " (current-process-id))
+	   (set! *time-to-exit* #t)
+	   #t)
+	  ((set-verbosity)
+	   (set! *verbosity* (caddr params))
+	   *verbosity*)
+	  ((get-verbosity)
+	   *verbosity*)
 	  (else
 	   (mutex-lock! *incoming-mutex*)
 	   (set! *last-db-access* (current-seconds))
@@ -1158,6 +1173,9 @@
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
   
+(define (cdb:set-verbosity zmqsocket val)
+  (cdb:client-call zmqsocket 'set-verbosity #f val))
+
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg
       (cdb:client-call zmqsocket 'state-status-msg #t state status msg test-id)
@@ -1178,30 +1196,43 @@
 (define (cdb:flush-queue zmqsocket)
   (cdb:client-call zmqsocket 'flush #f))
 
-(define db:queries 
-  '((register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
-    (state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
-    (state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
-    (pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
-    (test_data-pf-rollup    "UPDATE tests
-                               SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-                                 THEN 'FAIL'
-                               WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-                                 (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-                               THEN 'PASS'
-                               ELSE status
-                               END WHERE id=?;")
-    (rollup-tests-pass-fail "UPDATE tests 
-                               SET fail_count=(SELECT count(id) FROM tests WHERE 
-                                     run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                                   pass_count=(SELECT count(id) FROM tests WHERE 
-                                     run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
-                               WHERE run_id=? AND testname=? AND item_path='';")
-    (test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
-    (test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")))
+(define (cdb:kill-server zmqsocket)
+  (cdb:client-call zmqsocket 'killserver #f))
 
-(define db:special-queries   '(rollup-tests-pass-fail))
-(define db:run-local-queries '(rollup-tests-pass-fail))
+(define (cdb:roll-up-pass-fail-counts zmqsocket run-id test-name item-path status)
+  (cdb:client-call zmqsocket 'immediate #f open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
+
+(define (cdb:get-test-info zmqsocket run-id test-name item-path)
+  (cdb:client-call zmqsocket 'immediate #f open-run-close db:get-test-info #f run-id test-name item-path))
+
+;; db should be db open proc or #f
+(define (cdb:remote-run proc db . params)
+  (apply cdb:client-call *runremote* 'immediate #f open-run-close proc #f params))
+
+(define db:queries 
+  (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
+	'(test_data-pf-rollup    "UPDATE tests
+                                    SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
+                                      THEN 'FAIL'
+                                    WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
+                                      (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
+                                    THEN 'PASS'
+                                    ELSE status
+                                    END WHERE id=?;")
+	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
+	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
+    ))
+
+;; do not run these as part of the transaction
+(define db:special-queries   '(rollup-tests-pass-fail
+			       db:roll-up-pass-fail-counts))
+
+;; not used, intended to indicate to run in calling process
+(define db:run-local-queries '()) ;; rollup-tests-pass-fail))
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1218,42 +1249,65 @@
        (mutex-unlock! *incoming-mutex*)
        (if (> (length data) 0)
 	   (debug:print-info 4 "Writing cached data " data))
-       ;; prepare the needed statements
+
+       ;; prepare the needed statements, do each only once
        (for-each (lambda (request-item)
 		   (let ((stmt-key (vector-ref request-item 0)))
 		     (if (not (hash-table-ref/default queries stmt-key #f))
 			 (let ((stmt (alist-ref stmt-key db:queries)))
 			   (if stmt
 			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
-			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+			       (if (procedure? stmt-key)
+				   (hash-table-set! queries stmt-key #f)
+				   (debug:print 0 "ERROR: Missing query spec for " stmt-key "!")))))))
 		 data)
+
+       ;; outer loop to handle special queries that cannot be handled in the
+       ;; transaction.
        (let outerloop ((special-qry #f)
 		       (stmts       data))
 	 (if special-qry
+
 	     ;; handle a query that cannot be part of the grouped queries
 	     (let* ((stmt-key (vector-ref special-qry 0))
 		    (qry      (hash-table-ref queries stmt-key))
 		    (params   (vector-ref special-qry 2)))
-	       (apply sqlite3:execute db qry params)
+	       (if (string? qry)
+		   (apply sqlite3:execute db qry params)
+		   (if (procedure? stmt-key)
+		       (begin
+			 ;; we are being handed a procedure so call it
+			 (debug:print-info 11 "Running (apply " stmt-key " " db " " params ")")
+			 (apply stmt-key db params))
+		       (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
+
 	     ;; handle normal queries
-	     (sqlite3:with-transaction 
-	      db
-	      (lambda ()
-		(debug:print-info 11 "flushing " stmts " to db")
-		(if (not (null? stmts))
-		    (let innerloop ((hed (car stmts))
-				    (tal (cdr stmts)))
-		      (let ((params   (vector-ref hed 2))
-			    (stmt-key (vector-ref hed 0)))
-			(if (not (member stmt-key db:special-queries))
-			    (begin
-			      (debug:print-info 11 "Executing " stmt-key " for " params)
-			      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-			      (if (not (null? tal))
-				  (innerloop (car tal)(cdr tal))))
-			    (outerloop hed tal)))))))))
+	     (let ((rem (sqlite3:with-transaction 
+			 db
+			 (lambda ()
+			   (debug:print-info 11 "flushing " stmts " to db")
+			   (if (null? stmts)
+			       stmts
+			       (let innerloop ((hed (car stmts))
+					       (tal (cdr stmts)))
+				 (let ((params   (vector-ref hed 2))
+				       (stmt-key (vector-ref hed 0)))
+				   (if (or (procedure? stmt-key)
+					   (member stmt-key db:special-queries))
+				       (begin
+					 (debug:print-info 11 "Handling special statement " stmt-key)
+					 (cons hed tal))
+				       (begin
+					 (debug:print-info 11 "Executing " stmt-key " for " params)
+					 (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+					 (if (not (null? tal))
+					     (innerloop (car tal)(cdr tal))
+					     '()))
+				       ))))))))
+	       (if (not (null? rem))
+		   (outerloop (car rem)(cdr rem))))))
        (for-each (lambda (stmt-key)
 		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
 		 (hash-table-keys queries))
@@ -1263,8 +1317,9 @@
        ))
    #f))
 
+;; Rollup the pass/fail counts from itemized tests into fail_count and pass_count
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
-  (cdb:flush-queue *runremote*)
+  ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
 	   (or (equal? status "PASS")
 	       (equal? status "WARN")
@@ -1292,7 +1347,6 @@
                        WHERE run_id=? AND testname=? AND item_path='';"
 	     run-id test-name run-id test-name))
 	#f)
-
       #f))
 
 ;;======================================================================

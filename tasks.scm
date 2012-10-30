@@ -88,7 +88,7 @@
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
 (define (tasks:server-deregister-self mdb)
-  (tasks:server-deregister mdb pid: (current-process-id) (get-host-name)))
+  (tasks:server-deregister mdb (get-host-name) pid: (current-process-id)))
 
 (define (tasks:server-get-server-id mdb)
   ;; dunno yet

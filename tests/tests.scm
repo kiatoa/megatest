@@ -91,9 +91,10 @@
 
 ;; (exit)
 
-(set! *verbosity* 10)
+(set! *verbosity* 3) ;; enough to trigger turning off exception handling in db accesses
 (define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
 (sleep 3)
+(set! *verbosity* 1)
 
 (define th1 (make-thread (lambda ()(server:client-setup))))
 (thread-start! th1)
@@ -150,19 +151,16 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
+(test #f #t (cdb:client-call *runremote* 'immediate #f (lambda ()(display "Got here eh!?") #t)))
+
+;; (set! *verbosity* 20)
+(test #f *verbosity* (cdb:set-verbosity *runremote* *verbosity*))
+(test #f #f (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" "PASS"))
+;; (set! *verbosity* 1)
+;; (cdb:set-verbosity *runremote* *verbosity*)
+
 (test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
 
-(test "register-test, test info" "NOT_STARTED"
-      (begin
-	(cdb:tests-register-test *runremote* 1 "nada" "")
-	;; (rdb:flush-queue)
-	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
-
-(test #f "NOT_STARTED"    
-      (begin
-	(rdb:tests-register-test #f 1 "nada" "")
-	;; (rdb:flush-queue)
-	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
@@ -180,6 +178,12 @@
 						    "new"
 						    "n/a" 
 						    "bob")))
+
+(test #f "CACHED"       (cdb:tests-register-test *runremote* 1 "nada" ""))
+(test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
+(test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
+(test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
+
 (define keys (db:get-keys *db*))
 
 ;;======================================================================
@@ -296,13 +300,12 @@
 ;;======================================================================
 
 (define start-wait (current-seconds))
-(server:client-setup)
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
-	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
+	    (cdb:tests-register-test *runremote* 1 (conc "test" (random 20)) "")
 	    (apply cdb:test-set-status-state *runremote* test-id params)
-	    (rdb:pass-fail-counts test-id (random 100) (random 100))
-	    (rdb:test-rollup-test_data-pass-fail test-id)
+	    (cdb:pass-fail-counts *runremote* test-id (random 100) (random 100))
+	    (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
 	  '(("COMPLETED"    "PASS" #f)
 	    ("NOT_STARTED"  "FAIL" "Just testing")
@@ -345,16 +348,17 @@
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ))
 ;; now set all tests to completed
-(rdb:flush-queue)
-(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" '() '())))
+(cdb:flush-queue *runremote*)
+(let ((tests (cdb:remote-run db:get-tests-for-run #f 1 "%" '() '())))
   (print "Setting " (length tests) " to COMPLETED/PASS")
   (for-each
    (lambda (test)
-     (rdb:test-set-status-state (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
+     (cdb:test-set-status-state *runremote* (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
    tests))
 
 (print "Waiting for server to be done, should be about 20 seconds")
-(process-wait server-pid)
+(cdb:kill-server *runremote*)
+;; (process-wait server-pid)
 (test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
 			      (print "Server ran for " run-delta " seconds")
 			      (> run-delta 20)))
