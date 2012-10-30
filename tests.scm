@@ -360,6 +360,7 @@
 		(release-dot-lock outputfilename)))
 	    (close-output-port oup)
 	    (change-directory orig-dir)
+	    ;; NB// tests:test-set-toplog! is remote internal...
 	    (tests:test-set-toplog! db run-id test-name outputfilename)
 	    )))))
 
@@ -427,7 +428,7 @@
 
 ;; for each test:
 ;;   
-(define (tests:filter-non-runnable db run-id testkeynames testrecordshash)
+(define (tests:filter-non-runnable run-id testkeynames testrecordshash)
   (let ((runnables '()))
     (for-each
      (lambda (testkeyname)
@@ -437,8 +438,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (db:get-test-id db run-id test-name item-path))
-	      (tdat        (db:get-test-info-by-id db test-id)))
+	      (test-id     (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	      (tdat        (cdb:remote-run db:get-test-info-by-id #f test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -453,8 +454,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (db:get-test-id db run-id waiton ""))
-				      (wtdat (db:get-test-info-by-id db test-id)))
+			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
+				      (wtdat (cdb:remote-run db:get-test-info-by-id #f test-id)))
 				 (if (or (member (db:test-get-status wtdat)
 						 '("FAIL" "KILLED"))
 					 (member (db:test-get-state wtdat)
@@ -471,9 +472,9 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request db test-id) ;; run-id test-name itemdat)
+(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
   (let* (;; (item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info-by-id db test-id))) ;; run-id test-name item-path)))
+	 (testdat   (cdb:remote-run db:get-test-info-by-id test-id))) ;; run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
 (define (test:tdb-get-rundat-count tdb)
