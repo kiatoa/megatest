@@ -958,7 +958,7 @@
   (cdb:client-call zmqsocket 'test-set-rundir #t rundir run-id test-name item-path))
 
 (define (cdb:test-set-rundir-by-test-id zmqsocket test-id rundir)
-  (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t test-id rundir))
+  (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t rundir test-id))
 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res #f)) ;; (hash-table-ref/default *test-paths* test-id #f)))
@@ -975,7 +975,7 @@
     res)) ;; ))
 
 (define (cdb:test-set-log! zmqsocket test-id logf)
-  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f test-id logf)))
+  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f logf test-id)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1480,8 +1480,8 @@
 	  (cdb:pass-fail-counts *runremote* test-id fail-count pass-count)
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
-
-	  (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
+	  (cdb:flush-queue *runremote*)
+	  ;; (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
 	  (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
