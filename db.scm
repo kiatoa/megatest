@@ -774,8 +774,8 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
-(define (db:delete-tests-in-state db run-id state)
-  (sqlite3:execute db "DELETE FROM tests WHERE state=? AND run_id=?;" state run-id))
+(define (cdb:delete-tests-in-state zmqsocket run-id state)
+  (cdb:client-call zmqsocket 'delete-tests-in-state #t run-id state))
 
 ;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
@@ -1218,6 +1218,7 @@
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
+	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
     ))
 
 ;; do not run these as part of the transaction

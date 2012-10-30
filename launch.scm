@@ -106,13 +106,13 @@
 	  (server:client-setup)
 
 	  (change-directory *toppath*) 
-	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
 	  (open-run-close set-run-config-vars #f run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (open-run-close set-megatest-env-vars #f run-id)
+	  (set-megatest-env-vars run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
@@ -439,7 +439,7 @@
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  (cdb:test-set-rundir! *runremote* run-id testname item-path lnkpath) ;; toptest-path)
+	  (cdb:test-set-rundir! *runremote* run-id testname "" lnkpath) ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin

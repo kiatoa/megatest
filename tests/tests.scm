@@ -285,13 +285,13 @@
 (test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
 			      (print "Rundir" rundir)
 			      (string? rundir)))
-(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (db:open-test-db-by-test-id db test-id)))
-			      (sqlite3#finalize! tdb)
-			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
-(test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
+(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (open-run-close db:open-test-db-by-test-id #f test-id)))
+									    (sqlite3#finalize! tdb)
+									    (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
+(test "Get steps for test" #t (> (length (open-run-close db:get-steps-for-test test-id)) 0))
 (test "Get nice table for steps" "2.0s"
       (begin
-	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
+	(vector-ref (hash-table-ref (open-run-close db:get-steps-table #f test-id) "step1") 4)))
 
 ;; (exit)
 
