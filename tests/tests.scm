@@ -279,16 +279,22 @@
 	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" '() '()))))
+	(set! test-id (db:test-get-id (car (cdb:remote-run db:get-tests-for-run #f 1 "test1" '() '()))))
 	(number? test-id)))
 
-(test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
-			      (print "Rundir" rundir)
+(test "Get rundir"       #t (let ((rundir (cdb:remote-run db:test-get-rundir-from-test-id #f test-id)))
+			      (print "Rundir " rundir)
+			      (system (conc "mkdir -p " rundir))
 			      (string? rundir)))
-(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (open-run-close db:open-test-db-by-test-id #f test-id)))
-									    (sqlite3#finalize! tdb)
-									    (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
-(test "Get steps for test" #t (> (length (open-run-close db:get-steps-for-test test-id)) 0))
+(test #f #t (sqlite3#database? (open-test-db "./")))
+(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db"
+      (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id)))
+	(if tdb (sqlite3#finalize! tdb))
+	(file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
+
+(test "Get steps for test" #t (let ((steps (cdb:remote-run db:get-steps-for-test #f test-id)))
+				(print steps)
+				(> (length steps) 0)))
 (test "Get nice table for steps" "2.0s"
       (begin
 	(vector-ref (hash-table-ref (open-run-close db:get-steps-table #f test-id) "step1") 4)))

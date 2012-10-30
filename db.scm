@@ -255,6 +255,7 @@
 ;; find and open the testdat.db file for an existing test
 (define (db:open-test-db-by-test-id db test-id)
   (let* ((test-path (db:test-get-rundir-from-test-id db test-id)))
+    (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 (define (db:testdb-initialize db)
@@ -960,18 +961,18 @@
   (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t test-id rundir))
 
 (define (db:test-get-rundir-from-test-id db test-id)
-  (let ((res (hash-table-ref/default *test-paths* test-id #f)))
-    (if res
-	res
-	(begin
-	  (sqlite3:for-each-row
-	   (lambda (tpath)
-	     (set! res tpath))
-	   db 
-	   "SELECT rundir FROM tests WHERE id=?;"
-	   test-id)
-	  (hash-table-set! *test-paths* test-id res)
-	  res))))
+  (let ((res #f)) ;; (hash-table-ref/default *test-paths* test-id #f)))
+    ;; (if res
+    ;;     res
+    ;;     (begin
+    (sqlite3:for-each-row
+     (lambda (tpath)
+       (set! res tpath))
+     db 
+     "SELECT rundir FROM tests WHERE id=?;"
+     test-id)
+    ;; (hash-table-set! *test-paths* test-id res)
+    res)) ;; ))
 
 (define (cdb:test-set-log! zmqsocket test-id logf)
   (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f test-id logf)))
