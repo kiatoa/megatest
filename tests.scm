@@ -305,29 +305,34 @@
 		(counts (make-hash-table))
 		(statecounts (make-hash-table))
 		(outtxt "")
-		(tot    0))
+		(tot    0)
+		(testdat (cdb:remote-run db:test-get-records-for-index-file run-id test-name)))
 	    (with-output-to-port
 		oup
 	      (lambda ()
 		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
 				   "</title><body><h2>Summary for " test-name "</h2>"))
-		(sqlite3:for-each-row 
-		 (lambda (id itempath state status run_duration logf comment)
-		   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-		   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-		   (set! outtxt (conc outtxt "<tr>"
-				      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-				      "<td>" state    "</td>" 
-				      "<td><font color=" (common:get-color-from-status status)
-				      ">"   status   "</font></td>"
-				      "<td>" (if (equal? comment "")
-						 "&nbsp;"
-						 comment) "</td>"
-						 "</tr>")))
-		 db
-		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
-		 run-id test-name)
-
+		(for-each
+		 (lambda (testrecord)
+		   (let ((id             (vector-ref testrecord 0))
+			 (itempath       (vector-ref testrecord 1))
+			 (state          (vector-ref testrecord 2))
+			 (status         (vector-ref testrecord 3))
+			 (run_duration   (vector-ref testrecord 4))
+			 (logf           (vector-ref testrecord 5))
+			 (comment        (vector-ref testrecord 6)))
+		     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+		     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+		     (set! outtxt (conc outtxt "<tr>"
+					"<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+					"<td>" state    "</td>" 
+					"<td><font color=" (common:get-color-from-status status)
+					">"   status   "</font></td>"
+					"<td>" (if (equal? comment "")
+						   "&nbsp;"
+						   comment) "</td>"
+						   "</tr>"))))
+		 testdat)
 		(print "<table><tr><td valign=\"top\">")
 		;; Print out stats for status
 		(set! tot 0)

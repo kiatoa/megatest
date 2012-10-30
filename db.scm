@@ -1079,7 +1079,7 @@
     res))
 
 ;;======================================================================
-;; QUEUE UP META, TEST STATUS AND STEPS
+;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS
 ;;======================================================================
 
 ;; db:updater is run in a thread to write out the cached data periodically
@@ -1202,6 +1202,20 @@
 (define (cdb:remote-run proc db . params)
   (apply cdb:client-call *runremote* 'immediate #f open-run-close proc #f params))
 
+(define (db:test-get-logfile-info db run-id test-name)
+  (let ((res #f))
+    (sqlite3:for-each-row 
+     (lambda (path final_logf)
+       (set! logf final_logf)
+       (set! res (list path final_logf))
+       (if (directory? path)
+	   (print "Found path: " path)
+	   (print "No such path: " path)))
+     db 
+     "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
+     run-id test-name)
+    res))
+
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
@@ -1220,6 +1234,7 @@
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
+	'(tests:test-set-toplog    "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
     ))
 
 ;; do not run these as part of the transaction
@@ -1311,6 +1326,16 @@
 	     (set! *max-cache-size* cache-size)))
        ))
    #f))
+
+(define (db:test-get-records-for-index-file db run-id test-name)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id itempath state status run_duration logf comment)
+       (set! res (cons (vector id itempath state status run_duration logf comment) res)))
+     db
+     "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
+     run-id test-name)
+    res))
 
 ;; Rollup the pass/fail counts from itemized tests into fail_count and pass_count
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
