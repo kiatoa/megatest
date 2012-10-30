@@ -953,23 +953,12 @@
    "UPDATE tests SET comment=? WHERE id=?;"
    comment test-id))
 
-;;
-(define (db:test-set-rundir! db run-id test-name item-path rundir)
-  (sqlite3:execute 
-   db 
-   "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;"
-   rundir run-id test-name item-path))
+(define (cdb:test-set-rundir! zmqsocket run-id test-name item-path rundir)
+  (cdb:client-call zmqsocket 'test-set-rundir #t rundir run-id test-name item-path))
 
 (define (cdb:test-set-rundir-by-test-id zmqsocket test-id rundir)
   (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t test-id rundir))
 
-;; (define (db:test-set-rundir-by-test-id! db test-id rundir)
-;;   (sqlite3:execute 
-;;    db 
-;;    "UPDATE tests SET rundir=? WHERE id=?"
-;;    rundir test-id))
-
-;; 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res (hash-table-ref/default *test-paths* test-id #f)))
     (if res
@@ -1205,6 +1194,9 @@
 (define (cdb:get-test-info zmqsocket run-id test-name item-path)
   (cdb:client-call zmqsocket 'immediate #f open-run-close db:get-test-info #f run-id test-name item-path))
 
+(define (cdb:get-test-info-by-id zmqsocket test-id)
+  (cdb:client-call zmqsocket 'immediate #f open-run-close db:get-test-info-by-id #f test-id))
+
 ;; db should be db open proc or #f
 (define (cdb:remote-run proc db . params)
   (apply cdb:client-call *runremote* 'immediate #f open-run-close proc #f params))
@@ -1225,6 +1217,7 @@
                                     END WHERE id=?;")
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
+	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
     ))
 
 ;; do not run these as part of the transaction
