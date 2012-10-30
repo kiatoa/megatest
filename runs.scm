@@ -556,7 +556,7 @@
 	      (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
 	      (exit 1))
 	     ((not (null? reruns))
-	      (let* ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+	      (let* ((newlst (tests:filter-non-runnable run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		     (junked (lset-difference equal? tal newlst)))
 		(debug:print-info 4 "full drop through, if reruns is less than 100 we will force retry them, reruns=" reruns ", tal=" tal)
 		(if (< num-retries max-retries)
@@ -621,7 +621,7 @@
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
 	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
-	   (testdat       (cdb:remote-run db:get-test-info-by-id #f test-id)))
+	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
@@ -639,7 +639,7 @@
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
+	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")

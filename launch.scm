@@ -256,7 +256,7 @@
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
+				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
 				       (if kill-job? 
 					   (begin
@@ -542,7 +542,7 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	 (testinfo   (cdb:remote-run db:get-test-info-by-id #f test-id))
+	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
