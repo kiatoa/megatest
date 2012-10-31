@@ -1,4 +1,4 @@
-(use zmq posix)
+(use zmq posix srfi-18)
 
 (define s (make-socket 'req))
 (connect-socket s "tcp://*:5563")

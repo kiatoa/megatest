@@ -173,6 +173,7 @@ Misc
 		 (maxtests    0)
 		 (states      (hash-table-keys *state-ignore-hash*))
 		 (statuses    (hash-table-keys *status-ignore-hash*)))
+	    ;; (thread-sleep! 0.1) ;; give some time to other threads
 	    (debug:print 6 "update-rundat, got " (length runs) " runs")
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
