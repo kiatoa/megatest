@@ -84,16 +84,9 @@
 							 (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
 							 (set! res (open-run-close tasks:get-best-server tasks:open-db))
 							 res))
-(test "de-register server" #f (let ((res #f))
+(test "de-register server" #t (let ((res #f))
 				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
-				(open-run-close tasks:get-best-server tasks:open-db)))
-
-;; (exit)
-
-(set! *verbosity* 3) ;; enough to trigger turning off exception handling in db accesses
-(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
-(sleep 3)
-(set! *verbosity* 1)
+				(list? (open-run-close tasks:get-best-server tasks:open-db))))
 
 (define hostinfo #f)
 (test #f #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
@@ -101,17 +94,18 @@
 				   (and (string? (car dat))
 					(number? (cadr dat)))))
 
-(test #f #t (socket? (let ((s (server:client-login (car hostinfo)(cadr hostinfo))))
-		       (set! *runremote* s)
-		       s)))
+(test #f #t (let ((zmq-socket (apply server:client-connect hostinfo)))
+	      (set! *runremote* zmq-socket)
+	      (socket? *runremote*)))
 
-(define th1 (make-thread (lambda ()(server:client-setup))))
-(thread-start! th1)
+(test #f #t (let ((res (server:client-login *runremote*)))
+	      (car res)))
 
-(test #f #t (cdb:login *runremote* *toppath* *my-client-signature*))
 (test #f #t (socket? *runremote*))
 
-(exit)
+;; (test #f #t (server:client-setup))
+
+(test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 

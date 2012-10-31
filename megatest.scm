@@ -265,16 +265,16 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    (server:launch))
-
-(define *logged-in-clients* (make-hash-table))
+    (begin
+      (debug:print 1 "Launching server...")
+      (server:launch)))
 
 (if (or (args:get-arg "-listservers")
 	(args:get-arg "-killserver"))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~20a~5a~20a~8a~10a\n"))
+		(fmtstr  "~5a~8a~20a~5a~20a~9a~10a\n"))
 	    (format #t fmtstr "Id" "Pid" "Host" "Port" "Time" "Priority" "State")
 	    (format #t fmtstr "==" "===" "====" "====" "====" "========" "=====")
 	    (for-each 
@@ -286,29 +286,35 @@ Built from " megatest-fossil-hash ))
 		      (start-time (vector-ref server 4))
 		      (priority   (vector-ref server 5))
 		      (state      (vector-ref server 6))
-		      (accessible (handle-exceptions
+		      (status     (handle-exceptions
 				   exn
-				   #f
-				   (let ((zmq-socket (server:client-login hostname port)))
+				   (conc "EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+				   (let ((zmq-socket (server:client-connect hostname port)))
 				     (if zmq-socket
-					 (server:client-logout zmq-socket)
-					 #f)))))
+					 (if (server:client-login zmq-socket)
+					     (begin
+					       (server:client-logout zmq-socket)
+					       (close-socket  zmq-socket)
+					       "ACCESSIBLE") ;; (server:client-logout zmq-socket)
+					     (begin
+					       (close-socket zmq-socket)
+					       "CAN'T LOGIN"))
+					 "CAN'T CONNECT")))))
 		 (format #t fmtstr id pid hostname port start-time priority 
-			 (cond
-			  (accessible "ACCESSIBLE")
-			  (else       "DEAD")))))
-		 servers)))))
-
-(if (or (let ((res #f))
-	  (for-each
-	   (lambda (key)
-	     (if (args:get-arg key)(set! res #t)))
-	   (list "-h" "-version" "-gen-megatest-area" "-gen-megatest-test"))
-	  res)
-	(eq? (length (hash-table-keys args:arg-hash)) 0))
-    (debug:print-info 1 "No server needed")
-    (server:client-launch))
-
+			 status)))
+	     servers)
+	    (set! *didsomething* #t))))
+    ;; if not list or kill then start a client (if appropriate)
+    (if (or (let ((res #f))
+	      (for-each
+	       (lambda (key)
+		 (if (args:get-arg key)(set! res #t)))
+	       (list "-h" "-version" "-gen-megatest-area" "-gen-megatest-test"))
+	      res)
+	    (eq? (length (hash-table-keys args:arg-hash)) 0))
+	(debug:print-info 1 "Server connection not needed")
+	(server:client-launch)))
+    
 ;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================

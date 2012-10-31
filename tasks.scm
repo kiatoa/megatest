@@ -134,7 +134,7 @@
      (lambda (id pid hostname port start-time priority state)
        (set! res (cons (vector id pid hostname port start-time priority state) res)))
      mdb
-     "SELECT id,pid,hostname,port,start_time,priority,state FROM servers ORDER BY start_time ASC;")
+     "SELECT id,pid,hostname,port,start_time,priority,state FROM servers ORDER BY start_time DESC;")
     res))
        
 

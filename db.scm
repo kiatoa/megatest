@@ -1107,14 +1107,15 @@
 	;; Remainder are put in the db queue
 	(case qry-name
 	  ((login) ;; login checks that the megatest path matches
-	   (if (eq? (length remparam) 2) ;; should get toppath and signature
-	       #f ;; no path - fail!
-	       (let ((calling-path (car remparam)))
+	   (if (< (length remparam) 2) ;; should get toppath and signature
+	       '(#f "login failed due to missing params") ;; missing params
+	       (let ((calling-path (car remparam))
+		     (client-key   (cadr remparam)))
 		 (if (equal? calling-path *toppath*)
 		     (begin
-		       (hash-table-set! *logged-in-clients* (cadr remparam) (current-seconds))
-		       #t)      ;; path matches - pass! Should vet the caller at this time ...
-		     #f))))  ;; else fail to login
+		       (hash-table-set! *logged-in-clients* client-key (current-seconds))
+		       '(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
+		     (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
 	  ((logout)
 	   (if (and (> (length remparam) 1)
 		    (eq? *toppath* (car remparam))
@@ -1285,7 +1286,7 @@
 				   (hash-table-set! queries stmt-key #f)
 				   (debug:print 0 "ERROR: Missing query spec for " stmt-key "!")))))))
 		 data)
-
+       
        ;; outer loop to handle special queries that cannot be handled in the
        ;; transaction.
        (let outerloop ((special-qry #f)

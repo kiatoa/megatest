@@ -33,60 +33,44 @@
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
   (if (not *toppath*)(setup-for-run))
-  (let* ((hostport      (open-run-close tasks:get-best-server tasks:open-db)) ;; do whe already have a server running?
-	 (host:port (server:make-server-url hostport)))
-    (if host:port 
-	(begin
-	  (debug:print 0 "NOTE: server already running.")
-	  (if (server:client-setup)
-	      (begin 
-		(debug:print-info 0 "Server is alive, not starting another"))
-	      (begin
-		(debug:print-info 0 "Server is dead, deregistering it, please try again")
-		(open-run-close tasks:server-deregister tasks:open-db (car hostport) port: (cadr port))
-		;; (server:run hostn)
-		(debug:print 0 "WOULD NORMALLY START ANOTHER SERVER HERE")
-		)
-	      )
-	  )
-	(let* ((zmq-socket     #f)
-	       (hostname       (if (string=? "-" hostn)
-				   (get-host-name) 
-				   hostn))
-	       (ipaddrstr      (let ((ipstr (if (string=? "-" hostn)
-						(string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
-						#f)))
-				 (if ipstr ipstr hostname))))
-	  (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555 0))
-	  (set! *cache-on* #t)
-	  
-	  ;; what to do when we quit
-	  ;;
-	  (on-exit (lambda ()
-		     (open-run-close tasks:server-deregister-self tasks:open-db)
-		     (let loop () 
-		       (let ((queue-len 0))
-			 (thread-sleep! (random 5))
-			 (mutex-lock! *incoming-mutex*)
-			 (set! queue-len (length *incoming-data*))
-			 (mutex-unlock! *incoming-mutex*)
-			 (if (> queue-len 0)
-			     (begin
-			       (debug:print-info 0 "Queue not flushed, waiting ...")
-			       (loop)))))))
+  (let* ((zmq-socket     #f)
+	 (hostname       (if (string=? "-" hostn)
+			     (get-host-name) 
+			     hostn))
+	 (ipaddrstr      (let ((ipstr (if (string=? "-" hostn)
+					  (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					  #f)))
+			   (if ipstr ipstr hostname))))
+    (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555 0))
+    (set! *cache-on* #t)
+    
+    ;; what to do when we quit
+    ;;
+    (on-exit (lambda ()
+	       (open-run-close tasks:server-deregister-self tasks:open-db)
+	       (let loop () 
+		 (let ((queue-len 0))
+		   (thread-sleep! (random 5))
+		   (mutex-lock! *incoming-mutex*)
+		   (set! queue-len (length *incoming-data*))
+		   (mutex-unlock! *incoming-mutex*)
+		   (if (> queue-len 0)
+		       (begin
+			 (debug:print-info 0 "Queue not flushed, waiting ...")
+			 (loop)))))))
 
-	  ;; The heavy lifting
-	  ;;
-	  (let loop ()
-	    (let* ((rawmsg (receive-message zmq-socket))
-		   (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
-		   (res    #f))
-	      (debug:print-info 12 "server=> received params=" params)
-	      (set! res (cdb:cached-access params))
-	      (debug:print-info 12 "server=> processed res=" res)
-	      (send-message zmq-socket (db:obj->string res))
-	      (if *time-to-exit* (exit))
-	      (loop)))))))
+    ;; The heavy lifting
+    ;;
+    (let loop ()
+      (let* ((rawmsg (receive-message zmq-socket))
+	     (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
+	     (res    #f))
+	(debug:print-info 12 "server=> received params=" params)
+	(set! res (cdb:cached-access params))
+	(debug:print-info 12 "server=> processed res=" res)
+	(send-message zmq-socket (db:obj->string res))
+	(if *time-to-exit* (exit))
+	(loop)))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -97,14 +81,15 @@
   (let loop ((count 0))
     (thread-sleep! 1) ;; no need to do this very often
     (db:write-cached-data)
-    (if (< count 100)
-	(loop 0)
+    (print "Server running, count is " count)
+    (if (< count 10)
+	(loop (+ count 1))
 	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
 	  (if (or (> numrunning 0)
 		  (> (+ *last-db-access* 60)(current-seconds)))
 	      (begin
 		(debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-		(loop (+ count 1)))
+		(loop 0)))
 	      (begin
 		(debug:print-info 0 "Starting to shutdown the server side")
 		;; need to delete only *my* server entry (future use)
@@ -112,10 +97,9 @@
 		(thread-sleep! 10)
 		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
 		(debug:print-info 0 "Server shutdown complete. Exiting")
-		;; (exit)))
-		))))))
+		)))))
 
-(define (server:find-free-port-and-open host s port trynum)
+(define (server:find-free-port-and-open host s port #!key (trynum 50))
   (let ((s (if s s (make-socket 'rep)))
 	(p (if (number? port) port 5555)))
     (handle-exceptions
@@ -123,8 +107,8 @@
      (begin
        (debug:print 0 "Failed to bind to port " p ", trying next port")
        (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-       (if (< trynum 100)
-	   (server:find-free-port-and-open host s (+ p 1) (+ trynum 1))
+       (if (> trynum 0)
+	   (server:find-free-port-and-open host s (+ p 1) trynum: (- trynum 1))
 	   (debug:print-info 0 "Tried ports from " (- p trynum) " to " p 
 			     " but all were in use. Please try a different port range by starting the server with parameter \" -port N\" where N is the starting port number to use")))
      (let ((zmq-url (conc "tcp://" host ":" p)))
@@ -142,36 +126,37 @@
 			     (write (list (current-directory)
 					  (argv)))))))
 
-;; MOVE ME TO COMMON
-(define *my-client-signature* #f)
+(define (server:get-client-signature)
+  (if *my-client-signature* *my-client-signature*
+      (let ((sig (server:mk-signature)))
+	(set! *my-client-signature* sig)
+	*my-client-signature*)))
 
-(define (server:client-login host port)
+;; 
+(define (server:client-connect host port)
   (let ((connect-ok #f)
 	(zmq-socket (make-socket 'req))
-	(mysig      (if *my-client-signature* *my-client-signature* (server:mk-signature)))
 	(conurl     (server:make-server-url (list host port))))
-    (set! *my-client-signature* mysig)
     (connect-socket zmq-socket conurl)
-    (if (cdb:login zmq-socket *toppath* mysig)
-	zmq-socket
-	(if (socket? *runremote*)
-	    (begin
-	      (close-socket *runremote*)
-	      #f)
-	    zmq-socket))))
+    zmq-socket))
+  
+
+(define (server:client-login zmq-socket)
+  (cdb:login zmq-socket *toppath* (server:get-client-signature)))
 
 (define (server:client-logout zmq-socket)
-  (and (socket? zmq-socket)
-       (cdb:logout zmq-socket *toppath* *my-client-signature*)
-       (close-socket zmq-socket)))
+  (let ((ok (and (socket? zmq-socket)
+		 (cdb:logout zmq-socket *toppath* (server:get-client-signature)))))
+    (close-socket zmq-socket)
+    ok))
 
-;;; IS THIS NEEDED?
-(define (server:client-setup)
+;; Do all the connection work, start a server if not already running
+(define (server:client-setup #!key (numtries 10))
   (if (not *toppath*)(setup-for-run))
-  (let* ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db))
-	 (zmq-socket (make-socket 'req)))
+  (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
     (if hostinfo
-	(begin
+	(let* ((host       (car hostinfo))
+	       (port       (cadr hostinfo)))
 	  (debug:print-info 2 "Setting up to connect to " hostinfo)
 	  (handle-exceptions
 	   exn
@@ -179,15 +164,12 @@
 	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
 	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	     (open-run-close tasks:server-deregister tasks:open-db (car hostinfo) port: (cadr hostinfo))
-	     ;; (exit) ;; why forced exit?
+	     (open-run-close tasks:server-deregister tasks:open-db host port: port)
 	     #f)
-	   ;; REPLACE WITH server:client-login
-	   ;;
-	   (let ((connect-ok #f)
-		 (conurl     (server:make-server-url hostinfo)))
-	     (connect-socket zmq-socket conurl)
-	     (set! connect-ok (cdb:login zmq-socket *toppath* *my-client-signature*))
+	   (let* ((zmq-socket (server:client-connect host port))
+		  (login-res  (server:client-login zmq-socket))
+		  (connect-ok (if (null? login-res) #f (car login-res)))
+		  (conurl     (server:make-server-url hostinfo)))
 	     (if connect-ok
 		 (begin
 		   (debug:print-info 2 "Logged in and connected to " conurl)
@@ -197,29 +179,30 @@
 		   (debug:print-info 2 "Failed to login or connect to " conurl)
 		   (set! *runremote* #f)
 		   #f)))))
-	(begin
-	  (debug:print-info 0 "NO SERVER RUNNING! PLEASE START ONE! E.g. \"megatest -server - &\"")
-	;;   (debug:print-info 2 "No server available, attempting to start one...")
-	;;   (system (conc (car (argv)) " -server - " (if (args:get-arg "-debug")
-	;; 					  (conc "-debug " (args:get-arg "-debug"))
-	;; 					  "")
-	;; 		" &"))
-	  ;; (sleep 5)
-	  ;; (server:client-setup)
-	  ))))
+	(if (> numtries 0)
+	    (let ((exe (car (argv))))
+	      (debug:print-info 1 "No server available, attempting to start one...")
+	      (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
+	      ;; (system (conc  " -server - " (if (args:get-arg "-debug")
+	      ;;   					   (conc "-debug " (args:get-arg "-debug"))
+	      ;;   					   "")
+	      ;;   	    " &"))
+	      (sleep 10)
+	      (server:client-setup numtries: (- numtries 1)))
+	    (debug:print-info 1 "Too many retries, giving up")))))
 
 (define (server:launch)
   (let* ((toppath (setup-for-run)))
     (debug:print-info 0 "Starting the standalone server")
     (if *toppath* 
 	(let* ((th2 (make-thread (lambda ()
-				   (server:run (args:get-arg "-server")))))
-	       (th3 (make-thread (lambda ()
-				   (server:keep-running)))))
-	  (thread-start! th3)
+				   (server:run (args:get-arg "-server"))))))
+	  ;; (th3 (make-thread (lambda ()
+	  ;;       		   (server:keep-running)))))
 	  (thread-start! th2)
-	  (thread-join! th2)
-	  (set! *didsomething* #t))
+	  ;; (thread-start! th3)
+	  (set! *didsomething* #t)
+	  (thread-join! th2))
 	(debug:print 0 "ERROR: Failed to setup for megatest"))))
 
 (define (server:client-launch)
