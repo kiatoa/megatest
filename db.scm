@@ -1122,6 +1122,8 @@
 		    (hash-table-ref/default *logged-in-clients* (cadr remparam) #f))
 	       #t
 	       #f))
+	  ((numclients)
+	   (length (hash-table-keys *logged-in-clients*)))
 	  ((flush)
 	   (db:write-cached-data)
 	   #t)
@@ -1131,7 +1133,7 @@
 	       (apply (car remparam) (cdr remparam))
 	       "ERROR"))
 	  ((killserver)
-	   (db:write-cached-data)
+	   ;; (db:write-cached-data)
 	   (debug:print-info 0 "Remotely killed server on host " (get-host-name) " pid " (current-process-id))
 	   (set! *time-to-exit* #t)
 	   #t)
@@ -1180,6 +1182,9 @@
 
 (define (cdb:logout zmq-socket keyval signature)
   (cdb:client-call zmq-socket 'logout #t keyval signature))
+
+(define (cdb:num-clients zmq-socket)
+  (cdb:client-call zmq-socket 'numclients #t))
 
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg

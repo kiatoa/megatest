@@ -81,6 +81,7 @@
    pid hostname port priority (conc state)))
 
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
+  (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
   (if pid
       (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND pid=?;" hostname pid)
       (if port

@@ -98,7 +98,7 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -listservers            : list the servers 
-  -killserver host:port|pid : kill server specified by host:port or pid, use % to kill all
+  -killserver host:port|pid : kill server specified by host:port or pid
   -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
@@ -274,34 +274,55 @@ Built from " megatest-fossil-hash ))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~20a~5a~20a~9a~10a\n"))
-	    (format #t fmtstr "Id" "Pid" "Host" "Port" "Time" "Priority" "State")
-	    (format #t fmtstr "==" "===" "====" "====" "====" "========" "=====")
+		(fmtstr  "~5a~8a~20a~5a~20a~9a~20a~5a\n")
+		(servers-to-kill '()))
+	    (format #t fmtstr "Id" "Pid" "Host" "Port" "Time" "Priority" "State" "Num Clients")
+	    (format #t fmtstr "==" "===" "====" "====" "====" "========" "=====" "===========")
 	    (for-each 
 	     (lambda (server)
-	       (let* ((id         (vector-ref server 0))
+	       (let* ((killinfo   (args:get-arg "-killserver"))
+		      (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
+		      (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
+		      (id         (vector-ref server 0))
 		      (pid        (vector-ref server 1))
 		      (hostname   (vector-ref server 2))
 		      (port       (vector-ref server 3))
 		      (start-time (vector-ref server 4))
 		      (priority   (vector-ref server 5))
 		      (state      (vector-ref server 6))
-		      (status     (handle-exceptions
-				   exn
-				   (conc "EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+		      (numclients #f)
+		      (stat-numc  ;; (handle-exceptions
+				  ;;  exn
+				  ;;  (list #f (conc "EXCEPTION: " ((condition-property-accessor 'exn 'message) exn)))
 				   (let ((zmq-socket (server:client-connect hostname port)))
 				     (if zmq-socket
 					 (if (server:client-login zmq-socket)
-					     (begin
-					       (server:client-logout zmq-socket)
+					     (let ((numclients (cdb:num-clients zmq-socket))
+						   (killed     #f))
+					       (if (and khost-port ;; kill by host/port
+							(equal? hostname (car khost-port))
+							(equal? port (string->number (cadr khost-port))))
+						   (begin
+						     (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
+						     (cdb:kill-server zmq-socket)
+						     (debug:print-info 1 "Killed server by host:port at " hostname ":" port)
+						     (set! killed #t))
+						   (if (and kpid
+							    (equal? kpid pid))
+						       (begin
+							 (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
+							 (set! killed #t)
+							 (cdb:kill-server zmq-socket)
+							 (debug:print-info 1 "Killed server by pid at " hostname ":" port))))
+					       (if (not killed)(server:client-logout zmq-socket))
 					       (close-socket  zmq-socket)
-					       "ACCESSIBLE") ;; (server:client-logout zmq-socket)
+					       (list numclients "ACCESSIBLE")) ;; (server:client-logout zmq-socket)
 					     (begin
 					       (close-socket zmq-socket)
-					       "CAN'T LOGIN"))
-					 "CAN'T CONNECT")))))
+					       (list #f "CAN'T LOGIN")))
+					 (list #f "CAN'T CONNECT"))))) ;; )
 		 (format #t fmtstr id pid hostname port start-time priority 
-			 status)))
+			 (cadr stat-numc)(car stat-numc))))
 	     servers)
 	    (set! *didsomething* #t))))
     ;; if not list or kill then start a client (if appropriate)

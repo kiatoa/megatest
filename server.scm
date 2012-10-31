@@ -69,8 +69,13 @@
 	(set! res (cdb:cached-access params))
 	(debug:print-info 12 "server=> processed res=" res)
 	(send-message zmq-socket (db:obj->string res))
-	(if *time-to-exit* (exit))
-	(loop)))))
+	(if (not *time-to-exit*)
+	    (loop)
+	    (begin
+	      (db:write-cached-data)
+	      (open-run-close tasks:server-deregister-self tasks:open-db)
+	      (exit)
+	      ))))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
