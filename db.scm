@@ -1170,7 +1170,7 @@
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
 	(res  #f))
     (send-message zmq-socket zdat)
-    (set! res (db:string->obj (receive-message zmq-socket zdat)))
+    (set! res (db:string->obj (receive-message* zmq-socket zdat)))
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
   

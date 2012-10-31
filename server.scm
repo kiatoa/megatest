@@ -62,7 +62,7 @@
     ;; The heavy lifting
     ;;
     (let loop ()
-      (let* ((rawmsg (receive-message zmq-socket))
+      (let* ((rawmsg (receive-message* zmq-socket))
 	     (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
 	     (res    #f))
 	(debug:print-info 12 "server=> received params=" params)
