@@ -165,6 +165,7 @@
        (cdb:logout zmq-socket *toppath* *my-client-signature*)
        (close-socket zmq-socket)))
 
+;;; IS THIS NEEDED?
 (define (server:client-setup)
   (if (not *toppath*)(setup-for-run))
   (let* ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db))
@@ -186,7 +187,7 @@
 	   (let ((connect-ok #f)
 		 (conurl     (server:make-server-url hostinfo)))
 	     (connect-socket zmq-socket conurl)
-	     (set! connect-ok (cdb:login zmq-socket))
+	     (set! connect-ok (cdb:login zmq-socket *toppath* *my-client-signature*))
 	     (if connect-ok
 		 (begin
 		   (debug:print-info 2 "Logged in and connected to " conurl)
