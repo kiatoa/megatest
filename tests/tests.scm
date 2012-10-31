@@ -88,7 +88,6 @@
 				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
 				(open-run-close tasks:get-best-server tasks:open-db)))
 
-
 ;; (exit)
 
 (set! *verbosity* 3) ;; enough to trigger turning off exception handling in db accesses
@@ -96,10 +95,23 @@
 (sleep 3)
 (set! *verbosity* 1)
 
+(define hostinfo #f)
+(test #f #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
+				   (set! hostinfo dat)
+				   (and (string? (car dat))
+					(number? (cadr dat)))))
+
+(test #f #t (socket? (let ((s (server:client-login (car hostinfo)(cadr hostinfo))))
+		       (set! *runremote* s)
+		       s)))
+
 (define th1 (make-thread (lambda ()(server:client-setup))))
 (thread-start! th1)
 
+(test #f #t (cdb:login *runremote* *toppath* *my-client-signature*))
 (test #f #t (socket? *runremote*))
+
+(exit)
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 

@@ -128,6 +128,15 @@
      "SELECT id,hostname,port FROM servers WHERE state='live' ORDER BY start_time DESC LIMIT 1;")
     res))
 
+(define (tasks:get-all-servers mdb)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (id pid hostname port start-time priority state)
+       (set! res (cons (vector id pid hostname port start-time priority state) res)))
+     mdb
+     "SELECT id,pid,hostname,port,start_time,priority,state FROM servers ORDER BY start_time ASC;")
+    res))
+       
 
 ;;======================================================================
 ;; Tasks and Task monitors

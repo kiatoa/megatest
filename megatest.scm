@@ -97,6 +97,8 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -listservers            : list the servers 
+  -killserver host:port|pid : kill server specified by host:port or pid, use % to kill all
   -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
@@ -155,6 +157,7 @@ Built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
+			"-killserver"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -180,6 +183,7 @@ Built from " megatest-fossil-hash ))
 			"-repl"
 			"-lock"
 			"-unlock"
+			"-listservers"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -262,6 +266,38 @@ Built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-server")
     (server:launch))
+
+(define *logged-in-clients* (make-hash-table))
+
+(if (or (args:get-arg "-listservers")
+	(args:get-arg "-killserver"))
+    (let ((tl (setup-for-run)))
+      (if tl 
+	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+		(fmtstr  "~5a~8a~20a~5a~20a~8a~10a\n"))
+	    (format #t fmtstr "Id" "Pid" "Host" "Port" "Time" "Priority" "State")
+	    (format #t fmtstr "==" "===" "====" "====" "====" "========" "=====")
+	    (for-each 
+	     (lambda (server)
+	       (let* ((id         (vector-ref server 0))
+		      (pid        (vector-ref server 1))
+		      (hostname   (vector-ref server 2))
+		      (port       (vector-ref server 3))
+		      (start-time (vector-ref server 4))
+		      (priority   (vector-ref server 5))
+		      (state      (vector-ref server 6))
+		      (accessible (handle-exceptions
+				   exn
+				   #f
+				   (let ((zmq-socket (server:client-login hostname port)))
+				     (if zmq-socket
+					 (server:client-logout zmq-socket)
+					 #f)))))
+		 (format #t fmtstr id pid hostname port start-time priority 
+			 (cond
+			  (accessible "ACCESSIBLE")
+			  (else       "DEAD")))))
+		 servers)))))
 
 (if (or (let ((res #f))
 	  (for-each

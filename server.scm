@@ -11,7 +11,7 @@
 (require-extension (srfi 18) extras tcp rpc s11n)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo zmq)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo zmq md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit server))
@@ -135,6 +135,36 @@
        (open-run-close tasks:server-register tasks:open-db (current-process-id) host p 0 'live)
        s))))
 
+(define (server:mk-signature)
+  (message-digest-string (md5-primitive) 
+			 (with-output-to-string
+			   (lambda ()
+			     (write (list (current-directory)
+					  (argv)))))))
+
+;; MOVE ME TO COMMON
+(define *my-client-signature* #f)
+
+(define (server:client-login host port)
+  (let ((connect-ok #f)
+	(zmq-socket (make-socket 'req))
+	(mysig      (if *my-client-signature* *my-client-signature* (server:mk-signature)))
+	(conurl     (server:make-server-url (list host port))))
+    (set! *my-client-signature* mysig)
+    (connect-socket zmq-socket conurl)
+    (if (cdb:login zmq-socket *toppath* mysig)
+	zmq-socket
+	(if (socket? *runremote*)
+	    (begin
+	      (close-socket *runremote*)
+	      #f)
+	    zmq-socket))))
+
+(define (server:client-logout zmq-socket)
+  (and (socket? zmq-socket)
+       (cdb:logout zmq-socket *toppath* *my-client-signature*)
+       (close-socket zmq-socket)))
+
 (define (server:client-setup)
   (if (not *toppath*)(setup-for-run))
   (let* ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db))
@@ -151,10 +181,12 @@
 	     (open-run-close tasks:server-deregister tasks:open-db (car hostinfo) port: (cadr hostinfo))
 	     ;; (exit) ;; why forced exit?
 	     #f)
+	   ;; REPLACE WITH server:client-login
+	   ;;
 	   (let ((connect-ok #f)
 		 (conurl     (server:make-server-url hostinfo)))
 	     (connect-socket zmq-socket conurl)
-	     (set! connect-ok (cdb:client-call zmq-socket 'login #t *toppath*))
+	     (set! connect-ok (cdb:login zmq-socket))
 	     (if connect-ok
 		 (begin
 		   (debug:print-info 2 "Logged in and connected to " conurl)

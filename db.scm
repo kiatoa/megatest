@@ -1107,12 +1107,20 @@
 	;; Remainder are put in the db queue
 	(case qry-name
 	  ((login) ;; login checks that the megatest path matches
-	   (if (null? remparam)
+	   (if (eq? (length remparam) 2) ;; should get toppath and signature
 	       #f ;; no path - fail!
 	       (let ((calling-path (car remparam)))
 		 (if (equal? calling-path *toppath*)
-		     #t      ;; path matches - pass! Should vet the caller at this time ...
+		     (begin
+		       (hash-table-set! *logged-in-clients* (cadr remparam) (current-seconds))
+		       #t)      ;; path matches - pass! Should vet the caller at this time ...
 		     #f))))  ;; else fail to login
+	  ((logout)
+	   (if (and (> (length remparam) 1)
+		    (eq? *toppath* (car remparam))
+		    (hash-table-ref/default *logged-in-clients* (cadr remparam) #f))
+	       #t
+	       #f))
 	  ((flush)
 	   (db:write-cached-data)
 	   #t)
@@ -1163,8 +1171,14 @@
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
   
-(define (cdb:set-verbosity zmqsocket val)
-  (cdb:client-call zmqsocket 'set-verbosity #f val))
+(define (cdb:set-verbosity zmq-socket val)
+  (cdb:client-call zmq-socket 'set-verbosity #f val))
+
+(define (cdb:login zmq-socket keyval signature)
+  (cdb:client-call zmq-socket 'login #t keyval signature))
+
+(define (cdb:logout zmq-socket keyval signature)
+  (cdb:client-call zmq-socket 'logout #t keyval signature))
 
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg
