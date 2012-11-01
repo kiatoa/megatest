@@ -290,39 +290,36 @@ Built from " megatest-fossil-hash ))
 		      (start-time (vector-ref server 4))
 		      (priority   (vector-ref server 5))
 		      (state      (vector-ref server 6))
-		      (numclients #f)
-		      (stat-numc  ;; (handle-exceptions
-				  ;;  exn
-				  ;;  (list #f (conc "EXCEPTION: " ((condition-property-accessor 'exn 'message) exn)))
-				   (let ((zmq-socket (server:client-connect hostname port)))
-				     (if zmq-socket
-					 (if (server:client-login zmq-socket)
-					     (let ((numclients (cdb:num-clients zmq-socket))
-						   (killed     #f))
-					       (if (and khost-port ;; kill by host/port
-							(equal? hostname (car khost-port))
-							(equal? port (string->number (cadr khost-port))))
-						   (begin
-						     (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
-						     (cdb:kill-server zmq-socket)
-						     (debug:print-info 1 "Killed server by host:port at " hostname ":" port)
-						     (set! killed #t))
-						   (if (and kpid
-							    (equal? kpid pid))
-						       (begin
-							 (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
-							 (set! killed #t)
-							 (cdb:kill-server zmq-socket)
-							 (debug:print-info 1 "Killed server by pid at " hostname ":" port))))
-					       (if (not killed)(server:client-logout zmq-socket))
-					       (close-socket  zmq-socket)
-					       (list numclients "ACCESSIBLE")) ;; (server:client-logout zmq-socket)
-					     (begin
-					       (close-socket zmq-socket)
-					       (list #f "CAN'T LOGIN")))
-					 (list #f "CAN'T CONNECT"))))) ;; )
+		      (stat-numc  (server:ping hostname port))
+		      (status     (car stat-numc))
+		      (numclients (cadr stat-numc))
+		      (killed     #f)
+		      (zmq-socket (if status (server:client-connect hostname port) #f)))
+		 ;; no need to login as status of #t indicates we are connecting to correct 
+		 ;; server
+		 (if (or (not status)    ;; no point in keeping dead records in the db
+			 (and khost-port ;; kill by host/port
+			      (equal? hostname (car khost-port))
+			      (equal? port (string->number (cadr khost-port)))))
+		     (begin
+		       (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
+		       (if status ;; #t means alive
+			   (begin
+			     (cdb:kill-server zmq-socket)
+			     (debug:print-info 1 "Killed server by host:port at " hostname ":" port))
+			   (debug:print-info 1 "Removing defunct server record for " hostname ":" port))
+		       (set! killed #t)))
+		 (if (and kpid
+			  (equal? hostname (car khost-port))
+			  (equal? kpid pid))
+		     (begin
+		       (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
+		       (set! killed #t)
+		       (if status (cdb:kill-server zmq-socket))
+		       (debug:print-info 1 "Killed server by pid at " hostname ":" port)))
+		 ;; (if zmq-socket (close-socket  zmq-socket))
 		 (format #t fmtstr id pid hostname port start-time priority 
-			 (cadr stat-numc)(car stat-numc))))
+			 status numclients)))
 	     servers)
 	    (set! *didsomething* #t))))
     ;; if not list or kill then start a client (if appropriate)
@@ -909,8 +906,9 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 ;; this is the socket if we are a client
-(if (socket? *runremote*)
-    (close-socket *runremote*))
+;; (if (and *runremote*
+;; 	 (socket? *runremote*))
+;;     (close-socket *runremote*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

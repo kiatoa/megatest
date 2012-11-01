@@ -1165,12 +1165,20 @@
 (define (db:obj->string obj)(with-output-to-string (lambda ()(serialize obj))))
 (define (db:string->obj msg)(with-input-from-string msg (lambda ()(deserialize))))
 
+(define (cdb:use-non-blocking-mode proc)
+  (set! *client-non-blocking-mode* #t)
+  (let ((res (proc)))
+    (set! *client-non-blocking-mode* #f)
+    res))
+  
 (define (cdb:client-call zmq-socket . params)
   (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
 	(res  #f))
     (send-message zmq-socket zdat)
-    (set! res (db:string->obj (receive-message zmq-socket zdat)))
+    (set! res (db:string->obj (if *client-non-blocking-mode* 
+				  (receive-message* zmq-socket zdat)
+				  (receive-message  zmq-socket zdat))))
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
   

@@ -120,14 +120,32 @@
 (define (tasks:have-clients? mdb server-id)
   (null? (tasks:get-logged-in-clients mdb server-id)))
 
+;; ping each server in the db and return first found that responds. 
+;; remove any others. will not necessarily remove all!
 (define (tasks:get-best-server mdb)
-  (let ((res #f))
+  (let ((res '())
+	(best #f))
     (sqlite3:for-each-row
      (lambda (id hostname port)
-       (set! res (list hostname port)))
+       (set! res (cons (list hostname port) res))
+       (debug:print-info 1 "Found " hostname ":" port))
      mdb
      "SELECT id,hostname,port FROM servers WHERE state='live' ORDER BY start_time DESC LIMIT 1;")
-    res))
+    (print "res=" res)
+    (if (null? res) #f
+	(let loop ((hed (car res))
+		   (tal (cdr res)))
+	  (print "hed=" hed ", tal=" tal)
+	  (let* ((host (car hed))
+		 (port (cadr hed))
+		 (ping-res (server:ping host port)))
+	    (if ping-res hed
+		;; remove defunct server from table
+		(begin
+		  (open-run-close tasks:server-deregister tasks:open-db  host port: port)
+		  (if (null? tal)
+		      #f
+		      (loop (car tal)(cdr tal))))))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))

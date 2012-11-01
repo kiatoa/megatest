@@ -107,6 +107,8 @@
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
 
+(test #f #t (open-run-close tasks:get-best-server tasks:open-db))
+
 ;;======================================================================
 ;; C O N F I G   F I L E S 
 ;;======================================================================

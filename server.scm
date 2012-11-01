@@ -86,7 +86,7 @@
   (let loop ((count 0))
     (thread-sleep! 1) ;; no need to do this very often
     (db:write-cached-data)
-    (print "Server running, count is " count)
+    ;; (print "Server running, count is " count)
     (if (< count 10)
 	(loop (+ count 1))
 	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
@@ -96,13 +96,14 @@
 		(debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
 		(loop 0)))
 	      (begin
-		(debug:print-info 0 "Starting to shutdown the server side")
+		(debug:print-info 0 "Starting to shutdown the server.")
 		;; need to delete only *my* server entry (future use)
 		(open-run-close db:del-var #f "SERVER")
 		(thread-sleep! 10)
 		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
 		(debug:print-info 0 "Server shutdown complete. Exiting")
-		)))))
+		(open-run-close tasks:server-deregister-self tasks:open-db)
+		(exit))))))
 
 (define (server:find-free-port-and-open host s port #!key (trynum 50))
   (let ((s (if s s (make-socket 'rep)))
@@ -139,11 +140,15 @@
 
 ;; 
 (define (server:client-connect host port)
+  (debug:print 3 "client-connect " host ":" port)
   (let ((connect-ok #f)
 	(zmq-socket (make-socket 'req))
 	(conurl     (server:make-server-url (list host port))))
-    (connect-socket zmq-socket conurl)
-    zmq-socket))
+    (if (socket? zmq-socket)
+	(begin
+	  (connect-socket zmq-socket conurl)
+	  zmq-socket)
+	#f)))
   
 
 (define (server:client-login zmq-socket)
@@ -152,7 +157,7 @@
 (define (server:client-logout zmq-socket)
   (let ((ok (and (socket? zmq-socket)
 		 (cdb:logout zmq-socket *toppath* (server:get-client-signature)))))
-    (close-socket zmq-socket)
+    ;; (close-socket zmq-socket)
     ok))
 
 ;; Do all the connection work, start a server if not already running
@@ -199,16 +204,19 @@
 (define (server:launch)
   (let* ((toppath (setup-for-run)))
     (debug:print-info 0 "Starting the standalone server")
-    (if *toppath* 
-	(let* ((th2 (make-thread (lambda ()
-				   (server:run (args:get-arg "-server"))))))
-	  ;; (th3 (make-thread (lambda ()
-	  ;;       		   (server:keep-running)))))
-	  (thread-start! th2)
-	  ;; (thread-start! th3)
-	  (set! *didsomething* #t)
-	  (thread-join! th2))
-	(debug:print 0 "ERROR: Failed to setup for megatest"))))
+    (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
+      (if hostinfo
+	  (debug:print-info 1 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
+	  (if *toppath* 
+	      (let* ((th2 (make-thread (lambda ()
+					 (server:run (args:get-arg "-server")))))
+		     (th3 (make-thread (lambda ()
+					 (server:keep-running)))))
+		(thread-start! th2)
+		(thread-start! th3)
+		(set! *didsomething* #t)
+		(thread-join! th3))
+	      (debug:print 0 "ERROR: Failed to setup for megatest"))))))
 
 (define (server:client-launch)
   (if (server:client-setup)
@@ -216,3 +224,38 @@
       (begin
 	(debug:print 0 "ERROR: Failed to connect as client")
 	(exit))))
+
+;; ping a server and return number of clients or #f (if no response)
+(define (server:ping host port #!key (secs 10))
+  (cdb:use-non-blocking-mode
+   (lambda ()
+     (let* ((res #f)
+	    (th1 (make-thread
+		  (lambda ()
+		    (let ((zmq-socket (server:client-connect host port)))
+		      (if zmq-socket
+			  (if (server:client-login zmq-socket)
+			      (let ((numclients (cdb:num-clients zmq-socket)))
+				(server:client-logout zmq-socket)
+				(close-socket  zmq-socket)
+				(set! res (list #t numclients)))
+			      (begin
+				;; (close-socket zmq-socket)
+				(set! res (list #f "CAN'T LOGIN"))))
+			  (set! res (list #f "CAN'T CONNECT")))))))
+	    (th2 (make-thread
+		  (lambda ()
+		    (let loop ((count 1))
+		      (debug:print-info 1 "Ping " count " server on " host " at port " port)
+		      (thread-sleep! 2)
+		      (if (< count (/ secs 2))
+			  (loop (+ count 1))))
+		    ;; (thread-terminate! th1)
+		    (set! res (list #f "TIMED OUT"))))))
+       (thread-start! th2)
+       (thread-start! th1)
+       (handle-exceptions
+	exn
+	(set! res (list #f "TIMED OUT"))
+	(thread-join! th1 secs))
+       res))))
