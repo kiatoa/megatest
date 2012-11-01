@@ -206,7 +206,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(open-run-close db:test-set-state-status-by-id *db* test-id #f #f b)
+					(open-run-close db:test-set-state-status-by-id #f test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -216,7 +216,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id *db* test-id state #f #f)
+								    (open-run-close db:test-set-state-status-by-id #f test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
@@ -236,7 +236,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id *db* test-id #f status #f)
+								    (open-run-close db:test-set-state-status-by-id #f test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
@@ -267,8 +267,8 @@
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (open-run-close db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (open-run-close db:get-run-info db run-id) #f))
+	       (keydat        (if testdat (open-run-close db:get-key-val-pairs #f run-id) #f))
+	       (rundat        (if testdat (open-run-close db:get-run-info #f run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -278,7 +278,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (open-run-close db:testmeta-get-record db testname)))
+				  (let ((tm (open-run-close db:testmeta-get-record #f testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -307,7 +307,7 @@
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
 						       request-update))
-				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id db test-id))))
+				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id #f test-id))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -468,7 +468,7 @@
 										       (db:test-data-get-units    x)
 										       (db:test-data-get-type     x)
 										       (db:test-data-get-comment  x)))
-									     (open-run-close db:read-test-data db test-id "%")))
+									     (open-run-close db:read-test-data #f test-id "%")))
 								       "\n")))
 							(if (not (equal? currval newval))
 							    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

@@ -73,8 +73,28 @@
 (define *env-vars-by-run-id* (make-hash-table))
 (define *current-run-name*   #f)
 
-(define (set-megatest-env-vars db run-id)
-  (let ((keys (db:get-keys db))
+(define (db:get-run-key-val db run-id key)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     db 
+     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
+     run-id)
+    res))
+
+(define (db:get-run-name-from-id db run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (runname)
+       (set! res runname))
+     db
+     "SELECT runname FROM runs WHERE id=?;"
+     run-id)
+    res))
+
+(define (set-megatest-env-vars run-id)
+  (let ((keys (cdb:remote-run db:get-keys #f))
 	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
     (if (not vals)
@@ -83,12 +103,7 @@
 	  (set! vals ht)
 	  (for-each
 	   (lambda (key)
-	     (sqlite3:for-each-row
-	      (lambda (val)
-		(hash-table-set! vals key val))
-	      db 
-	      (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
-	      run-id))
+	     (hash-table-set! vals key (cdb:remote-run db:get-run-key-val #f run-id key)))
 	   keys)))
     ;; from the cached data set the vars
     (hash-table-for-each
@@ -98,15 +113,7 @@
        (setenv (key:get-fieldname key) val)))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (if (not *current-run-name*)
-	(sqlite3:for-each-row
-	 (lambda (runname)
-	   (set! *current-run-name* runname))
-
-	 db
-	 "SELECT runname FROM runs WHERE id=?;"
-	 run-id))
-    (setenv "MT_RUNNAME" *current-run-name*)
+    (setenv "MT_RUNNAME" (cdb:remote-run db:get-run-name-from-id #f run-id))
     (setenv "MT_RUN_AREA_HOME" *toppath*)
     ))
 
@@ -117,11 +124,11 @@
 	    itemdat))
 
 (define *last-num-running-tests* 0)
-(define (runs:can-run-more-tests db test-record)
+(define (runs:can-run-more-tests test-record)
   (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
 	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
-	 (num-running             (db:get-count-tests-running db))
-	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
+	 (num-running             (cdb:remote-run db:get-count-tests-running #f))
+	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
 	 (max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
 				    (if (and mcj (string->number mcj))
 					(string->number mcj)
@@ -191,9 +198,9 @@
 ;; keyvals
 (define (runs:run-tests target runname test-patts user flags)
   (let* ((db          #f)
-	 (keys        (open-run-close db:get-keys db))
+	 (keys        (cdb:remote-run db:get-keys #f))
 	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id      (cdb:remote-run runs:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
@@ -202,7 +209,7 @@
 	 (required-tests '())
 	 (test-records (make-hash-table)))
 
-    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
 	(open-run-close setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")
@@ -224,8 +231,8 @@
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (open-run-close db:delete-tests-in-state db run-id "NOT_STARTED")
-	  (open-run-close db:set-tests-state-status db run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+	  (cdb:delete-tests-in-state *runremote* run-id "NOT_STARTED")
+	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
     ;; (sqlite3:finalize! db) 
@@ -373,7 +380,7 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let* ((run-limits-info         (open-run-close runs:can-run-more-tests #f test-record)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         (open-run-close runs:can-run-more-tests test-record)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
@@ -476,7 +483,7 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (open-run-close runs:can-run-more-tests #f test-record)))
+	      (let ((can-run-more    (runs:can-run-more-tests test-record)))
 		(if can-run-more
 		    (let* ((prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
 			   (fails           (runs:calc-fails prereqs-not-met))
@@ -502,7 +509,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+			  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin
@@ -549,7 +556,7 @@
 	      (debug:print 0 "ERROR: Should not have a list of items in a test and the itemspath set - please report this")
 	      (exit 1))
 	     ((not (null? reruns))
-	      (let* ((newlst (open-run-close tests:filter-non-runnable #f run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
+	      (let* ((newlst (tests:filter-non-runnable run-id tal test-records)) ;; i.e. not FAIL, WAIVED, INCOMPLETE, PASS, KILLED,
 		     (junked (lset-difference equal? tal newlst)))
 		(debug:print-info 4 "full drop through, if reruns is less than 100 we will force retry them, reruns=" reruns ", tal=" tal)
 		(if (< num-retries max-retries)
@@ -600,7 +607,7 @@
     (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "/") "/" item-path))
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (open-run-close set-megatest-env-vars db run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
@@ -613,8 +620,8 @@
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
-	   (test-id       (open-run-close db:get-test-id db  run-id test-name item-path))
-	   (testdat       (open-run-close db:get-test-info-by-id db test-id)))
+	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
+	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
       (if (not testdat)
 	  (begin
 	    ;; ensure that the path exists before registering the test
@@ -632,7 +639,7 @@
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-	    (set! testdat (open-run-close db:get-test-info-by-id db test-id))))
+	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")

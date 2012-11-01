@@ -20,6 +20,9 @@ TARGET     = "-target ubuntu/nfs/none"
 
 all : test1 test2 test3 test4 test5
 
+test0 : cleanprep
+	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)&
+
 test1 : cleanprep
 	rm -f simplerun/megatest.db
 	rm -rf simplelinks/ simpleruns/
@@ -28,7 +31,7 @@ test1 : cleanprep
 	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) $(SERVER) -debug $(DEBUG) $(LOGGING)
+	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
 	cd fullrun;megatest -runall -target ubunut/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
 	cd fullrun;megatest -runtests %/,%/ai -target ubunut/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
 	cd fullrun;megatest -runtests runfirst/%,%/ai -target ubunut/nfs/none :runname $(RUNNAME)_02 -debug $(DEBUG)
@@ -37,21 +40,19 @@ test2 : fullprep
 
 
 test3 : fullprep
-	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b  $(SERVER) -debug 10
+	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -debug 10
 
 test4 : fullprep
-	cd fullrun;$(MEGATEST) $(SERVER) $(LOGGING) -debug $(DEBUG) &
-	cd fullrun;sleep 5;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
 test5 : fullprep
-	cd fullrun;$(MEGATEST) $(SERVER) $(LOGGING) &
-	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
+	cd fullrun;sleep  0;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
 	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-	# cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-	# cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -runall $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -60,15 +61,13 @@ test6: fullprep
 
 
 cleanprep : ../*.scm Makefile */*.config
-	# if [ -e fullrun/megatest.db ]; then sqlite3 fullrun/megatest.db "delete from metadat where var='SERVER';";fi
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
-	rm -f fullrun/logging.db
+	rm -f */logging.db */monitor.db
 	touch cleanprep
 
 fullprep : cleanprep
-	cd fullrun;$(MEGATEST) -server - -debug $(DEBUG) &
-	sleep 5;cd fullrun;$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt %/%
+	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt %/%
 	cd fullrun;$(BINPATH)/dboard -rows 15 &
 
 dashboard : cleanprep
@@ -82,8 +81,11 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -f fullrun/megatest.db fullrun/logging.db || true
-	killall -v -9 mtest dboard || true
+	rm -f */megatest.db */logging.db */monitor.db || true
+	killall -v mtest dboard || true
+
+hardkill : kill
+	sleep 5;killall -v mtest main.sh dboard -9
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done

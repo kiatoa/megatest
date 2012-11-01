@@ -40,10 +40,15 @@
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
 
+;; SERVER
+(define *my-client-signature* #f)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
 (define *max-cache-size*    0)
+(define *logged-in-clients* (make-hash-table))
+(define *client-non-blocking-mode* #f)
+
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))
@@ -53,6 +58,8 @@
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
 (define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
+
+
 
 ;; Debugging stuff
 (define *verbosity*         1)
@@ -69,6 +76,15 @@
 ;;======================================================================
 ;; Misc utils
 ;;======================================================================
+
+;; one-of args defined
+(define (args-defined? . param)
+  (let ((res #f))
+    (for-each 
+     (lambda (arg)
+       (if (args:get-arg arg)(set! res #t)))
+     param)
+    res))
 
 ;; convert stuff to a number if possible
 (define (any->number val)

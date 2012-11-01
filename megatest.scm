@@ -97,6 +97,8 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -listservers            : list the servers 
+  -killserver host:port|pid : kill server specified by host:port or pid
   -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
@@ -155,6 +157,7 @@ Built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
+			"-killserver"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -180,6 +183,7 @@ Built from " megatest-fossil-hash ))
 			"-repl"
 			"-lock"
 			"-unlock"
+			"-listservers"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -259,10 +263,75 @@ Built from " megatest-fossil-hash ))
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
-(if (args:get-arg "-server")
-    (server:launch)
-    (server:client-launch))
 
+(if (args:get-arg "-server")
+    (begin
+      (debug:print 1 "Launching server...")
+      (server:launch)))
+
+(if (or (args:get-arg "-listservers")
+	(args:get-arg "-killserver"))
+    (let ((tl (setup-for-run)))
+      (if tl 
+	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+		(fmtstr  "~5a~8a~20a~5a~20a~9a~20a~5a\n")
+		(servers-to-kill '()))
+	    (format #t fmtstr "Id" "Pid" "Host" "Port" "Time" "Priority" "State" "Num Clients")
+	    (format #t fmtstr "==" "===" "====" "====" "====" "========" "=====" "===========")
+	    (for-each 
+	     (lambda (server)
+	       (let* ((killinfo   (args:get-arg "-killserver"))
+		      (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
+		      (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
+		      (id         (vector-ref server 0))
+		      (pid        (vector-ref server 1))
+		      (hostname   (vector-ref server 2))
+		      (port       (vector-ref server 3))
+		      (start-time (vector-ref server 4))
+		      (priority   (vector-ref server 5))
+		      (state      (vector-ref server 6))
+		      (stat-numc  (server:ping hostname port))
+		      (status     (car stat-numc))
+		      (numclients (cadr stat-numc))
+		      (killed     #f)
+		      (zmq-socket (if status (server:client-connect hostname port) #f)))
+		 ;; no need to login as status of #t indicates we are connecting to correct 
+		 ;; server
+		 (if (or (not status)    ;; no point in keeping dead records in the db
+			 (and khost-port ;; kill by host/port
+			      (equal? hostname (car khost-port))
+			      (equal? port (string->number (cadr khost-port)))))
+		     (begin
+		       (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
+		       (if status ;; #t means alive
+			   (begin
+			     (cdb:kill-server zmq-socket)
+			     (debug:print-info 1 "Killed server by host:port at " hostname ":" port))
+			   (debug:print-info 1 "Removing defunct server record for " hostname ":" port))
+		       (set! killed #t)))
+		 (if (and kpid
+			  (equal? hostname (car khost-port))
+			  (equal? kpid pid))
+		     (begin
+		       (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
+		       (set! killed #t)
+		       (if status (cdb:kill-server zmq-socket))
+		       (debug:print-info 1 "Killed server by pid at " hostname ":" port)))
+		 ;; (if zmq-socket (close-socket  zmq-socket))
+		 (format #t fmtstr id pid hostname port start-time priority 
+			 status numclients)))
+	     servers)
+	    (set! *didsomething* #t))))
+    ;; if not list or kill then start a client (if appropriate)
+    (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+	    (eq? (length (hash-table-keys args:arg-hash)) 0))
+	(debug:print-info 1 "Server connection not needed")
+	;; ping servers only if -runall -runtests
+	(let ((ping (args-defined? "-runall" "-runtests" "-remove-runs" 
+				   "-set-state-status" "-rerun" "-rollup" "-lock" "-unlock"
+				   "-set-values" "-list-runs")))
+	  (server:client-launch do-ping: ping))))
+    
 ;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================
@@ -675,7 +744,7 @@ Built from " megatest-fossil-hash ))
 	      (open-run-close db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(open-run-close db:test-set-log! db test-id logfname)))
+		(cdb:test-set-log! *runremote* test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      (open-run-close tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
@@ -718,7 +787,7 @@ Built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (open-run-close db:test-set-log! db test-id htmllogfile)))
+			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
 		    )))
@@ -836,8 +905,9 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 ;; this is the socket if we are a client
-(if (socket? *runremote*)
-    (close-socket *runremote*))
+;; (if (and *runremote*
+;; 	 (socket? *runremote*))
+;;     (close-socket *runremote*))
 
 (if (not *didsomething*)
     (debug:print 0 help))
