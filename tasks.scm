@@ -131,11 +131,11 @@
        (debug:print-info 1 "Found " hostname ":" port))
      mdb
      "SELECT id,hostname,port FROM servers WHERE state='live' ORDER BY start_time DESC LIMIT 1;")
-    (print "res=" res)
+    ;; (print "res=" res)
     (if (null? res) #f
 	(let loop ((hed (car res))
 		   (tal (cdr res)))
-	  (print "hed=" hed ", tal=" tal)
+	  ;; (print "hed=" hed ", tal=" tal)
 	  (let* ((host (car hed))
 		 (port (cadr hed))
 		 (ping-res (server:ping host port)))

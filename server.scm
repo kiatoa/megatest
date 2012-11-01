@@ -98,11 +98,11 @@
 	      (begin
 		(debug:print-info 0 "Starting to shutdown the server.")
 		;; need to delete only *my* server entry (future use)
-		(open-run-close db:del-var #f "SERVER")
-		(thread-sleep! 10)
+		(set! *time-to-exit* #t)
+		(open-run-close tasks:server-deregister-self tasks:open-db)
+		(thread-sleep! 5)
 		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
 		(debug:print-info 0 "Server shutdown complete. Exiting")
-		(open-run-close tasks:server-deregister-self tasks:open-db)
 		(exit))))))
 
 (define (server:find-free-port-and-open host s port #!key (trynum 50))
