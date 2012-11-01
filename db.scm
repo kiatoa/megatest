@@ -946,7 +946,8 @@
 (define db:get-test-info-by-id db:get-test-info-not-cached-by-id)
 
 (define (db:get-test-info db run-id testname item-path)
-  (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
+  (let ((test-id (db:get-test-id db run-id testname item-path)))
+    (db:get-test-info-by-id db test-id)))
 
 (define (db:test-set-comment db test-id comment)
   (sqlite3:execute 

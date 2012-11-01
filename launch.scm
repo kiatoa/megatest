@@ -189,8 +189,9 @@
 						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
-
-						   (cdb:remote-run db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+						   (mutex-lock! m)
+						   (db:teststep-set-status! test-id stepname "start" "-" #f #f)
+						   (mutex-unlock! m)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -208,9 +209,14 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (cdb:remote-run db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+						       (mutex-lock! m)
+						       (db:teststep-set-status! test-id stepname "end" exinfo #f logfna)
+						       (mutex-unlock! m))
 						     (if logpro-used
-							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
+							 (begin
+							   (mutex-lock! m)
+							   (cdb:test-set-log! #f test-id (conc stepname ".html"))
+							   (mutex-unlock! m)))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -228,6 +234,7 @@
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
 								    " next-status: " next-status " rollup-status: " rollup-status)
+						       (mutex-lock! m)
 						       (case next-status
 							 ((warn)
 							  (set! rollup-status 2)
@@ -240,7 +247,8 @@
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
 							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
-							  ))))
+							  ))
+						       (mutex-unlock! m)))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
@@ -256,8 +264,10 @@
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
+				       (mutex-lock! m)
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
+				       (mutex-unlock! m)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -297,7 +307,7 @@
 	    (thread-join! th2)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
@@ -435,7 +445,7 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (cdb:get-test-info-by-id *runremote* test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (open-run-close db:get-test-info-by-id #f test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?

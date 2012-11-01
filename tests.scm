@@ -203,7 +203,7 @@
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (open-run-close test:get-previous-test-run-record db run-id test-name item-path)))
+		       (let ((prev-test (cdb:run-remote test:get-previous-test-run-record #f run-id test-name item-path)))
 			 (if prev-test ;; true if we found a previous test in this run series
 			     (let ((prev-status (db:test-get-status   prev-test))
 				   (prev-state  (db:test-get-state    prev-test))
