@@ -291,7 +291,7 @@ Built from " megatest-fossil-hash ))
 		      (priority   (vector-ref server 5))
 		      (state      (vector-ref server 6))
 		      (stat-numc  (server:ping hostname port))
-		      (status     (car stat-numc))
+		      (status     (car  stat-numc))
 		      (numclients (cadr stat-numc))
 		      (killed     #f)
 		      (zmq-socket (if status (server:client-connect hostname port) #f)))
@@ -310,8 +310,8 @@ Built from " megatest-fossil-hash ))
 			   (debug:print-info 1 "Removing defunct server record for " hostname ":" port))
 		       (set! killed #t)))
 		 (if (and kpid
-			  (equal? hostname (car khost-port))
-			  (equal? kpid pid))
+			  ;; (equal? hostname (car khost-port))
+			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
 		     (begin
 		       (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
 		       (set! killed #t)
@@ -321,6 +321,8 @@ Built from " megatest-fossil-hash ))
 		 (format #t fmtstr id pid hostname port start-time priority 
 			 status numclients)))
 	     servers)
+	    (debug:print-info 1 "Done with listservers")
+	    (exit) ;; must do, would have to add checks to many/all calls below
 	    (set! *didsomething* #t))))
     ;; if not list or kill then start a client (if appropriate)
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
@@ -329,9 +331,9 @@ Built from " megatest-fossil-hash ))
 	;; ping servers only if -runall -runtests
 	(let ((ping (args-defined? "-runall" "-runtests" "-remove-runs" 
 				   "-set-state-status" "-rerun" "-rollup" "-lock" "-unlock"
-				   "-set-values" "-list-runs")))
+				   "-set-values" "-list-runs" "-repl")))
 	  (server:client-launch do-ping: ping))))
-    
+
 ;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================

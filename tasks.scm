@@ -80,16 +80,17 @@
    "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?,?);"
    pid hostname port priority (conc state)))
 
+;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
   (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
   (if pid
-      (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND pid=?;" hostname pid)
+      (sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid)
       (if port
 	  (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
-(define (tasks:server-deregister-self mdb)
-  (tasks:server-deregister mdb (get-host-name) pid: (current-process-id)))
+(define (tasks:server-deregister-self mdb hostname)
+  (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
 (define (tasks:server-get-server-id mdb)
   ;; dunno yet

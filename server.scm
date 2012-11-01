@@ -47,7 +47,7 @@
     ;; what to do when we quit
     ;;
     (on-exit (lambda ()
-	       (open-run-close tasks:server-deregister-self tasks:open-db)
+	       (open-run-close tasks:server-deregister-self tasks:open-db #f)
 	       (let loop () 
 		 (let ((queue-len 0))
 		   (thread-sleep! (random 5))
@@ -72,8 +72,8 @@
 	(if (not *time-to-exit*)
 	    (loop)
 	    (begin
+	      (open-run-close tasks:server-deregister-self tasks:open-db #f)
 	      (db:write-cached-data)
-	      (open-run-close tasks:server-deregister-self tasks:open-db)
 	      (exit)
 	      ))))))
 
@@ -84,26 +84,26 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   (let loop ((count 0))
-    (thread-sleep! 1) ;; no need to do this very often
+    (thread-sleep! 3) ;; no need to do this very often
     (db:write-cached-data)
     ;; (print "Server running, count is " count)
     (if (< count 10)
 	(loop (+ count 1))
 	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
-	  (if (or (> numrunning 0)
-		  (> (+ *last-db-access* 60)(current-seconds)))
+	  (if (or (> numrunning 0) ;; stay alive for two days after last access
+		  (> (+ *last-db-access* (* 48 60 60))(current-seconds)))
 	      (begin
-		(debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-		(loop 0)))
+		(debug:print-info 2 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+		(loop 0))
 	      (begin
 		(debug:print-info 0 "Starting to shutdown the server.")
 		;; need to delete only *my* server entry (future use)
 		(set! *time-to-exit* #t)
-		(open-run-close tasks:server-deregister-self tasks:open-db)
-		(thread-sleep! 5)
+		(open-run-close tasks:server-deregister-self tasks:open-db #f)
+		(thread-sleep! 1)
 		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
 		(debug:print-info 0 "Server shutdown complete. Exiting")
-		(exit))))))
+		(exit)))))))
 
 (define (server:find-free-port-and-open host s port #!key (trynum 50))
   (let ((s (if s s (make-socket 'rep)))
@@ -199,8 +199,9 @@
 	    (let ((exe (car (argv))))
 	      (debug:print-info 1 "No server available, attempting to start one...")
 	      (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
-	      (sleep 5)
-	      (server:client-setup numtries: (- numtries 1) do-ping: do-ping))
+	      (sleep 2)
+	      ;; not doing ping, assume the server started and registered itself
+	      (server:client-setup numtries: (- numtries 1) do-ping: #f))
 	    (debug:print-info 1 "Too many retries, giving up")))))
 
 (define (server:launch)
