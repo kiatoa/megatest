@@ -139,10 +139,12 @@
 	*my-client-signature*)))
 
 ;; 
-(define (server:client-connect host port)
+(define (server:client-connect host port #!key (context #f))
   (debug:print 3 "client-connect " host ":" port)
   (let ((connect-ok #f)
-	(zmq-socket (make-socket 'req))
+	(zmq-socket (if context 
+			(make-socket 'req context)
+			(make-socket 'req)))
 	(conurl     (server:make-server-url (list host port))))
     (if (socket? zmq-socket)
 	(begin
@@ -161,44 +163,44 @@
     ok))
 
 ;; Do all the connection work, start a server if not already running
-(define (server:client-setup #!key (numtries 10))
+(define (server:client-setup #!key (numtries 10)(do-ping #f))
   (if (not *toppath*)(setup-for-run))
-  (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
+  (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db do-ping: do-ping)))
     (if hostinfo
-	(let* ((host       (car hostinfo))
-	       (port       (cadr hostinfo)))
-	  (debug:print-info 2 "Setting up to connect to " hostinfo)
-	  (handle-exceptions
-	   exn
-	   (begin
-	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
-	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	     (open-run-close tasks:server-deregister tasks:open-db host port: port)
-	     #f)
-	   (let* ((zmq-socket (server:client-connect host port))
-		  (login-res  (server:client-login zmq-socket))
-		  (connect-ok (if (null? login-res) #f (car login-res)))
-		  (conurl     (server:make-server-url hostinfo)))
-	     (if connect-ok
-		 (begin
-		   (debug:print-info 2 "Logged in and connected to " conurl)
-		   (set! *runremote* zmq-socket)
-		   #t)
-		 (begin
-		   (debug:print-info 2 "Failed to login or connect to " conurl)
-		   (set! *runremote* #f)
-		   #f)))))
+	(let ((host    (car hostinfo))
+	      (port    (cadr hostinfo))
+	      (zsocket (caddr hostinfo)))
+	;; (set! *runremote* zsocket))
+	  (let* ((host       (car hostinfo))
+		 (port       (cadr hostinfo)))
+	    (debug:print-info 2 "Setting up to connect to " hostinfo)
+	    (handle-exceptions
+	     exn
+	     (begin
+	       (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
+	       (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+	       (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
+	       (open-run-close tasks:server-deregister tasks:open-db host port: port)
+	       #f)
+	     (let* ((zmq-socket (server:client-connect host port))
+		    (login-res  (server:client-login zmq-socket))
+		    (connect-ok (if (null? login-res) #f (car login-res)))
+		    (conurl     (server:make-server-url hostinfo)))
+	       (if connect-ok
+		   (begin
+		     (debug:print-info 2 "Logged in and connected to " conurl)
+		     (set! *runremote* zmq-socket)
+		     #t)
+		   (begin
+		     (debug:print-info 2 "Failed to login or connect to " conurl)
+		     (set! *runremote* #f)
+		     #f))))))
 	(if (> numtries 0)
 	    (let ((exe (car (argv))))
 	      (debug:print-info 1 "No server available, attempting to start one...")
 	      (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
-	      ;; (system (conc  " -server - " (if (args:get-arg "-debug")
-	      ;;   					   (conc "-debug " (args:get-arg "-debug"))
-	      ;;   					   "")
-	      ;;   	    " &"))
-	      (sleep 10)
-	      (server:client-setup numtries: (- numtries 1)))
+	      (sleep 5)
+	      (server:client-setup numtries: (- numtries 1) do-ping: do-ping))
 	    (debug:print-info 1 "Too many retries, giving up")))))
 
 (define (server:launch)
@@ -218,31 +220,34 @@
 		(thread-join! th3))
 	      (debug:print 0 "ERROR: Failed to setup for megatest"))))))
 
-(define (server:client-launch)
-  (if (server:client-setup)
+(define (server:client-launch #!key (do-ping #f))
+  (if (server:client-setup do-ping: do-ping)
       (debug:print-info 0 "connected as client")
       (begin
 	(debug:print 0 "ERROR: Failed to connect as client")
 	(exit))))
 
 ;; ping a server and return number of clients or #f (if no response)
-(define (server:ping host port #!key (secs 10))
+(define (server:ping host port #!key (secs 10)(return-socket #f))
   (cdb:use-non-blocking-mode
    (lambda ()
      (let* ((res #f)
 	    (th1 (make-thread
 		  (lambda ()
-		    (let ((zmq-socket (server:client-connect host port)))
+		    (let* ((zmq-context (make-context 1))
+			   (zmq-socket  (server:client-connect host port context: zmq-context)))
 		      (if zmq-socket
 			  (if (server:client-login zmq-socket)
 			      (let ((numclients (cdb:num-clients zmq-socket)))
-				(server:client-logout zmq-socket)
-				(close-socket  zmq-socket)
-				(set! res (list #t numclients)))
+				(if (not return-socket)
+				    (begin
+				      (server:client-logout zmq-socket)
+				      (close-socket  zmq-socket)))
+				(set! res (list #t numclients (if return-socket zmq-socket #f))))
 			      (begin
 				;; (close-socket zmq-socket)
-				(set! res (list #f "CAN'T LOGIN"))))
-			  (set! res (list #f "CAN'T CONNECT")))))))
+				(set! res (list #f "CAN'T LOGIN" #f))))
+			  (set! res (list #f "CAN'T CONNECT" #f)))))))
 	    (th2 (make-thread
 		  (lambda ()
 		    (let loop ((count 1))
@@ -251,11 +256,11 @@
 		      (if (< count (/ secs 2))
 			  (loop (+ count 1))))
 		    ;; (thread-terminate! th1)
-		    (set! res (list #f "TIMED OUT"))))))
+		    (set! res (list #f "TIMED OUT" #f))))))
        (thread-start! th2)
        (thread-start! th1)
        (handle-exceptions
 	exn
-	(set! res (list #f "TIMED OUT"))
+	(set! res (list #f "TIMED OUT" #f))
 	(thread-join! th1 secs))
        res))))

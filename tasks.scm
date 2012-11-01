@@ -122,7 +122,7 @@
 
 ;; ping each server in the db and return first found that responds. 
 ;; remove any others. will not necessarily remove all!
-(define (tasks:get-best-server mdb)
+(define (tasks:get-best-server mdb #!key (do-ping #f))
   (let ((res '())
 	(best #f))
     (sqlite3:for-each-row
@@ -136,10 +136,13 @@
 	(let loop ((hed (car res))
 		   (tal (cdr res)))
 	  ;; (print "hed=" hed ", tal=" tal)
-	  (let* ((host (car hed))
-		 (port (cadr hed))
-		 (ping-res (server:ping host port)))
-	    (if ping-res hed
+	  (let* ((host     (car hed))
+		 (port     (cadr hed))
+		 (ping-res (if do-ping (server:ping host port return-socket: #f) '(#t "NO PING" #f)))
+		 (alive    (car ping-res))
+		 (reason   (cadr ping-res))
+		 (zsocket  (caddr ping-res)))
+	    (if alive (list host port zsocket)
 		;; remove defunct server from table
 		(begin
 		  (open-run-close tasks:server-deregister tasks:open-db  host port: port)

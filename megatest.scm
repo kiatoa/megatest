@@ -323,15 +323,14 @@ Built from " megatest-fossil-hash ))
 	     servers)
 	    (set! *didsomething* #t))))
     ;; if not list or kill then start a client (if appropriate)
-    (if (or (let ((res #f))
-	      (for-each
-	       (lambda (key)
-		 (if (args:get-arg key)(set! res #t)))
-	       (list "-h" "-version" "-gen-megatest-area" "-gen-megatest-test"))
-	      res)
+    (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
 	(debug:print-info 1 "Server connection not needed")
-	(server:client-launch)))
+	;; ping servers only if -runall -runtests
+	(let ((ping (args-defined? "-runall" "-runtests" "-remove-runs" 
+				   "-set-state-status" "-rerun" "-rollup" "-lock" "-unlock"
+				   "-set-values" "-list-runs")))
+	  (server:client-launch do-ping: ping))))
     
 ;;======================================================================
 ;; Remove old run(s)
