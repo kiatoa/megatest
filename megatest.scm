@@ -328,11 +328,7 @@ Built from " megatest-fossil-hash ))
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
 	(debug:print-info 1 "Server connection not needed")
-	;; ping servers only if -runall -runtests
-	(let ((ping (args-defined? "-runall" "-runtests" "-remove-runs" 
-				   "-set-state-status" "-rerun" "-rollup" "-lock" "-unlock"
-				   "-set-values" "-list-runs" "-repl")))
-	  (server:client-launch do-ping: ping))))
+	(server:client-launch do-ping: #t)))
 
 ;;======================================================================
 ;; Remove old run(s)
@@ -878,8 +874,8 @@ Built from " megatest-fossil-hash ))
       (if db
 	  (begin
 	    (set! *db* db)
-	    (if (not (args:get-arg "-server"))
-		(server:client-setup))
+	    (set! *client-non-blocking-mode* #t)
+	    ;; (server:client-setup)
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager
