@@ -56,7 +56,9 @@
                                   start_time TIMESTAMP,
                                   priority INTEGER,
                                   state TEXT,
-                               CONSTRAINT servers_constraint UNIQUE (pid,hostname));")
+                                  mt_version TEXT,
+                                  heartbeat TIMESTAMP,
+                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
@@ -77,8 +79,9 @@
 (define (tasks:server-register mdb pid hostname port priority state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state) VALUES(?,?,?,strftime('%s','now'),?,?);"
-   pid hostname port priority (conc state)))
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat) VALUES(?,?,?,strftime('%s','now'),?,?,?,strftime('%s','now'));"
+   pid hostname port priority (conc state) megatest-version)
+  (tasks:server-get-server-id mdb hostname port pid))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
@@ -92,9 +95,32 @@
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
-(define (tasks:server-get-server-id mdb)
-  ;; dunno yet
-  0)
+(define (tasks:server-get-server-id mdb host port pid)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     mdb
+     (if (and host  pid)
+	 "SELECT id FROM servers WHERE hostname=? AND pid=?;"
+	 "SELECT id FROM servers WHERE hostname=? AND port=?;")
+     host (if pid pid port))
+    res))
+
+(define (tasks:server-update-heartbeat mdb server-id)
+  (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id))
+
+;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
+(define (tasks:server-alive? mdb server-id #!key (hostname #f)(port #f)(pid #f))
+  (let* ((server-id  (if server-id 
+			 server-id
+			 (tasks:server-get-server-id mdb hostname port pid)))
+	 (heartbeat-delta 99e9))
+    (sqlite3:for-each-row
+     (lambda (delta)
+       (set! heartbeat-delta delta))
+     mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
+    (< (- (current-seconds) heartbeat-delta) 10)))
 
 (define (tasks:client-register mdb pid hostname cmdline)
   (sqlite3:execute
@@ -131,7 +157,7 @@
        (set! res (cons (list hostname port) res))
        (debug:print-info 1 "Found " hostname ":" port))
      mdb
-     "SELECT id,hostname,port FROM servers WHERE state='live' ORDER BY start_time DESC LIMIT 1;")
+     "SELECT id,hostname,port FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
     (if (null? res) #f
 	(let loop ((hed (car res))
@@ -139,11 +165,12 @@
 	  ;; (print "hed=" hed ", tal=" tal)
 	  (let* ((host     (car hed))
 		 (port     (cadr hed))
-		 (ping-res (if do-ping (server:ping host port return-socket: #f) '(#t "NO PING" #f)))
-		 (alive    (car ping-res))
-		 (reason   (cadr ping-res))
-		 (zsocket  (caddr ping-res)))
-	    (if alive (list host port zsocket)
+		 ;; (ping-res (if do-ping (server:ping host port return-socket: #f) '(#t "NO PING" #f)))
+		 (alive    (open-run-close tasks:server-alive? tasks:open-db host port: port)) ;; (car ping-res))
+		 ;; (reason   (cadr ping-res))
+		 ;; (zsocket  (caddr ping-res))
+		 )
+	    (if alive (list host port)
 		;; remove defunct server from table
 		(begin
 		  (open-run-close tasks:server-deregister tasks:open-db  host port: port)
@@ -154,10 +181,10 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname port start-time priority state)
-       (set! res (cons (vector id pid hostname port start-time priority state) res)))
+     (lambda (id pid hostname port start-time priority state mt-version)
+       (set! res (cons (vector id pid hostname port start-time priority state mt-version) res)))
      mdb
-     "SELECT id,pid,hostname,port,start_time,priority,state FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,port,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
     res))
        
 

@@ -1106,12 +1106,14 @@
 	;; Any special calls are dispatched here. 
 	;; Remainder are put in the db queue
 	(case qry-name
-	  ((login) ;; login checks that the megatest path matches
-	   (if (< (length remparam) 2) ;; should get toppath and signature
+	  ((login) ;; login checks that the megatest path and version matches
+	   (if (< (length remparam) 3) ;; should get toppath, version and signature
 	       '(#f "login failed due to missing params") ;; missing params
-	       (let ((calling-path (car remparam))
-		     (client-key   (cadr remparam)))
-		 (if (equal? calling-path *toppath*)
+	       (let ((calling-path (car   remparam))
+		     (calling-vers (cadr  remparam))
+		     (client-key   (caddr remparam)))
+		 (if (and (equal? calling-path *toppath*)
+			  (equal? megatest-version calling-vers))
 		     (begin
 		       (hash-table-set! *logged-in-clients* client-key (current-seconds))
 		       '(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
@@ -1186,7 +1188,7 @@
   (cdb:client-call zmq-socket 'set-verbosity #f val))
 
 (define (cdb:login zmq-socket keyval signature)
-  (cdb:client-call zmq-socket 'login #t keyval signature))
+  (cdb:client-call zmq-socket 'login #t keyval megatest-version signature))
 
 (define (cdb:logout zmq-socket keyval signature)
   (cdb:client-call zmq-socket 'logout #t keyval signature))

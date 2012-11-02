@@ -28,7 +28,6 @@
   (if (not hostport)
       #f
       (conc "tcp://" (car hostport) ":" (cadr hostport))))
-(define *time-to-exit* #f)
 
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
@@ -87,9 +86,10 @@
     (thread-sleep! 3) ;; no need to do this very often
     (db:write-cached-data)
     ;; (print "Server running, count is " count)
-    (if (< count 10)
+    (if (< count 2) ;; 3x3 = 9 secs aprox
 	(loop (+ count 1))
 	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
+	  (open-run-close tasks:server-update-heartbeat  tasks:open-db *server-id*)
 	  (if (or (> numrunning 0) ;; stay alive for two days after last access
 		  (> (+ *last-db-access* (* 48 60 60))(current-seconds)))
 	      (begin
@@ -99,7 +99,7 @@
 		(debug:print-info 0 "Starting to shutdown the server.")
 		;; need to delete only *my* server entry (future use)
 		(set! *time-to-exit* #t)
-		(open-run-close tasks:server-deregister-self tasks:open-db #f)
+		(open-run-close tasks:server-deregister-self tasks:open-db)
 		(thread-sleep! 1)
 		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
 		(debug:print-info 0 "Server shutdown complete. Exiting")
@@ -122,7 +122,7 @@
        (bind-socket s zmq-url)
        (set! *runremote* #f)
        (debug:print 0 "Server started on " zmq-url)
-       (open-run-close tasks:server-register tasks:open-db (current-process-id) host p 0 'live)
+       (set! *server-id* (open-run-close tasks:server-register tasks:open-db (current-process-id) host p 0 'live))
        s))))
 
 (define (server:mk-signature)
@@ -168,8 +168,8 @@
   (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db do-ping: do-ping)))
     (if hostinfo
 	(let ((host    (car hostinfo))
-	      (port    (cadr hostinfo))
-	      (zsocket (caddr hostinfo)))
+	      (port    (cadr hostinfo)))
+	  ;; (zsocket (caddr hostinfo)))
 	;; (set! *runremote* zsocket))
 	  (let* ((host       (car hostinfo))
 		 (port       (cadr hostinfo)))
@@ -223,7 +223,7 @@
 
 (define (server:client-launch #!key (do-ping #f))
   (if (server:client-setup do-ping: do-ping)
-      (debug:print-info 0 "connected as client")
+      (debug:print-info 2 "connected as client")
       (begin
 	(debug:print 0 "ERROR: Failed to connect as client")
 	(exit))))

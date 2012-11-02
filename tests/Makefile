@@ -87,5 +87,8 @@ kill :
 hardkill : kill
 	sleep 5;killall -v mtest main.sh dboard -9
 
+listservers :
+	cd fullrun;$(MEGATEST) -listservers
+
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done
