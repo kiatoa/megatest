@@ -235,7 +235,8 @@
 ;; Create the sqlite db for the individual test(s)
 (define (open-test-db testpath) 
   (debug:print-info 11 "open-test-db " testpath)
-  (if (and (directory? testpath)
+  (if (and testpath 
+	   (directory? testpath)
 	   (file-read-access? testpath))
       (let* ((dbpath    (conc testpath "/testdat.db"))
 	     (dbexists  (file-exists? dbpath))

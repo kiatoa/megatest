@@ -51,6 +51,7 @@
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
+                                  interface TEXT,
                                   hostname TEXT,
                                   port INTEGER,
                                   start_time TIMESTAMP,
@@ -76,12 +77,12 @@
 ;;======================================================================
 
 ;; state: 'live, 'shutting-down, 'dead
-(define (tasks:server-register mdb pid hostname port priority state)
+(define (tasks:server-register mdb pid interface port priority state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat) VALUES(?,?,?,strftime('%s','now'),?,?,?,strftime('%s','now'));"
-   pid hostname port priority (conc state) megatest-version)
-  (tasks:server-get-server-id mdb hostname port pid))
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat,interface) VALUES(?,?,?,strftime('%s','now'),?,?,?,strftime('%s','now'),?);"
+   pid (get-host-name) port priority (conc state) megatest-version interface)
+  (tasks:server-get-server-id mdb (get-host-name) port pid))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
@@ -95,16 +96,16 @@
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
-(define (tasks:server-get-server-id mdb host port pid)
+(define (tasks:server-get-server-id mdb hostname port pid)
   (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id)
        (set! res id))
      mdb
-     (if (and host  pid)
+     (if (and hostname  pid)
 	 "SELECT id FROM servers WHERE hostname=? AND pid=?;"
 	 "SELECT id FROM servers WHERE hostname=? AND port=?;")
-     host (if pid pid port))
+     hostname (if pid pid port))
     res))
 
 (define (tasks:server-update-heartbeat mdb server-id)
@@ -120,7 +121,7 @@
      (lambda (delta)
        (set! heartbeat-delta delta))
      mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
-    (< (- (current-seconds) heartbeat-delta) 10)))
+    (> heartbeat-delta 10)))
 
 (define (tasks:client-register mdb pid hostname cmdline)
   (sqlite3:execute
@@ -153,24 +154,37 @@
   (let ((res '())
 	(best #f))
     (sqlite3:for-each-row
-     (lambda (id hostname port)
-       (set! res (cons (list hostname port) res))
+     (lambda (id hostname interface port pid)
+       (set! res (cons (list hostname interface port pid) res))
        (debug:print-info 1 "Found " hostname ":" port))
      mdb
-     "SELECT id,hostname,port FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
+     "SELECT id,hostname,interface,port,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
     (if (null? res) #f
 	(let loop ((hed (car res))
 		   (tal (cdr res)))
 	  ;; (print "hed=" hed ", tal=" tal)
-	  (let* ((host     (car hed))
-		 (port     (cadr hed))
+	  (let* ((host     (car    hed))
+		 (iface    (cadr   hed))
+		 (port     (caddr  hed))
+		 (pid      (cadddr hed))
 		 ;; (ping-res (if do-ping (server:ping host port return-socket: #f) '(#t "NO PING" #f)))
 		 (alive    (open-run-close tasks:server-alive? tasks:open-db host port: port)) ;; (car ping-res))
 		 ;; (reason   (cadr ping-res))
 		 ;; (zsocket  (caddr ping-res))
 		 )
-	    (if alive (list host port)
+	    (if alive
+		;; (if (server:ping iface port)
+		    (list host iface port)
+		 ;;    ;; not actually alive, destroy!
+		 ;;    (begin
+		 ;;      (if (equal? host (get-host-name))
+		 ;;          (begin
+		 ;;            (debug:print-info 0 "Killing process " pid " on host " host " with signal/term")
+		 ;;            (send-signal pid signal/term))
+		 ;;          (debug:print 0 "WARNING: Can't kill process " pid " on host " host))
+		 ;;      (open-run-close tasks:server-deregister tasks:open-db  host port: port)
+		 ;;      #f))
 		;; remove defunct server from table
 		(begin
 		  (open-run-close tasks:server-deregister tasks:open-db  host port: port)
@@ -181,10 +195,10 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname port start-time priority state mt-version)
-       (set! res (cons (vector id pid hostname port start-time priority state mt-version) res)))
+     (lambda (id pid hostname interface port start-time priority state mt-version)
+       (set! res (cons (vector id pid hostname interface port start-time priority state mt-version) res)))
      mdb
-     "SELECT id,pid,hostname,port,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,port,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
     res))
        
 

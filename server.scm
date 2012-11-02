@@ -37,13 +37,15 @@
 	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
 	    (exit))))
   (let* ((zmq-socket     #f)
-	 (hostname       (if (string=? "-" hostn)
-			     (get-host-name) 
+	 (iface          (if (string=? "-" hostn)
+			     "*" ;; (get-host-name) 
 			     hostn))
+	 (hostname       (get-host-name))
 	 (ipaddrstr      (let ((ipstr (if (string=? "-" hostn)
 					  (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					  #f)))
 			   (if ipstr ipstr hostname))))
+    ;; (set! zmq-socket (server:find-free-port-and-open iface zmq-socket 5555 0))
     (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555 0))
     (set! *cache-on* #t)
     
@@ -52,7 +54,7 @@
     (on-exit (lambda ()
 	       (if (and *toppath* *server-id*)
 		   (begin
-		     (open-run-close tasks:server-deregister-self tasks:open-db #f))
+		     (open-run-close tasks:server-deregister-self tasks:open-db ipaddrstr))
 		   (let loop () 
 		     (let ((queue-len 0))
 		       (thread-sleep! (random 5))
@@ -111,24 +113,27 @@
 		(debug:print-info 0 "Server shutdown complete. Exiting")
 		(exit)))))))
 
-(define (server:find-free-port-and-open host s port #!key (trynum 50))
+(define (server:find-free-port-and-open iface s port #!key (trynum 50))
   (let ((s (if s s (make-socket 'rep)))
-	(p (if (number? port) port 5555)))
+	(p (if (number? port) port 5555))
+ 	(old-handler (current-exception-handler)))
     (handle-exceptions
      exn
      (begin
        (debug:print 0 "Failed to bind to port " p ", trying next port")
        (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+       ;; (old-handler)
+       ;; (print-call-chain)
        (if (> trynum 0)
-	   (server:find-free-port-and-open host s (+ p 1) trynum: (- trynum 1))
-	   (debug:print-info 0 "Tried ports from " (- p trynum) " to " p 
+	   (server:find-free-port-and-open iface s (+ p 1) trynum: (- trynum 1))
+	   (debug:print-info 0 "Tried ports up to " p 
 			     " but all were in use. Please try a different port range by starting the server with parameter \" -port N\" where N is the starting port number to use")))
-     (let ((zmq-url (conc "tcp://" host ":" p)))
+     (let ((zmq-url (conc "tcp://" iface ":" p)))
        (print "Trying to start server on " zmq-url)
        (bind-socket s zmq-url)
        (set! *runremote* #f)
        (debug:print 0 "Server started on " zmq-url)
-       (set! *server-id* (open-run-close tasks:server-register tasks:open-db (current-process-id) host p 0 'live))
+       (set! *server-id* (open-run-close tasks:server-register tasks:open-db (current-process-id) iface p 0 'live))
        s))))
 
 (define (server:mk-signature)
@@ -145,13 +150,13 @@
 	*my-client-signature*)))
 
 ;; 
-(define (server:client-connect host port #!key (context #f))
-  (debug:print 3 "client-connect " host ":" port)
+(define (server:client-connect iface port #!key (context #f))
+  (debug:print 3 "client-connect " iface ":" port)
   (let ((connect-ok #f)
 	(zmq-socket (if context 
 			(make-socket 'req context)
 			(make-socket 'req)))
-	(conurl     (server:make-server-url (list host port))))
+	(conurl     (server:make-server-url (list iface port))))
     (if (socket? zmq-socket)
 	(begin
 	  (connect-socket zmq-socket conurl)
@@ -177,34 +182,31 @@
 	    (exit))))
   (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db do-ping: do-ping)))
     (if hostinfo
-	(let ((host    (car hostinfo))
-	      (port    (cadr hostinfo)))
-	  ;; (zsocket (caddr hostinfo)))
-	;; (set! *runremote* zsocket))
-	  (let* ((host       (car hostinfo))
-		 (port       (cadr hostinfo)))
-	    (debug:print-info 2 "Setting up to connect to " hostinfo)
-	    (handle-exceptions
-	     exn
-	     (begin
-	       (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
-	       (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	       (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	       (open-run-close tasks:server-deregister tasks:open-db host port: port)
-	       #f)
-	     (let* ((zmq-socket (server:client-connect host port))
-		    (login-res  (server:client-login zmq-socket))
-		    (connect-ok (if (null? login-res) #f (car login-res)))
-		    (conurl     (server:make-server-url hostinfo)))
-	       (if connect-ok
-		   (begin
-		     (debug:print-info 2 "Logged in and connected to " conurl)
-		     (set! *runremote* zmq-socket)
-		     #t)
-		   (begin
-		     (debug:print-info 2 "Failed to login or connect to " conurl)
-		     (set! *runremote* #f)
-		     #f))))))
+	(let ((host    (car   hostinfo))
+	      (iface   (cadr  hostinfo))
+	      (port    (caddr hostinfo)))
+	  (debug:print-info 2 "Setting up to connect to " hostinfo)
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
+	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
+	     (open-run-close tasks:server-deregister tasks:open-db host port: port)
+	     #f)
+	   (let* ((zmq-socket (server:client-connect iface port))
+		  (login-res  (server:client-login zmq-socket))
+		  (connect-ok (if (null? login-res) #f (car login-res)))
+		  (conurl     (server:make-server-url (list iface port))))
+	     (if connect-ok
+		 (begin
+		   (debug:print-info 2 "Logged in and connected to " conurl)
+		   (set! *runremote* zmq-socket)
+		   #t)
+		 (begin
+		   (debug:print-info 2 "Failed to login or connect to " conurl)
+		   (set! *runremote* #f)
+		   #f)))))
 	(if (> numtries 0)
 	    (let ((exe (car (argv))))
 	      (debug:print-info 1 "No server available, attempting to start one...")
