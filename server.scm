@@ -31,7 +31,11 @@
 
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
-  (if (not *toppath*)(setup-for-run))
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
+	    (exit))))
   (let* ((zmq-socket     #f)
 	 (hostname       (if (string=? "-" hostn)
 			     (get-host-name) 
@@ -46,17 +50,19 @@
     ;; what to do when we quit
     ;;
     (on-exit (lambda ()
-	       (open-run-close tasks:server-deregister-self tasks:open-db #f)
-	       (let loop () 
-		 (let ((queue-len 0))
-		   (thread-sleep! (random 5))
-		   (mutex-lock! *incoming-mutex*)
-		   (set! queue-len (length *incoming-data*))
-		   (mutex-unlock! *incoming-mutex*)
-		   (if (> queue-len 0)
-		       (begin
-			 (debug:print-info 0 "Queue not flushed, waiting ...")
-			 (loop)))))))
+	       (if (and *toppath* *server-id*)
+		   (begin
+		     (open-run-close tasks:server-deregister-self tasks:open-db #f))
+		   (let loop () 
+		     (let ((queue-len 0))
+		       (thread-sleep! (random 5))
+		       (mutex-lock! *incoming-mutex*)
+		       (set! queue-len (length *incoming-data*))
+		       (mutex-unlock! *incoming-mutex*)
+		       (if (> queue-len 0)
+			   (begin
+			     (debug:print-info 0 "Queue not flushed, waiting ...")
+			     (loop))))))))
 
     ;; The heavy lifting
     ;;
@@ -164,7 +170,11 @@
 
 ;; Do all the connection work, start a server if not already running
 (define (server:client-setup #!key (numtries 10)(do-ping #f))
-  (if (not *toppath*)(setup-for-run))
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
+	    (exit))))
   (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db do-ping: do-ping)))
     (if hostinfo
 	(let ((host    (car hostinfo))
@@ -205,21 +215,25 @@
 	    (debug:print-info 1 "Too many retries, giving up")))))
 
 (define (server:launch)
-  (let* ((toppath (setup-for-run)))
-    (debug:print-info 0 "Starting the standalone server")
-    (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
-      (if hostinfo
-	  (debug:print-info 1 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
-	  (if *toppath* 
-	      (let* ((th2 (make-thread (lambda ()
-					 (server:run (args:get-arg "-server")))))
-		     (th3 (make-thread (lambda ()
-					 (server:keep-running)))))
-		(thread-start! th2)
-		(thread-start! th3)
-		(set! *didsomething* #t)
-		(thread-join! th3))
-	      (debug:print 0 "ERROR: Failed to setup for megatest"))))))
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
+	    (exit))))
+  (debug:print-info 0 "Starting the standalone server")
+  (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
+    (if hostinfo
+	(debug:print-info 1 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
+	(if *toppath* 
+	    (let* ((th2 (make-thread (lambda ()
+				       (server:run (args:get-arg "-server")))))
+		   (th3 (make-thread (lambda ()
+				       (server:keep-running)))))
+	      (thread-start! th2)
+	      (thread-start! th3)
+	      (set! *didsomething* #t)
+	      (thread-join! th3))
+	    (debug:print 0 "ERROR: Failed to setup for megatest")))))
 
 (define (server:client-launch #!key (do-ping #f))
   (if (server:client-setup do-ping: do-ping)

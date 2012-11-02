@@ -1,5 +1,5 @@
 
-PREFIX=.
+PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \

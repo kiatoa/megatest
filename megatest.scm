@@ -322,7 +322,8 @@ Built from " megatest-fossil-hash ))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
 	    (exit) ;; must do, would have to add checks to many/all calls below
-	    (set! *didsomething* #t))))
+	    (set! *didsomething* #t))
+	  (exit)))
     ;; if not list or kill then start a client (if appropriate)
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
@@ -437,8 +438,8 @@ Built from " megatest-fossil-hash ))
 			     steps)))))
 		  tests))))
 	   runs)
-	  (set! *didsomething* #t)
-	  )))
+	  (set! *didsomething* #t))
+	(exit)))
 
 ;;======================================================================
 ;; full run
@@ -460,30 +461,17 @@ Built from " megatest-fossil-hash ))
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
 (if (args:get-arg "-runall")
-    (let ((server-thread #f))
-      (if (args:get-arg "-server")
-	  (let ((toppath (setup-for-run))
-		(db      (open-db)))
-	    (if db 
-		(let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
-		       (th2 (server:start db (args:get-arg "-server")))
-		       (th3 (make-thread (lambda ()
-					   (server:keep-running db host:port)))))
-		  (thread-start! th3)
-		  (set! server-thread th3)))))
-      (general-run-call 
-       "-runall"
-       "run all tests"
-       (lambda (target runname keys keynames keyvallst)
-	 (runs:run-tests target
-			 runname
-			 (if (args:get-arg "-testpatt")
-			     (args:get-arg "-testpatt")
-			     "%/%")
-			 user
-			 args:arg-hash)))
-      (if server-thread 
-	  (thread-join! server-thread))))
+    (general-run-call 
+     "-runall"
+     "run all tests"
+     (lambda (target runname keys keynames keyvallst)
+       (runs:run-tests target
+		       runname
+		       (if (args:get-arg "-testpatt")
+			   (args:get-arg "-testpatt")
+			   "%/%")
+		       user
+		       args:arg-hash))))
 
 ;;======================================================================
 ;; run one test
@@ -898,7 +886,8 @@ Built from " megatest-fossil-hash ))
 	     (string-append
 	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
 	    (current-input-port (make-gnu-readline-port "megatest> "))
-	    (repl)))
+	    (repl))
+	  (exit))
       (set! *didsomething* #t)))
 
 ;;======================================================================

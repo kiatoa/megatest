@@ -637,7 +637,7 @@ Misc
 	(begin
 	  (lambda (x)
 	    (on-exit (lambda ()
-		       (sqlite3:finalize! *db*)))
+		       (if *db* (sqlite3:finalize! *db*))))
 	    (open-run-close examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))

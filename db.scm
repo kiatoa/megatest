@@ -55,7 +55,11 @@
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (if (not *toppath*)(setup-for-run))
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
+	    (exit))))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
