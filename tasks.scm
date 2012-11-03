@@ -82,15 +82,20 @@
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat,interface) VALUES(?,?,?,strftime('%s','now'),?,?,?,strftime('%s','now'),?);"
    pid (get-host-name) port priority (conc state) megatest-version interface)
-  (tasks:server-get-server-id mdb (get-host-name) port pid))
+  (list 
+   (tasks:server-get-server-id mdb (get-host-name) port pid)
+   interface
+   port))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
   (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
   (if pid
-      (sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid)
+      ;; (sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid)
+      (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)
       (if port
-	  (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
+	  ;; (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
+	  (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
 (define (tasks:server-deregister-self mdb hostname)
@@ -121,13 +126,14 @@
      (lambda (delta)
        (set! heartbeat-delta delta))
      mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
+    (debug:print 1 "Found heartbeat-delta of " heartbeat-delta " for server with id " server-id)
     (< heartbeat-delta 10)))
 
 (define (tasks:client-register mdb pid hostname cmdline)
   (sqlite3:execute
    mdb
    "INSERT OR REPLACE INTO clients (server_id,pid,hostname,cmdline,login_time) VALUES(?,?,?,?,strftime('%s','now'));")
-  (tasks:server-get-server-id mdb)
+  (tasks:server-get-server-id mdb hostname #f pid)
   pid hostname cmdline)
 
 (define (tasks:client-logout mdb pid hostname cmdline)
@@ -150,13 +156,13 @@
 
 ;; ping each server in the db and return first found that responds. 
 ;; remove any others. will not necessarily remove all!
-(define (tasks:get-best-server mdb #!key (do-ping #f))
+(define (tasks:get-best-server mdb)
   (let ((res '())
 	(best #f))
     (sqlite3:for-each-row
      (lambda (id hostname interface port pid)
        (set! res (cons (list hostname interface port pid) res))
-       (debug:print-info 1 "Found " hostname ":" port))
+       (debug:print-info 1 "Found existing server " hostname ":" port " registered in db"))
      mdb
      "SELECT id,hostname,interface,port,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
@@ -168,29 +174,44 @@
 		 (iface    (cadr   hed))
 		 (port     (caddr  hed))
 		 (pid      (cadddr hed))
-		 ;; (ping-res (if do-ping (server:ping host port return-socket: #f) '(#t "NO PING" #f)))
-		 (alive    (open-run-close tasks:server-alive? tasks:open-db host port: port)) ;; (car ping-res))
-		 ;; (reason   (cadr ping-res))
-		 ;; (zsocket  (caddr ping-res))
-		 )
+		 (alive    (open-run-close tasks:server-alive? tasks:open-db #f hostname: host port: port)))
 	    (if alive
-		;; (if (server:ping iface port)
-		    (list host iface port)
-		 ;;    ;; not actually alive, destroy!
-		 ;;    (begin
-		 ;;      (if (equal? host (get-host-name))
-		 ;;          (begin
-		 ;;            (debug:print-info 0 "Killing process " pid " on host " host " with signal/term")
-		 ;;            (send-signal pid signal/term))
-		 ;;          (debug:print 0 "WARNING: Can't kill process " pid " on host " host))
-		 ;;      (open-run-close tasks:server-deregister tasks:open-db  host port: port)
-		 ;;      #f))
-		;; remove defunct server from table
 		(begin
-		  (open-run-close tasks:server-deregister tasks:open-db  host port: port)
+		  (debug:print 1 "Found an existing, alive, server " host ":" port ".")
+		  (list host iface port))
+		(begin
+		  (debug:print-info 1 "Removing " host ":" port " from server registry as it appears to be dead")
+		  (tasks:kill-server #f host port pid)
 		  (if (null? tal)
 		      #f
 		      (loop (car tal)(cdr tal))))))))))
+
+(define (tasks:kill-server status hostname port pid)
+  (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
+  (if port
+      (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
+      (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid))
+  
+  (if status ;; #t means alive
+      (begin
+	(if (equal? hostname (get-host-name))
+	    (begin
+	      (debug:print 1 "Sending signal/term to " pid " on " hostname)
+	      (process-signal pid signal/term)
+	      (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
+	      (process-signal pid signal/kill)) ;; local machine, send sig term
+	    (begin
+	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
+	      (cdb:kill-server zmq-socket))))    ;; remote machine, try telling server to commit suicide
+      (begin
+	(if status 
+	    (if (equal? hostname (get-host-name))
+		(begin
+		  (debug:print-info 1 "Sending signal/term to " pid " on " hostname)
+		  (process-signal pid signal/term)  ;; local machine, send sig term
+		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
+		  (process-signal pid signal/kill)) 
+		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))

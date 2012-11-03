@@ -1149,6 +1149,8 @@
 	   *verbosity*)
 	  ((get-verbosity)
 	   *verbosity*)
+	  ((ping)
+	   'hi)
 	  (else
 	   (mutex-lock! *incoming-mutex*)
 	   (set! *last-db-access* (current-seconds))
@@ -1178,6 +1180,7 @@
     (set! *client-non-blocking-mode* #f)
     res))
   
+;; params = 'target cached remparams
 (define (cdb:client-call zmq-socket . params)
   (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))

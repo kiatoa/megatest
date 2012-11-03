@@ -293,7 +293,7 @@ Built from " megatest-fossil-hash ))
 		      (priority   (vector-ref server 6))
 		      (state      (vector-ref server 7))
 		      (mt-ver     (vector-ref server 8))
-		      (status     (open-run-close tasks:server-alive? tasks:open-db hostname port: port))
+		      (status     (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
 		      (killed     #f)
 		      (zmq-socket (if status (server:client-connect hostname port) #f)))
 		 ;; no need to login as status of #t indicates we are connecting to correct 
@@ -302,28 +302,13 @@ Built from " megatest-fossil-hash ))
 			 (and khost-port ;; kill by host/port
 			      (equal? hostname (car khost-port))
 			      (equal? port (string->number (cadr khost-port)))))
-		     (begin
-		       (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
-		       (if status ;; #t means alive
-			   (begin
-			     (if (equal? hostname (get-host-name))
-				 (process-signal pid signal/term) ;; local machine, send sig term
-				 (cdb:kill-server zmq-socket))    ;; remote machine, try telling server to commit suicide
-			     (debug:print-info 1 "Killed server by host:port at " hostname ":" port))
-			   (debug:print-info 1 "Removing defunct server record for " hostname ":" port))
-		       (set! killed #t)))
+		     (tasks:kill-server status hostname port pid))
+
 		 (if (and kpid
-			  ;; (equal? hostname (car khost-port))
+			  (equal? hostname (car khost-port))
 			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
-		     (begin
-		       (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid)
-		       (set! killed #t)
-		       (if status 
-			   (if (equal? hostname (get-host-name))
-			       (process-signal pid signal/term) ;; local machine, send sig term
-			       (debug:print 0 "WARNING: Can't kill a dead server on host " hostname)))
-		       (debug:print-info 1 "Killed server by pid at " hostname ":" port)))
-		 ;; (if zmq-socket (close-socket  zmq-socket))
+		     (tasks:kill-server status hostname #f pid))
+
 		 (format #t fmtstr id mt-ver pid hostname interface port start-time priority 
 			 (if status "alive" "dead"))))
 	     servers)
