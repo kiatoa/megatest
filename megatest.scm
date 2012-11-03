@@ -158,6 +158,7 @@ Built from " megatest-fossil-hash ))
 			;; misc
 			"-server"
 			"-killserver"
+			"-port"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -306,8 +307,8 @@ Built from " megatest-fossil-hash ))
 		       (if status ;; #t means alive
 			   (begin
 			     (if (equal? hostname (get-host-name))
-				 (process-signal pid signal/term)
-				 (cdb:kill-server zmq-socket))
+				 (process-signal pid signal/term) ;; local machine, send sig term
+				 (cdb:kill-server zmq-socket))    ;; remote machine, try telling server to commit suicide
 			     (debug:print-info 1 "Killed server by host:port at " hostname ":" port))
 			   (debug:print-info 1 "Removing defunct server record for " hostname ":" port))
 		       (set! killed #t)))
@@ -319,7 +320,7 @@ Built from " megatest-fossil-hash ))
 		       (set! killed #t)
 		       (if status 
 			   (if (equal? hostname (get-host-name))
-			       (process-signal pid signal/term)
+			       (process-signal pid signal/term) ;; local machine, send sig term
 			       (debug:print 0 "WARNING: Can't kill a dead server on host " hostname)))
 		       (debug:print-info 1 "Killed server by pid at " hostname ":" port)))
 		 ;; (if zmq-socket (close-socket  zmq-socket))

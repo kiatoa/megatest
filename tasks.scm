@@ -121,7 +121,7 @@
      (lambda (delta)
        (set! heartbeat-delta delta))
      mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
-    (> heartbeat-delta 10)))
+    (< heartbeat-delta 10)))
 
 (define (tasks:client-register mdb pid hostname cmdline)
   (sqlite3:execute

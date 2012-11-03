@@ -29,6 +29,8 @@
       #f
       (conc "tcp://" (car hostport) ":" (cadr hostport))))
 
+(define  *server-loop-heart-beat* (list 'start (current-seconds)))
+
 (define (server:run hostn)
   (debug:print 0 "Attempting to start the server ...")
   (if (not *toppath*)
@@ -46,7 +48,10 @@
 					  #f)))
 			   (if ipstr ipstr hostname))))
     ;; (set! zmq-socket (server:find-free-port-and-open iface zmq-socket 5555 0))
-    (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket 5555 0))
+    (set! zmq-socket (server:find-free-port-and-open ipaddrstr zmq-socket (if (args:get-arg "-port")
+									      (string->number (args:get-arg "-port"))
+									      5555)
+						     0))
     (set! *cache-on* #t)
     
     ;; what to do when we quit
@@ -69,9 +74,17 @@
     ;; The heavy lifting
     ;;
     (let loop ()
+      ;; Ugly yuk. 
+      (mutex-lock! *incoming-mutex*)
+      (set! *server-loop-heart-beat* (list 'waiting (current-seconds)))
+      (mutex-unlock! *incoming-mutex*)
       (let* ((rawmsg (receive-message* zmq-socket))
 	     (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
 	     (res    #f))
+	;;; Ugly yuk. 
+	(mutex-lock! *incoming-mutex*)
+	(set! *server-loop-heart-beat* (list 'working (current-seconds)))
+	(mutex-unlock! *incoming-mutex*)
 	(debug:print-info 12 "server=> received params=" params)
 	(set! res (cdb:cached-access params))
 	(debug:print-info 12 "server=> processed res=" res)
@@ -96,8 +109,20 @@
     ;; (print "Server running, count is " count)
     (if (< count 2) ;; 3x3 = 9 secs aprox
 	(loop (+ count 1))
-	(let ((numrunning (open-run-close db:get-count-tests-running #f)))
-	  (open-run-close tasks:server-update-heartbeat  tasks:open-db *server-id*)
+	(let ((numrunning            (open-run-close db:get-count-tests-running #f))
+	      (server-loop-heartbeat #f))
+	;;; Ugly yuk. 
+	  (mutex-lock! *incoming-mutex*)
+	  (set! server-loop-heartbeat *server-loop-heart-beat*)
+	  (mutex-unlock! *incoming-mutex*)
+	  ;; The logic here is that if the server loop gets stuck blocked in working
+	  ;; we don't want to update our heartbeat
+	  (let ((server-state  (car server-loop-heartbeat))
+		(server-update (cadr server-loop-heartbeat)))
+	    (if (or (eq? server-state 'waiting)
+		    (< (- (current-seconds) server-update) 10))
+		(open-run-close tasks:server-update-heartbeat  tasks:open-db *server-id*)
+		(debug:print "ERROR: No heartbeat update, server appears stuck")))
 	  (if (or (> numrunning 0) ;; stay alive for two days after last access
 		  (> (+ *last-db-access* (* 48 60 60))(current-seconds)))
 	      (begin
@@ -174,7 +199,7 @@
     ok))
 
 ;; Do all the connection work, start a server if not already running
-(define (server:client-setup #!key (numtries 10)(do-ping #f))
+(define (server:client-setup #!key (numtries 50)(do-ping #f))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -214,7 +239,7 @@
 	      (sleep 2)
 	      ;; not doing ping, assume the server started and registered itself
 	      (server:client-setup numtries: (- numtries 1) do-ping: #f))
-	    (debug:print-info 1 "Too many retries, giving up")))))
+	    (debug:print-info 1 "Too many attempts, giving up")))))
 
 (define (server:launch)
   (if (not *toppath*)
