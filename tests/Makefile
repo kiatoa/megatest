@@ -63,7 +63,7 @@ test6: fullprep
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
-	rm -f */logging.db */monitor.db
+	rm -f */logging.db
 	touch cleanprep
 
 fullprep : cleanprep
