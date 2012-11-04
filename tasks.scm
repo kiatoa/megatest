@@ -163,7 +163,7 @@
        (set! res (cons (list hostname interface port pid) res))
        (debug:print-info 1 "Found existing server " hostname ":" port " registered in db"))
      mdb
-     "SELECT id,hostname,interface,port,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
+     "SELECT id,hostname,interface,port,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
     (if (null? res) #f
 	(let loop ((hed (car res))
