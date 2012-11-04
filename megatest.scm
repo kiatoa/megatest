@@ -298,14 +298,16 @@ Built from " megatest-fossil-hash ))
 		      (zmq-socket (if status (server:client-connect hostname port) #f)))
 		 ;; no need to login as status of #t indicates we are connecting to correct 
 		 ;; server
-		 (if (or (not status)    ;; no point in keeping dead records in the db
-			 (and khost-port ;; kill by host/port
-			      (equal? hostname (car khost-port))
-			      (equal? port (string->number (cadr khost-port)))))
+		 (if (not status)    ;; no point in keeping dead records in the db
+		      (open-run-close tasks:server-deregister tasks:open-db hostname port: port pid: pid))
+
+		 (if (and khost-port ;; kill by host/port
+			  (equal? hostname (car khost-port))
+			  (equal? port (string->number (cadr khost-port))))
 		     (tasks:kill-server status hostname port pid))
 
 		 (if (and kpid
-			  (equal? hostname (car khost-port))
+			  (equal? hostname (get-host-name))
 			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
 		     (tasks:kill-server status hostname #f pid))
 

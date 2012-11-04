@@ -144,7 +144,7 @@
 	  ;; The logic here is that if the server loop gets stuck blocked in working
 	  ;; we don't want to update our heartbeat
 	  (set! pulse (- (current-seconds) server-loop-heartbeat))
-	  (debug:print-info 1 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " *last-db-access*)
+	  (debug:print-info 1 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
 	  (if (> pulse 11) ;; must stay less than 10 seconds 
 	      (begin
 		(debug:print 0 "ERROR: Heartbeat failed, committing servercide")

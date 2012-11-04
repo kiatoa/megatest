@@ -126,7 +126,6 @@
      (lambda (delta)
        (set! heartbeat-delta delta))
      mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
-    (debug:print 1 "Found heartbeat-delta of " heartbeat-delta " for server with id " server-id)
     (< heartbeat-delta 10)))
 
 (define (tasks:client-register mdb pid hostname cmdline)
@@ -189,17 +188,20 @@
 (define (tasks:kill-server status hostname port pid)
   (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
   (if port
-      (open-run-close tasks:server-deregister tasks:open-db  hostname port: port)
-      (open-run-close tasks:server-deregister tasks:open-db hostname pid: pid))
+      (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
+      (open-run-close tasks:server-deregister tasks:open-db hostname pid:  pid))
   
   (if status ;; #t means alive
       (begin
 	(if (equal? hostname (get-host-name))
-	    (begin
-	      (debug:print 1 "Sending signal/term to " pid " on " hostname)
-	      (process-signal pid signal/term)
-	      (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
-	      (process-signal pid signal/kill)) ;; local machine, send sig term
+	    (handle-exceptions
+	     exn
+	     (debug:print-info 0 "server may or may not be dead, check for megatest -server running as pid " pid "\n"
+			       "  EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
+	     (process-signal pid signal/term)
+	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
+	     (process-signal pid signal/kill)) ;; local machine, send sig term
 	    (begin
 	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
 	      (cdb:kill-server zmq-socket))))    ;; remote machine, try telling server to commit suicide
