@@ -28,6 +28,7 @@
 	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! mdb handler)
+    (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
     (if (not exists)
 	(begin
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
@@ -190,7 +191,6 @@
   (if port
       (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
       (open-run-close tasks:server-deregister tasks:open-db hostname pid:  pid))
-  
   (if status ;; #t means alive
       (begin
 	(if (equal? hostname (get-host-name))

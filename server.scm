@@ -35,7 +35,7 @@
 (define (server:self-ping iface port)
   (let ((zsocket (server:client-connect iface port)))
     (let loop ()
-      (thread-sleep! 5)
+      (thread-sleep! 2)
       (cdb:client-call zsocket 'ping #t)
       (debug:print 4 "server:self-ping - I'm alive on " iface ":" port "!")
       (mutex-lock! *heartbeat-mutex*)
@@ -126,12 +126,12 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   (let loop ((count 0))
-    (thread-sleep! 3) ;; no need to do this very often
+    (thread-sleep! 4) ;; no need to do this very often
     (db:write-cached-data)
     ;; (print "Server running, count is " count)
-    (if (< count 2) ;; 3x3 = 9 secs aprox
+    (if (< count 1) ;; 3x3 = 9 secs aprox
 	(loop (+ count 1))
-	(let ((numrunning            (open-run-close db:get-count-tests-running #f))
+	(let (;; (numrunning            (open-run-close db:get-count-tests-running #f))
 	      (server-loop-heartbeat #f)
 	      (server-info           #f)
 	      (pulse                 0))
@@ -145,20 +145,22 @@
 	  ;; we don't want to update our heartbeat
 	  (set! pulse (- (current-seconds) server-loop-heartbeat))
 	  (debug:print-info 1 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
-	  (if (> pulse 11) ;; must stay less than 10 seconds 
+	  (if (> pulse 15) ;; must stay less than 10 seconds 
 	      (begin
+		(open-run-close tasks:server-deregister tasks:open-db (cadr server-info) port: (caddr server-info))
 		(debug:print 0 "ERROR: Heartbeat failed, committing servercide")
 		(exit))
 	      (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info)))
-	  (if (or (> numrunning 0) ;; stay alive for two days after last access
-		  (> (+ *last-db-access* 
-			;; (* 48 60 60)    ;; 48 hrs
-			;; 60              ;; one minute
-			(* 60 60)       ;; one hour
-			)
-		     (current-seconds)))
+	  ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+	  (if (> (+ *last-db-access* 
+		    ;; (* 48 60 60)    ;; 48 hrs
+		    ;; 60              ;; one minute
+		    (* 60 60)       ;; one hour
+		    )
+		 (current-seconds))
 	      (begin
-		(debug:print-info 2 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+		;; (debug:print-info 2 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+		(debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
 		(loop 0))
 	      (begin
 		(debug:print-info 0 "Starting to shutdown the server.")
@@ -296,7 +298,7 @@
 					 ;; wait for the server to be online and available
 					 (let loop ()
 					   (debug:print-info 1 "Waiting for the server to come online before starting heartbeat")
-					   (thread-sleep! 5)
+					   (thread-sleep! 2)
 					   (mutex-lock! *heartbeat-mutex*)
 					   (set! server-info *server-info* )
 					   (mutex-unlock! *heartbeat-mutex*)
@@ -317,7 +319,7 @@
     (exit)))
 
 (define (server:client-launch #!key (do-ping #f))
-  (if (server:client-setup do-ping: do-ping)
+  (if (server:client-setup)
       (debug:print-info 2 "connected as client")
       (begin
 	(debug:print 0 "ERROR: Failed to connect as client")
