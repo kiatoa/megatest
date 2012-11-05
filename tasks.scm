@@ -162,7 +162,7 @@
     (sqlite3:for-each-row
      (lambda (id hostname interface port pid)
        (set! res (cons (list hostname interface port pid) res))
-       (debug:print-info 1 "Found existing server " hostname ":" port " registered in db"))
+       (debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
      mdb
      "SELECT id,hostname,interface,port,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
@@ -177,7 +177,7 @@
 		 (alive    (open-run-close tasks:server-alive? tasks:open-db #f hostname: host port: port)))
 	    (if alive
 		(begin
-		  (debug:print 1 "Found an existing, alive, server " host ":" port ".")
+		  (debug:print-info 2 "Found an existing, alive, server " host ":" port ".")
 		  (list host iface port))
 		(begin
 		  (debug:print-info 1 "Removing " host ":" port " from server registry as it appears to be dead")
