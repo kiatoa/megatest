@@ -144,7 +144,7 @@
 	  ;; The logic here is that if the server loop gets stuck blocked in working
 	  ;; we don't want to update our heartbeat
 	  (set! pulse (- (current-seconds) server-loop-heartbeat))
-	  (debug:print-info 1 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
+	  (debug:print-info 2 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
 	  (if (> pulse 15) ;; must stay less than 10 seconds 
 	      (begin
 		(open-run-close tasks:server-deregister tasks:open-db (cadr server-info) port: (caddr server-info))
@@ -212,7 +212,7 @@
 
 ;; 
 (define (server:client-connect iface port #!key (context #f))
-  (debug:print 3 "client-connect " iface ":" port)
+  (debug:print-info 3 "client-connect " iface ":" port)
   (let ((connect-ok #f)
 	(zmq-socket (if context 
 			(make-socket 'req context)
@@ -288,7 +288,7 @@
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
-  (debug:print-info 0 "Starting the standalone server")
+  (debug:print-info 1 "Starting the standalone server")
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (if hostinfo
 	(debug:print-info 1 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
