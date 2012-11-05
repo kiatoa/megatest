@@ -323,7 +323,8 @@ Built from " megatest-fossil-hash ))
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
 	(debug:print-info 1 "Server connection not needed")
-	(server:client-launch do-ping: #t)))
+
+	(server:client-launch)))
 
 ;;======================================================================
 ;; Remove old run(s)

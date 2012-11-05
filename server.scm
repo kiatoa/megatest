@@ -318,12 +318,30 @@
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
 
-(define (server:client-launch #!key (do-ping #f))
-  (if (server:client-setup)
-      (debug:print-info 2 "connected as client")
-      (begin
-	(debug:print 0 "ERROR: Failed to connect as client")
-	(exit))))
+(define (server:client-signal-handler signum)
+  (handle-exceptions
+   exn
+   (debug:print " ... exiting ...")
+   (let ((th1 (make-thread (lambda ()
+			     (receive-message* *runremote*)) ;; flush out last call if applicable
+			   "eat response"))
+	 (th2 (make-thread (lambda ()
+			     (debug:print 0 "ERROR: Received ^C, attempting clean exit.")
+			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+			     (debug:print 0 "       Done.")
+			     (exit 4))
+			   "exit on ^C timer")))
+     (thread-start! th2)
+     (thread-start! th1)
+     (thread-join! th2))))
+
+(define (server:client-launch)
+  (set-signal-handler! signal/int server:client-signal-handler)
+   (if (server:client-setup)
+       (debug:print-info 2 "connected as client")
+       (begin
+	 (debug:print 0 "ERROR: Failed to connect as client")
+	 (exit))))
 
 ;; ping a server and return number of clients or #f (if no response)
 (define (server:ping host port #!key (secs 10)(return-socket #f))
