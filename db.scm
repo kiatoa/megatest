@@ -1185,12 +1185,12 @@
   (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
   (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
 	(res  #f))
-    ;; (signal-mask! signal/int)
+    (set! *received-response* #f)
     (send-message zmq-socket zdat)
     (set! res (db:string->obj (if *client-non-blocking-mode* 
 				  (receive-message* zmq-socket)
 				  (receive-message  zmq-socket))))
-    ;; (signal-unmask! signal/int)
+    (set! *received-response* #t)
     (debug:print-info 11 "zmq-socket " (car params) " res=" res)
     res))
   

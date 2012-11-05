@@ -323,7 +323,8 @@
    exn
    (debug:print " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
-			     (receive-message* *runremote*)) ;; flush out last call if applicable
+			     (if (not *received-response*)
+				 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit.")
