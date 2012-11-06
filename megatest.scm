@@ -10,9 +10,11 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos zmq) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos ) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+
+(use zmq)
 
 (declare (uses common))
 (declare (uses megatest-version))

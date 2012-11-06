@@ -11,8 +11,10 @@
 (require-extension (srfi 18) extras tcp rpc s11n)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo zmq md5 message-digest)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
+
+(use zmq)
 
 (declare (unit server))
 

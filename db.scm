@@ -16,8 +16,10 @@
 (require-extension (srfi 18) extras tcp rpc)
 (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n zmq)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n)
 (import (prefix sqlite3 sqlite3:))
+
+(use zmq)
 
 (declare (unit db))
 (declare (uses common))
@@ -1644,7 +1646,11 @@
 			"\nstatus:   " (db:step-get-status step)
 			"\ntime:     " (db:step-get-event_time step))))
        ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
-       (sort steps (lambda (a b)(< (db:step-get-event_time a)(db:step-get-event_time b)))))
+       (sort steps (lambda (a b)
+		     
+		     (< (db:step-get-event_time a)(db:step-get-event_time b))
+		     
+		     )))
       res)))
 
 ;;======================================================================

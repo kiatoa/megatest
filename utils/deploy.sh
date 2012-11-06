@@ -22,21 +22,23 @@ export CHICKENINSTDIR=$(dirname $(dirname $(type -p csi)))
 
 # First copy in the needed iup, sqlite3 and zmq libraries
 cp $CHICKENINSTDIR/lib/lib{zmq,uuid}* $DEPLOYTARG
-
+cp $CHICKENINSTDIR/lib/libchicken.* $DEPLOYTARG
 
 # Then run the deploy for all needed # Some eggs are quoted since they are reserved to Bash
 for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops \
          trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc \
-         csv-xml fmt json md5 iup canvas-draw sqlite3 ; do
+         csv-xml fmt json md5 iup canvas-draw ; do
   if ! [[ -e $DEPLOYTARG/$f.so ]];then
-    chicken-install -deploy $f -prefix $DEPLOYTARG
+    chicken-install $PROX -deploy $f -prefix $DEPLOYTARG
     # chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
   else
     echo Skipping install of egg $f as it is already installed
   fi
 done
 
-CSC_OPTIONS="-I$CHICKENINSTDIR/include -L$DEPLOYTARG" chicken-install -deploy zmq -prefix $DEPLOYTARG
+export CSC_OPTIONS="-I$CHICKENINSTDIR/include -L$DEPLOYTARG" 
+chicken-install -deploy zmq -prefix $DEPLOYTARG
+chicken-install -deploy sqlite3 -prefix $DEPLOYTARG
 
 make $DEPLOYTARG/megatest
 make $DEPLOYTARG/dashboard
