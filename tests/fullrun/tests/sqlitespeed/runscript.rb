@@ -18,7 +18,8 @@ num_records=rand(5) # 0000
 record_step("add #{num_records}","start","n/a")
 status=false
 (0..num_records).each do |i|
-  randstring="a;lskdfja;sdfj;alsdfj;aslfdj;alsfja;lsfdj;alsfja;lsjfd;lasfjl;asdfja;slfj;alsjf;asljf;alsjf;lasdjf;lasjf;lasjf;alsjf;lashflkashflkerhflkdsvnlasldhlfaldf"
+  randstring="abc";
+  # "a;lskdfja;sdfj;alsdfj;aslfdj;alsfja;lsfdj;alsfja;lsjfd;lasfjl;asdfja;slfj;alsjf;asljf;alsjf;lasdjf;lasjf;lasjf;alsjf;lashflkashflkerhflkdsvnlasldhlfaldf"
   # status=system "sqlite3 testing.db \"insert into blah (name) values ('#{randstring}');\""
   system "megatest -step testing :state wrote_junk :status #{num_records}"
   sleep(5)

@@ -25,7 +25,7 @@ echo ADDITIONAL_LIBPATH=$ADDITIONAL_LIBPATH
 echo
 echo To use previous IUP libraries set USEOLDIUP to yes
 echo USEOLDIUP=$USEOLDIUP
-
+echo 
 echo Hit ^C now to do that
 
 # A nice way to run this script:
@@ -98,7 +98,7 @@ for a in `ls */*.meta|cut -f1 -d/` ; do
 done
 
 export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
-export LD_LIBRARY_PATH=$LIBPATH
+export LD_LIBRARY_PATH$=$LIBPATH
 
 export SQLITE3_VERSION=3071401
 echo Install sqlite3
@@ -233,8 +233,7 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
   --disable-rename        \
   --disable-schedutils    \
   --disable-libblkid      \
-  --disable-wall
-   make install
+  --disable-wall CFLAGS='-fPIC'
 
 #  --disable-makeinstall-chown \
 #  --disable-makeinstall-setuid \
@@ -247,8 +246,9 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
 #   --disable-makeinstall-setuid
     fi
     
-    make
-    make install
+    (cd libuuid;make install)
+    # make
+    # make install
     cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
 fi
 
@@ -269,7 +269,9 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     cd ${ZEROMQ}
     ln -s $PREFIX/include/uuid src
     # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
-    LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --prefix=$PREFIX 
+    
+    ./configure --enable-static --disable-shared --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
+    # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
     make
     make install
     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq

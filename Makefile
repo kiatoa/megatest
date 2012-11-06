@@ -22,6 +22,13 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
 
+$(DEPLOYTARG)/megatest : $(OFILES) megatest.o
+	csc -deployed $(CSCOPTS) $(OFILES) megatest.o -o $(DEPLOYTARG)/megatest
+
+$(DEPLOYTARG)/dashboard :  $(OFILES) $(GOFILES)
+	csc -deployed $(OFILES) $(GOFILES) -o $(DEPLOYTARG)/dashboard
+
+
 # Special dependencies for the includes
 tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o megatest.o : db_records.scm
 tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
