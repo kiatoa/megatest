@@ -26,6 +26,30 @@
 (include "common_records.scm")
 (include "db_records.scm")
 
+;; Transition to pub --> sub with pull <-- push
+;;
+;;   1. client sends request to server via push to the pull port
+;;   2. server puts request in queue or processes immediately as appropriate
+;;   3. server puts responses from completed requests into pub port 
+;;
+;; TODO
+;;
+;; Done Tested
+;; [ ]  [ ]    1. Add columns pullport pubport to servers table
+;; [ ]  [ ]    2. Add rm of monitor.db if older than 11/12/2012 
+;; [x]  [ ]    3. Add create of pullport and pubport with finding of available ports
+;; [ ]  [ ]    4. Add client compose of request
+;; [ ]  [ ]        - name of client: testname/itempath-test_id-hostname 
+;; [ ]  [ ]        - name of request: callname, params
+;; [ ]  [ ]        - request key: f(clientname, callname, params)
+;; [ ]  [ ]    5. Add processing of subscription hits
+;; [ ]  [ ]        - done when get key 
+;; [ ]  [ ]        - return results
+;; [ ]  [ ]    6. Add timeout processing
+;; [ ]  [ ]        - after 60 seconds
+;; [ ]  [ ]            i. check server alive, connect to new if necessary
+;; [ ]  [ ]           ii. resend request
+
 (define (server:make-server-url hostport)
   (if (not hostport)
       #f
