@@ -265,19 +265,19 @@ Built from " megatest-fossil-hash ))
       (save-environment-as-files (args:get-arg "-env2file"))
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-list-targets")
-    (print (string-intersperse
-	    (sort (map car (hash-table->alist
-			    (read-config "runconfigs.config"
-					 (make-hash-table) #f))) string<?) "\n")))
-
-
-(if (args:get-arg "-list-disks")
-    (print (string-intersperse 
-	    (map cadr (hash-table-ref/default 
-		       (read-config "megatest.config" #f #t) 
-		       "disks" "'" 
-		       ("none" ""))) "\n")))
+;; (if (args:get-arg "-list-targets")
+;;     (print (string-intersperse
+;; 	    (sort (map car (hash-table->alist
+;; 			    (read-config "runconfigs.config"
+;; 					 (make-hash-table) #f))) string<?) "\n")))
+;; 
+;; 
+;; (if (args:get-arg "-list-disks")
+;;     (print (string-intersperse 
+;; 	    (map cadr (hash-table-ref/default 
+;; 		       (read-config "megatest.config" #f #t) 
+;; 		       "disks" "'" 
+;; 		       ("none" ""))) "\n")))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
