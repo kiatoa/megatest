@@ -270,7 +270,7 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     ln -s $PREFIX/include/uuid src
     # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
     
-    ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-I$PREFIX/include" LIBS="-lgcc"
+    ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
     # --disable-shared CPPFLAGS="-fPIC 
     # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
     make
