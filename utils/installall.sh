@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /bin/env bash
 
 set -x
 
@@ -13,7 +13,7 @@ set -x
 
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
-echo sudo apt-get install libwebkitgtk-dev
+echo sudo apt-get install libwebkitgtk-dev 
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo KTYPE can be 26, 26g4, or 32
 echo KTYPE=$KTYPE
@@ -270,7 +270,8 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     ln -s $PREFIX/include/uuid src
     # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
     
-    ./configure --enable-static --disable-shared --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
+    ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
+    # --disable-shared CPPFLAGS="-fPIC 
     # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
     make
     make install
