@@ -187,6 +187,9 @@ Built from " megatest-fossil-hash ))
 			"-lock"
 			"-unlock"
 			"-listservers"
+			;; mist queries
+			"-list-disks"
+			"-list-targets"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -262,6 +265,20 @@ Built from " megatest-fossil-hash ))
       (save-environment-as-files (args:get-arg "-env2file"))
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-list-targets")
+    (print (string-intersperse
+	    (sort (map car (hash-table->alist
+			    (read-config "runconfigs.config"
+					 (make-hash-table) #f))) string<?) "\n")))
+
+
+(if (args:get-arg "-list-disks")
+    (print (string-intersperse 
+	    (map cadr (hash-table-ref/default 
+		       (read-config "megatest.config" #f #t) 
+		       "disks" "'" 
+		       ("none" ""))) "\n")))
+
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
@@ -269,7 +286,7 @@ Built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-server")
     (begin
-      (debug:print 1 "Launching server...")
+      (debug:print 2 "Launching server...")
       (server:launch)))
 
 (if (or (args:get-arg "-listservers")

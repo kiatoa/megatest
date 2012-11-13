@@ -46,7 +46,7 @@
       (loop))))
     
 (define (server:run hostn)
-  (debug:print 0 "Attempting to start the server ...")
+  (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -127,6 +127,9 @@
 (define (server:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
+
+;;  (let ((die-timeout (
+
   (let loop ((count 0))
     (thread-sleep! 4) ;; no need to do this very often
     (db:write-cached-data)
@@ -155,9 +158,9 @@
 	      (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info)))
 	  ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
 	  (if (> (+ *last-db-access* 
-		    ;; (* 48 60 60)    ;; 48 hrs
+		    (* 70 60 60)       ;; 70 hrs is enough that the server will still be available after the weekend 
 		    ;; 60              ;; one minute
-		    (* 60 60)       ;; one hour
+		    ;; (* 60 60)       ;; one hour
 		    )
 		 (current-seconds))
 	      (begin
@@ -190,10 +193,10 @@
 	   (debug:print-info 0 "Tried ports up to " p 
 			     " but all were in use. Please try a different port range by starting the server with parameter \" -port N\" where N is the starting port number to use")))
      (let ((zmq-url (conc "tcp://" iface ":" p)))
-       (print "Trying to start server on " zmq-url)
+       (debug:print 2 "Trying to start server on " zmq-url)
        (bind-socket s zmq-url)
        (set! *runremote* #f)
-       (debug:print 0 "Server started on " zmq-url)
+       (debug:print 2 "Server started on " zmq-url)
        (mutex-lock! *heartbeat-mutex*)
        (set! *server-info* (open-run-close tasks:server-register tasks:open-db (current-process-id) iface p 0 'live))
        (mutex-unlock! *heartbeat-mutex*)
@@ -275,8 +278,12 @@
 		   #f)))))
 	(if (> numtries 0)
 	    (let ((exe (car (argv))))
-	      (debug:print-info 1 "No server available, attempting to start one...")
+	      (debug:print-info 2 "No server available, attempting to start one...")
 	      (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
+	      ;; (process-fork (lambda ()
+	      ;;   	      (server:launch)
+	      ;;   	      (exit) ;; should never get here ....
+	      ;;   	      ))
 	      (sleep 5) ;; give server time to start
 	      ;; we are starting a server, do not try again! That can lead to 
 	      ;; recursively starting many processes!!!
@@ -290,22 +297,22 @@
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
-  (debug:print-info 1 "Starting the standalone server")
+  (debug:print-info 2 "Starting the standalone server")
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (if hostinfo
-	(debug:print-info 1 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
+	(debug:print-info 2 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
 	(if *toppath* 
 	    (let* ((th1 (make-thread (lambda ()
 				       (let ((server-info #f))
 					 ;; wait for the server to be online and available
 					 (let loop ()
-					   (debug:print-info 1 "Waiting for the server to come online before starting heartbeat")
+					   (debug:print-info 2 "Waiting for the server to come online before starting heartbeat")
 					   (thread-sleep! 2)
 					   (mutex-lock! *heartbeat-mutex*)
 					   (set! server-info *server-info* )
 					   (mutex-unlock! *heartbeat-mutex*)
 					   (if (not server-info)(loop)))
-					 (debug:print 1 "Server alive, starting self-ping")
+					 (debug:print 2 "Server alive, starting self-ping")
 					 (server:self-ping (cadr server-info)(caddr server-info)))) "Self ping"))
 		   (th2 (make-thread (lambda ()
 				       (server:run (args:get-arg "-server"))) "Server run"))
