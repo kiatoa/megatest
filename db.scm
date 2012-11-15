@@ -1183,26 +1183,29 @@
     res))
   
 ;; params = 'target cached remparams
-(define (cdb:client-call zmq-socket . params)
-  (debug:print-info 11 "cdb:client-call zmq-socket=" zmq-socket " params=" params)
-  (let ((zdat (db:obj->string params)) ;; (with-output-to-string (lambda ()(serialize params))))
-	(res  #f))
-    ;; (signal-mask! signal/int)
-    (set! *received-response* #f)
+(define (cdb:client-call zmq-sockets . params)
+  (debug:print-info 11 "cdb:client-call zmq-sockets=" zmq-sockets " params=" params)
+  (let* ((push-socket (vector-ref zmq-sockets 0))
+	 (sub-socket  (vector-ref zmq-sockets 1))
+	 (query-id (conc (server:get-client-signature) "-" (message-digest-string (md5-primitive) (conc params))))
+	 (zdat (db:obj->string (vector query-id params))) ;; (with-output-to-string (lambda ()(serialize params))))
+	 (res  #f)
+	 (get-res (lambda ()
+		    (db:string->obj (if *client-non-blocking-mode* 
+					(receive-message* zmq-socket)
+					(receive-message  zmq-socket))))))
     (send-message zmq-socket zdat)
-    ;; (signal-unmask! signal/int)
-    (set! res (db:string->obj (if *client-non-blocking-mode* 
-				  (receive-message* zmq-socket)
-				  (receive-message  zmq-socket))))
-    (set! *received-response* #t)
-    (debug:print-info 11 "zmq-socket " (car params) " res=" res)
-    res))
+    (let loop ((res (get-res)))
+      (if res res
+	  (begin 
+	    (thread-sleep! 0.5)
+	    (get-res))))))
   
 (define (cdb:set-verbosity zmq-socket val)
   (cdb:client-call zmq-socket 'set-verbosity #f val))
 
-(define (cdb:login zmq-socket keyval signature)
-  (cdb:client-call zmq-socket 'login #t keyval megatest-version signature))
+(define (cdb:login zmq-sockets keyval signature)
+  (cdb:client-call zmq-sockets 'login #t keyval megatest-version signature))
 
 (define (cdb:logout zmq-socket keyval signature)
   (cdb:client-call zmq-socket 'logout #t keyval signature))
