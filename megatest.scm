@@ -99,8 +99,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -listservers            : list the servers 
-  -killserver host:port|pid : kill server specified by host:port or pid
+  -list-servers            : list the servers 
   -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
@@ -123,6 +122,7 @@ Built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
+;;  -kill-server host:port|pid : kill server specified by host:port or pid
 
 ;; process args
 (define remargs (args:get-args 
@@ -159,7 +159,7 @@ Built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
-			"-killserver"
+			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -186,7 +186,7 @@ Built from " megatest-fossil-hash ))
 			"-repl"
 			"-lock"
 			"-unlock"
-			"-listservers"
+			"-list-servers"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -272,48 +272,53 @@ Built from " megatest-fossil-hash ))
       (debug:print 1 "Launching server...")
       (server:launch)))
 
-(if (or (args:get-arg "-listservers")
-	(args:get-arg "-killserver"))
+(if (args:get-arg "-list-servers")
+	;; (args:get-arg "-kill-server"))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~8a~20a~20a~10a~20a~10a~10a\n")
+		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~20a~10a~10a\n")
 		(servers-to-kill '()))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "Port" "Time" "Priority" "State")
-	    (format #t fmtstr "==" "=====" "===" "====" "=========" "====" "====" "========" "=====")
+	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "Time" "LastBeat" "State")
+	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "====" "========" "=====")
 	    (for-each 
 	     (lambda (server)
-	       (let* ((killinfo   (args:get-arg "-killserver"))
-		      (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
-		      (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
+	       (let* (;; (killinfo   (args:get-arg "-kill-server"))
+		      ;; (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
+		      ;; (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
 		      (id         (vector-ref server 0))
 		      (pid        (vector-ref server 1))
 		      (hostname   (vector-ref server 2))
 		      (interface  (vector-ref server 3))
-		      (port       (vector-ref server 4))
-		      (start-time (vector-ref server 5))
-		      (priority   (vector-ref server 6))
-		      (state      (vector-ref server 7))
-		      (mt-ver     (vector-ref server 8))
-		      (status     (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
+		      (pullport   (vector-ref server 4))
+		      (pubport    (vector-ref server 5))
+		      (start-time (vector-ref server 6))
+		      (priority   (vector-ref server 7))
+		      (state      (vector-ref server 8))
+		      (mt-ver     (vector-ref server 9))
+		      (last-update (vector-ref server 10)) ;;   (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
 		      (killed     #f)
-		      (zmq-socket (if status (server:client-connect hostname port) #f)))
+		      (status     (< last-update 20)))
+		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
 		 ;; no need to login as status of #t indicates we are connecting to correct 
 		 ;; server
-		 (if (not status)    ;; no point in keeping dead records in the db
-		      (open-run-close tasks:server-deregister tasks:open-db hostname port: port pid: pid))
+		 (if (equal? state "dead")
+		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
+			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
+		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
+			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
 
-		 (if (and khost-port ;; kill by host/port
-			  (equal? hostname (car khost-port))
-			  (equal? port (string->number (cadr khost-port))))
-		     (tasks:kill-server status hostname port pid))
-
-		 (if (and kpid
-			  (equal? hostname (get-host-name))
-			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
-		     (tasks:kill-server status hostname #f pid))
-
-		 (format #t fmtstr id mt-ver pid hostname interface port start-time priority 
+;; 		 (if (and khost-port ;; kill by host/port
+;; 			  (equal? hostname (car khost-port))
+;; 			  (equal? port (string->number (cadr khost-port))))
+;; 		     (tasks:kill-server status hostname port pid))
+;; 
+;; 		 (if (and kpid
+;; 			  (equal? hostname (get-host-name))
+;; 			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
+;; 		     (tasks:kill-server status hostname #f pid))
+;; 
+		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport start-time last-update
 			 (if status "alive" "dead"))))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
@@ -325,7 +330,7 @@ Built from " megatest-fossil-hash ))
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
 	(debug:print-info 1 "Server connection not needed")
-
+	
 	(server:client-launch)))
 
 ;;======================================================================

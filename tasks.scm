@@ -100,14 +100,16 @@
    pubport))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
-(define (tasks:server-deregister mdb hostname #!key (pullport #f)(pid #f))
+(define (tasks:server-deregister mdb hostname #!key (pullport #f)(pid #f)(action 'markdead))
   (debug:print-info 11 "server-deregister " hostname ", pullport " pullport ", pid " pid)
   (if pid
-      ;; (sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid)
-      (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)
+      (case action
+	((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid))
+	(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
       (if pullport
-	  ;; (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
-	  (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND pullport=?;" hostname pullport)
+	  (case action
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
+	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND pullport=?;" hostname pullport)))
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
 (define (tasks:server-deregister-self mdb hostname)
@@ -236,13 +238,15 @@
 		  (process-signal pid signal/kill)) 
 		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
 
+
+
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname interface pullport pubport start-time priority state mt-version)
-       (set! res (cons (vector id pid hostname interface pullport pubport start-time priority state mt-version) res)))
+     (lambda (id pid hostname interface pullport pubport start-time priority state mt-version last-update)
+       (set! res (cons (vector id pid hostname interface pullport pubport start-time priority state mt-version last-update) res)))
      mdb
-     "SELECT id,pid,hostname,interface,pullport,pubport,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,pullport,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update FROM servers ORDER BY start_time DESC;")
     res))
        
 
