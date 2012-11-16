@@ -8,8 +8,8 @@
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
 
-(require-extension (srfi 18) extras tcp rpc s11n)
-(import (prefix rpc rpc:))
+(require-extension (srfi 18) extras tcp s11n)
+;; (import (prefix rpc rpc:))
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
@@ -49,6 +49,7 @@
 ;; [ ]  [ ]        - after 60 seconds
 ;; [ ]  [ ]            i. check server alive, connect to new if necessary
 ;; [ ]  [ ]           ii. resend request
+;; [ ]  [ ]    7. Turn self ping back on
 
 (define (server:make-server-url hostport)
   (if (not hostport)
@@ -58,12 +59,16 @@
 (define  *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
 
-(define (server:self-ping iface port)
-  (let ((zsocket (server:client-connect iface port)))
+(define (server:self-ping server-info)
+  ;; server-info: server-id interface pullport pubport
+  (let ((iface    (list-ref server-info 1))
+	(pullport (list-ref server-info 2))
+	(pubport  (list-ref server-info 3)))
+    (server:client-connect iface pullport pubport)
     (let loop ()
       (thread-sleep! 2)
-      (cdb:client-call zsocket 'ping #t)
-      (debug:print 4 "server:self-ping - I'm alive on " iface ":" port "!")
+      (cdb:client-call *runremote* 'ping #t)
+      (debug:print 4 "server:self-ping - I'm alive on " iface ":" pullport "/" pubport "!")
       (mutex-lock! *heartbeat-mutex*)
       (set! *server-loop-heart-beat* (current-seconds))
       (mutex-unlock! *heartbeat-mutex*)
@@ -83,8 +88,8 @@
 	    (exit))))
   (let* ((zmq-sdat1       #f)
 	 (zmq-sdat2       #f)
-	 (zmq-socket1     #f)
-	 (zmq-socket2     #f)
+	 (pull-socket     #f)
+	 (pub-socket      #f)
 	 (p1              #f)
 	 (p2              #f)
 	 (zmq-sockets-dat #f)
@@ -100,12 +105,12 @@
 							    (string->number (args:get-arg "-port"))
 							    (+ 5000 (random 1001)))))
 
-    (set! zmq-sdat1    (car   zmq-socket-dat))
-    (set! zmq-socket1  (car   zmq-sdat1))
+    (set! zmq-sdat1    (car   zmq-sockets-dat))
+    (set! pull-socket  (cadr  zmq-sdat1)) ;; (iface s  port)
     (set! p1           (caddr zmq-sdat1))
     
-    (set! zmq-sdat2    (cadr  zmq-socket-dat))
-    (set! zmq-socket2  (car   zmq-sdat2))
+    (set! zmq-sdat2    (cadr  zmq-sockets-dat))
+    (set! pub-socket   (cadr  zmq-sdat2))
     (set! p2           (caddr zmq-sdat2))
 
     (set! *cache-on* #t)
@@ -134,12 +139,15 @@
     ;; The heavy lifting
     ;;
     (let loop ()
-      (let* ((rawmsg (receive-message* zmq-socket1))
+      (let* ((rawmsg (receive-message* pull-socket))
 	     (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
 	     (res    #f))
 	(debug:print-info 12 "server=> received params=" params)
 	(set! res (cdb:cached-access params))
 	(debug:print-info 12 "server=> processed res=" res)
+
+	;; need address here
+	;;
 	(send-message zmq-socket (db:obj->string res))
 	(if (not *time-to-exit*)
 	    (loop)
@@ -179,7 +187,7 @@
 	  (debug:print-info 2 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
 	  (if (> pulse 15) ;; must stay less than 10 seconds 
 	      (begin
-		(open-run-close tasks:server-deregister tasks:open-db (cadr server-info) port: (caddr server-info))
+		(open-run-close tasks:server-deregister tasks:open-db (cadr server-info) pullport: (caddr server-info))
 		(debug:print 0 "ERROR: Heartbeat failed, committing servercide")
 		(exit))
 	      (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info)))
@@ -225,15 +233,15 @@
        (bind-socket s zmq-url)
        (list iface s port)))))
 
-(define (server:setup-ports ipadrstr startport)
-  (let* ((s1 (server:find-free-port-and-open ipadrstr #f startport 'pub))
+(define (server:setup-ports ipaddrstr startport)
+  (let* ((s1 (server:find-free-port-and-open ipaddrstr #f startport 'pub))
 	 (p1 (caddr s1))
-	 (s2 (server:find-free-port-and-open ipadrstr #f (+ 1 (if p1 p1 (+ startport 1))) 'pull))
+	 (s2 (server:find-free-port-and-open ipaddrstr #f (+ 1 (if p1 p1 (+ startport 1))) 'pull))
 	 (p2 (caddr s2)))
     (set! *runremote* #f)
-    (debug:print 0 "Server started on " ipaddrstr " ports " p1 " and p2")
+    (debug:print 0 "Server started on " ipaddrstr " ports " p1 " and " p2)
     (mutex-lock! *heartbeat-mutex*)
-    (set! *server-info* (open-run-close tasks:server-register tasks:open-db (current-process-id) iface p 0 'live))
+    (set! *server-info* (open-run-close tasks:server-register tasks:open-db (current-process-id) ipaddrstr p1 p2 0 'live))
     (mutex-unlock! *heartbeat-mutex*)
     (list s1 s2)))
 
@@ -251,7 +259,7 @@
 	*my-client-signature*)))
 
 ;; 
-(define (server:client-connect iface port #!key (context #f)(type 'req))
+(define (server:client-socket-connect iface port #!key (context #f)(type 'req)(subscriptions '()))
   (debug:print-info 3 "client-connect " iface ":" port)
   (let ((connect-ok #f)
 	(zmq-socket (if context 
@@ -260,11 +268,14 @@
 	(conurl     (server:make-server-url (list iface port))))
     (if (socket? zmq-socket)
 	(begin
+	  ;; first apply subscriptions
+	  (for-each (lambda (subscription)
+		      (socket-options-set! zmq-socket 'subscribe subscription))
+		    subscriptions)
 	  (connect-socket zmq-socket conurl)
 	  zmq-socket)
 	#f)))
   
-
 (define (server:client-login zmq-sockets)
   (cdb:login zmq-sockets *toppath* (server:get-client-signature)))
 
@@ -273,6 +284,24 @@
 		 (cdb:logout zmq-socket *toppath* (server:get-client-signature)))))
     ;; (close-socket zmq-socket)
     ok))
+
+(define (server:client-connect iface pullport pubport)
+  (let* ((push-socket (server:client-socket-connect iface pullport 'push))
+	 (sub-socket  (server:client-socket-connect iface pubport 'sub
+						    subscriptions: (list (server:get-client-signature) "all")))
+	 (zmq-sockets (vector push-socket sub-socket))
+	 (login-res   #f))
+    (set! login-res (server:client-login zmq-sockets))
+    (if (and (not (null? login-res))
+	     (car login-res))
+	(begin
+	  (debug:print-info 2 "Logged in and connected to " iface ":" pullport "/" pubport ".")
+	  (set! *runremote* zmq-socket)
+	  #t)
+	(begin
+	  (debug:print-info 2 "Failed to login or connect to " conurl)
+	  (set! *runremote* #f)
+	  #f))))
 
 ;; Do all the connection work, start a server if not already running
 (define (server:client-setup #!key (numtries 50))
@@ -296,27 +325,10 @@
 	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
 	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	     (open-run-close tasks:server-deregister tasks:open-db host port: port)
+	     (open-run-close tasks:server-deregister tasks:open-db host pullport: pullport)
 	     (server:client-setup (- numtries 1))
 	     #f)
-	   (let* ((push-socket (server:client-connect iface pullport 'push))
-		  (sub-socket  (server:client-connect iface pubport  'sub))
-		  (zmq-sockets (vector push-socket sub-socket))
-		  (login-res   #f)
-		  ;; (connect-ok 
-		  (conurl     (server:make-server-url (list iface port))))
-	     (socket-option-set! sub-socket 'subscribe  (server:get-client-signature))
-	     (set! login-res (server:client-login zmq-sockets))
-	     (if (and (not (null? login-res))
-		      (car login-res))
-		 (begin
-		   (debug:print-info 2 "Logged in and connected to " conurl)
-		   (set! *runremote* zmq-socket)
-		   #t)
-		 (begin
-		   (debug:print-info 2 "Failed to login or connect to " conurl)
-		   (set! *runremote* #f)
-		   #f)))))
+	   (server:client-connect iface pullport pubport)))
 	(if (> numtries 0)
 	    (let ((exe (car (argv))))
 	      (debug:print-info 1 "No server available, attempting to start one...")
@@ -350,7 +362,8 @@
 					   (mutex-unlock! *heartbeat-mutex*)
 					   (if (not server-info)(loop)))
 					 (debug:print 1 "Server alive, starting self-ping")
-					 (server:self-ping (cadr server-info)(caddr server-info)))) "Self ping"))
+					 (server:self-ping server-info)))
+				     "Self ping"))
 		   (th2 (make-thread (lambda ()
 				       (server:run (args:get-arg "-server"))) "Server run"))
 		   (th3 (make-thread (lambda ()
@@ -373,7 +386,7 @@
 				 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
-			     (debug:print 0 "ERROR: Received ^C, attempting clean exit.")
+			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
 			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
 			     (debug:print 0 "       Done.")
 			     (exit 4))

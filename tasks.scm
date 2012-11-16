@@ -27,8 +27,12 @@
 	 (exists  (if (file-exists? dbpath)
 		      ;; BUGGISHNESS: Remove this code in six months. Today is 11/13/2012
 		      (if (< (file-change-time dbpath) 1352851396.0)
-			  (begin (delete-file dbpath) #f)
-			  #t) #t))
+			  (begin
+			    (debug:print 0 "NOTE: removing old db file " dbpath)
+			    (delete-file dbpath)
+			    #f)
+			  #t)
+		      #f))
 	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! mdb handler)
@@ -65,7 +69,7 @@
                                   state TEXT,
                                   mt_version TEXT,
                                   heartbeat TIMESTAMP,
-                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
+                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,pullport,pubport));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
@@ -83,31 +87,33 @@
 ;;======================================================================
 
 ;; state: 'live, 'shutting-down, 'dead
-(define (tasks:server-register mdb pid interface port priority state)
+(define (tasks:server-register mdb pid interface pullport pubport priority state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat,interface) VALUES(?,?,?,strftime('%s','now'),?,?,?,strftime('%s','now'),?);"
-   pid (get-host-name) port priority (conc state) megatest-version interface)
+   "INSERT OR REPLACE INTO servers (pid,hostname,pullport,pubport,start_time,priority,state,mt_version,heartbeat,interface)
+                             VALUES(?,  ?,       ?,       ?, strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?);"
+   pid (get-host-name) pullport pubport priority (conc state) megatest-version interface)
   (list 
-   (tasks:server-get-server-id mdb (get-host-name) port pid)
+   (tasks:server-get-server-id mdb (get-host-name) pullport pid)
    interface
-   port))
+   pullport
+   pubport))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
-(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f))
-  (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
+(define (tasks:server-deregister mdb hostname #!key (pullport #f)(pid #f))
+  (debug:print-info 11 "server-deregister " hostname ", pullport " pullport ", pid " pid)
   (if pid
       ;; (sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid)
       (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)
-      (if port
+      (if pullport
 	  ;; (sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port)
-	  (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)
+	  (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND pullport=?;" hostname pullport)
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
-(define (tasks:server-get-server-id mdb hostname port pid)
+(define (tasks:server-get-server-id mdb hostname pullport pid)
   (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id)
@@ -115,18 +121,18 @@
      mdb
      (if (and hostname  pid)
 	 "SELECT id FROM servers WHERE hostname=? AND pid=?;"
-	 "SELECT id FROM servers WHERE hostname=? AND port=?;")
-     hostname (if pid pid port))
+	 "SELECT id FROM servers WHERE hostname=? AND pullport=?;")
+     hostname (if pid pid pullport))
     res))
 
 (define (tasks:server-update-heartbeat mdb server-id)
   (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id))
 
 ;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
-(define (tasks:server-alive? mdb server-id #!key (hostname #f)(port #f)(pid #f))
+(define (tasks:server-alive? mdb server-id #!key (hostname #f)(pullport #f)(pid #f))
   (let* ((server-id  (if server-id 
 			 server-id
-			 (tasks:server-get-server-id mdb hostname port pid)))
+			 (tasks:server-get-server-id mdb hostname pullport pid)))
 	 (heartbeat-delta 99e9))
     (sqlite3:for-each-row
      (lambda (delta)
@@ -165,9 +171,9 @@
   (let ((res '())
 	(best #f))
     (sqlite3:for-each-row
-     (lambda (id hostname interface port pid)
-       (set! res (cons (list hostname interface port pid) res))
-       (debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
+     (lambda (id hostname interface pullport pubport pid)
+       (set! res (cons (list hostname interface pullport pubport pid) res))
+       (debug:print-info 2 "Found existing server " hostname ":" pullport " registered in db"))
      mdb
      "SELECT id,hostname,interface,pullport,pubport,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
     ;; (print "res=" res)
@@ -233,10 +239,10 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname interface port start-time priority state mt-version)
-       (set! res (cons (vector id pid hostname interface port start-time priority state mt-version) res)))
+     (lambda (id pid hostname interface pullport pubport start-time priority state mt-version)
+       (set! res (cons (vector id pid hostname interface pullport pubport start-time priority state mt-version) res)))
      mdb
-     "SELECT id,pid,hostname,interface,port,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,pullport,pubport,start_time,priority,state,mt_version FROM servers ORDER BY start_time DESC;")
     res))
        
 

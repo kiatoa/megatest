@@ -13,10 +13,10 @@
 ;; Database access
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp rpc)
-(import (prefix rpc rpc:))
+(require-extension (srfi 18) extras tcp) ;;  rpc)
+;; (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
 (use zmq)
@@ -1192,9 +1192,9 @@
 	 (res  #f)
 	 (get-res (lambda ()
 		    (db:string->obj (if *client-non-blocking-mode* 
-					(receive-message* zmq-socket)
-					(receive-message  zmq-socket))))))
-    (send-message zmq-socket zdat)
+					(receive-message* sub-socket)
+					(receive-message  sub-socket))))))
+    (send-message push-socket zdat)
     (let loop ((res (get-res)))
       (if res res
 	  (begin 
