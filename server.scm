@@ -139,6 +139,7 @@
     ;; The heavy lifting
     ;;
     (let loop ()
+      (print "GOT HERE EH?")
       (let* ((rawmsg (receive-message* pull-socket))
 	     (params (db:string->obj rawmsg)) ;; (with-input-from-string rawmsg (lambda ()(deserialize))))
 	     (res    #f))
@@ -148,7 +149,7 @@
 
 	;; need address here
 	;;
-	(send-message zmq-socket (db:obj->string res))
+	;; (send-message zmq-socket (db:obj->string res))
 	(if (not *time-to-exit*)
 	    (loop)
 	    (begin
@@ -362,7 +363,8 @@
 					   (mutex-unlock! *heartbeat-mutex*)
 					   (if (not server-info)(loop)))
 					 (debug:print 1 "Server alive, starting self-ping")
-					 (server:self-ping server-info)))
+					 ;; (server:self-ping server-info)
+					 ))
 				     "Self ping"))
 		   (th2 (make-thread (lambda ()
 				       (server:run (args:get-arg "-server"))) "Server run"))
