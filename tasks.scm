@@ -108,7 +108,7 @@
 	(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
       (if pullport
 	  (case action
-	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND pullport=?;" hostname port))
 	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND pullport=?;" hostname pullport)))
 	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
 
@@ -177,8 +177,9 @@
        (set! res (cons (list hostname interface pullport pubport pid) res))
        (debug:print-info 2 "Found existing server " hostname ":" pullport " registered in db"))
      mdb
-     "SELECT id,hostname,interface,pullport,pubport,pid FROM servers WHERE state='live' AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
-    ;; (print "res=" res)
+     "SELECT id,hostname,interface,pullport,pubport,pid FROM servers
+         WHERE strftime('%s','now')-heartbeat < 10
+               AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
     (if (null? res) #f
 	(let loop ((hed (car res))
 		   (tal (cdr res)))
@@ -195,7 +196,7 @@
 		  (list host iface pullport pubport))
 		(begin
 		  (debug:print-info 1 "Marking " host ":" pullport " as dead in server registry.")
-		  (if port
+		  (if pullport
 		      (open-run-close tasks:server-deregister tasks:open-db host pullport: pullport)
 		      (open-run-close tasks:server-deregister tasks:open-db host pid:  pid))
 		  (if (null? tal)

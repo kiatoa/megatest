@@ -277,10 +277,10 @@ Built from " megatest-fossil-hash ))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~20a~10a~10a\n")
+		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a\n")
 		(servers-to-kill '()))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "Time" "LastBeat" "State")
-	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "====" "========" "=====")
+	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State")
+	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====")
 	    (for-each 
 	     (lambda (server)
 	       (let* (;; (killinfo   (args:get-arg "-kill-server"))
@@ -308,17 +308,7 @@ Built from " megatest-fossil-hash ))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
 
-;; 		 (if (and khost-port ;; kill by host/port
-;; 			  (equal? hostname (car khost-port))
-;; 			  (equal? port (string->number (cadr khost-port))))
-;; 		     (tasks:kill-server status hostname port pid))
-;; 
-;; 		 (if (and kpid
-;; 			  (equal? hostname (get-host-name))
-;; 			  (equal? kpid pid)) ;;; YEP, ALL WITH PID WILL BE KILLED!!!
-;; 		     (tasks:kill-server status hostname #f pid))
-;; 
-		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport start-time last-update
+		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
 			 (if status "alive" "dead"))))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")

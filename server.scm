@@ -166,55 +166,45 @@
 (define (server:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
-  (let loop ((count 0))
-    (thread-sleep! 4) ;; no need to do this very often
-    (db:write-cached-data)
-    ;; (print "Server running, count is " count)
-    (if (< count 1) ;; 3x3 = 9 secs aprox
-	(loop (+ count 1))
-	(let (;; (numrunning            (open-run-close db:get-count-tests-running #f))
-	      (server-loop-heartbeat #f)
-	      (server-info           #f)
-	      (pulse                 0))
-	  ;; BUG add a wait on server alive here!!
-	  ;; ;; Ugly yuk. 
-	  ;; == (mutex-lock! *heartbeat-mutex*)
-	  ;; == (set! server-loop-heartbeat *server-loop-heart-beat*)
-	  ;; == (set! server-info *server-info*)
-	  ;; == (mutex-unlock! *heartbeat-mutex*)
-	  ;; The logic here is that if the server loop gets stuck blocked in working
-	  ;; we don't want to update our heartbeat
-	  ;; == (set! pulse (- (current-seconds) server-loop-heartbeat))
-	  ;; == (debug:print-info 2 "Heartbeat period is " pulse " seconds on " (cadr server-info) ":" (caddr server-info) ", last db access is " (- (current-seconds) *last-db-access*) " seconds ago")
-	  ;; == (if (> pulse 15) ;; must stay less than 10 seconds 
-	  ;; ==     (begin
-	  ;; ==       (open-run-close tasks:server-deregister tasks:open-db (cadr server-info) pullport: (caddr server-info))
-	  ;; ==       (debug:print 0 "ERROR: Heartbeat failed, committing servercide")
-	  ;; ==       (exit))
-
-	  ;; NOTE: Get rid of this mechanism! It really is not needed...
-	  (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
-
-	  ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-	  (if (> (+ *last-db-access* 
-		    ;; (* 48 60 60)    ;; 48 hrs
-		    ;; 60              ;; one minute
-		    (* 60 60)       ;; one hour
-		    )
-		 (current-seconds))
-	      (begin
-		;; (debug:print-info 2 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-		(debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
-		(loop 0))
-	      (begin
-		(debug:print-info 0 "Starting to shutdown the server.")
-		;; need to delete only *my* server entry (future use)
-		(set! *time-to-exit* #t)
-		(open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-		(thread-sleep! 1)
-		(debug:print-info 0 "Max cached queries was " *max-cache-size*)
-		(debug:print-info 0 "Server shutdown complete. Exiting")
-		(exit)))))))
+  ;; This thread waits for the server to come alive
+  (let ((server-info (let loop ()
+		       (let ((sdat #f))
+			 (mutex-lock! *heartbeat-mutex*)
+			 (set! sdat *server-info*)
+			 (mutex-unlock! *heartbeat-mutex*)
+			 (if sdat sdat
+			     (begin
+			       (sleep 4)
+			       (loop)))))))
+    (let loop ((count 0))
+      (thread-sleep! 4) ;; no need to do this very often
+      (db:write-cached-data)
+      ;; (print "Server running, count is " count)
+      (if (< count 1) ;; 3x3 = 9 secs aprox
+	  (loop (+ count 1)))
+	    
+      ;; NOTE: Get rid of this mechanism! It really is not needed...
+      (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
+      
+      ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+      (if (> (+ *last-db-access* 
+		;; (* 48 60 60)    ;; 48 hrs
+		;; 60              ;; one minute
+		(* 60 60)       ;; one hour
+		)
+	     (current-seconds))
+	  (begin
+	    (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
+	    (loop 0))
+	  (begin
+	    (debug:print-info 0 "Starting to shutdown the server.")
+	    ;; need to delete only *my* server entry (future use)
+	    (set! *time-to-exit* #t)
+	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+	    (thread-sleep! 1)
+	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+	    (debug:print-info 0 "Server shutdown complete. Exiting")
+	    (exit))))))
 
 (define (server:find-free-port-and-open iface s port stype #!key (trynum 50))
   (let ((s (if s s (make-socket stype)))
@@ -321,27 +311,27 @@
 	      (pullport (list-ref hostinfo 2))
 	      (pubport  (list-ref hostinfo 3)))
 	  (debug:print-info 2 "Setting up to connect to " hostinfo)
-	  ;;(handle-exceptions
-	  ;;  exn
-	   (begin
-	     ;; something went wrong in connecting to the server. In this scenario it is ok
-	     ;; to try again
-	     (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
-	     (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	     (open-run-close tasks:server-deregister tasks:open-db host pullport: pullport)
-	     (server:client-setup (- numtries 1))
-	     #f)
-	   (server:client-connect iface pullport pubport)))))
-	;; (if (> numtries 0)
-	;;     (let ((exe (car (argv))))
-	;;       (debug:print-info 1 "No server available, attempting to start one...")
-	;;       (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
-	;;       (sleep 5) ;; give server time to start
-	;;       ;; we are starting a server, do not try again! That can lead to 
-	;;       ;; recursively starting many processes!!!
-	;;       (server:client-setup numtries: 0))
-	;;     (debug:print-info 1 "Too many attempts, giving up")))))
+	  ;; (handle-exceptions
+	  ;;   exn
+	  ;;  (begin
+	  ;;    ;; something went wrong in connecting to the server. In this scenario it is ok
+	  ;;    ;; to try again
+	  ;;    (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
+	  ;;    (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+	  ;;    (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
+	  ;;    (open-run-close tasks:server-deregister tasks:open-db host pullport: pullport)
+	  ;;    (server:client-setup (- numtries 1))
+	  ;;    #f)
+	   (server:client-connect iface pullport pubport)) ;; )
+	(if (> numtries 0)
+	    (let ((exe (car (argv))))
+	      (debug:print-info 1 "No server available, attempting to start one...")
+	      (process-run exe (list "-server" "-" "-debug" (conc *verbosity*)))
+	      (sleep 5) ;; give server time to start
+	      ;; we are starting a server, do not try again! That can lead to 
+	      ;; recursively starting many processes!!!
+	      (server:client-setup numtries: 0))
+	    (debug:print-info 1 "Too many attempts, giving up")))))
 
 ;; all routes though here end in exit ...
 (define (server:launch)
@@ -409,6 +399,7 @@
 	 (exit))))
 
 ;; ping a server and return number of clients or #f (if no response)
+;; NOT IN USE!
 (define (server:ping host port #!key (secs 10)(return-socket #f))
   (cdb:use-non-blocking-mode
    (lambda ()

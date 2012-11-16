@@ -49,7 +49,8 @@
 (define *logged-in-clients* (make-hash-table))
 (define *client-non-blocking-mode* #f)
 (define *server-id*         #f)
-(define *time-to-exit* #f)
+(define *server-info*       #f)
+(define *time-to-exit*      #f)
 (define *received-response* #f)
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
