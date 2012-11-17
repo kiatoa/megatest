@@ -12,7 +12,7 @@
 (bind-socket pull "tcp://*:5564")
 
 (define (open-db)
-  (let* ((dbpath    "mockupserver.db")
+  (let* ((dbpath    "mockup.db")
 	 (dbexists  (file-exists? dbpath))
 	 (db        (open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout 10)))
@@ -22,9 +22,29 @@
 	 (lambda (stmt)
 	   (execute db stmt))
 	 (list
-	  "CREATE TABLE clients (id INTEGER PRIMARY KEY,name TEXT,num_accesses INTEGER);"
+	  "CREATE TABLE clients (id INTEGER PRIMARY KEY,name TEXT,num_accesses INTEGER DEFAULT 0);"
 	  "CREATE TABLE vars    (var TEXT,val TEXT,CONSTRAINT vars_constraint UNIQUE (var));")))
     db))
+
+(define cid-cache (make-hash-table))
+
+(define (get-client-id db cname)
+  (let ((cid (hash-table-ref/default cid-cache cname #f)))
+    (if cid 
+	cid
+	(begin
+	  (execute db "INSERT OR REPLACE INTO clients (name) VALUES(?);" cname)
+	  (for-each-row 
+	   (lambda (id)
+	     (set! cid id))
+	   db
+	   "SELECT id FROM clients WHERE name=?;" cname)
+	  (hash-table-set! cid-cache cname cid)
+	  cid))))
+
+(define (count-client db cname)
+  (let ((cid (get-client-id db cname)))
+    (execute db "UPDATE clients SET num_accesses=num_accesses+1 WHERE id=?;" cid)))
 
 (define db (open-db))
 ;; (define queuelst '())
@@ -38,10 +58,10 @@
 	   (cdata (vector-ref item 3)))
        (send-message pub cname send-more: #t)
        (send-message pub (case clcmd
-			   ((setval)
+			   ((set)
 			    (apply execute db "INSERT OR REPLACE INTO vars (var,val) VALUES (?,?);" (string-split cdata))
 			    "ok")
-			   ((getval)
+			   ((get)
 			    (let ((res "noval"))
 			      (for-each-row
 			       (lambda (val)
@@ -62,7 +82,7 @@
 			  (clcmd (string->symbol (cadr parts))) ;; client cmd
 			  (cdata (caddr parts))                 ;; client data
 			  (svect (vector (current-seconds) cname clcmd cdata))) ;; record for the queue
-		     ;; (print "Got indat=" indat)
+		     (count-client db cname)
 		     (case clcmd
 		       ((sync) ;; just process the queue
 			(print "Got sync from " cname)
@@ -82,7 +102,7 @@
 (define th2 (make-thread
 	     (lambda ()
 	       (let loop ()
-		 (thread-sleep! 3)
+		 (thread-sleep! 5)
 		 ;; (print "Sending sync from server")
 		 (send-message push "server:sync:nodat")
 		 (loop)))
