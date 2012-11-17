@@ -7,6 +7,7 @@
 
 (define pub (make-socket 'pub))
 (define pull (make-socket 'pull))
+(define cname "server")
 
 (bind-socket pub "tcp://*:5563")
 (bind-socket pull "tcp://*:5564")
@@ -22,6 +23,7 @@
 	 (lambda (stmt)
 	   (execute db stmt))
 	 (list
+	  "PRAGMA SYNCHRONOUS=0;"
 	  "CREATE TABLE clients (id INTEGER PRIMARY KEY,name TEXT,num_accesses INTEGER DEFAULT 0);"
 	  "CREATE TABLE vars    (var TEXT,val TEXT,CONSTRAINT vars_constraint UNIQUE (var));")))
     db))
@@ -58,6 +60,8 @@
 	   (cdata (vector-ref item 3)))
        (send-message pub cname send-more: #t)
        (send-message pub (case clcmd
+			   ((sync)
+			    "ok")
 			   ((set)
 			    (apply execute db "INSERT OR REPLACE INTO vars (var,val) VALUES (?,?);" (string-split cdata))
 			    "ok")
@@ -86,17 +90,16 @@
 		     (case clcmd
 		       ((sync) ;; just process the queue
 			(print "Got sync from " cname)
-			(process-queue queuelst)
+			(process-queue (cons svect queuelst))
 			(loop '()))
-		       ((imediate)
+		       ((get)
 			(process-queue (cons svect queuelst))
 			(loop '()))
 		       (else
 			(loop (cons svect queuelst))))))))
 	     "server thread"))
 
-(define push (make-socket 'push))
-(connect-socket push "tcp://localhost:5564")
+(include "mockupclientlib.scm")
 
 ;; send a sync to the pull port
 (define th2 (make-thread
@@ -104,7 +107,7 @@
 	       (let loop ()
 		 (thread-sleep! 5)
 		 ;; (print "Sending sync from server")
-		 (send-message push "server:sync:nodat")
+		 (dbaccess "server" 'sync "nada" #f)
 		 (loop)))
 	     "sync thread"))
 
