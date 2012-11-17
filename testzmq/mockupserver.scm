@@ -53,28 +53,29 @@
 ;; (define mx1 (make-mutex))
 
 (define (process-queue queuelst)
-  (for-each
-   (lambda (item)
-     (let ((cname (vector-ref item 1))
-	   (clcmd (vector-ref item 2))
-	   (cdata (vector-ref item 3)))
-       (send-message pub cname send-more: #t)
-       (send-message pub (case clcmd
-			   ((sync)
-			    "ok")
-			   ((set)
-			    (apply execute db "INSERT OR REPLACE INTO vars (var,val) VALUES (?,?);" (string-split cdata))
-			    "ok")
-			   ((get)
-			    (let ((res "noval"))
-			      (for-each-row
-			       (lambda (val)
-				 (set! res val))
-			       db 
-			       "SELECT val FROM vars WHERE var=?;" cdata)
-			      res))
-			   (else (conc "unk cmd: " clcmd))))))
-   queuelst))
+  (let ((queuelen (length queuelst)))
+    (for-each
+     (lambda (item)
+       (let ((cname (vector-ref item 1))
+	     (clcmd (vector-ref item 2))
+	     (cdata (vector-ref item 3)))
+	 (send-message pub cname send-more: #t)
+	 (send-message pub (case clcmd
+			     ((sync)
+			      (conc queuelen))
+			     ((set)
+			      (apply execute db "INSERT OR REPLACE INTO vars (var,val) VALUES (?,?);" (string-split cdata))
+			      "ok")
+			     ((get)
+			      (let ((res "noval"))
+				(for-each-row
+				 (lambda (val)
+				   (set! res val))
+				 db 
+				 "SELECT val FROM vars WHERE var=?;" cdata)
+				res))
+			     (else (conc "unk cmd: " clcmd))))))
+     queuelst)))
 
 (define th1 (make-thread 
 	     (lambda ()
@@ -104,13 +105,20 @@
 ;; send a sync to the pull port
 (define th2 (make-thread
 	     (lambda ()
-	       (let loop ()
-		 (thread-sleep! 5)
-		 ;; (print "Sending sync from server")
-		 (dbaccess "server" 'sync "nada" #f)
-		 (loop)))
+	       (let ((last-action-time (current-seconds)))
+		 (let loop ()
+		   (thread-sleep! 5)
+		   (let ((queuelen (string->number (dbaccess "server" 'sync "nada" #f)))
+			 (last-action-delta (- (current-seconds) last-action-time)))
+		     (print "Server: Got queuelen=" queuelen ", last-action-delta=" last-action-delta)
+		     (if (> queuelen 1)(set! last-action-time (current-seconds)))
+		     (if (< last-action-delta 15)
+			 (loop)
+			 (print "Server exiting, 15 seconds since last access"))))))
 	     "sync thread"))
 
 (thread-start! th1)
 (thread-start! th2)
-(thread-join! th1)
+(thread-join! th2)
+
+(print "Server exited!")

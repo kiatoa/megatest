@@ -1,20 +1,20 @@
 (use zmq posix)
 
 (define cname "Bob")
+(define runtime 10)
 (let ((args (argv)))
-  (if (< (length args) 2)
+  (if (< (length args) 3)
       (begin
-	(print "Usage: mockupclient clientname")
+	(print "Usage: mockupclient clientname runtime")
 	(exit))
-      (set! cname (cadr args))))
+      (begin
+	(set! cname (cadr args))
+	(set! runtime (string->number (caddr args))))))
       
-(randomize)
-(define start-delay (/ (random 100) 9))
-(define runtime     (+ 1 (/ (random 200) 2)))
+;; (define start-delay (/ (random 100) 9))
+;; (define runtime     (+ 1 (/ (random 200) 2)))
 
-(print "client " cname " with start delay " start-delay " and runtime " runtime)
-(thread-sleep! start-delay)
-(print "client " cname " started")
+(print "Starting client " cname " with runtime " runtime)
 
 (include "mockupclientlib.scm")
 
@@ -24,7 +24,7 @@
   (let ((x (random 15))
 	(varname (list-ref (list "hello" "goodbye" "saluton" "kiaorana")(random 4))))
     (case x
-      ((1)(dbaccess cname 'sync "nodat"    #f))
+      ;; ((1)(dbaccess cname 'sync "nodat"    #f))
       ((2 3 4 5)(dbaccess cname 'set varname (random 999)))
       ((6 7 8 9 10)(print cname ": Get \"" varname "\" " (dbaccess cname 'get varname #f)))
       (else
