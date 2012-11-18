@@ -8,6 +8,7 @@
 (define pub (make-socket 'pub))
 (define pull (make-socket 'pull))
 (define cname "server")
+(define total-db-accesses 0)
 
 (bind-socket pub "tcp://*:5563")
 (bind-socket pull "tcp://*:5564")
@@ -42,11 +43,14 @@
 	   db
 	   "SELECT id FROM clients WHERE name=?;" cname)
 	  (hash-table-set! cid-cache cname cid)
+	  (set! total-db-accesses (+ total-db-accesses 2))
 	  cid))))
 
 (define (count-client db cname)
   (let ((cid (get-client-id db cname)))
-    (execute db "UPDATE clients SET num_accesses=num_accesses+1 WHERE id=?;" cid)))
+    (execute db "UPDATE clients SET num_accesses=num_accesses+1 WHERE id=?;" cid)
+    (set! total-db-accesses (+ total-db-accesses 1))
+    ))
 
 (define db (open-db))
 ;; (define queuelst '())
@@ -64,9 +68,11 @@
 			     ((sync)
 			      (conc queuelen))
 			     ((set)
+			      (set! total-db-accesses (+ total-db-accesses 1))
 			      (apply execute db "INSERT OR REPLACE INTO vars (var,val) VALUES (?,?);" (string-split cdata))
 			      "ok")
 			     ((get)
+			      (set! total-db-accesses (+ total-db-accesses 1))
 			      (let ((res "noval"))
 				(for-each-row
 				 (lambda (val)
@@ -109,16 +115,17 @@
 		 (let loop ()
 		   (thread-sleep! 5)
 		   (let ((queuelen (string->number (dbaccess "server" 'sync "nada" #f)))
-			 (last-action-delta (- (current-seconds) last-action-time)))
-		     (print "Server: Got queuelen=" queuelen ", last-action-delta=" last-action-delta)
+			 (last-action-delta #f))
 		     (if (> queuelen 1)(set! last-action-time (current-seconds)))
-		     (if (< last-action-delta 15)
+		     (set! last-action-delta (- (current-seconds) last-action-time))
+		     (print "Server: Got queuelen=" queuelen ", last-action-delta=" last-action-delta)
+		     (if (< last-action-delta 25)
 			 (loop)
-			 (print "Server exiting, 15 seconds since last access"))))))
+			 (print "Server exiting, 25 seconds since last access"))))))
 	     "sync thread"))
 
 (thread-start! th1)
 (thread-start! th2)
 (thread-join! th2)
 
-(print "Server exited!")
+(print "Server exited! Total db accesses=" total-db-accesses)

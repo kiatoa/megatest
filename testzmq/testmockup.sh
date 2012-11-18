@@ -19,8 +19,8 @@ for i in a b c d e f g h i j k l m n o p q s t u v w x y z;
     do
     for j in 0 1 2 3 4 5 6 7 8 9;
       do
-      waittime=`random 0 20`
-      runtime=`random 5 20`
+      waittime=`random 0 30`
+      runtime=`random 5 120`
       echo "Starting client $i$k$j with waittime $waittime and runtime $runtime" 
       (sleep $waittime;./mockupclient $i$k$j $runtime) &
     done
