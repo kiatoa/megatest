@@ -233,6 +233,7 @@ if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
   --disable-rename        \
   --disable-schedutils    \
   --disable-libblkid      \
+  --without-ncurses       \
   --disable-wall CFLAGS='-fPIC'
 
 #  --disable-makeinstall-chown \
