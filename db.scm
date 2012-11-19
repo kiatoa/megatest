@@ -1111,23 +1111,24 @@
 ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
 ;;
 (define (cdb:client-call zmq-sockets qtype immediate numretries . params)
-  (debug:print-info 11 "cdb:client-call zmq-sockets=" zmq-sockets " params=" params)
+  (debug:print-info 11 "cdb:client-call zmq-sockets=" zmq-sockets ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
   (let* ((push-socket (vector-ref zmq-sockets 0))
 	 (sub-socket  (vector-ref zmq-sockets 1))
-	 (client-sig   (server:get-client-signature))
-	 (query-sig    (message-digest-string (md5-primitive) (conc qtype immediate params)))
-	 (zdat (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
+	 (client-sig  (server:get-client-signature))
+	 (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	 (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
 	 (res  #f)
 	 (send-receive (lambda ()
+			 (debug:print-info 11 "sending message")
 			 (send-message push-socket zdat)
-			 (db:string->obj
-			  (let ((rmsg (if *client-non-blocking-mode* receive-message* receive-message)))
-			    ;; get the sender info
-			    ;; this should match (server:get-client-signature)
-			    ;; we will need to process "all" messages here some day
-			    (rmsg sub-socket)
-			    ;; now get the actual message
-			    (rmsg  sub-socket)))))
+			 (debug:print-info 11 "message sent")
+			 (let ((rmsg receive-message*)) ;; (if *client-non-blocking-mode* receive-message* receive-message)))
+			   ;; get the sender info
+			   ;; this should match (server:get-client-signature)
+			   ;; we will need to process "all" messages here some day
+			   (rmsg sub-socket)
+			   ;; now get the actual message
+			   (set! res (db:string->obj (rmsg  sub-socket))))))
 	 (timeout (lambda ()
 		    (thread-sleep! 5)
 		    (if (not res)
@@ -1138,11 +1139,13 @@
 			    (begin
 			      (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
 			      (exit 5)))))))
+    (debug:print-info 11 "Starting threads")
     (let ((th1 (make-thread send-receive "send receive"))
 	  (th2 (make-thread timeout      "timeout")))
       (thread-start! th1)
       (thread-start! th2)
-      (thread-join! th1)
+      (thread-join!  th1)
+      (debug:print-info 11 "cdb:client-call returning res=" res)
       res)))
   
 (define (cdb:set-verbosity zmq-socket val)
@@ -1230,7 +1233,8 @@
 
 ;; do not run these as part of the transaction
 (define db:special-queries   '(rollup-tests-pass-fail
-			       db:roll-up-pass-fail-counts))
+			       db:roll-up-pass-fail-counts
+                               login))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1250,8 +1254,9 @@
 
        ;; prepare the needed statements, do each only once
        (for-each (lambda (request-item)
-		   (let ((stmt-key (cdb:get-qtype request-item)))
-		     (if (not (hash-table-ref/default queries stmt-key #f))
+		   (let ((stmt-key (cdb:packet-get-qtype request-item)))
+		     (if (and (not (hash-table-ref/default queries stmt-key #f))
+			      (not (member stmt-key db:special-queries)))
 			 (let ((stmt (alist-ref stmt-key db:queries)))
 			   (if stmt
 			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
@@ -1267,20 +1272,34 @@
 	 (if special-qry
 
 	     ;; handle a query that cannot be part of the grouped queries
-	     (let* ((stmt-key       (cdb:get-qtype special-qry))
-		    (return-address (cdb:get-client-sig special-qry))
-		    (qry            (hash-table-ref queries stmt-key))
-		    (params         (cdb:get-params special-qry)))
-	       (if (string? qry)
-		   (begin
-		     (apply sqlite3:execute db qry params)
-		     (server:reply return-address #t))
-		   (if (procedure? stmt-key)
-		       (begin
-			 ;; we are being handed a procedure so call it
-			 (debug:print-info 11 "Running (apply " stmt-key " " db " " params ")")
-			 (server:reply return-address (apply stmt-key db params)))
-		       (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))
+	     (let* ((stmt-key       (cdb:packet-get-qtype special-qry))
+		    (return-address (cdb:packet-get-client-sig special-qry))
+		    (qry            (hash-table-ref/default queries stmt-key #f))
+		    (params         (cdb:packet-get-params special-qry)))
+	       (cond
+		((string? qry)
+		 (apply sqlite3:execute db qry params)
+		 (server:reply pubsock return-address #t))
+		((procedure? stmt-key)
+		 ;; we are being handed a procedure so call it
+		 (debug:print-info 11 "Running (apply " stmt-key " " db " " params ")")
+		 (server:reply pubsock return-address (apply stmt-key db params)))
+		(else 
+		 (case stmt-key
+		   ((login)
+		    (if (< (length params) 3) ;; should get toppath, version and signature
+			'(#f "login failed due to missing params") ;; missing params
+			(let ((calling-path (car   params))
+			      (calling-vers (cadr  params))
+			      (client-key   (caddr params)))
+			  (if (and (equal? calling-path *toppath*)
+				   (equal? megatest-version calling-vers))
+			      (begin
+				(hash-table-set! *logged-in-clients* client-key (current-seconds))
+				(server:reply  pubsock return-address '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+			      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
+		   (else
+		    (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))))
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
 
@@ -1304,7 +1323,7 @@
 				       (begin
 					 (debug:print-info 11 "Executing " stmt-key " for " params)
 					 (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-					 (server:reply return-address #t)
+					 (server:reply pubsock return-address #t)
 					 (if (not (null? tal))
 					     (innerloop (car tal)(cdr tal))
 					     '()))
