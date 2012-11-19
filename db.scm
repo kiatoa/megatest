@@ -1130,7 +1130,7 @@
 			   ;; now get the actual message
 			   (set! res (db:string->obj (rmsg  sub-socket))))))
 	 (timeout (lambda ()
-		    (thread-sleep! 5)
+		    (thread-sleep! 60)
 		    (if (not res)
 			(if (> numretries 0)
 			    (begin
@@ -1234,7 +1234,8 @@
 ;; do not run these as part of the transaction
 (define db:special-queries   '(rollup-tests-pass-fail
 			       db:roll-up-pass-fail-counts
-                               login))
+                               login
+                               immediate))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1276,16 +1277,28 @@
 		    (return-address (cdb:packet-get-client-sig special-qry))
 		    (qry            (hash-table-ref/default queries stmt-key #f))
 		    (params         (cdb:packet-get-params special-qry)))
+	       (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", qry=" qry ", params=" params)
 	       (cond
+		;; Special queries
 		((string? qry)
 		 (apply sqlite3:execute db qry params)
 		 (server:reply pubsock return-address #t))
-		((procedure? stmt-key)
-		 ;; we are being handed a procedure so call it
-		 (debug:print-info 11 "Running (apply " stmt-key " " db " " params ")")
-		 (server:reply pubsock return-address (apply stmt-key db params)))
+		;; ((and (not (null? params))
+		;;       (procedure? (car params)))
+		;;  (let ((proc      (car params))
+		;;        (remparams (cdr params)))
+		;;    ;; we are being handed a procedure so call it
+		;;    (debug:print-info 11 "Running (apply " proc " " db " " remparams ")")
+		;;    (server:reply pubsock return-address (apply proc db remparams))))
+		
 		(else 
 		 (case stmt-key
+		   ((immediate)
+		    (let ((proc      (car params))
+			  (remparams (cdr params)))
+		      ;; we are being handed a procedure so call it
+		      (debug:print-info 11 "Running (apply " proc " " remparams ")")
+		      (server:reply pubsock return-address (apply proc remparams))))
 		   ((login)
 		    (if (< (length params) 3) ;; should get toppath, version and signature
 			'(#f "login failed due to missing params") ;; missing params
@@ -1315,8 +1328,7 @@
 				 (let ((params         (cdb:packet-get-params hed))
 				       (return-address (cdb:packet-get-client-sig hed))
 				       (stmt-key       (cdb:packet-get-qtype hed)))
-				   (if (or (procedure? stmt-key)
-					   (member stmt-key db:special-queries))
+				   (if (member stmt-key db:special-queries)
 				       (begin
 					 (debug:print-info 11 "Handling special statement " stmt-key)
 					 (cons hed tal))

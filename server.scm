@@ -142,7 +142,7 @@
       (let* ((rawmsg (receive-message* pull-socket))
 	     (packet (db:string->obj rawmsg)))
 	(debug:print-info 12 "server=> received packet=" packet)
-	(if (cdb:packet-get-immediate packet) ;; process immediately or put in queue
+	(if #t ;; (cdb:packet-get-immediate packet) ;; process immediately or put in queue
 	    (begin
 	      (db:process-queue pub-socket (cons packet queue-lst))
 	      (loop '()))
