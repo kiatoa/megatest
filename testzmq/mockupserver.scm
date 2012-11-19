@@ -9,6 +9,7 @@
 (define pull (make-socket 'pull))
 (define cname "server")
 (define total-db-accesses 0)
+(define start-time (current-seconds))
 
 (bind-socket pub "tcp://*:5563")
 (bind-socket pull "tcp://*:5564")
@@ -119,7 +120,7 @@
 		     (if (> queuelen 1)(set! last-action-time (current-seconds)))
 		     (set! last-action-delta (- (current-seconds) last-action-time))
 		     (print "Server: Got queuelen=" queuelen ", last-action-delta=" last-action-delta)
-		     (if (< last-action-delta 25)
+		     (if (< last-action-delta 60)
 			 (loop)
 			 (print "Server exiting, 25 seconds since last access"))))))
 	     "sync thread"))
@@ -128,4 +129,6 @@
 (thread-start! th2)
 (thread-join! th2)
 
-(print "Server exited! Total db accesses=" total-db-accesses)
+(let* ((run-time       (- (current-seconds) start-time))
+       (queries/second (/  total-db-accesses run-time)))
+  (print "Server exited! Total db accesses=" total-db-accesses " in " run-time " seconds for " queries/second " queries/second"))

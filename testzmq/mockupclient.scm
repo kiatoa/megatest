@@ -28,7 +28,7 @@
       ((2 3 4 5)(dbaccess cname 'set varname (random 999)))
       ((6 7 8 9 10)(print cname ": Get \"" varname "\" " (dbaccess cname 'get varname #f)))
       (else
-       (thread-sleep! 0.1)))
+       (thread-sleep! 0.011)))
     (if (< (current-seconds) endtime)
 	(loop))))
 

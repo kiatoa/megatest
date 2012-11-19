@@ -783,7 +783,7 @@
 	    testnames))
 
 (define (cdb:delete-tests-in-state zmqsocket run-id state)
-  (cdb:client-call zmqsocket 'delete-tests-in-state #t run-id state))
+  (cdb:client-call zmqsocket 'delete-tests-in-state #t *default-numtries* run-id state))
 
 ;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
@@ -962,10 +962,10 @@
    comment test-id))
 
 (define (cdb:test-set-rundir! zmqsocket run-id test-name item-path rundir)
-  (cdb:client-call zmqsocket 'test-set-rundir #t rundir run-id test-name item-path))
+  (cdb:client-call zmqsocket 'test-set-rundir #t *default-numtries* rundir run-id test-name item-path))
 
 (define (cdb:test-set-rundir-by-test-id zmqsocket test-id rundir)
-  (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t rundir test-id))
+  (cdb:client-call zmqsocket 'test-set-rundir-by-test-id #t *default-numtries* rundir test-id))
 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res #f)) ;; (hash-table-ref/default *test-paths* test-id #f)))
@@ -982,7 +982,7 @@
     res)) ;; ))
 
 (define (cdb:test-set-log! zmqsocket test-id logf)
-  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f logf test-id)))
+  (if (string? logf)(cdb:client-call zmqsocket 'test-set-log #f *default-numtries* logf test-id)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1097,82 +1097,6 @@
 ;;     (db:write-cached-data)
 ;;     (loop)))
 
-;; cdb:cached-access is called by the server loop to dispatch commands or queue up
-;; db accesses
-;;
-;; params := qry-name cached? val1 val2 val3 ...
-(define (cdb:cached-access params)
-  (debug:print-info 12 "cdb:cached-access params=" params)
-  (if (< (length params) 2)
-      "ERROR"
-      (let ((qry-name (car params))
-	    (cached?  (cadr params))
-	    (remparam (list-tail params 2))) 
-	(debug:print-info 12 "cdb:cached-access qry-name=" qry-name " params=" params)
-	(if (not cached?)(db:write-cached-data))
-	;; Any special calls are dispatched here. 
-	;; Remainder are put in the db queue
-	(case qry-name
-	  ((login) ;; login checks that the megatest path and version matches
-	   (if (< (length remparam) 3) ;; should get toppath, version and signature
-	       '(#f "login failed due to missing params") ;; missing params
-	       (let ((calling-path (car   remparam))
-		     (calling-vers (cadr  remparam))
-		     (client-key   (caddr remparam)))
-		 (if (and (equal? calling-path *toppath*)
-			  (equal? megatest-version calling-vers))
-		     (begin
-		       (hash-table-set! *logged-in-clients* client-key (current-seconds))
-		       '(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
-		     (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
-	  ((logout)
-	   (if (and (> (length remparam) 1)
-		    (eq? *toppath* (car remparam))
-		    (hash-table-ref/default *logged-in-clients* (cadr remparam) #f))
-	       #t
-	       #f))
-	  ((numclients)
-	   (length (hash-table-keys *logged-in-clients*)))
-	  ((flush)
-	   (db:write-cached-data)
-	   #t)
-	  ((immediate)
-	   (db:write-cached-data)
-	   (if (not (null? remparam))
-	       (apply (car remparam) (cdr remparam))
-	       "ERROR"))
-	  ((killserver)
-	   ;; (db:write-cached-data)
-	   (debug:print-info 0 "Remotely killed server on host " (get-host-name) " pid " (current-process-id))
-	   (set! *time-to-exit* #t)
-	   #t)
-	  ((set-verbosity)
-	   (set! *verbosity* (caddr params))
-	   *verbosity*)
-	  ((get-verbosity)
-	   *verbosity*)
-	  ((ping)
-	   'hi)
-	  (else
-	   (mutex-lock! *incoming-mutex*)
-	   (set! *last-db-access* (current-seconds))
-	   (set! *incoming-data* (cons 
-				  (vector qry-name
-					  (current-milliseconds)
-					  remparam)
-				  *incoming-data*))
-	   (mutex-unlock! *incoming-mutex*)
-	   ;; NOTE: if cached? is #f then this call must be run immediately
-	   ;;       but first all calls in the queue are run first in the order
-	   ;;       of their time stamp
-	   (if (and cached? *cache-on*)
-	       (begin
-		 (debug:print-info 12 "*cache-on* is " *cache-on* ", skipping cache write")
-		 "CACHED")
-	       (begin
-		 (db:write-cached-data)
-		 "WRITTEN")))))))
-
 (define (db:obj->string obj)(with-output-to-string (lambda ()(serialize obj))))
 (define (db:string->obj msg)(with-input-from-string msg (lambda ()(deserialize))))
 
@@ -1183,71 +1107,91 @@
     res))
   
 ;; params = 'target cached remparams
-(define (cdb:client-call zmq-sockets . params)
+;;
+;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
+;;
+(define (cdb:client-call zmq-sockets qtype immediate numretries . params)
   (debug:print-info 11 "cdb:client-call zmq-sockets=" zmq-sockets " params=" params)
   (let* ((push-socket (vector-ref zmq-sockets 0))
 	 (sub-socket  (vector-ref zmq-sockets 1))
-	 (query-id (conc (server:get-client-signature) "-" (message-digest-string (md5-primitive) (conc params))))
-	 (zdat (db:obj->string (vector query-id params))) ;; (with-output-to-string (lambda ()(serialize params))))
+	 (client-sig   (server:get-client-signature))
+	 (query-sig    (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	 (zdat (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
 	 (res  #f)
-	 (get-res (lambda ()
-		    (db:string->obj (if *client-non-blocking-mode* 
-					(receive-message* sub-socket)
-					(receive-message  sub-socket))))))
-    (send-message push-socket zdat)
-    (let loop ((res (get-res)))
-      (if res res
-	  (begin 
-	    (thread-sleep! 0.5)
-	    (get-res))))))
+	 (send-receive (lambda ()
+			 (send-message push-socket zdat)
+			 (db:string->obj
+			  (let ((rmsg (if *client-non-blocking-mode* receive-message* receive-message)))
+			    ;; get the sender info
+			    ;; this should match (server:get-client-signature)
+			    ;; we will need to process "all" messages here some day
+			    (rmsg sub-socket)
+			    ;; now get the actual message
+			    (rmsg  sub-socket)))))
+	 (timeout (lambda ()
+		    (thread-sleep! 5)
+		    (if (not res)
+			(if (> numretries 0)
+			    (begin
+			      (debug:print 0 "WARNING: no reply to query " params ", trying again")
+			      (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+			    (begin
+			      (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+			      (exit 5)))))))
+    (let ((th1 (make-thread send-receive "send receive"))
+	  (th2 (make-thread timeout      "timeout")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1)
+      res)))
   
 (define (cdb:set-verbosity zmq-socket val)
-  (cdb:client-call zmq-socket 'set-verbosity #f val))
+  (cdb:client-call zmq-socket 'set-verbosity #f *default-numtries* val))
 
 (define (cdb:login zmq-sockets keyval signature)
-  (cdb:client-call zmq-sockets 'login #t keyval megatest-version signature))
+  (cdb:client-call zmq-sockets 'login #t *default-numtries* keyval megatest-version signature))
 
 (define (cdb:logout zmq-socket keyval signature)
-  (cdb:client-call zmq-socket 'logout #t keyval signature))
+  (cdb:client-call zmq-socket 'logout #t *default-numtries* keyval signature))
 
 (define (cdb:num-clients zmq-socket)
-  (cdb:client-call zmq-socket 'numclients #t))
+  (cdb:client-call zmq-socket 'numclients #t *default-numtries*))
 
 (define (cdb:test-set-status-state zmqsocket test-id status state msg)
   (if msg
-      (cdb:client-call zmqsocket 'state-status-msg #t state status msg test-id)
-      (cdb:client-call zmqsocket 'state-status #t state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+      (cdb:client-call zmqsocket 'state-status-msg #t *default-numtries* state status msg test-id)
+      (cdb:client-call zmqsocket 'state-status #t *default-numtries* state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
 (define (cdb:test-rollup-test_data-pass-fail zmqsocket test-id)
-  (cdb:client-call zmqsocket 'test_data-pf-rollup #t test-id test-id test-id test-id))
+  (cdb:client-call zmqsocket 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
 
 (define (cdb:pass-fail-counts zmqsocket test-id fail-count pass-count)
-  (cdb:client-call zmqsocket 'pass-fail-counts #t fail-count pass-count test-id))
+  (cdb:client-call zmqsocket 'pass-fail-counts #t *default-numtries* fail-count pass-count test-id))
 
 (define (cdb:tests-register-test zmqsocket run-id test-name item-path)
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (cdb:client-call zmqsocket 'register-test #t run-id test-name item-path)))
+    (cdb:client-call zmqsocket 'register-test #t *default-numtries* run-id test-name item-path)))
 
 (define (cdb:flush-queue zmqsocket)
-  (cdb:client-call zmqsocket 'flush #f))
+  (cdb:client-call zmqsocket 'flush #f *default-numtries*))
 
 (define (cdb:kill-server zmqsocket)
-  (cdb:client-call zmqsocket 'killserver #f))
+  (cdb:client-call zmqsocket 'killserver #f *default-numtries*))
 
 (define (cdb:roll-up-pass-fail-counts zmqsocket run-id test-name item-path status)
-  (cdb:client-call zmqsocket 'immediate #f open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
+  (cdb:client-call zmqsocket 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
 
 (define (cdb:get-test-info zmqsocket run-id test-name item-path)
-  (cdb:client-call zmqsocket 'immediate #f open-run-close db:get-test-info #f run-id test-name item-path))
+  (cdb:client-call zmqsocket 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
 
 (define (cdb:get-test-info-by-id zmqsocket test-id)
-  (cdb:client-call zmqsocket 'immediate #f open-run-close db:get-test-info-by-id #f test-id))
+  (cdb:client-call zmqsocket 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id))
 
 ;; db should be db open proc or #f
 (define (cdb:remote-run proc db . params)
-  (apply cdb:client-call *runremote* 'immediate #f open-run-close proc #f params))
+  (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
 
 (define (db:test-get-logfile-info db run-id test-name)
   (let ((res #f))
@@ -1295,21 +1239,18 @@
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
-(define (db:write-cached-data)
+(define (db:process-queue pubsock indata)
   (open-run-close
    (lambda (db . junkparams)
      (let ((queries    (make-hash-table))
-	   (data       #f))
-       (mutex-lock! *incoming-mutex*)
-       (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
-       (set! *incoming-data* '())
-       (mutex-unlock! *incoming-mutex*)
+	   (data       (sort indata (lambda (a b)
+				      (< (cdb:packet-get-qtime a)(cdb:packet-get-qtime b))))))
        (if (> (length data) 0)
 	   (debug:print-info 4 "Writing cached data " data))
 
        ;; prepare the needed statements, do each only once
        (for-each (lambda (request-item)
-		   (let ((stmt-key (vector-ref request-item 0)))
+		   (let ((stmt-key (cdb:get-qtype request-item)))
 		     (if (not (hash-table-ref/default queries stmt-key #f))
 			 (let ((stmt (alist-ref stmt-key db:queries)))
 			   (if stmt
@@ -1326,16 +1267,19 @@
 	 (if special-qry
 
 	     ;; handle a query that cannot be part of the grouped queries
-	     (let* ((stmt-key (vector-ref special-qry 0))
-		    (qry      (hash-table-ref queries stmt-key))
-		    (params   (vector-ref special-qry 2)))
+	     (let* ((stmt-key       (cdb:get-qtype special-qry))
+		    (return-address (cdb:get-client-sig special-qry))
+		    (qry            (hash-table-ref queries stmt-key))
+		    (params         (cdb:get-params special-qry)))
 	       (if (string? qry)
-		   (apply sqlite3:execute db qry params)
+		   (begin
+		     (apply sqlite3:execute db qry params)
+		     (server:reply return-address #t))
 		   (if (procedure? stmt-key)
 		       (begin
 			 ;; we are being handed a procedure so call it
 			 (debug:print-info 11 "Running (apply " stmt-key " " db " " params ")")
-			 (apply stmt-key db params))
+			 (server:reply return-address (apply stmt-key db params)))
 		       (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
@@ -1349,8 +1293,9 @@
 			       stmts
 			       (let innerloop ((hed (car stmts))
 					       (tal (cdr stmts)))
-				 (let ((params   (vector-ref hed 2))
-				       (stmt-key (vector-ref hed 0)))
+				 (let ((params         (cdb:packet-get-params hed))
+				       (return-address (cdb:packet-get-client-sig hed))
+				       (stmt-key       (cdb:packet-get-qtype hed)))
 				   (if (or (procedure? stmt-key)
 					   (member stmt-key db:special-queries))
 				       (begin
@@ -1359,6 +1304,7 @@
 				       (begin
 					 (debug:print-info 11 "Executing " stmt-key " for " params)
 					 (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+					 (server:reply return-address #t)
 					 (if (not (null? tal))
 					     (innerloop (car tal)(cdr tal))
 					     '()))
