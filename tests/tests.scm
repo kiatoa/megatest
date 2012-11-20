@@ -161,7 +161,7 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
-(test #f #t (cdb:client-call *runremote* 'immediate #f (lambda ()(display "Got here eh!?") #t)))
+(test #f #t (cdb:client-call *runremote* 'immediate #f 1 (lambda ()(display "Got here eh!?") #t)))
 
 ;; (set! *verbosity* 20)
 (test #f *verbosity* (cdb:set-verbosity *runremote* *verbosity*))
