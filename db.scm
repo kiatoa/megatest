@@ -1122,23 +1122,31 @@
 			 (debug:print-info 11 "sending message")
 			 (send-message push-socket zdat)
 			 (debug:print-info 11 "message sent")
-			 (let ((rmsg receive-message*)) ;; (if *client-non-blocking-mode* receive-message* receive-message)))
+			 (let loop ()
 			   ;; get the sender info
 			   ;; this should match (server:get-client-signature)
 			   ;; we will need to process "all" messages here some day
-			   (rmsg sub-socket)
+			   (receive-message* sub-socket)
 			   ;; now get the actual message
-			   (set! res (db:string->obj (rmsg  sub-socket))))))
+			   (let ((myres (db:string->obj (receive-message* sub-socket))))
+			     (if (equal? query-sig (vector-ref myres 1))
+				 (set! res (vector-ref myres 2))
+				 (loop))))))
 	 (timeout (lambda ()
-		    (thread-sleep! 120)
-		    (if (not res)
-			(if (> numretries 0)
-			    (begin
-			      (debug:print 0 "WARNING: no reply to query " params ", trying again")
-			      (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
-			    (begin
-			      (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-			      (exit 5)))))))
+		    (let loop ((n numretries))
+		      (thread-sleep! 20)
+		      (if (not res)
+			  (if (> numretries 0)
+			      (begin
+				(debug:print 0 "WARNING: no reply to query " params ", trying resend")
+				(debug:print-info 11 "re-sending message")
+				(send-message push-socket zdat)
+				(debug:print-info 11 "message re-sent")
+				(loop (- n 1)))
+			      ;; (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+			      (begin
+				(debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+				(exit 5))))))))
     (debug:print-info 11 "Starting threads")
     (let ((th1 (make-thread send-receive "send receive"))
 	  (th2 (make-thread timeout      "timeout")))
@@ -1232,11 +1240,12 @@
     ))
 
 ;; do not run these as part of the transaction
-(define db:special-queries   '(;; rollup-tests-pass-fail
-			       ;; db:roll-up-pass-fail-counts
+(define db:special-queries   '(rollup-tests-pass-fail
+			       db:roll-up-pass-fail-counts
                                login
                                immediate
 			       flush
+			       sync
 			       set-verbosity
 			       killserver))
 
@@ -1280,6 +1289,7 @@
 
 	     ;; handle a query that cannot be part of the grouped queries
 	     (let* ((stmt-key       (cdb:packet-get-qtype special-qry))
+		    (qry-sig        (cdb:packet-get-query-sig special-qry))
 		    (return-address (cdb:packet-get-client-sig special-qry))
 		    (qry            (hash-table-ref/default queries stmt-key #f))
 		    (params         (cdb:packet-get-params special-qry)))
@@ -1288,7 +1298,7 @@
 		;; Special queries
 		((string? qry)
 		 (apply sqlite3:execute db qry params)
-		 (server:reply pubsock return-address #t))
+		 (server:reply pubsock return-address qry-sig #t #t))
 		;; ((and (not (null? params))
 		;;       (procedure? (car params)))
 		;;  (let ((proc      (car params))
@@ -1304,7 +1314,7 @@
 			  (remparams (cdr params)))
 		      ;; we are being handed a procedure so call it
 		      (debug:print-info 11 "Running (apply " proc " " remparams ")")
-		      (server:reply pubsock return-address (apply proc remparams))))
+		      (server:reply pubsock return-address qry-sig #t (apply proc remparams))))
 		   ((login)
 		    (if (< (length params) 3) ;; should get toppath, version and signature
 			'(#f "login failed due to missing params") ;; missing params
@@ -1315,23 +1325,23 @@
 				   (equal? megatest-version calling-vers))
 			      (begin
 				(hash-table-set! *logged-in-clients* client-key (current-seconds))
-				(server:reply  pubsock return-address '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+				(server:reply  pubsock return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
 			      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
-		   ((flush)
-		    (server:reply pubsock return-address '(#t "sucessful flush")))
+		   ((flush sync)
+		    (server:reply pubsock return-address qry-sig #t (length data)))
 		   ((set-verbosity)
 		    (set! *verbosity* (car params))
-		    (server:reply pubsock return-address '(#t *verbosity*)))
+		    (server:reply pubsock return-address qry-sig #t '(#t *verbosity*)))
 		   ((killserver)
 		    (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
 		    (open-run-close tasks:server-deregister tasks:open-db 
 				    (cadr *server-info*)
 				    pullport: (caddr *server-info*))
 		    (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-		    (server:reply pubsock return-address '(#t "exit process started")))
+		    (server:reply pubsock return-address qry-sig #t '(#t "exit process started")))
 		   (else
 		    (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)
-		    (server:reply pubsock return-address #t)))))
+		    (server:reply pubsock return-address qry-sig #f #t)))))
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
 
@@ -1346,6 +1356,7 @@
 					       (tal (cdr stmts)))
 				 (let ((params         (cdb:packet-get-params hed))
 				       (return-address (cdb:packet-get-client-sig hed))
+				       (qry-sig        (cdb:packet-get-query-sig hed))
 				       (stmt-key       (cdb:packet-get-qtype hed)))
 				   (if (or (not (hash-table-ref/default queries stmt-key #f))
 					   (member stmt-key db:special-queries))
@@ -1355,7 +1366,7 @@
 				       (begin
 					 (debug:print-info 11 "Executing " stmt-key " for " params)
 					 (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-					 (server:reply pubsock return-address #t)
+					 (server:reply pubsock return-address qry-sig #t #t)
 					 (if (not (null? tal))
 					     (innerloop (car tal)(cdr tal))
 					     '()))

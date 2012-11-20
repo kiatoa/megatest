@@ -120,8 +120,7 @@
     ;;
     (on-exit (lambda ()
 	       (if (and *toppath* *server-info*)
-		   (begin
-		     (open-run-close tasks:server-deregister-self tasks:open-db ipaddrstr p1 p2))
+		   (open-run-close tasks:server-deregister-self tasks:open-db (car *server-info*))
 		   (let loop () 
 		     (let ((queue-len 0))
 		       (thread-sleep! (random 5))
@@ -147,10 +146,10 @@
 	      (loop '()))
 	    (loop (cons packet queue-lst)))))))
 
-(define (server:reply pubsock target result)
+(define (server:reply pubsock target query-sig success/fail result)
   (debug:print-info 11 "server:reply target=" target ", result=" result)
   (send-message pubsock target send-more: #t)
-  (send-message pubsock (db:obj->string result)))
+  (send-message pubsock (db:obj->string (vector success/fail query-sig result))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -171,37 +170,38 @@
 	 (iface       (cadr server-info))
 	 (pullport    (caddr server-info))
 	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
-	 ;; (zmq-sockets (server:client-connect iface pullport pubport))
+	 (zmq-sockets (server:client-connect iface pullport pubport))
 	 )
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
-      ;; (let ((queue-len (string->number (cdb:client-call zmq-sockets 'sync #t 1))))
+      ;; NB// sync currently does NOT return queue-length
+      (let ((queue-len (cdb:client-call zmq-sockets 'sync #t 1)))
       ;; (print "Server running, count is " count)
-      (if (< count 1) ;; 3x3 = 9 secs aprox
-	  (loop (+ count 1)))
+	(if (< count 1) ;; 3x3 = 9 secs aprox
+	    (loop (+ count 1)))
+	
+	;; NOTE: Get rid of this mechanism! It really is not needed...
+	(open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
       
-      ;; NOTE: Get rid of this mechanism! It really is not needed...
-      (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
-      
-      ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-      (if (> (+ *last-db-access* 
-		;; (* 48 60 60)    ;; 48 hrs
-		;; 60              ;; one minute
-		(* 60 60)       ;; one hour
-		)
-	     (current-seconds))
-	  (begin
-	    (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
-	    (loop 0))
-	  (begin
-	    (debug:print-info 0 "Starting to shutdown the server.")
-	    ;; need to delete only *my* server entry (future use)
-	    (set! *time-to-exit* #t)
-	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-	    (thread-sleep! 1)
-	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    (exit))))))
+	;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+	(if (> (+ *last-db-access* 
+		  ;; (* 48 60 60)    ;; 48 hrs
+		  ;; 60              ;; one minute
+		  (* 60 60)       ;; one hour
+		  )
+	       (current-seconds))
+	    (begin
+	      (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (loop 0))
+	    (begin
+	      (debug:print-info 0 "Starting to shutdown the server.")
+	      ;; need to delete only *my* server entry (future use)
+	      (set! *time-to-exit* #t)
+	      (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+	      (thread-sleep! 1)
+	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+	      (debug:print-info 0 "Server shutdown complete. Exiting")
+	      (exit)))))))
 
 (define (server:find-free-port-and-open iface s port stype #!key (trynum 50))
   (let ((s (if s s (make-socket stype)))

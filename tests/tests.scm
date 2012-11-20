@@ -161,7 +161,7 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
-(test #f #t (cdb:client-call *runremote* 'immediate #f 1 (lambda ()(display "Got here eh!?") #t)))
+(test #f #t (cdb:client-call *runremote* 'immediate #t 1 (lambda ()(display "Got here eh!?") #t)))
 
 ;; (set! *verbosity* 20)
 (test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
@@ -313,7 +313,7 @@
 
 (test #f "myrun" (cdb:remote-run db:get-run-name-from-id #f 1))
 
-(test #f "dunno" (cdb:remote-run db:roll-up-pass-fail-counts #f 1 "nada" "" "PASS"))
+(test #f #f (cdb:remote-run db:roll-up-pass-fail-counts #f 1 "nada" "" "PASS"))
 
 ;;======================================================================
 ;; R E M O T E   C A L L S 
@@ -327,6 +327,7 @@
 	    (apply cdb:test-set-status-state *runremote* test-id params)
 	    (cdb:pass-fail-counts *runremote* test-id (random 100) (random 100))
 	    (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
+	    (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" (cadr params))
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
 	  '(("COMPLETED"    "PASS" #f)
 	    ("NOT_STARTED"  "FAIL" "Just testing")
