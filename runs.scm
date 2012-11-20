@@ -132,7 +132,7 @@
 	 (max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
 				    (if (and mcj (string->number mcj))
 					(string->number mcj)
-					#f)))
+					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin

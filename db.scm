@@ -1130,7 +1130,7 @@
 			   ;; now get the actual message
 			   (set! res (db:string->obj (rmsg  sub-socket))))))
 	 (timeout (lambda ()
-		    (thread-sleep! 60)
+		    (thread-sleep! 120)
 		    (if (not res)
 			(if (> numretries 0)
 			    (begin
@@ -1232,11 +1232,13 @@
     ))
 
 ;; do not run these as part of the transaction
-(define db:special-queries   '(rollup-tests-pass-fail
-			       db:roll-up-pass-fail-counts
+(define db:special-queries   '(;; rollup-tests-pass-fail
+			       ;; db:roll-up-pass-fail-counts
                                login
                                immediate
-			       flush))
+			       flush
+			       set-verbosity
+			       killserver))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1317,8 +1319,19 @@
 			      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
 		   ((flush)
 		    (server:reply pubsock return-address '(#t "sucessful flush")))
+		   ((set-verbosity)
+		    (set! *verbosity* (car params))
+		    (server:reply pubsock return-address '(#t *verbosity*)))
+		   ((killserver)
+		    (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
+		    (open-run-close tasks:server-deregister tasks:open-db 
+				    (cadr *server-info*)
+				    pullport: (caddr *server-info*))
+		    (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
+		    (server:reply pubsock return-address '(#t "exit process started")))
 		   (else
-		    (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))))
+		    (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)
+		    (server:reply pubsock return-address #t)))))
 	       (if (not (null? stmts))
 		   (outerloop #f stmts)))
 
@@ -1372,11 +1385,7 @@
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
-	   (or (equal? status "PASS")
-	       (equal? status "WARN")
-	       (equal? status "FAIL")
-	       (equal? status "WAIVED")
-	       (equal? status "RUNNING")))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK")))
       (begin
 	(sqlite3:execute 
 	 db
@@ -1391,10 +1400,16 @@
 	    (sqlite3:execute
 	     db
 	     "UPDATE tests
-                       SET state=CASE WHEN (SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 
-                          'RUNNING'
-                       ELSE 'COMPLETED' END,
-                          status=CASE WHEN fail_count > 0 THEN 'FAIL' WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' ELSE 'UNKNOWN' END
+                       SET state=CASE 
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE run_id=? AND testname=?
+                                                     AND item_path != '' 
+                                                     AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
+                                   ELSE 'COMPLETED' END,
+                                      status=CASE 
+                                            WHEN fail_count > 0 THEN 'FAIL' 
+                                            WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
+                                            ELSE 'UNKNOWN' END
                        WHERE run_id=? AND testname=? AND item_path='';"
 	     run-id test-name run-id test-name))
 	#f)

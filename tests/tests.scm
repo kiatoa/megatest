@@ -164,7 +164,7 @@
 (test #f #t (cdb:client-call *runremote* 'immediate #f 1 (lambda ()(display "Got here eh!?") #t)))
 
 ;; (set! *verbosity* 20)
-(test #f *verbosity* (cdb:set-verbosity *runremote* *verbosity*))
+(test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
 (test #f #f (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" "PASS"))
 ;; (set! *verbosity* 1)
 ;; (cdb:set-verbosity *runremote* *verbosity*)
@@ -189,7 +189,7 @@
 						    "n/a" 
 						    "bob")))
 
-(test #f "CACHED"       (cdb:tests-register-test *runremote* 1 "nada" ""))
+(test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
 (test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
 (test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
 (test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
@@ -311,6 +311,10 @@
 
 ;; (exit)
 
+(test #f "myrun" (cdb:remote-run db:get-run-name-from-id #f 1))
+
+(test #f "dunno" (cdb:remote-run db:roll-up-pass-fail-counts #f 1 "nada" "" "PASS"))
+
 ;;======================================================================
 ;; R E M O T E   C A L L S 
 ;;======================================================================
@@ -318,6 +322,7 @@
 (define start-wait (current-seconds))
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
+	    (print "Intensive: params=" params)
 	    (cdb:tests-register-test *runremote* 1 (conc "test" (random 20)) "")
 	    (apply cdb:test-set-status-state *runremote* test-id params)
 	    (cdb:pass-fail-counts *runremote* test-id (random 100) (random 100))
@@ -363,6 +368,7 @@
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ))
+
 ;; now set all tests to completed
 (cdb:flush-queue *runremote*)
 (let ((tests (cdb:remote-run db:get-tests-for-run #f 1 "%" '() '())))
@@ -372,12 +378,10 @@
      (cdb:test-set-status-state *runremote* (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
    tests))
 
-(print "Waiting for server to be done, should be about 20 seconds")
-(cdb:kill-server *runremote*)
 ;; (process-wait server-pid)
-(test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
-			      (print "Server ran for " run-delta " seconds")
-			      (> run-delta 20)))
+;; (test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
+;; 			      (print "Server ran for " run-delta " seconds")
+;; 			      (> run-delta 20)))
 
 (test "Rollup the run(s)" #t (begin
 			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")
@@ -387,7 +391,10 @@
 
 (test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
 
-(thread-join! th1 th2 th3)
+(print "Waiting for server to be done, should be about 20 seconds")
+(cdb:kill-server *runremote*)
+
+;; (thread-join! th1 th2 th3)
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())

@@ -243,6 +243,10 @@
 			     (write (list (current-directory)
 					  (argv)))))))
 
+;;======================================================================
+;; C L I E N  T S
+;;======================================================================
+
 (define (server:get-client-signature)
   (if *my-client-signature* *my-client-signature*
       (let ((sig (server:mk-signature)))

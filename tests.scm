@@ -263,7 +263,8 @@
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (cdb:remote-run db:roll-up-pass-fail-counts #f run-id test-name item-path status)
+    (if (not (equal? item-path ""))
+	(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -274,7 +275,7 @@
 
 
 (define (tests:test-set-toplog! db run-id test-name logf) 
-  (cdb:client-call *runremote* 'tests:test-set-toplog #t logf run-id test-name))
+  (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
 
 (define (tests:summarize-items db run-id test-name force)
   ;; if not force then only update the record if one of these is true:
