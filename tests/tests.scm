@@ -80,34 +80,36 @@
 (test "setup for run" #t (begin (setup-for-run)
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
-(test "server-register, get-best-server" '("bob" 1234) (let ((res #f))
-							 (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
-							 (set! res (open-run-close tasks:get-best-server tasks:open-db))
-							 res))
+(test "server-register, get-best-server" #t (let ((res #f))
+					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 1235 100 'live)
+					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
+					      (number? (cadddr res))))
+
 (test "de-register server" #t (let ((res #f))
-				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
+				(open-run-close tasks:server-deregister tasks:open-db "bob" pullport: 1234)
 				(list? (open-run-close tasks:get-best-server tasks:open-db))))
 
 (define hostinfo #f)
-(test #f #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
-				   (set! hostinfo dat)
-				   (and (string? (car dat))
-					(number? (cadr dat)))))
+(test "get-best-server" #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
+			     (set! hostinfo dat) ;; host ip pullport pubport
+			     (and (string? (car dat))
+				  (number? (caddr dat)))))
 
-(test #f #t (let ((zmq-socket (apply server:client-connect hostinfo)))
+(test #f #t (let ((zmq-socket (server:client-connect
+			       (cadr hostinfo)
+			       (caddr hostinfo)
+			       (cadddr hostinfo))))
 	      (set! *runremote* zmq-socket)
-	      (socket? *runremote*)))
+	      (socket? (vector-ref *runremote* 0))))
 
 (test #f #t (let ((res (server:client-login *runremote*)))
 	      (car res)))
 
-(test #f #t (socket? *runremote*))
+(test #f #t (socket? (vector-ref *runremote* 0)))
 
 ;; (test #f #t (server:client-setup))
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
-
-(test #f #t (open-run-close tasks:get-best-server tasks:open-db))
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 

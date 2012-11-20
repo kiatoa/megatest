@@ -1235,7 +1235,8 @@
 (define db:special-queries   '(rollup-tests-pass-fail
 			       db:roll-up-pass-fail-counts
                                login
-                               immediate))
+                               immediate
+			       flush))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1264,7 +1265,8 @@
 			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
 			       (if (procedure? stmt-key)
 				   (hash-table-set! queries stmt-key #f)
-				   (debug:print 0 "ERROR: Missing query spec for " stmt-key "!")))))))
+				   (if (not (member stmt-key db:special-queries))
+				       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))))
 		 data)
        
        ;; outer loop to handle special queries that cannot be handled in the
@@ -1313,6 +1315,8 @@
 				(hash-table-set! *logged-in-clients* client-key (current-seconds))
 				(server:reply  pubsock return-address '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
 			      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
+		   ((flush)
+		    (server:reply pubsock return-address '(#t "sucessful flush")))
 		   (else
 		    (debug:print 0 "ERROR: Unrecognised queued call " qry " " params)))))
 	       (if (not (null? stmts))
