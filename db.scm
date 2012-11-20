@@ -1228,7 +1228,7 @@
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
-	'(tests:test-set-toplog    "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
+	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
     ))
 
 ;; do not run these as part of the transaction
@@ -1256,9 +1256,10 @@
        ;; prepare the needed statements, do each only once
        (for-each (lambda (request-item)
 		   (let ((stmt-key (cdb:packet-get-qtype request-item)))
-		     (if (and (not (hash-table-ref/default queries stmt-key #f))
-			      (not (member stmt-key db:special-queries)))
+		     (debug:print-info 11 "stmt-key=" stmt-key ", request-item=" request-item)
+		     (if (not (hash-table-ref/default queries stmt-key #f))
 			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (debug:print-info 11 "stmt-key=" stmt-key ", stmt=" stmt)
 			   (if stmt
 			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
 			       (if (procedure? stmt-key)
@@ -1270,6 +1271,7 @@
        ;; transaction.
        (let outerloop ((special-qry #f)
 		       (stmts       data))
+	 (debug:print-info 11 "special-qry=" special-qry ", stmts=" stmts)
 	 (if special-qry
 
 	     ;; handle a query that cannot be part of the grouped queries
@@ -1328,7 +1330,8 @@
 				 (let ((params         (cdb:packet-get-params hed))
 				       (return-address (cdb:packet-get-client-sig hed))
 				       (stmt-key       (cdb:packet-get-qtype hed)))
-				   (if (member stmt-key db:special-queries)
+				   (if (or (not (hash-table-ref/default queries stmt-key #f))
+					   (member stmt-key db:special-queries))
 				       (begin
 					 (debug:print-info 11 "Handling special statement " stmt-key)
 					 (cons hed tal))

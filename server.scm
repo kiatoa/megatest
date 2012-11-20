@@ -138,7 +138,6 @@
     ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
     ;;
     (let loop ((queue-lst '()))
-      (print "GOT HERE EH?")
       (let* ((rawmsg (receive-message* pull-socket))
 	     (packet (db:string->obj rawmsg)))
 	(debug:print-info 12 "server=> received packet=" packet)

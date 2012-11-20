@@ -57,8 +57,12 @@
 ;; (define queuelst '())
 ;; (define mx1 (make-mutex))
 
+(define max-queue-len 0)
+
 (define (process-queue queuelst)
   (let ((queuelen (length queuelst)))
+    (if (> queuelen max-queue-len)
+	(set! max-queue-len queuelen))
     (for-each
      (lambda (item)
        (let ((cname (vector-ref item 1))
@@ -131,4 +135,4 @@
 
 (let* ((run-time       (- (current-seconds) start-time))
        (queries/second (/  total-db-accesses run-time)))
-  (print "Server exited! Total db accesses=" total-db-accesses " in " run-time " seconds for " queries/second " queries/second"))
+  (print "Server exited! Total db accesses=" total-db-accesses " in " run-time " seconds for " queries/second " queries/second with max queue length of: " max-queue-len))
