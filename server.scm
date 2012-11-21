@@ -118,19 +118,19 @@
 
     ;; what to do when we quit
     ;;
-    (on-exit (lambda ()
-	       (if (and *toppath* *server-info*)
-		   (open-run-close tasks:server-deregister-self tasks:open-db (car *server-info*))
-		   (let loop () 
-		     (let ((queue-len 0))
-		       (thread-sleep! (random 5))
-		       (mutex-lock! *incoming-mutex*)
-		       (set! queue-len (length *incoming-data*))
-		       (mutex-unlock! *incoming-mutex*)
-		       (if (> queue-len 0)
-			   (begin
-			     (debug:print-info 0 "Queue not flushed, waiting ...")
-			     (loop))))))))
+;;     (on-exit (lambda ()
+;; 	       (if (and *toppath* *server-info*)
+;; 		   (open-run-close tasks:server-deregister-self tasks:open-db (car *server-info*))
+;; 		   (let loop () 
+;; 		     (let ((queue-len 0))
+;; 		       (thread-sleep! (random 5))
+;; 		       (mutex-lock! *incoming-mutex*)
+;; 		       (set! queue-len (length *incoming-data*))
+;; 		       (mutex-unlock! *incoming-mutex*)
+;; 		       (if (> queue-len 0)
+;; 			   (begin
+;; 			     (debug:print-info 0 "Queue not flushed, waiting ...")
+;; 			     (loop))))))))
 
     ;; The heavy lifting
     ;;
@@ -142,7 +142,7 @@
 	(debug:print-info 12 "server=> received packet=" packet)
 	(if #t ;; (cdb:packet-get-immediate packet) ;; process immediately or put in queue
 	    (begin
-	      (db:process-queue pub-socket (cons packet queue-lst))
+	      (open-run-close db:process-queue #f pub-socket (cons packet queue-lst))
 	      (loop '()))
 	    (loop (cons packet queue-lst)))))))
 
@@ -242,6 +242,11 @@
 			   (lambda ()
 			     (write (list (current-directory)
 					  (argv)))))))
+
+;;======================================================================
+;; S E R V E R   U T I L I T I E S 
+;;======================================================================
+
 
 ;;======================================================================
 ;; C L I E N  T S
@@ -366,12 +371,12 @@
 		   ;;      	     "Self ping"))
 		   (th2 (make-thread (lambda ()
 				       (server:run (args:get-arg "-server"))) "Server run"))
-		   (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
+		   ;; (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
 		   )
 	      (set! *client-non-blocking-mode* #t)
 	      ;; (thread-start! th1)
 	      (thread-start! th2)
-	      (thread-start! th3)
+	      ;; (thread-start! th3)
 	      (set! *didsomething* #t)
 	      ;; (thread-join! th3)
 	      (thread-join! th2)
