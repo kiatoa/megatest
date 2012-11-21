@@ -42,11 +42,11 @@
 ;; [x]  [ ]        - name of client: testname/itempath-test_id-hostname 
 ;; [x]  [ ]        - name of request: callname, params
 ;; [x]  [ ]        - request key: f(clientname, callname, params)
-;; [ ]  [ ]    5. Add processing of subscription hits
-;; [ ]  [ ]        - done when get key 
-;; [ ]  [ ]        - return results
-;; [ ]  [ ]    6. Add timeout processing
-;; [ ]  [ ]        - after 60 seconds
+;; [x]  [ ]    5. Add processing of subscription hits
+;; [x]  [ ]        - done when get key 
+;; [x]  [ ]        - return results
+;; [x]  [ ]    6. Add timeout processing
+;; [x]  [ ]        - after 60 seconds
 ;; [ ]  [ ]            i. check server alive, connect to new if necessary
 ;; [ ]  [ ]           ii. resend request
 ;; [ ]  [ ]    7. Turn self ping back on
@@ -375,12 +375,12 @@
 		   ;;      	     "Self ping"))
 		   (th2 (make-thread (lambda ()
 				       (server:run (args:get-arg "-server"))) "Server run"))
-		   ;; (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
+		   (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
 		   )
 	      (set! *client-non-blocking-mode* #t)
 	      ;; (thread-start! th1)
 	      (thread-start! th2)
-	      ;; (thread-start! th3)
+	      (thread-start! th3)
 	      (set! *didsomething* #t)
 	      ;; (thread-join! th3)
 	      (thread-join! th2)
