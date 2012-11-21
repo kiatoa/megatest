@@ -185,9 +185,9 @@
       
 	;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
 	(if (> (+ *last-db-access* 
-		  ;; (* 48 60 60)    ;; 48 hrs
+		  (* 50 60 60)    ;; 48 hrs
 		  ;; 60              ;; one minute
-		  (* 60 60)       ;; one hour
+		  ;; (* 60 60)       ;; one hour
 		  )
 	       (current-seconds))
 	    (begin
