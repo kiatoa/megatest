@@ -410,8 +410,9 @@
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
-		 ((and (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
-		       (and max-concurrent-jobs (> (- max-concurrent-jobs num-running) 5)))
+		 ( ;; (and
+		  (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
+		      ;; (and max-concurrent-jobs (> (- max-concurrent-jobs num-running) 5)))
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
@@ -419,7 +420,7 @@
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
-		  (thread-sleep! (+ 0.01 *global-delta*))
+		  (thread-sleep! (+ 2 *global-delta*))
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
@@ -484,7 +485,8 @@
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
 	      (let ((can-run-more    (runs:can-run-more-tests test-record)))
-		(if can-run-more
+		(if (and (list? can-run-more)
+			 (car can-run-more))
 		    (let* ((prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
 			   (fails           (runs:calc-fails prereqs-not-met))
 			   (non-completed   (runs:calc-not-completed prereqs-not-met)))
@@ -548,7 +550,7 @@
 		    ;; if can't run more just loop with next possible test
 		    (begin
 		      (debug:print-info 4 "processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
-		      (thread-sleep! (+ 1 *global-delta*))
+		      (thread-sleep! (+ 2 *global-delta*))
 		      (loop (car newtal)(cdr newtal) reruns))))) ;; END OF (or (procedure? items)(eq? items 'have-procedure))
 	     
 	     ;; this case should not happen, added to help catch any bugs
