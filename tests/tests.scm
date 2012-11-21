@@ -80,34 +80,36 @@
 (test "setup for run" #t (begin (setup-for-run)
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
-(test "server-register, get-best-server" '("bob" 1234) (let ((res #f))
-							 (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
-							 (set! res (open-run-close tasks:get-best-server tasks:open-db))
-							 res))
+(test "server-register, get-best-server" #t (let ((res #f))
+					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 1235 100 'live)
+					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
+					      (number? (cadddr res))))
+
 (test "de-register server" #t (let ((res #f))
-				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
+				(open-run-close tasks:server-deregister tasks:open-db "bob" pullport: 1234)
 				(list? (open-run-close tasks:get-best-server tasks:open-db))))
 
 (define hostinfo #f)
-(test #f #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
-				   (set! hostinfo dat)
-				   (and (string? (car dat))
-					(number? (cadr dat)))))
+(test "get-best-server" #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
+			     (set! hostinfo dat) ;; host ip pullport pubport
+			     (and (string? (car dat))
+				  (number? (caddr dat)))))
 
-(test #f #t (let ((zmq-socket (apply server:client-connect hostinfo)))
+(test #f #t (let ((zmq-socket (server:client-connect
+			       (cadr hostinfo)
+			       (caddr hostinfo)
+			       (cadddr hostinfo))))
 	      (set! *runremote* zmq-socket)
-	      (socket? *runremote*)))
+	      (socket? (vector-ref *runremote* 0))))
 
 (test #f #t (let ((res (server:client-login *runremote*)))
 	      (car res)))
 
-(test #f #t (socket? *runremote*))
+(test #f #t (socket? (vector-ref *runremote* 0)))
 
 ;; (test #f #t (server:client-setup))
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
-
-(test #f #t (open-run-close tasks:get-best-server tasks:open-db))
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
@@ -159,10 +161,10 @@
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
-(test #f #t (cdb:client-call *runremote* 'immediate #f (lambda ()(display "Got here eh!?") #t)))
+(test #f #t (cdb:client-call *runremote* 'immediate #t 1 (lambda ()(display "Got here eh!?") #t)))
 
 ;; (set! *verbosity* 20)
-(test #f *verbosity* (cdb:set-verbosity *runremote* *verbosity*))
+(test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
 (test #f #f (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" "PASS"))
 ;; (set! *verbosity* 1)
 ;; (cdb:set-verbosity *runremote* *verbosity*)
@@ -187,7 +189,7 @@
 						    "n/a" 
 						    "bob")))
 
-(test #f "CACHED"       (cdb:tests-register-test *runremote* 1 "nada" ""))
+(test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
 (test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
 (test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
 (test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
@@ -309,6 +311,10 @@
 
 ;; (exit)
 
+(test #f "myrun" (cdb:remote-run db:get-run-name-from-id #f 1))
+
+(test #f #f (cdb:remote-run db:roll-up-pass-fail-counts #f 1 "nada" "" "PASS"))
+
 ;;======================================================================
 ;; R E M O T E   C A L L S 
 ;;======================================================================
@@ -316,10 +322,12 @@
 (define start-wait (current-seconds))
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
+	    (print "Intensive: params=" params)
 	    (cdb:tests-register-test *runremote* 1 (conc "test" (random 20)) "")
 	    (apply cdb:test-set-status-state *runremote* test-id params)
 	    (cdb:pass-fail-counts *runremote* test-id (random 100) (random 100))
 	    (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
+	    (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" (cadr params))
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
 	  '(("COMPLETED"    "PASS" #f)
 	    ("NOT_STARTED"  "FAIL" "Just testing")
@@ -361,6 +369,7 @@
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ))
+
 ;; now set all tests to completed
 (cdb:flush-queue *runremote*)
 (let ((tests (cdb:remote-run db:get-tests-for-run #f 1 "%" '() '())))
@@ -370,12 +379,10 @@
      (cdb:test-set-status-state *runremote* (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
    tests))
 
-(print "Waiting for server to be done, should be about 20 seconds")
-(cdb:kill-server *runremote*)
 ;; (process-wait server-pid)
-(test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
-			      (print "Server ran for " run-delta " seconds")
-			      (> run-delta 20)))
+;; (test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
+;; 			      (print "Server ran for " run-delta " seconds")
+;; 			      (> run-delta 20)))
 
 (test "Rollup the run(s)" #t (begin
 			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")
@@ -385,7 +392,10 @@
 
 (test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
 
-(thread-join! th1 th2 th3)
+(print "Waiting for server to be done, should be about 20 seconds")
+(cdb:kill-server *runremote*)
+
+;; (thread-join! th1 th2 th3)
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())
