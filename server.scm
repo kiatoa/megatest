@@ -138,8 +138,14 @@
     ;;
     (let loop ((queue-lst '()))
       (let* ((rawmsg (receive-message* pull-socket))
-	     (packet (db:string->obj rawmsg)))
+	     (packet (db:string->obj rawmsg))
+	     (qtype  (cdb:packet-get-qtype packet)))
 	(debug:print-info 12 "server=> received packet=" packet)
+	(if (not (member qtype '(sync ping)))
+	    (begin
+	      (mutex-lock! *heartbeat-mutex*)
+	      (set! *last-db-access* (current-seconds))
+	      (mutex-unlock! *heartbeat-mutex*)))
 	(if #t ;; (cdb:packet-get-immediate packet) ;; process immediately or put in queue
 	    (begin
 	      (open-run-close db:process-queue #f pub-socket (cons packet queue-lst))
@@ -171,7 +177,7 @@
 	 (pullport    (caddr server-info))
 	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
 	 (zmq-sockets (server:client-connect iface pullport pubport))
-	 )
+	 (last-access 0))
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
@@ -184,14 +190,17 @@
 	(open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
       
 	;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-	(if (> (+ *last-db-access* 
+	(mutex-lock! *heartbeat-mutex*)
+	(set! last-access *last-db-access*)
+	(mutex-unlock! *heartbeat-mutex*)
+	(if (> (+ last-access
 		  (* 50 60 60)    ;; 48 hrs
 		  ;; 60              ;; one minute
 		  ;; (* 60 60)       ;; one hour
 		  )
 	       (current-seconds))
 	    (begin
-	      (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	      (loop 0))
 	    (begin
 	      (debug:print-info 0 "Starting to shutdown the server.")
