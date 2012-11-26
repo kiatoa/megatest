@@ -24,15 +24,15 @@
 
 (define (tasks:open-db)
   (let* ((dbpath  (conc *toppath* "/monitor.db"))
-	 (exists  (if (file-exists? dbpath)
-		      ;; BUGGISHNESS: Remove this code in six months. Today is 11/13/2012
-		      (if (< (file-change-time dbpath) 1352851396.0)
-			  (begin
-			    (debug:print 0 "NOTE: removing old db file " dbpath)
-			    (delete-file dbpath)
-			    #f)
-			  #t)
-		      #f))
+	 (exists  (file-exists? dbpath))
+	 ;; 	      ;; BUGGISHNESS: Remove this code in six months. Today is 11/13/2012
+	 ;;              (if (< (file-change-time dbpath) 1352851396.0)
+	 ;;        	  (begin
+	 ;;        	    (debug:print 0 "NOTE: removing old db file " dbpath)
+	 ;;        	    (delete-file dbpath)
+	 ;;        	    #f)
+	 ;;        	  #t)
+	 ;;              #f))
 	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! mdb handler)
