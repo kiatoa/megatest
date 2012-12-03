@@ -55,7 +55,7 @@
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
-	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
+	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; How is testpath different from work-area ??
 	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
@@ -71,7 +71,15 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
-	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
+	       (fullrunscript (if (not runscript)
+                                  #f
+                                  (if (substring-index "/" runscript)
+                                      runscript ;; use unadultered if contains slashes
+                                      (let ((fulln (conc testpath "/" runscript)))
+	                                  (if (and (file-exists? fulln)
+                                                   (file-execute-access? fulln))
+                                              fulln
+                                              runscript))))) ;; assume it is on the path
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))

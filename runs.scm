@@ -195,8 +195,13 @@
 	  #f))))
 
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
-;; keyvals
-(define (runs:run-tests target runname test-patts user flags)
+;; keyvals.
+;;
+;;  test-names: Comma separated patterns same as test-patts but used in selection 
+;;              of tests to run. The item portions are not respected.
+;;              FIXME: error out if /patt specified
+;;            
+(define (runs:run-tests target runname test-names test-patts user flags)
   (let* ((db          #f)
 	 (keys        (cdb:remote-run db:get-keys #f))
 	 (keyvallst   (keys:target->keyval keys target))
@@ -204,7 +209,6 @@
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
-	 (test-names  '())
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
 	 (test-records (make-hash-table)))
@@ -218,7 +222,7 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (tests:get-valid-tests *toppath* test-patts test-names: test-names))
+    (set! test-names (tests:get-valid-tests *toppath* test-names))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print-info 0 "test names " test-names)

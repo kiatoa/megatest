@@ -1600,10 +1600,11 @@
 			"\ntime:     " (db:step-get-event_time step))))
        ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
        (sort steps (lambda (a b)
-		     
-		     (< (db:step-get-event_time a)(db:step-get-event_time b))
-		     
-		     )))
+		     (cond
+		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
+		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
+		       (<   (db:step-get-id a)        (db:step-get-id b)))
+		      (else #f)))))
       res)))
 
 ;;======================================================================

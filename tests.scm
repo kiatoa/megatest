@@ -29,16 +29,15 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:get-valid-tests testsdir test-patts #!key (test-names '()))
+(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
     (delete-duplicates
-     (append test-names 
-	     (filter (lambda (testname)
-		       (tests:match test-patts testname #f))
-		     (map (lambda (testp)
-			    (last (string-split testp "/")))
-			  tests))))))
+     (filter (lambda (testname)
+	       (tests:match test-patts testname #f))
+	     (map (lambda (testp)
+		    (last (string-split testp "/")))
+		  tests)))))
 
 ;; tests:glob-like-match
 (define (tests:glob-like-match patt str) 
@@ -307,7 +306,7 @@
 		(statecounts (make-hash-table))
 		(outtxt "")
 		(tot    0)
-		(testdat (cdb:remote-run db:test-get-records-for-index-file run-id test-name)))
+		(testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
 	    (with-output-to-port
 		oup
 	      (lambda ()

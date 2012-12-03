@@ -118,7 +118,7 @@ Examples
 megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ") "
-Built from " megatest-fossil-hash ))
+Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
@@ -473,9 +473,8 @@ Built from " megatest-fossil-hash ))
      (lambda (target runname keys keynames keyvallst)
        (runs:run-tests target
 		       runname
-		       (if (args:get-arg "-testpatt")
-			   (args:get-arg "-testpatt")
-			   "%/%")
+		       "%"
+		       (args:get-arg "-testpatt")
 		       user
 		       args:arg-hash))))
 
@@ -504,6 +503,7 @@ Built from " megatest-fossil-hash ))
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
+		     (args:get-arg "-testpatt")
 		     user
 		     args:arg-hash))))
 
