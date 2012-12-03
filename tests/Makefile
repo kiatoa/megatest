@@ -33,7 +33,7 @@ test5 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -itempatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
 
 cleanprep : ../*.scm Makefile */*.config
-	sqlite3 megatest.db "delete from metadat where var='SERVER';"
+	# sqlite3 megatest.db "delete from metadat where var='SERVER';"
 	mkdir -p /tmp/mt_runs /tmp/mt_links
 	cd ..;make install
 	touch cleanprep
