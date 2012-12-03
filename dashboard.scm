@@ -495,9 +495,9 @@ Misc
 			(iup:label) ;; (iup:valuator)
 			(apply iup:vbox 
 			       (map (lambda (x)		
-				      (let ((res (iup:hbox
-						  (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
-						  (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
+				      (let ((res (iup:hbox #:expand "HORIZONTAL"
+						  (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
+						  (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
 							       #:action (lambda (obj unk val)
 									  (mark-for-update)
 									  (update-search x val))))))
@@ -509,7 +509,7 @@ Misc
       (cond
        ((>= testnum ntests)
 	;; now lftlst will be an hbox with the test keys and the test name labels
-	(set! lftlst (append lftlst (list (iup:hbox 
+	(set! lftlst (append lftlst (list (iup:hbox  #:expand "HORIZONTAL"
 					   (iup:valuator #:valuechanged_cb (lambda (obj)
 									     (let ((val (string->number (iup:attribute obj "VALUE")))
 										   (oldmax  (string->number (iup:attribute obj "MAX")))
@@ -520,7 +520,7 @@ Misc
 									       (if (< val 10)
 										   (iup:attribute-set! obj "MAX" newmax))
 									       ))
-							 #:expand "YES" 
+							 #:expand "VERTICAL" 
 							 #:orientation "VERTICAL")
 					   (apply iup:vbox (reverse res)))))))
        (else
@@ -529,7 +529,8 @@ Misc
 				 #:alignment "ALEFT"
 				 ; #:image img1
 				 ; #:impress img2
-				 #:size "100x15"
+				 #:size "x15"
+				 #:expand "HORIZONTAL"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
 					    (mark-for-update)
@@ -548,7 +549,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10"))) ;; #:expand "HORIZONTAL"
+	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10" #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL"
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -566,7 +567,7 @@ Misc
 	(let* ((button-key (mkstr runnum testnum))
 	       (butn       (iup:button "" ;; button-key 
 				       #:size "60x15" 
-				       ;; #:expand "HORIZONTAL"
+				       #:expand "HORIZONTAL"
 				       #:fontsize "10" 
 				       #:action (lambda (x)
 						  (let* ((toolpath (car (argv)))
