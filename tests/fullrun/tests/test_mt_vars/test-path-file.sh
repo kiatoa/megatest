@@ -6,7 +6,7 @@ export EZFAILPATH=`$MT_MEGATEST -test-files envfile.txt -target $MT_TARGET :runn
 
 echo Found $EZFAILPATH 
 
-if [[ -e $EZFAILPATH ]];then
+if [[ -e $EZFAILPATH/ ]];then
   echo All good!
 else
   echo NOT good!
