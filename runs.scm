@@ -222,7 +222,7 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (tests:get-valid-tests *toppath* test-names))
+    (set! test-names (append (tests:get-valid-tests *toppath* test-patts) test-names))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print-info 0 "test names " test-names)
@@ -344,7 +344,8 @@
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
 	(test-registery    (make-hash-table))
 	(num-retries        0)
-	(max-retries       (config-lookup *configdat* "setup" "maxretries")))
+	(max-retries       (config-lookup *configdat* "setup" "maxretries"))
+	(dotfilep          (if (args:get-arg "-dotfile")(open-output-file (args:get-arg "-dotfile")) #f)))
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
@@ -431,7 +432,13 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  (run:test run-id runname keyvallst test-record flags #f)
+		  (if dotfilep
+		      (with-output-to-port (lambda ()
+					     (for-each (lambda (w)
+							 (print " " w " -> " test-name ";"))
+						       waitons)
+					     (print " " test-name ";")))
+		      (run:test run-id runname keyvallst test-record flags #f))
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))

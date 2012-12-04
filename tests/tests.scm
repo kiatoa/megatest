@@ -47,20 +47,35 @@
    (test (conc patt " " str "=>" expected) expected (tests:glob-like-match patt str)))
  (list "abc"    "~abc" "~abc" "a*c"  "a%c")
  (list "abc"    "abcd" "abc"  "ABC"  "ABC")
- (list '("abc")  #t      #f     #f '("ABC"))
- )
+ (list '("abc")  #t      #f     #f '("ABC")))
+
+(test #f '("sqlite3speed") (tests:get-valid-tests *toppath* "%sqlite%") )
 
 ;; tests:match
 (test #f #t (tests:match "abc/def" "abc" "def"))
 (for-each 
- (lambda (patterns testname itempath expected)
-   (test (conc patterns " " testname "/" itempath "=>" expected)
-	 expected 
-	 (tests:match patterns testname itempath)))
- (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/")
- (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a")
- (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b")
- (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f))
+ (lambda (row) ;; erns testname itempath expected)
+   (let ((patterns (list-ref row 0))
+	 (testname (list-ref row 1))
+	 (itempath (list-ref row 2))
+	 (expected (list-ref row 3)))
+     (test (conc patterns " " testname "/" itempath "=>" expected)
+	   expected 
+	   (tests:match patterns testname itempath))))
+ '(("abc"        "abc"   ""      #t)
+   ("abc/%"      "abc"   ""      #t)
+   ("ab%/c%"     "abcd"  "cde"   #t)
+   ("ab%/c%"     "def"   ""      #t)
+   ("~abc/c%"    "abc"   "cde"   #f)
+   ("abc/~c%"    "abc"   "cde"   #f)
+   ("a,b/c,%/d"  "a"     ""      #t)
+   ("%/,%/a"     "abc"   ""      #t)
+   ("%/,%/a"     "def"   "a"     #t)
+   ("%/,%/a"     "ghi"   "b"     #f)
+   ("%"          "a"     ""      #t)
+   ("%"          "a"     "b"     #t)
+   ("%/"         "a"     ""      #t)
+   ("%/"         "a"     "b"     #f)))
 
 ;; db:patt->like
 (test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
@@ -72,6 +87,8 @@
       (tests:match->sqlqry "a/b,a%,/b%"))
 (test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
       (tests:match->sqlqry "a/b,a%,%/b%"))
+
+(exit)
 
 ;;======================================================================
 ;; S E R V E R

@@ -30,12 +30,17 @@
 (include "test_records.scm")
 
 (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+  (let ((tests  (glob (conc testsdir "/tests/*"))) ;; " (string-translate patt "%" "*")))))
+	;; strip off all itempatt portions
+	(modpat (string-intersperse
+		 (map
+		  (lambda (x)(first (string-split x "/")))
+		  (string-split test-patts ",")) ",")))
     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
     (delete-duplicates
      (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
+	       (tests:match modpat testname #f))
+	     (map (lambda (testp) ;; extract the testname from <test>/testconfig
 		    (last (string-split testp "/")))
 		  tests)))))
 

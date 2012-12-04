@@ -42,9 +42,8 @@ Usage: megatest [options]
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
-  -runall                 : run all tests that are not state COMPLETED and status PASS, 
-                            CHECK or KILLED
-  -runtests tst1,tst2 ... : run tests
+  -run testpatt[/itempatt] : run all tests that are not state COMPLETED and status PASS, 
+                            CHECK or KILLED, matching pattern testpatt...
   -remove-runs            : remove the data for a run, requires :runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
@@ -170,6 +169,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-gen-megatest-test"
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
+			"-run"
 			) 
 		 (list  "-h"
 			"-version"
@@ -513,17 +513,36 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   process deferred tasks per above steps
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
-(if (args:get-arg "-runall")
-    (general-run-call 
-     "-runall"
-     "run all tests"
-     (lambda (target runname keys keynames keyvallst)
-       (runs:run-tests target
-		       runname
-		       "%"
-		       (args:get-arg "-testpatt")
-		       user
-		       args:arg-hash))))
+(if (or (args:get-arg "-runall") ;; deprecated
+	(args:get-arg "-run")
+	(args:get-arg "-runtests"))
+    (begin
+      (if (args:get-arg "-testpatt")
+	  (begin
+	    (debug:print 0 "ERROR:-testpatt is deprecated, use -run patt1,patt2... instead, your pattern " (args:get-arg "-testpatt") " will be ignored")
+	    (sleep 3)))
+      (if (args:get-arg "-itempatt")
+	  (begin
+	    (debug:print 0 "ERROR: -itempatt is not used with -run, your pattern " (args:get-arg "-itempatt") " will be ignored")
+	    (sleep 3)))
+      (if (args:get-arg "-runall")
+	  (begin
+	    (debug:print 0 "ERROR: -runall is deprecated, use -run patt1,patt2 ... instead")
+	    (sleep 3)))
+      (if (args:get-arg "-runtests")
+	  (debug:print 0 "WARNING: -runtests is deprecated, use -run patt1,patt2 ... instead"))
+      (general-run-call 
+       "-run"
+       "run tests"
+       (lambda (target runname keys keynames keyvallst)
+	 (runs:run-tests target
+			 runname
+			 '()
+			 (or (args:get-arg "-run")
+			     (args:get-arg "-runtests")
+			     (args:get-arg "-testpatt"))
+			 user
+			 args:arg-hash)))))
 
 ;;======================================================================
 ;; run one test
@@ -542,17 +561,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-(if (args:get-arg "-runtests")
-  (general-run-call 
-   "-runtests" 
-   "run a test" 
-   (lambda (target runname keys keynames keyvallst)
-     (runs:run-tests target
-		     runname
-		     (args:get-arg "-runtests")
-		     (args:get-arg "-testpatt")
-		     user
-		     args:arg-hash))))
+;; (if (args:get-arg "-runtests")
+;;   (general-run-call 
+;;    "-runtests" 
+;;    "run a test" 
+;;    (lambda (target runname keys keynames keyvallst)
+;;      (runs:run-tests target
+;; 		     runname
+;; 		     (args:get-arg "-runtests")
+;; 		     (args:get-arg "-testpatt")
+;; 		     user
+;; 		     args:arg-hash))))
 
 ;;======================================================================
 ;; Rollup into a run
