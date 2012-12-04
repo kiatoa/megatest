@@ -117,6 +117,17 @@
 	res)
       #t))
 
+(define (common:get-runconfig-targets)
+  (sort (map car (hash-table->alist
+		  (read-config "runconfigs.config"
+			       (make-hash-table) #f))) string<?))
+
+;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
+(define (common:get-disks)
+  (hash-table-ref/default 
+   (read-config "megatest.config" #f #t)
+   "disks" '("none" "")))
+
 ;;======================================================================
 ;; System stuff
 ;;======================================================================

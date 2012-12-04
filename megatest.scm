@@ -190,6 +190,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; mist queries
 			"-list-disks"
 			"-list-targets"
+			"-list-db-targets"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -265,19 +266,54 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (save-environment-as-files (args:get-arg "-env2file"))
       (set! *didsomething* #t)))
 
-;; (if (args:get-arg "-list-targets")
-;;     (print (string-intersperse
-;; 	    (sort (map car (hash-table->alist
-;; 			    (read-config "runconfigs.config"
-;; 					 (make-hash-table) #f))) string<?) "\n")))
+(if (args:get-arg "-list-targets")
+    (begin
+      (print (string-intersperse
+	      (common:get-runconfig-targets)
+	      "\n"))
+      (set! *didsomething* #t)))
+
+;; (if (args:get-arg "-list-db-targets")
+;;     (if (setup-for-run)
+;; 	(let* ((db       (open-db)) ;; A=%,B=foo => ("A=%" "B=foo")
+;; 	       (keypatts (let ((pattstr  (args:get-arg "-list-db-targets")))
+;; 			   (if (equal? pattstr "-") 
+;; 			       #f
+;; 			       (let ((all (string-split pattstr ",")))
+;; 				 (map (lambda (x) ;; A=% => (A "%")
+;; 					(string-split x "="))
+;; 				      all)))))
+;; 	       (runsdat  (db:get-runs db "%" #f #f keypatts))
+;; 	       (runs     (cadr runsdat))
+;; 	       (header   (car  runsdat))
+;; 	       (seen     (make-hash-table))
+;; 	       (keysdat  (db:get-keys db))
+;; 	       (keys     (map (lambda (x)(vector-ref x 0)) keysdat)))
 ;; 
-;; 
-;; (if (args:get-arg "-list-disks")
-;;     (print (string-intersperse 
-;; 	    (map cadr (hash-table-ref/default 
-;; 		       (read-config "megatest.config" #f #t) 
-;; 		       "disks" "'" 
-;; 		       ("none" ""))) "\n")))
+;; 	  (for-each 
+;; 	   (lambda (run)
+;; 	     (print (string-intersperse 
+;; 		     (let loop ((key (car keys))
+;; 				(tal (cdr keys))
+;; 				(res '()))
+;; 		       (let ((val (db:get-value-by-header run header key)))
+;; 			 (if (null? tal)
+;; 			     (append res (list val))
+;; 			     (loop (car tal)(cdr tal)(append res (list val))))))
+;; 		     "/")))
+;; 	   runs))))
+
+(if (args:get-arg "-list-disks")
+    (begin
+      (print 
+       (string-intersperse 
+	(map (lambda (x)
+	       (string-intersperse 
+		x
+		" => "))
+	     (common:get-disks) )
+	"\n"))
+      (set! *didsomething* #t)))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -386,26 +422,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Query runs
 ;;======================================================================
 
-(if (args:get-arg "-list-runs")
+(if (or (args:get-arg "-list-runs")
+	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
 	(let* ((db       #f)
 	       (runpatt  (args:get-arg "-list-runs"))
-	       (testpatt (args:get-arg "-testpatt"))
+	       (testpatt (if (args:get-arg "-testpatt") 
+			     (args:get-arg "-testpatt") 
+			     "A long and rediculous test name that hopefully will never match"))
 	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (keys     (open-run-close db:get-keys db))
-	       (keynames (map key:get-fieldname keys)))
+	       (keynames (map key:get-fieldname keys))
+	       (db-targets (args:get-arg "-list-db-targets"))
+	       (seen     (make-hash-table)))
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
-	     (debug:print 1 "Run: "
-			  (string-intersperse (map (lambda (x)
-						     (db:get-value-by-header run header x))
-						   keynames) "/")
-			  "/"
-			  (db:get-value-by-header run header "runname")
-			  " status: " (db:get-value-by-header run header "state"))
+	     (let ((targetstr (string-intersperse (map (lambda (x)
+							 (db:get-value-by-header run header x))
+						       keynames) "/")))
+	       (if db-targets
+		   (if (not (hash-table-ref/default seen targetstr #f))
+		       (begin
+			 (hash-table-set! seen targetstr #t)
+			 (print targetstr)))
+		   (debug:print 1 
+				(if db-targets "" "Run: ")
+				targetstr 
+				(if db-targets "" (conc " status: " (db:get-value-by-header run header "state"))))
+		   ))
 	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
 	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
 		 ;; Each test
