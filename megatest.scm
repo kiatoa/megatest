@@ -266,43 +266,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (save-environment-as-files (args:get-arg "-env2file"))
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-list-targets")
-    (begin
-      (print (string-intersperse
-	      (common:get-runconfig-targets)
-	      "\n"))
-      (set! *didsomething* #t)))
-
-;; (if (args:get-arg "-list-db-targets")
-;;     (if (setup-for-run)
-;; 	(let* ((db       (open-db)) ;; A=%,B=foo => ("A=%" "B=foo")
-;; 	       (keypatts (let ((pattstr  (args:get-arg "-list-db-targets")))
-;; 			   (if (equal? pattstr "-") 
-;; 			       #f
-;; 			       (let ((all (string-split pattstr ",")))
-;; 				 (map (lambda (x) ;; A=% => (A "%")
-;; 					(string-split x "="))
-;; 				      all)))))
-;; 	       (runsdat  (db:get-runs db "%" #f #f keypatts))
-;; 	       (runs     (cadr runsdat))
-;; 	       (header   (car  runsdat))
-;; 	       (seen     (make-hash-table))
-;; 	       (keysdat  (db:get-keys db))
-;; 	       (keys     (map (lambda (x)(vector-ref x 0)) keysdat)))
-;; 
-;; 	  (for-each 
-;; 	   (lambda (run)
-;; 	     (print (string-intersperse 
-;; 		     (let loop ((key (car keys))
-;; 				(tal (cdr keys))
-;; 				(res '()))
-;; 		       (let ((val (db:get-value-by-header run header key)))
-;; 			 (if (null? tal)
-;; 			     (append res (list val))
-;; 			     (loop (car tal)(cdr tal)(append res (list val))))))
-;; 		     "/")))
-;; 	   runs))))
-
 (if (args:get-arg "-list-disks")
     (begin
       (print 
@@ -377,6 +340,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(server:client-launch)))
 
 ;;======================================================================
+;; Weird special calls that need to run *after* the server has started?
+;;======================================================================
+
+(if (args:get-arg "-list-targets")
+    (let ((targets (common:get-runconfig-targets)))
+      (print "Found "(length targets) " targets")
+      (for-each (lambda (x)
+		  (print "[" x "]"))
+		targets)
+      (set! *didsomething* #t)))
+
+
+;;======================================================================
 ;; Remove old run(s)
 ;;======================================================================
 
@@ -429,7 +405,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
-			     "A long and rediculous test name that hopefully will never match"))
+			     "%"))
 	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
@@ -447,52 +423,48 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (if (not (hash-table-ref/default seen targetstr #f))
 		       (begin
 			 (hash-table-set! seen targetstr #t)
-			 (print targetstr)))
-		   (debug:print 1 
-				(if db-targets "" "Run: ")
-				targetstr 
-				(if db-targets "" (conc " status: " (db:get-value-by-header run header "state"))))
-		   ))
-	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
-	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
-		 ;; Each test
-		 (for-each 
-		  (lambda (test)
-		    (format #t
-			    "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-			    (conc (db:test-get-testname test)
-				  (if (equal? (db:test-get-item-path test) "")
-				      "" 
-				      (conc "(" (db:test-get-item-path test) ")")))
-			    (db:test-get-state test)
-			    (db:test-get-status test)
-			    (db:test-get-run_duration test)
-			    (db:test-get-event_time test)
-			    (db:test-get-host test))
-		    (if (not (or (equal? (db:test-get-status test) "PASS")
-				 (equal? (db:test-get-status test) "WARN")
-				 (equal? (db:test-get-state test)  "NOT_STARTED")))
-			(begin
-			  (print "         cpuload:  " (db:test-get-cpuload test)
-				 "\n         diskfree: " (db:test-get-diskfree test)
-				 "\n         uname:    " (db:test-get-uname test)
-				 "\n         rundir:   " (db:test-get-rundir test)
-				 )
-			  ;; Each test
-			  (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
-			    (for-each 
-			     (lambda (step)
-			       (format #t 
-				       "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-				       (db:step-get-stepname step)
-				       (db:step-get-state step)
-				       (db:step-get-status step)
-				       (db:step-get-event_time step)))
-			     steps)))))
-		  tests))))
-	   runs)
-	  (set! *didsomething* #t))
-	(exit)))
+			 (print "[" targetstr "]"))))
+	       (if (not db-targets)
+		   (let* ((run-id (open-run-close db:get-value-by-header run header "id"))
+			  (tests  (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
+		     (debug:print 1 "Run: " targetstr " status: " (db:get-value-by-header run header "state")
+				  " run-id: " run-id ", number tests: " (length tests))
+		     (for-each 
+		      (lambda (test)
+			(format #t
+				"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+				(conc (db:test-get-testname test)
+				      (if (equal? (db:test-get-item-path test) "")
+					  "" 
+					  (conc "(" (db:test-get-item-path test) ")")))
+				(db:test-get-state test)
+				(db:test-get-status test)
+				(db:test-get-run_duration test)
+				(db:test-get-event_time test)
+				(db:test-get-host test))
+			(if (not (or (equal? (db:test-get-status test) "PASS")
+				     (equal? (db:test-get-status test) "WARN")
+				     (equal? (db:test-get-state test)  "NOT_STARTED")))
+			    (begin
+			      (print "         cpuload:  " (db:test-get-cpuload test)
+				     "\n         diskfree: " (db:test-get-diskfree test)
+				     "\n         uname:    " (db:test-get-uname test)
+				     "\n         rundir:   " (db:test-get-rundir test)
+				     )
+			      ;; Each test
+			      (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
+				(for-each 
+				 (lambda (step)
+				   (format #t 
+					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+					   (db:step-get-stepname step)
+					   (db:step-get-state step)
+					   (db:step-get-status step)
+					   (db:step-get-event_time step)))
+				 steps)))))
+		      tests)))))
+	     runs)
+	   (set! *didsomething* #t))))
 
 ;;======================================================================
 ;; full run
