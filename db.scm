@@ -568,8 +568,8 @@
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
-  (if (hash-table-ref/default *run-info-cache* run-id #f)
-      (hash-table-ref *run-info-cache* run-id)
+  ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
+  ;;    (hash-table-ref *run-info-cache* run-id)
       (let* ((res      #f)
 	     (keys      (db:get-keys db))
 	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
@@ -586,8 +586,8 @@
 	 run-id)
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(let ((finalres (vector header res)))
-	  (hash-table-set! *run-info-cache* run-id finalres)
-	  finalres))))
+	  ;; (hash-table-set! *run-info-cache* run-id finalres)
+	  finalres)))
 
 (define (db:set-comment-for-run db run-id comment)
   (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
@@ -1218,7 +1218,7 @@
        (if (directory? path)
 	   (print "Found path: " path)
 	   (print "No such path: " path)))
-     db 
+     db
      "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
      run-id test-name)
     res))
