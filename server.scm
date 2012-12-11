@@ -332,6 +332,9 @@
 	      ;;   							  (string-intersperse *verbosity* ",")
 	      ;;   							  (conc *verbosity*)))))
 	      (set! pid (process-fork (lambda ()
+					;; (current-input-port  (open-input-file  "/dev/null"))
+					;; (current-output-port (open-output-file "/dev/null"))
+					;; (current-error-port  (open-output-file "/dev/null"))
 					(server:launch)))) ;; should never get here ....
 	      (let loop ((count 0))
 		(let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
