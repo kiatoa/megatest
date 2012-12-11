@@ -148,13 +148,15 @@
 
 (for-each (lambda (item)
 	    (test (conc "get valid items (" item ")")
-		  item (check-valid-items "state" item)))
+		  item (items:check-valid-items "state" item)))
 	  (list "start" "end" "completed"))
 
 (for-each (lambda (item)
 	    (test (conc "get valid items (" item ")")
-		  item (check-valid-items "status" item)))
+		  item (items:check-valid-items "status" item)))
 	  (list "pass" "fail" "n/a"))
+
+(test #f #f (items:check-valid-items "state" "blahfool"))
 
 (test "write env files" "nada.csh" (begin
                                       (save-environment-as-files "nada")

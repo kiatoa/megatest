@@ -13,9 +13,8 @@
 ;; Tests
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp rpc)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp)
 (import (prefix sqlite3 sqlite3:))
-(import (prefix rpc rpc:))
 
 (declare (unit tests))
 (declare (uses db))
@@ -289,7 +288,7 @@
     (set! logf (car logf-info))
     (if (directory? path)
 	(begin
-	  (print "Found path: " path)
+	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
 	(print "No such path: " path))

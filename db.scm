@@ -1219,8 +1219,8 @@
        (set! logf final_logf)
        (set! res (list path final_logf))
        (if (directory? path)
-	   (print "Found path: " path)
-	   (print "No such path: " path)))
+	   (debug:print 2 "Found path: " path)
+	   (debug:print 2 "No such path: " path)))
      db
      "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
      run-id test-name)
@@ -1671,8 +1671,8 @@
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   (let* ((tdb       (db:open-test-db-by-test-id db test-id))
-	 (state     (check-valid-items "state" state-in))
-	 (status    (check-valid-items "status" status-in)))
+	 (state     (items:check-valid-items "state" state-in))
+	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
 	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
