@@ -69,10 +69,6 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
-;; Awful. Please FIXME
-(define *env-vars-by-run-id* (make-hash-table))
-(define *current-run-name*   #f)
-
 (define (db:get-run-key-val db run-id key)
   (let ((res #f))
     (sqlite3:for-each-row
@@ -202,6 +198,7 @@
 ;;              FIXME: error out if /patt specified
 ;;            
 (define (runs:run-tests target runname test-names test-patts user flags)
+  (common:clear-caches) ;; clear all caches
   (let* ((db          #f)
 	 (keys        (cdb:remote-run db:get-keys #f))
 	 (keyvallst   (keys:target->keyval keys target))
@@ -730,6 +727,7 @@
 ;; NB// should pass in keys?
 ;;
 (define (runs:operate-on action runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
+  (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (keys         (open-run-close db:get-keys db))
 	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))

@@ -191,6 +191,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-disks"
 			"-list-targets"
 			"-list-db-targets"
+			"-show-runconfig"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -351,6 +352,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		targets)
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-show-runconfig")
+    (begin
+      (pp (hash-table->alist (open-run-close setup-env-defaults #f "runconfigs.config" #f #f change-env: #f)))
+      (set! *didsomething* #t)))
 
 ;;======================================================================
 ;; Remove old run(s)

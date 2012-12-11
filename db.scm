@@ -596,6 +596,7 @@
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
+  (common:clear-caches) ;; don't trust caches after doing any deletion
   (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
 (define (db:update-run-event_time db run-id)
@@ -749,6 +750,7 @@
 
 ;; 
 (define (db:delete-test-records db tdb test-id #!key (force #f))
+  (common:clear-caches)
   (if tdb 
       (begin
 	(sqlite3:execute tdb "DELETE FROM test_steps;")
@@ -763,6 +765,7 @@
 	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE id=?;" test-id)))))
 
 (define (db:delete-tests-for-run db run-id)
+  (common:clear-caches)
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
