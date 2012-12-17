@@ -122,14 +122,17 @@
 		  '()
 		  #f)))
       res)))
-            ;; Nope, not now, return null as of 6/6/2011
+;; Nope, not now, return null as of 6/6/2011
 		
 (define (items:check-valid-items class item)
   (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))
 			(if s (string-split s) #f))))
     (if valid-values
-	(if (member item valid-values)
-	    item #f)
+	(if (member (conc item) valid-values)
+	    item 
+	    (begin
+	      (debug:print-info 1 item " not found in " valid-values)
+	      #f))
 	item)))
 
 (define (items:get-items-from-config tconfig)

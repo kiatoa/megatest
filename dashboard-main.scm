@@ -23,6 +23,7 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit dashboard-main))
+(declare (uses dashboard-guimonitor))
 (declare (uses common))
 (declare (uses keys))
 (declare (uses db))
@@ -55,7 +56,7 @@
 
 (define (mtest)
   (let* ((curr-row-num     0)
-	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
+	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string allow-expand: #f))
 	 (keys-matrix      (iup:matrix
 		            #:expand "VERTICAL"
 		            ;; #:scrollbar "YES"
@@ -208,12 +209,13 @@
   (iup:hbox
    (iup:frame #:title "Runs browser")))
 
-(define (main-panel)
+(define (main-panel db)
   (iup:dialog
    #:title "Menu Test"
    #:menu (main-menu)
    (let ((tabtop (iup:tabs 
-		  (runs)
+		  (gui-monitor db) ;; (control-panel db tdb)
+		  ;; (runs)
 		  (mtest) 
 		  (rconfig)
 		  (tests)

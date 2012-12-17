@@ -156,7 +156,10 @@
 		  item (items:check-valid-items "status" item)))
 	  (list "pass" "fail" "n/a"))
 
-(test #f #f (items:check-valid-items "state" "blahfool"))
+(test #f #f    (items:check-valid-items "state" "blahfool"))
+(test #f 0     (items:check-valid-items "state" 0))
+(test #f "0"   (items:check-valid-items "state" "0"))
+(test #f "foo" (items:check-valid-items "nada"  "foo"))
 
 (test "write env files" "nada.csh" (begin
                                       (save-environment-as-files "nada")

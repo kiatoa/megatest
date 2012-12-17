@@ -115,9 +115,9 @@
 	(config-lookup config targ var)
 	#f)))
 
-(define-inline (configf:read-line p ht allow-processing)
-  (if (and allow-processing 
-	   (not (eq? allow-processing 'return-string)))
+(define-inline (configf:read-line p ht allow-expand)
+  (if (and allow-expand
+	   (not (eq? allow-expand 'return-string)))
       (configf:process-line (read-line p) ht)
       (read-line p)))
 
@@ -128,7 +128,7 @@
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(allow-expand #t))
   (debug:print-info 4 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections)
   (if (not (file-exists? path))
       (begin 
@@ -136,7 +136,7 @@
 	(if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
-	(let loop ((inl               (configf:read-line inp res allow-system)) ;; (read-line inp))
+	(let loop ((inl               (configf:read-line inp res allow-expand)) ;; (read-line inp))
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
 		   (lead     #f))
@@ -148,15 +148,15 @@
 		res)
 	      (regex-case 
 	       inl 
-	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
+	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-expand) curr-section-name #f #f))
+	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-expand) curr-section-name #f #f))
 	       (configf:include-rx ( x include-file ) (let ((curr-dir (current-directory))
 							    (conf-dir  (pathname-directory path)))
 							(if conf-dir (change-directory conf-dir))
-							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
+							(read-config include-file res allow-expand environ-patt: environ-patt curr-section: curr-section-name sections: sections)
 							(change-directory curr-dir)
-							(loop (configf:read-line inp res allow-system) curr-section-name #f #f)))
-	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system)
+							(loop (configf:read-line inp res allow-expand) curr-section-name #f #f)))
+	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-expand)
 							    ;; if we have the sections list then force all settings into "" and delete it later?
 							    (if (or (not sections) 
 								    (member section-name sections))
@@ -184,8 +184,8 @@
 												      ((return-procs) val-proc)
 												      ((return-string) cmd)
 												      (else (val-proc)))))
-							    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-							  (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))
+							    (loop (configf:read-line inp res allow-expand) curr-section-name #f #f))
+							  (loop (configf:read-line inp res allow-expand) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 							     (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
 							     (realval (if envar
@@ -198,7 +198,7 @@
 							      (setenv key realval)))
 							(hash-table-set! res curr-section-name 
 									 (config:assoc-safe-add alist key realval))
-							(loop (configf:read-line inp res allow-system) curr-section-name key #f)))
+							(loop (configf:read-line inp res allow-expand) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(if var-flag             ;; if set to a string then we have a continued var
@@ -212,11 +212,11 @@
 						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
 						      (hash-table-set! res curr-section-name 
 								       (config:assoc-safe-add alist var-flag newval))
-						      (loop (configf:read-line inp res allow-system) curr-section-name var-flag (if lead lead whsp)))
-						    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))))
+						      (loop (configf:read-line inp res allow-expand) curr-section-name var-flag (if lead lead whsp)))
+						    (loop (configf:read-line inp res allow-expand) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (configf:read-line inp res allow-system) curr-section-name #f #f))))))))
+		     (loop (configf:read-line inp res allow-expand) curr-section-name #f #f))))))))
   
 ;; pathenvvar will set the named var to the path of the config
 (define (find-and-read-config fname #!key (environ-patt #f)(given-toppath #f)(pathenvvar #f))

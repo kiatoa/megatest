@@ -33,6 +33,7 @@
 (include "run_records.scm")
 (include "task_records.scm")
 
+;; tdb is the tasks database (monitor.db)
 (define (control-panel db tdb keys)
   (let* ((var-params (make-hash-table)) ;; register all the widgets here for querying on run, rollup, remove?
 	 (key-params (make-hash-table))
@@ -128,7 +129,7 @@
 			       (set! next-touch (+ (current-seconds) 10))
 			       )))))
 	 (topdialog  #f))
-    (set! topdialog (iup:dialog 
+    (set! topdialog (iup:vbox ;; iup:dialog 
 		     #:close_cb (lambda (a)(exit))
 		     #:title "Run Controls"
 		     (iup:vbox
@@ -157,12 +158,13 @@
 		      ;  #:title "Actions"
 		      ;  actions))))
 
-    (iup:show topdialog)
+    ;; (iup:show topdialog)
     (iup:callback-set! *tim* "ACTION_CB"
 		       (lambda (x)
 			 (refreshdat)
 			 (if *exit-started*
-			     (set! *exit-started* 'ok))))))
+			     (set! *exit-started* 'ok))))
+    topdialog))
 
 (define (main-window setuptab fsltab collateraltab toolstab)
   (iup:show

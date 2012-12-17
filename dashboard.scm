@@ -653,7 +653,7 @@ Misc
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))
  ((args:get-arg "-main")
-  (iup:show (main-panel)))
+  (iup:show (main-panel *db*)))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*
