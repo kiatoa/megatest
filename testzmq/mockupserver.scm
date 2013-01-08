@@ -11,8 +11,8 @@
 (define total-db-accesses 0)
 (define start-time (current-seconds))
 
-(bind-socket pub "tcp://*:5563")
-(bind-socket pull "tcp://*:5564")
+(bind-socket pub "tcp://*:6563")
+(bind-socket pull "tcp://*:6564")
 
 (define (open-db)
   (let* ((dbpath    "mockup.db")
