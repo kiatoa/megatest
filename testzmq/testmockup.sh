@@ -3,6 +3,10 @@
 rm -f mockup.db
 
 echo Compiling mockupserver.scm and mockupclient.scm
+
+# Clean up first
+killall mockupserver mockupclient -v
+
 csc random.scm
 csc mockupserver.scm
 csc mockupclient.scm
@@ -12,8 +16,10 @@ echo Starting server
 
 sleep 1
 
+rm -f mockupclients.log
+
 echo Starting clients
-for i in a b c d e; # f g h i j k l m n o p q s t u v w x y z; 
+for i in a b c d e f g h i j k l m n o p q s t u v w x y z; 
   do
   for k in a b;
     do
@@ -23,6 +29,7 @@ for i in a b c d e; # f g h i j k l m n o p q s t u v w x y z;
       runtime=`./random 5 120`
       echo "Starting client $i$k$j with waittime $waittime and runtime $runtime" 
       (sleep $waittime;./mockupclient $i$k$j $runtime) &
+      # >> mockupclients.log &
     done
   done
 done

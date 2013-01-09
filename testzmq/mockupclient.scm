@@ -20,6 +20,13 @@
 
 (set! endtime (+ (current-seconds) runtime))
 
+;; first ping the server to ensure we have a connection
+(if (server-ping cname 5)
+    (print "SUCCESS: Client " cname " connected to server")
+    (begin
+      (print "ERROR: Client " cname " failed ping of server, exiting")
+      (exit)))
+
 (let loop ()
   (let ((x (random 15))
 	(varname (list-ref (list "hello" "goodbye" "saluton" "kiaorana")(random 4))))
