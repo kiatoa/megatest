@@ -3,7 +3,7 @@
 ;; as a client disconnects.  Also a remaining client may receive tons of
 ;; messages afterward.
 
-(use zmq srfi-18 sqlite3)
+(use zmq srfi-18 sqlite3 numbers)
 
 (define pub (make-socket 'pub))
 (define pull (make-socket 'pull))

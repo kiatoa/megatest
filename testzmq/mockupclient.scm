@@ -1,4 +1,4 @@
-(use zmq posix)
+(use zmq posix numbers)
 
 (define cname "Bob")
 (define runtime 10)
