@@ -7,7 +7,7 @@
   (define-page (main-page-path)
     (lambda ()
       (with-request-variables (foo)
-        (conc foo " Hello, world! Goodbye Dolly")))))
+        foo))))
 
 (define (start-server #!key (portnum 8080))
   (handle-exceptions
