@@ -10,6 +10,7 @@
 (define start-time (current-seconds))
 
 ;; setup the server here
+(tcp-buffer-size 2048)
 (server-port 5563)
 
 (define (open-db)
