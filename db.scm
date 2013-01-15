@@ -1252,6 +1252,31 @@
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
 
+
+
+
+
+
+
+
+UPDATE DB:PROCESS_QUEUE@@@@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied

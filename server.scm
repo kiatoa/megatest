@@ -60,7 +60,23 @@
 			    (string->number (args:get-arg "-port"))
 			    (+ 5000 (random 1001)))))
     (set! *cache-on* #t)
-    (server:try-start-server ipaddrstr portnum)))
+    (server:try-start-server ipaddrstr start-port)))
+
+
+(define (server:main-loop)
+  (define-page (main-page-path)
+    (lambda ()
+      (with-request-variables (dat)
+	(let* ((packet (db:string->obj dat))
+	       (qtype  (cdb:packet-get-qtype packet)))
+	  (debug:print-info 12 "server=> received packet=" packet)
+	  (if (not (member qtype '(sync ping)))
+	      (begin
+		(mutex-lock! *heartbeat-mutex*)
+		(set! *last-db-access* (current-seconds))
+		(mutex-unlock! *heartbeat-mutex*)))
+	  (open-run-close db:process-queue #f pub-socket (cons packet queue-lst)))))))
+
 
 ;; This is recursively run by server:run until sucessful
 ;;
@@ -76,7 +92,13 @@
 	   (server:try-start-server ipaddrstr (+ portnum 1)))
 	 (print "ERROR: Tried and tried but could not start the server")))
    (print "INFO: Trying to start server on portnum: " portnum)
-   (awful-start hello-world ip-address: ipaddrstr port: portnum)))
+   
+   (set! *runremote* (list ipaddrstr portnum))
+   (open-run-close tasks:server-register 
+		   tasks:open-db 
+		   (current-process-id)
+		   ipaddrstr portnum 0 'live)
+   (awful-start server:main-loop ip-address: ipaddrstr port: portnum)))
 
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 
@@ -99,12 +121,13 @@
       (let ((sig (server:mk-signature)))
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
+
 ;; <html>
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
 (define (server:client-send-receive serverdat msg)
-  (let* ((res (with-input-from-request (conc serverdat "/?dat=" msg) #f read-string))
+  (let* ((res (with-input-from-request (conc (server:make-server-url serverdat) "/?dat=" msg) #f read-string))
 	 (match (string-search (regexp "<body>(.*)<.body>") (caddr (string-split res "\n")))))
     (cadr match)))
 
@@ -112,23 +135,24 @@
   (cdb:login serverdat *toppath* (server:get-client-signature)))
 
 ;; Not currently used! But, I think it *should* be used!!!
-(define (server:client-logout zmq-socket)
-  (let ((ok (and (socket? zmq-socket)
-		 (cdb:logout zmq-socket *toppath* (server:get-client-signature)))))
-    ;; (close-socket zmq-socket)
+(define (server:client-logout serverdat)
+  (let ((ok (and (socket? serverdat)
+		 (cdb:logout serverdat *toppath* (server:get-client-signature)))))
+    ;; (close-socket serverdat)
     ok))
 
 (define (server:client-connect iface port)
-  (let* ((login-res   #f))
+  (let* ((login-res   #f)
+	 (serverdat   (list iface port)))
     (set! login-res (server:client-login serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" pullport "/" pubport ".")
+	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin
-	  (debug:print-info 2 "Failed to login or connect to " conurl)
+	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
 	  (set! *runremote* #f)
 	  #f))))
 
@@ -144,7 +168,7 @@
 	(let ((host     (list-ref hostinfo 0))
 	      (iface    (list-ref hostinfo 1)))
 	  (debug:print-info 2 "Setting up to connect to " hostinfo)
-	  (server:client-connect iface pullport pubport)) ;; )
+	  (server:client-connect iface port)) ;; )
 	(if (> numtries 0)
 	    (let ((exe (car (argv)))
 		  (pid #f))
