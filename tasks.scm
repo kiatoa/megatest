@@ -93,7 +93,7 @@
                              VALUES(?,  ?,       ?, strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?);"
    pid (get-host-name) port priority (conc state) megatest-version interface)
   (list 
-   (tasks:server-get-server-id mdb (get-host-name) port pid)
+   (tasks:server-get-server-id mdb (get-host-name) interface port pid)
    interface
    port
    ))
@@ -114,26 +114,31 @@
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
-(define (tasks:server-get-server-id mdb hostname port pid)
+(define (tasks:server-get-server-id mdb hostname iface port pid)
   (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id)
        (set! res id))
      mdb
-     (if (and hostname  pid)
-	 "SELECT id FROM servers WHERE hostname=? AND pid=?;"
-	 "SELECT id FROM servers WHERE hostname=? AND port=?;")
-     hostname (if pid pid port))
+     (cond
+      ((and hostname  pid)  "SELECT id FROM servers WHERE hostname=?  AND pid=?;")
+      ((and iface     port) "SELECT id FROM servers WHERE interface=? AND port=?;")
+      ((and hostname  port) "SELECT id FROM servers WHERE hostname=?  AND port=?;")
+      (else
+       (begin
+	 (debug:print 0 "ERROR: tasks:server-get-server-id needs (hostname and pid) OR (iface and port) OR (hostname and port)")
+	 "SELECT id FROM servers WHERE pid=-999;")))
+     (if hostname hostname iface)(if pid pid port))
     res))
 
 (define (tasks:server-update-heartbeat mdb server-id)
   (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id))
 
 ;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
-(define (tasks:server-alive? mdb server-id #!key (hostname #f)(port #f)(pid #f))
+(define (tasks:server-alive? mdb server-id #!key (iface #f)(hostname #f)(port #f)(pid #f))
   (let* ((server-id  (if server-id 
 			 server-id
-			 (tasks:server-get-server-id mdb hostname port pid)))
+			 (tasks:server-get-server-id mdb hostname iface port pid)))
 	 (heartbeat-delta 99e9))
     (sqlite3:for-each-row
      (lambda (delta)
@@ -145,7 +150,7 @@
   (sqlite3:execute
    mdb
    "INSERT OR REPLACE INTO clients (server_id,pid,hostname,cmdline,login_time) VALUES(?,?,?,?,strftime('%s','now'));")
-  (tasks:server-get-server-id mdb hostname #f pid)
+  (tasks:server-get-server-id mdb hostname #f #f pid)
   pid hostname cmdline)
 
 (define (tasks:client-logout mdb pid hostname cmdline)
@@ -179,30 +184,35 @@
      "SELECT id,hostname,interface,port,pid FROM servers
          WHERE strftime('%s','now')-heartbeat < 10
                AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
-    (if (null? res) #f
-	(let loop ((hed (car res))
-		   (tal (cdr res)))
-	  ;; (print "hed=" hed ", tal=" tal)
-	  (let* ((host     (list-ref hed 0))
-		 (iface    (list-ref hed 1))
-		 (port     (list-ref hed 2))
-		 (pid      (list-ref hed 4))
-		 (alive    (open-run-close tasks:server-alive? tasks:open-db #f hostname: host port: port)))
-	    (if alive
-		(begin
-		  (debug:print-info 2 "Found an existing, alive, server " host ", " port ".")
-		  (list host iface port))
-		(begin
-		  (debug:print-info 1 "Marking " host ":" port " as dead in server registry.")
-		  (if port
-		      (open-run-close tasks:server-deregister tasks:open-db host port: port)
-		      (open-run-close tasks:server-deregister tasks:open-db host pid:  pid))
-		  (if (null? tal)
-		      #f
-		      (loop (car tal)(cdr tal))))))))))
+    ;; for now we are keeping only one server registered in the db, return #f or first server found
+    (if (null? res) #f (car res))))
+
+;; BUG: This logic is probably needed unless methodology changes completely...
+;;
+;;     (if (null? res) #f
+;; 	(let loop ((hed (car res))
+;; 		   (tal (cdr res)))
+;; 	  ;; (print "hed=" hed ", tal=" tal)
+;; 	  (let* ((host     (list-ref hed 0))
+;; 		 (iface    (list-ref hed 1))
+;; 		 (port     (list-ref hed 2))
+;; 		 (pid      (list-ref hed 4))
+;; 		 (alive    (open-run-close tasks:server-alive? tasks:open-db #f hostname: host port: port)))
+;; 	    (if alive
+;; 		(begin
+;; 		  (debug:print-info 2 "Found an existing, alive, server " host ", " port ".")
+;; 		  (list host iface port))
+;; 		(begin
+;; 		  (debug:print-info 1 "Marking " host ":" port " as dead in server registry.")
+;; 		  (if port
+;; 		      (open-run-close tasks:server-deregister tasks:open-db host port: port)
+;; 		      (open-run-close tasks:server-deregister tasks:open-db host pid:  pid))
+;; 		  (if (null? tal)
+;; 		      #f
+;; 		      (loop (car tal)(cdr tal))))))))))
 
 (define (tasks:remove-server-records mdb)
-  (sqlite3:exec mdb "DELETE FROM servers;"))
+  (sqlite3:execute mdb "DELETE FROM servers;"))
 
 (define (tasks:mark-server hostname port pid state)
   (if port

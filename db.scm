@@ -1138,11 +1138,11 @@
 	  (res  #f)
 	  (rawdat      (server:client-send-receive serverdat zdat))
 	  (tmp         #f))
-     (print "Sent " zdat ", received " rawdat)
-     (set! tmp (db:string->obj newres))
+     (debug:print-info 11 "Sent " zdat ", received " rawdat)
+     (set! tmp (db:string->obj rawdat))
      ;; (if (equal? query-sig (vector-ref myres 1))
      ;; (set! res
-     (vector-ref myres 2)
+     (vector-ref tmp 2)
      ;; (loop (server:client-send-receive serverdat zdat)))))))
 	  ;; (timeout (lambda ()
 	  ;;            (let loop ((n numretries))
@@ -1278,7 +1278,7 @@
        (db:process-queue-item db pubsock item))
      data)))
 
-(define (db:process-queue-item db pubsock item)
+(define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
 	 (qry-sig        (cdb:packet-get-query-sig item))
 	 (return-address (cdb:packet-get-client-sig item))
@@ -1298,10 +1298,10 @@
 	       (remparams (cdr params)))
 	   ;; we are being handed a procedure so call it
 	   (debug:print-info 11 "Running (apply " proc " " remparams ")")
-	   (server:reply pubsock return-address qry-sig #t (apply proc remparams))))
+	   (server:reply return-address qry-sig #t (apply proc remparams))))
 	((login)
 	 (if (< (length params) 3) ;; should get toppath, version and signature
-	     '(#f "login failed due to missing params") ;; missing params
+	     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
 	     (let ((calling-path (car   params))
 		   (calling-vers (cadr  params))
 		   (client-key   (caddr params)))
@@ -1309,27 +1309,27 @@
 			(equal? megatest-version calling-vers))
 		   (begin
 		     (hash-table-set! *logged-in-clients* client-key (current-seconds))
-		     (server:reply  pubsock return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
-		   (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))))
+		     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+		   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
 	((flush sync)
-	 (server:reply pubsock return-address qry-sig #t 1)) ;; (length data)))
+	 (server:reply return-address qry-sig #t 1)) ;; (length data)))
 	((set-verbosity)
 	 (set! *verbosity* (car params))
-	 (server:reply pubsock return-address qry-sig #t '(#t *verbosity*)))
+	 (server:reply return-address qry-sig #t '(#t *verbosity*)))
 	((killserver)
 	 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
 	 (open-run-close tasks:server-deregister tasks:open-db 
 			 (cadr *server-info*)
 			 pullport: (caddr *server-info*))
 	 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-	 (server:reply pubsock return-address qry-sig #t '(#t "exit process started")))
+	 (server:reply return-address qry-sig #t '(#t "exit process started")))
 	(else ;; not a command, i.e. is a query
 	 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
 	 (server:reply pubsock return-address qry-sig #f 'failed))))
      (else
       (debug:print-info 11 "Executing " stmt-key " for " params)
       (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-      (server:reply pubsock return-address qry-sig #t #t)))))
+      (server:reply return-address qry-sig #t #t)))))
 
 (define (db:test-get-records-for-index-file db run-id test-name)
   (let ((res '()))

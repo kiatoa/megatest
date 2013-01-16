@@ -79,7 +79,7 @@
 		(mutex-lock! *heartbeat-mutex*)
 		(set! *last-db-access* (current-seconds))
 		(mutex-unlock! *heartbeat-mutex*)))
-	  (open-run-close db:process-queue-item packet))))))
+	  (open-run-close db:process-queue-item open-db packet))))))
 
 
 ;; This is recursively run by server:run until sucessful
@@ -117,14 +117,14 @@
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
-(define (server:reply pubsock target query-sig success/fail result)
-  (debug:print-info 11 "server:reply target=" target ", result=" result)
+(define (server:reply return-addr query-sig success/fail result)
+  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (db:obj->string (vector success/fail query-sig result)))
 
 ;;======================================================================
-;; C L I E N  T S
+;; C L I E N T S
 ;;======================================================================
 
 (define (server:get-client-signature)
@@ -140,11 +140,14 @@
 (define (server:client-send-receive serverdat msg)
   (let* ((url     (server:make-server-url serverdat))
 	 (fullurl (conc url "/?dat=" msg)))
-    (print "url=" url ", fullurl=" fullurl)
+    (debug:print-info 11 "fullurl=" fullurl)
     (let* ((res   (with-input-from-request fullurl #f read-string)))
-      (print "got res=" res)
-      (let ((match (string-search (regexp "<body>(.*)<.body>") (caddr (string-split res "\n")))))
-	(cadr match)))))
+      (debug:print-info 11 "got res=" res)
+      (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
+	(debug:print-info 11 "match=" match)
+	(let ((final (cadr match)))
+	  (debug:print-info 11 "final=" final)
+	  final)))))
 
 (define (server:client-login serverdat)
   (cdb:login serverdat *toppath* (server:get-client-signature)))
@@ -181,11 +184,13 @@
   (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
     (if hostinfo
 	(let ((host     (list-ref hostinfo 0))
-	      (iface    (list-ref hostinfo 1)))
+	      (iface    (list-ref hostinfo 1))
+	      (port     (list-ref hostinfo 2))
+	      (pid      (list-ref hostinfo 3)))
 	  (debug:print-info 2 "Setting up to connect to " hostinfo)
 	  (server:client-connect iface port)) ;; )
 	(if (> numtries 0)
-	    (let ((exe (car (argv)))
+	    (let (;; (exe (car (argv)))
 		  (pid #f))
 	      (debug:print-info 0 "No server available, attempting to start one...")
 	      ;; (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
@@ -195,7 +200,7 @@
 					;; (current-input-port  (open-input-file  "/dev/null"))
 					;; (current-output-port (open-output-file "/dev/null"))
 					;; (current-error-port  (open-output-file "/dev/null"))
-					(server:launch)))) ;; should never get here ....
+					(server:launch))))
 	      (let loop ((count 0))
 		(let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
 		  (if (not hostinfo)
@@ -227,18 +232,19 @@
                                 (loop))))))
          (iface       (car server-info))
          (port        (cadr server-info))
-         (last-access 0))
-    ;; (print "Keep-running got server-info " server-info)
+         (last-access 0)
+	 (spid        (open-run-close tasks:server-get-server-id tasks:open-db #f iface port #f)))
+    (print "Keep-running got server pid " spid ", using iface " iface " and port " port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
-      (let ((queue-len (cdb:client-call server-info 'sync #t 1)))
+      (let () ;; (queue-len (cdb:client-call server-info 'sync #t 1)))
       ;; (print "Server running, count is " count)
         (if (< count 1) ;; 3x3 = 9 secs aprox
             (loop (+ count 1)))
         
         ;; NOTE: Get rid of this mechanism! It really is not needed...
-        (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
+        (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
       
         ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
         (mutex-lock! *heartbeat-mutex*)
@@ -283,14 +289,11 @@
 					(if (args:get-arg "-server")
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
-		   ;; (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
+		   (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
 		   )
-	      (set! *client-non-blocking-mode* #t)
-	      ;; (thread-start! th1)
 	      (thread-start! th2)
-	      ;; (thread-start! th3)
+	      (thread-start! th3)
 	      (set! *didsomething* #t)
-	      ;; (thread-join! th3)
 	      (thread-join! th2)
 	      )
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
@@ -301,12 +304,11 @@
    exn
    (debug:print " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
-			     (if (not *received-response*)
-				 (receive-message* *runremote*))) ;; flush out last call if applicable
+			     "") ;; do nothing for now (was flush out last call if applicable)
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
 			     (debug:print 0 "       Done.")
 			     (exit 4))
 			   "exit on ^C timer")))
