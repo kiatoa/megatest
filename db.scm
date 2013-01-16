@@ -1133,7 +1133,7 @@
 	  (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	  (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
 	  )
-     ;; (print "zdat=" zdat)
+     (debug:print-info 11 "zdat=" zdat)
      (let* (
 	  (res  #f)
 	  (rawdat      (server:client-send-receive serverdat zdat))
@@ -1285,11 +1285,11 @@
 	 (params         (cdb:packet-get-params item))
 	 (query          (let ((q (alist-ref stmt-key db:queries)))
 			   (if q (car q) #f))))
-    (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", qrery=" query ", params=" params)
+    (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
     (cond
      (query
       (apply sqlite3:execute db query params)
-      (server:reply pubsock return-address qry-sig #t #t))
+      (server:reply return-address qry-sig #t #t))
      ((member stmt-key db:special-queries)
       (debug:print-info 11 "Handling special statement " stmt-key)
       (case stmt-key
