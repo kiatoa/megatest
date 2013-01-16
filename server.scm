@@ -48,14 +48,14 @@
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
 	    (exit))))
-  (let* ((iface           (if (string=? "-" hostn)
-			      "*" ;; (get-host-name) 
-			      hostn))
+  (let* (;; (iface           (if (string=? "-" hostn)
+	 ;;        	      #f ;; (get-host-name) 
+	 ;;        	      hostn))
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   #f)))
-			    (if ipstr ipstr hostname)))
+			    (if ipstr ipstr hostn))) ;; hostname)))
 	 (start-port    (if (args:get-arg "-port")
 			    (string->number (args:get-arg "-port"))
 			    (+ 5000 (random 1001)))))
@@ -64,9 +64,13 @@
 
 
 (define (server:main-loop)
+  (print "INFO: Exectuing main server loop")
+  (access-log "megatest-http.log")
+  (server-bind-address #f)
   (define-page (main-page-path)
     (lambda ()
       (with-request-variables (dat)
+        (print "Got dat=" dat)
 	(let* ((packet (db:string->obj dat))
 	       (qtype  (cdb:packet-get-qtype packet)))
 	  (debug:print-info 12 "server=> received packet=" packet)
@@ -75,7 +79,7 @@
 		(mutex-lock! *heartbeat-mutex*)
 		(set! *last-db-access* (current-seconds))
 		(mutex-unlock! *heartbeat-mutex*)))
-	  (open-run-close db:process-queue #f pub-socket (cons packet queue-lst)))))))
+	  (open-run-close db:process-queue-item packet))))))
 
 
 ;; This is recursively run by server:run until sucessful
@@ -88,17 +92,19 @@
      (if (< portnum 9000)
 	 (begin 
 	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
-	   (sleep 1)
+	   (thread-sleep! 0.1)
+	   (open-run-close tasks:remove-server-records tasks:open-db)
 	   (server:try-start-server ipaddrstr (+ portnum 1)))
 	 (print "ERROR: Tried and tried but could not start the server")))
-   (print "INFO: Trying to start server on portnum: " portnum)
-   
    (set! *runremote* (list ipaddrstr portnum))
+   (open-run-close tasks:remove-server-records tasks:open-db)
    (open-run-close tasks:server-register 
 		   tasks:open-db 
 		   (current-process-id)
 		   ipaddrstr portnum 0 'live)
-   (awful-start server:main-loop ip-address: ipaddrstr port: portnum)))
+   (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
+   (awful-start server:main-loop port: portnum) ;; ip-address: ipaddrstr 
+   (print "INFO: server has been stopped")))
 
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 
@@ -111,6 +117,11 @@
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
+(define (server:reply pubsock target query-sig success/fail result)
+  (debug:print-info 11 "server:reply target=" target ", result=" result)
+  ;; (send-message pubsock target send-more: #t)
+  ;; (send-message pubsock 
+  (db:obj->string (vector success/fail query-sig result)))
 
 ;;======================================================================
 ;; C L I E N  T S
@@ -127,9 +138,13 @@
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
 (define (server:client-send-receive serverdat msg)
-  (let* ((res (with-input-from-request (conc (server:make-server-url serverdat) "/?dat=" msg) #f read-string))
-	 (match (string-search (regexp "<body>(.*)<.body>") (caddr (string-split res "\n")))))
-    (cadr match)))
+  (let* ((url     (server:make-server-url serverdat))
+	 (fullurl (conc url "/?dat=" msg)))
+    (print "url=" url ", fullurl=" fullurl)
+    (let* ((res   (with-input-from-request fullurl #f read-string)))
+      (print "got res=" res)
+      (let ((match (string-search (regexp "<body>(.*)<.body>") (caddr (string-split res "\n")))))
+	(cadr match)))))
 
 (define (server:client-login serverdat)
   (cdb:login serverdat *toppath* (server:get-client-signature)))
@@ -194,6 +209,63 @@
 	      (server:client-setup numtries: 0))
 	    (debug:print-info 1 "Too many attempts, giving up")))))
 
+;; run server:keep-running in a parallel thread to monitor that the db is being 
+;; used and to shutdown after sometime if it is not.
+;;
+(define (server:keep-running)
+  ;; if none running or if > 20 seconds since 
+  ;; server last used then start shutdown
+  ;; This thread waits for the server to come alive
+  (let* ((server-info (let loop ()
+                        (let ((sdat #f))
+                          (mutex-lock! *heartbeat-mutex*)
+                          (set! sdat *runremote*)
+                          (mutex-unlock! *heartbeat-mutex*)
+                          (if sdat sdat
+                              (begin
+                                (sleep 4)
+                                (loop))))))
+         (iface       (car server-info))
+         (port        (cadr server-info))
+         (last-access 0))
+    ;; (print "Keep-running got server-info " server-info)
+    (let loop ((count 0))
+      (thread-sleep! 4) ;; no need to do this very often
+      ;; NB// sync currently does NOT return queue-length
+      (let ((queue-len (cdb:client-call server-info 'sync #t 1)))
+      ;; (print "Server running, count is " count)
+        (if (< count 1) ;; 3x3 = 9 secs aprox
+            (loop (+ count 1)))
+        
+        ;; NOTE: Get rid of this mechanism! It really is not needed...
+        (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
+      
+        ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+        (mutex-lock! *heartbeat-mutex*)
+        (set! last-access *last-db-access*)
+        (mutex-unlock! *heartbeat-mutex*)
+        (if (> (+ last-access
+                  ;; (* 50 60 60)    ;; 48 hrs
+                  ;; 60              ;; one minute
+                  ;; (* 60 60)       ;; one hour
+                  (* 45 60)          ;; 45 minutes, until the db deletion bug is fixed.
+                  )
+               (current-seconds))
+            (begin
+              (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (loop 0))
+            (begin
+              (debug:print-info 0 "Starting to shutdown the server.")
+              ;; need to delete only *my* server entry (future use)
+              (set! *time-to-exit* #t)
+              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+              (thread-sleep! 1)
+              (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+              (debug:print-info 0 "Server shutdown complete. Exiting")
+              (exit)))))))
+
+
+
 ;; all routes though here end in exit ...
 (define (server:launch)
   (if (not *toppath*)
@@ -211,12 +283,12 @@
 					(if (args:get-arg "-server")
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
-		   (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
+		   ;; (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
 		   )
 	      (set! *client-non-blocking-mode* #t)
 	      ;; (thread-start! th1)
 	      (thread-start! th2)
-	      (thread-start! th3)
+	      ;; (thread-start! th3)
 	      (set! *didsomething* #t)
 	      ;; (thread-join! th3)
 	      (thread-join! th2)

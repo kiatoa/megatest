@@ -16,8 +16,9 @@
 (require-extension (srfi 18) extras tcp) ;;  rpc)
 ;; (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
 (import (prefix sqlite3 sqlite3:))
+(import (prefix base64 base64:))
 
 (declare (unit db))
 (declare (uses common))
@@ -1098,8 +1099,18 @@
 ;;     (db:write-cached-data)
 ;;     (loop)))
 
-(define (db:obj->string obj)(with-output-to-string (lambda ()(serialize obj))))
-(define (db:string->obj msg)(with-input-from-string msg (lambda ()(deserialize))))
+(define (db:obj->string obj)
+  (string-substitute
+   (regexp "=") "_"
+   (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+   #t))
+
+(define (db:string->obj msg)
+  (with-input-from-string 
+      (base64:base64-decode
+       (string-substitute 
+	(regexp "_") "=" msg #t))
+    (lambda ()(deserialize))))
 
 (define (cdb:use-non-blocking-mode proc)
   (set! *client-non-blocking-mode* #t)
@@ -1113,48 +1124,51 @@
 ;;
 (define (cdb:client-call serverdat qtype immediate numretries . params)
   (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
-  (handle-exceptions
-   exn
-   (begin
-     (thread-sleep! 5) 
-     (if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
+  ;; (handle-exceptions
+  ;;  exn
+  ;;  (begin
+  ;;    (thread-sleep! 5) 
+  ;;    (if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
    (let* ((client-sig  (server:get-client-signature))
 	  (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	  (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
+	  )
+     ;; (print "zdat=" zdat)
+     (let* (
 	  (res  #f)
-	  (send-receive (lambda ()
-			  (let loop ((res (server:client-send-receive serverdat zdat)))
-			    ;; get the sender info
-			    ;; this should match (server:get-client-signature)
-			    ;; we will need to process "all" messages here some day
-			    ;; now get the actual message
-			    (let ((myres (db:string->obj res)))
-			      (if (equal? query-sig (vector-ref myres 1))
-				  (set! res (vector-ref myres 2))
-				  (loop (server:client-send-receive serverdat zdat)))))))
-	  (timeout (lambda ()
-		     (let loop ((n numretries))
-		       (thread-sleep! 15)
-		       (if (not res)
-			   (if (> numretries 0)
-			       (begin
-				 (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-				 (debug:print-info 11 "re-sending message")
-				 (send-message push-socket zdat)
-				 (debug:print-info 11 "message re-sent")
-				 (loop (- n 1)))
-			       ;; (apply cdb:client-call serverdats qtype immediate (- numretries 1) params))
-			       (begin
-				 (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-				 (exit 5))))))))
-     (debug:print-info 11 "Starting threads")
-     (let ((th1 (make-thread send-receive "send receive"))
-	   (th2 (make-thread timeout      "timeout")))
-       (thread-start! th1)
-       (thread-start! th2)
-       (thread-join!  th1)
-       (debug:print-info 11 "cdb:client-call returning res=" res)
-       res))))
+	  (rawdat      (server:client-send-receive serverdat zdat))
+	  (tmp         #f))
+     (print "Sent " zdat ", received " rawdat)
+     (set! tmp (db:string->obj newres))
+     ;; (if (equal? query-sig (vector-ref myres 1))
+     ;; (set! res
+     (vector-ref myres 2)
+     ;; (loop (server:client-send-receive serverdat zdat)))))))
+	  ;; (timeout (lambda ()
+	  ;;            (let loop ((n numretries))
+	  ;;              (thread-sleep! 15)
+	  ;;              (if (not res)
+	  ;;       	   (if (> numretries 0)
+	  ;;       	       (begin
+	  ;;       		 (debug:print 2 "WARNING: no reply to query " params ", trying resend")
+	  ;;       		 (debug:print-info 11 "re-sending message")
+	  ;;       		 (apply cdb:client-call serverdat qtype immediate numretries params)
+	  ;;       		 (debug:print-info 11 "message re-sent")
+	  ;;       		 (loop (- n 1)))
+	  ;;       	       ;; (apply cdb:client-call serverdats qtype immediate (- numretries 1) params))
+	  ;;       	       (begin
+	  ;;       		 (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+	  ;;       		 (exit 5))))))))
+     ;; (send-receive)
+     )))
+     ;; (debug:print-info 11 "Starting threads")
+     ;; (let ((th1 (make-thread send-receive "send receive"))
+     ;;       (th2 (make-thread timeout      "timeout")))
+     ;;   (thread-start! th1)
+     ;;   (thread-start! th2)
+     ;;   (thread-join!  th1)
+     ;;   (debug:print-info 11 "cdb:client-call returning res=" res)
+     ;;   res))))
   
 (define (cdb:set-verbosity serverdat val)
   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
@@ -1251,31 +1265,6 @@
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
-
-
-
-
-
-
-
-
-UPDATE DB:PROCESS_QUEUE@@@@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 

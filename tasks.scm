@@ -201,6 +201,9 @@
 		      #f
 		      (loop (car tal)(cdr tal))))))))))
 
+(define (tasks:remove-server-records mdb)
+  (sqlite3:exec mdb "DELETE FROM servers;"))
+
 (define (tasks:mark-server hostname port pid state)
   (if port
       (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
