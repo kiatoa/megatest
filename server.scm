@@ -69,7 +69,8 @@
   (server-bind-address #f)
   (define-page (main-page-path)
     (lambda ()
-      (with-request-variables (dat)
+      (let ((dat ($ "dat")))
+      ;; (with-request-variables (dat)
         (debug:print-info 12 "Got dat=" dat)
 	(let* ((packet (db:string->obj dat))
 	       (qtype  (cdb:packet-get-qtype packet)))
@@ -79,8 +80,22 @@
 		(mutex-lock! *heartbeat-mutex*)
 		(set! *last-db-access* (current-seconds))
 		(mutex-unlock! *heartbeat-mutex*)))
-	  (open-run-close db:process-queue-item open-db packet))))))
+	  (let ((res (open-run-close db:process-queue-item open-db packet)))
+	    (debug:print-info 11 "Return value from db:process-queue-item is " res)
+	    res))))))
 
+;;; (use spiffy uri-common intarweb)
+;;; 
+;;; (root-path "/var/www")
+;;; 
+;;; (vhost-map `(((* any) . ,(lambda (continue)
+;;;                            (if (equal? (uri-path (request-uri (current-request))) 
+;;;                                        '(/ "hey"))
+;;;                                (send-response body: "hey there!\n"
+;;;                                               headers: '((content-type text/plain)))
+;;;                                (continue))))))
+;;; 
+;;; (start-server port: 12345)
 
 ;; This is recursively run by server:run until sucessful
 ;;
@@ -139,9 +154,13 @@
 ;; Send msg to serverdat and receive result
 (define (server:client-send-receive serverdat msg)
   (let* ((url     (server:make-server-url serverdat))
-	 (fullurl (conc url "/?dat=" msg)))
+	 (fullurl url)) ;; (conc url "/?dat=" msg)))
     (debug:print-info 11 "fullurl=" fullurl "\n")
-    (let* ((res   (with-input-from-request fullurl #f read-string)))
+    (let* ((res   (with-input-from-request fullurl 
+					   ;; #f
+					   ;; msg 
+					   (list (cons 'dat msg)) 
+					   read-string)))
       (debug:print-info 11 "got res=" res)
       (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
 	(debug:print-info 11 "match=" match)
@@ -269,8 +288,6 @@
               (debug:print-info 0 "Max cached queries was " *max-cache-size*)
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)))))))
-
-
 
 ;; all routes though here end in exit ...
 (define (server:launch)
