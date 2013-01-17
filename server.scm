@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy awful http-client)
+(use spiffy uri-common intarweb http-client spiffy-request-vars)
 
 (tcp-buffer-size 2048)
 
@@ -41,6 +41,9 @@
 
 ;; Call this to start the actual server
 ;;
+
+(define *db:process-queue-mutex* (make-mutex))
+
 (define (server:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
@@ -58,31 +61,63 @@
 			    (if ipstr ipstr hostn))) ;; hostname)))
 	 (start-port    (if (args:get-arg "-port")
 			    (string->number (args:get-arg "-port"))
-			    (+ 5000 (random 1001)))))
+			    (+ 5000 (random 1001))))
+	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
     (set! *cache-on* #t)
+    (root-path     (if link-tree-path 
+		       link-tree-path
+		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
+    (vhost-map `(((* any) . ,(lambda (continue)
+			       (let* (($   (request-vars source: 'both))
+				      (dat ($ 'dat))
+				      (res #f))
+				 (cond
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "hey"))
+				   (send-response body: "hey there!\n"
+						  headers: '((content-type text/plain))))
+				  ((equal? (uri-path (request-uri (current-request)))
+					   '(/ "ctrl"))
+				   (let* ((packet (db:string->obj dat))
+					  (qtype  (cdb:packet-get-qtype packet)))
+				     (debug:print-info 12 "server=> received packet=" packet)
+				     (if (not (member qtype '(sync ping)))
+					 (begin
+					   (mutex-lock! *heartbeat-mutex*)
+					   (set! *last-db-access* (current-seconds))
+					   (mutex-unlock! *heartbeat-mutex*)))
+				     (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
+				     (set! res (open-run-close db:process-queue-item open-db packet))
+				     (mutex-unlock! *db:process-queue-mutex*)
+				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
+				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
+								res
+								"</body>")
+						    headers: '((content-type text/plain)))))
+				  (else (continue))))))))
     (server:try-start-server ipaddrstr start-port)))
 
 
-(define (server:main-loop)
-  (print "INFO: Exectuing main server loop")
-  (access-log "megatest-http.log")
-  (server-bind-address #f)
-  (define-page (main-page-path)
-    (lambda ()
-      (let ((dat ($ "dat")))
-      ;; (with-request-variables (dat)
-        (debug:print-info 12 "Got dat=" dat)
-	(let* ((packet (db:string->obj dat))
-	       (qtype  (cdb:packet-get-qtype packet)))
-	  (debug:print-info 12 "server=> received packet=" packet)
-	  (if (not (member qtype '(sync ping)))
-	      (begin
-		(mutex-lock! *heartbeat-mutex*)
-		(set! *last-db-access* (current-seconds))
-		(mutex-unlock! *heartbeat-mutex*)))
-	  (let ((res (open-run-close db:process-queue-item open-db packet)))
-	    (debug:print-info 11 "Return value from db:process-queue-item is " res)
-	    res))))))
+;; (define (server:main-loop)
+;;   (print "INFO: Exectuing main server loop")
+;;   (access-log "megatest-http.log")
+;;   (server-bind-address #f)
+;;   (define-page (main-page-path)
+;;     (lambda ()
+;;       (let ((dat ($ "dat")))
+;;       ;; (with-request-variables (dat)
+;;         (debug:print-info 12 "Got dat=" dat)
+;; 	(let* ((packet (db:string->obj dat))
+;; 	       (qtype  (cdb:packet-get-qtype packet)))
+;; 	  (debug:print-info 12 "server=> received packet=" packet)
+;; 	  (if (not (member qtype '(sync ping)))
+;; 	      (begin
+;; 		(mutex-lock! *heartbeat-mutex*)
+;; 		(set! *last-db-access* (current-seconds))
+;; 		(mutex-unlock! *heartbeat-mutex*)))
+;; 	  (let ((res (open-run-close db:process-queue-item open-db packet)))
+;; 	    (debug:print-info 11 "Return value from db:process-queue-item is " res)
+;; 	    res))))))
 
 ;;; (use spiffy uri-common intarweb)
 ;;; 
@@ -118,7 +153,8 @@
 		   (current-process-id)
 		   ipaddrstr portnum 0 'live)
    (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   (awful-start server:main-loop port: portnum) ;; ip-address: ipaddrstr 
+   ;; (awful-start server:main-loop port: portnum) ;; ip-address: ipaddrstr 
+   (start-server port: portnum)
    (print "INFO: server has been stopped")))
 
 (define (server:mk-signature)
@@ -153,22 +189,34 @@
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
 (define (server:client-send-receive serverdat msg)
-  (let* ((url     (server:make-server-url serverdat))
-	 (fullurl url)) ;; (conc url "/?dat=" msg)))
-    (debug:print-info 11 "fullurl=" fullurl "\n")
-    (let* ((res   (with-input-from-request fullurl 
-					   ;; #f
-					   ;; msg 
-					   (list (cons 'dat msg)) 
-					   read-string)))
-      (debug:print-info 11 "got res=" res)
-      (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
-	(debug:print-info 11 "match=" match)
-	(let ((final (cadr match)))
-	  (debug:print-info 11 "final=" final)
-	  final)))))
+  (let* ((url        (server:make-server-url serverdat))
+	 (fullurl    (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
+	 (numretries 0))     
+    (handle-exceptions
+     exn
+     (if (< numretries 200)
+	 (server:client-send-receive serverdat msg))
+     (begin
+       (debug:print-info 11 "fullurl=" fullurl "\n")
+       (max-retry-attempts 100)
+       (retry-request? (lambda (request)
+			 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
+			 (set! numretries (+ numretries 1))
+			 #t))
+       (let* ((res   (with-input-from-request fullurl 
+					      ;; #f
+					      ;; msg 
+					      (list (cons 'dat msg)) 
+					      read-string)))
+	 (debug:print-info 11 "got res=" res)
+	 (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
+	   (debug:print-info 11 "match=" match)
+	   (let ((final (cadr match)))
+	     (debug:print-info 11 "final=" final)
+	     final)))))))
 
 (define (server:client-login serverdat)
+  (max-retry-attempts 100)
   (cdb:login serverdat *toppath* (server:get-client-signature)))
 
 ;; Not currently used! But, I think it *should* be used!!!

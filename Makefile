@@ -19,7 +19,7 @@ MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 all : mtest dboard
 
 mtest: $(OFILES) megatest.o
-	csc -heap-size 1m $(CSCOPTS) $(OFILES) megatest.o -o mtest
+	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
