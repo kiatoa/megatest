@@ -34,19 +34,21 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (runs:get-runs-by-patt db keys runnamepatt . params) ;; test-name)
+(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
   (let* ((keyvallst (keys->vallist keys))
 	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
-	 (key-patt ""))
+	 (key-patt "")
+	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob")))
     (for-each (lambda (keyval)
 		(let* ((key    (vector-ref keyval 0))
 		       (fulkey (conc ":" key))
-		       (patt   (args:get-arg fulkey)))
+		       (patt   (args:get-arg fulkey))
+		       (wildtype (if (substring-index "%" patt) "like" "glob")))
 		  (if patt
-		      (set! key-patt (conc key-patt " AND " key " like '" patt "'"))
+		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
@@ -55,7 +57,7 @@
      (lambda (a . r)
        (set! res (cons (list->vector (cons a r)) res)))
      db 
-     (conc "SELECT " keystr " FROM runs WHERE runname like ? " key-patt ";")
+     (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";")
      runnamepatt)
     (vector header res)))
 
@@ -736,7 +738,7 @@
 								 (else          'event_time)))
 			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
-
+	   (debug:print 4 "INFO: runs:operate-on run=" run ", header=" header)
 	   (if (not (null? tests))
 	       (begin
 		 (case action
@@ -744,6 +746,8 @@
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
+		   ((print-run)
+		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header))
 		   (else
 		    (print "INFO: action not recognised " action)))
 		 (for-each

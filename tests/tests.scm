@@ -103,6 +103,13 @@
 						    "bob")))
 (define keys (db:get-keys *db*))
 
+;;======================================================================
+;; D B
+;;======================================================================
+(test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
+(test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
+(test #f #t (list? (runs:operate-on 'print "%" "%" "%")))
+
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
 (unsetenv "NADAFOO")

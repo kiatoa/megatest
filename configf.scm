@@ -55,7 +55,7 @@
 (define configf:section-rx (regexp "^\\[(.*)\\]\\s*$"))
 (define configf:blank-l-rx (regexp "^\\s*$"))
 (define configf:key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
-(define configf:key-val-pr (regexp "^(\\S+)\\s+(.*)$"))
+(define configf:key-val-pr (regexp "^(\\S+)(\\s+(.*)|())$"))
 (define configf:comment-rx (regexp "^\\s*#.*"))
 (define configf:cont-ln-rx (regexp "^(\\s+)(\\S+.*)$"))
 
@@ -183,7 +183,7 @@
 												      (else (val-proc)))))
 							    (loop (configf:read-line inp res) curr-section-name #f #f))
 							  (loop (configf:read-line inp res) curr-section-name #f #f)))
-	       (configf:key-val-pr ( x key val      ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
+	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 							     (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
 							     (realval (if envar
 									  (config:eval-string-in-environment val)
