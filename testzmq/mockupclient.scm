@@ -1,4 +1,4 @@
-(use zmq posix)
+(use zmq posix numbers)
 
 (define cname "Bob")
 (define runtime 10)
@@ -19,6 +19,13 @@
 (include "mockupclientlib.scm")
 
 (set! endtime (+ (current-seconds) runtime))
+
+;; first ping the server to ensure we have a connection
+(if (server-ping cname 5)
+    (print "SUCCESS: Client " cname " connected to server")
+    (begin
+      (print "ERROR: Client " cname " failed ping of server, exiting")
+      (exit)))
 
 (let loop ()
   (let ((x (random 15))

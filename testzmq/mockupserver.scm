@@ -3,7 +3,7 @@
 ;; as a client disconnects.  Also a remaining client may receive tons of
 ;; messages afterward.
 
-(use zmq srfi-18 sqlite3)
+(use zmq srfi-18 sqlite3 numbers)
 
 (define pub (make-socket 'pub))
 (define pull (make-socket 'pull))
@@ -11,8 +11,13 @@
 (define total-db-accesses 0)
 (define start-time (current-seconds))
 
-(bind-socket pub "tcp://*:5563")
-(bind-socket pull "tcp://*:5564")
+(socket-option-set! pub 'hwm 1000)
+(socket-option-set! pull 'hwm 1000)
+
+(bind-socket pub "tcp://*:6563")
+(bind-socket pull "tcp://*:6564")
+
+(thread-sleep! 0.2)
 
 (define (open-db)
   (let* ((dbpath    "mockup.db")
@@ -88,6 +93,7 @@
 			     (else (conc "unk cmd: " clcmd))))))
      queuelst)))
 
+;; SERVER THREAD
 (define th1 (make-thread 
 	     (lambda ()
 	       (let ((last-run 0)) ;; current-seconds when run last
@@ -98,8 +104,14 @@
 			  (clcmd (string->symbol (cadr parts))) ;; client cmd
 			  (cdata (caddr parts))                 ;; client data
 			  (svect (vector (current-seconds) cname clcmd cdata))) ;; record for the queue
+		     ;; (print "Server received message: " indat)
 		     (count-client db cname)
 		     (case clcmd
+		       ((ping)
+			(print "Got ping from " cname)
+			(send-message pub cname send-more: #t)
+			(send-message pub "Got ping")
+			(loop queuelst))
 		       ((sync) ;; just process the queue
 			(print "Got sync from " cname)
 			(process-queue (cons svect queuelst))
@@ -113,6 +125,7 @@
 
 (include "mockupclientlib.scm")
 
+;; SYNC THREAD
 ;; send a sync to the pull port
 (define th2 (make-thread
 	     (lambda ()

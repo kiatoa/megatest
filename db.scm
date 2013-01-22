@@ -329,9 +329,15 @@
 	  (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))))
     db))
 
-(define (db:log-event . loglst)
-  (let ((db      (open-logging-db))
-	(logline (apply conc loglst)))
+(define (db:log-local-event . loglst)
+  (let ((logline (apply conc loglst))
+	(pwd     (current-directory))
+	(cmdline (string-intersperse (argv) " "))
+	(pid     (current-process-id)))
+    (db:log-event logline pwd cmdline pid)))
+
+(define (db:log-event logline pwd cmdline pid)
+  (let ((db (open-logging-db)))
     (sqlite3:execute db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);" logline (current-directory)(string-intersperse (argv) " ")(current-process-id))
     (sqlite3:finalize! db)
     logline))
@@ -1674,7 +1680,7 @@
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
-	(debug:print 0 "WARNING: Invalid " (if status "status" "state")
+	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
     (if tdb
 	(begin
