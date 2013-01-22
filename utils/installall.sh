@@ -164,6 +164,17 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-c
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
+#======================================================================
+# Note uuid needed only for zmq 2.x series
+#======================================================================
+
+# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
+# zpatchlev=-rc2
+# http://download.zeromq.org/zeromq-2.2.0.tar.gz
+# ZEROMQ=zeromq-2.2.0
+
+ZEROMQ=zeromq-3.2.2
+
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
 UTIL_LINUX=2.21
 # UTIL_LINUX=2.20.1
@@ -256,12 +267,6 @@ fi
 
 cd $BUILDHOME
 
-# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
-# zpatchlev=-rc2
-# http://download.zeromq.org/zeromq-2.2.0.tar.gz
-# ZEROMQ=zeromq-2.2.0
-
-ZEROMQ=zeromq-3.2.2
 if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
 fi
