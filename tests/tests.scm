@@ -81,7 +81,7 @@
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
 (test "server-register, get-best-server" #t (let ((res #f))
-					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 1235 100 'live)
+					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
 					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
 					      (number? (cadddr res))))
 
@@ -98,16 +98,13 @@
 (test #f #t (let ((zmq-socket (server:client-connect
 			       (cadr hostinfo)
 			       (caddr hostinfo)
-			       (cadddr hostinfo))))
+			       ;; (cadddr hostinfo)
+			       )))
 	      (set! *runremote* zmq-socket)
-	      (socket? (vector-ref *runremote* 0))))
+	      (string? (car *runremote*))))
 
 (test #f #t (let ((res (server:client-login *runremote*)))
 	      (car res)))
-
-(test #f #t (socket? (vector-ref *runremote* 0)))
-
-;; (test #f #t (server:client-setup))
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
 

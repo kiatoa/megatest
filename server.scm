@@ -86,9 +86,9 @@
 					   (mutex-lock! *heartbeat-mutex*)
 					   (set! *last-db-access* (current-seconds))
 					   (mutex-unlock! *heartbeat-mutex*)))
-				     (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
+				     ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
 				     (set! res (open-run-close db:process-queue-item open-db packet))
-				     (mutex-unlock! *db:process-queue-mutex*)
+				     ;; (mutex-unlock! *db:process-queue-mutex*)
 				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
 				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
 								res

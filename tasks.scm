@@ -178,7 +178,7 @@
 	(best #f))
     (sqlite3:for-each-row
      (lambda (id hostname interface port pid)
-       (set! res (cons (list hostname interface port pid) res))
+       (set! res (cons (list hostname interface port pid id) res))
        (debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
      mdb
      "SELECT id,hostname,interface,port,pid FROM servers

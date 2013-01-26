@@ -1319,8 +1319,8 @@
 	((killserver)
 	 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
 	 (open-run-close tasks:server-deregister tasks:open-db 
-			 (cadr *server-info*)
-			 pullport: (caddr *server-info*))
+			 (car *runremote*)
+			 pullport: (cadr *runremote*))
 	 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
 	 (server:reply return-address qry-sig #t '(#t "exit process started")))
 	(else ;; not a command, i.e. is a query
