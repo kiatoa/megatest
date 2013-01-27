@@ -77,7 +77,7 @@
 				  itemsdat))))
 	(let ((debuglevel 5))
 	  (debug:print 5 "item-assoc->item-list: itemsdat => itemlst ")
-	  (if (>= *verbosity* 5)
+	  (if (debug:debug-mode 5)
 	      (begin
 		(pp itemsdat)
 		(print " => ")
@@ -124,7 +124,7 @@
       res)))
             ;; Nope, not now, return null as of 6/6/2011
 		
-(define (check-valid-items class item)
+(define (items:check-valid-items class item)
   (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))
 			(if s (string-split s) #f))))
     (if valid-values

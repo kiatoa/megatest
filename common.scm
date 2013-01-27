@@ -40,10 +40,20 @@
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
 
+;; SERVER
+(define *my-client-signature* #f)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
 (define *max-cache-size*    0)
+(define *logged-in-clients* (make-hash-table))
+(define *client-non-blocking-mode* #f)
+(define *server-id*         #f)
+(define *server-info*       #f)
+(define *time-to-exit*      #f)
+(define *received-response* #f)
+(define *default-numtries*  10)
+
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
 (define *keyvals*           (make-hash-table))
@@ -52,7 +62,27 @@
 (define *test-ids*          (make-hash-table)) ;; cache run-id, testname, and item-path => test-id
 (define *test-info*         (make-hash-table)) ;; cache the test info records, update the state, status, run_duration etc. from testdat.db
 
-(define *run-info-cache* (make-hash-table)) ;; run info is stable, no need to reget
+(define *run-info-cache*    (make-hash-table)) ;; run info is stable, no need to reget
+
+;; Debugging stuff
+(define *verbosity*         1)
+(define *logging*           #f)
+
+;; Awful. Please FIXME
+(define *env-vars-by-run-id* (make-hash-table))
+(define *current-run-name*   #f)
+
+(define (common:clear-caches)
+  (set! *target*             (make-hash-table))
+  (set! *keys*               (make-hash-table))
+  (set! *keyvals*            (make-hash-table))
+  (set! *toptest-paths*      (make-hash-table))
+  (set! *test-paths*         (make-hash-table))
+  (set! *test-ids*           (make-hash-table))
+  (set! *test-info*          (make-hash-table))
+  (set! *run-info-cache*     (make-hash-table))
+  (set! *env-vars-by-run-id* (make-hash-table))
+  (set! *test-id-cache*      (make-hash-table)))
 
 ;; Debugging stuff
 (define *verbosity*         1)
@@ -70,6 +100,15 @@
 ;; Misc utils
 ;;======================================================================
 
+;; one-of args defined
+(define (args-defined? . param)
+  (let ((res #f))
+    (for-each 
+     (lambda (arg)
+       (if (args:get-arg arg)(set! res #t)))
+     param)
+    res))
+
 ;; convert stuff to a number if possible
 (define (any->number val)
   (cond 
@@ -83,18 +122,30 @@
     (if num num val)))
 
 (define (patt-list-match item patts)
-  (debug:print 8 "INFO: patt-list-match item=" item " patts=" patts)
+  (debug:print-info 8 "patt-list-match item=" item " patts=" patts)
   (if (and item patts)  ;; here we are filtering for matches with -itempatt
       (let ((res #f))   ;; look through all the item-patts if defined, format is patt1,patt2,patt3 ... wildcard is %
 	(for-each 
 	 (lambda (patt)
 	   (let ((modpatt (string-substitute "%" ".*" patt #t)))
-	     (debug:print 10 "INFO: patt " patt " modpatt " modpatt)
+	     (debug:print-info 10 "patt " patt " modpatt " modpatt)
 	     (if (string-match (regexp modpatt) item)
 		 (set! res #t))))
 	 (string-split patts ","))
 	res)
       #t))
+
+;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
+(define (common:get-runconfig-targets)
+  (sort (map car (hash-table->alist
+		  (read-config "runconfigs.config"
+			       #f #t))) string<?))
+
+;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
+(define (common:get-disks)
+  (hash-table-ref/default 
+   (read-config "megatest.config" #f #t)
+   "disks" '("none" "")))
 
 ;;======================================================================
 ;; System stuff

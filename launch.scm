@@ -55,7 +55,7 @@
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
-	(let* ((testpath  (assoc/default 'testpath  cmdinfo))
+	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; How is testpath different from work-area ??
 	       (top-path  (assoc/default 'toppath   cmdinfo))
 	       (work-area (assoc/default 'work-area cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
@@ -71,7 +71,15 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
-	       (fullrunscript (if runscript (conc testpath "/" runscript) #f))
+	       (fullrunscript (if (not runscript)
+                                  #f
+                                  (if (substring-index "/" runscript)
+                                      runscript ;; use unadultered if contains slashes
+                                      (let ((fulln (conc testpath "/" runscript)))
+	                                  (if (and (file-exists? fulln)
+                                                   (file-execute-access? fulln))
+                                              fulln
+                                              runscript))))) ;; assume it is on the path
 	       (rollup-status 0))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -106,13 +114,13 @@
 	  (server:client-setup)
 
 	  (change-directory *toppath*) 
-	  (open-run-close set-megatest-env-vars #f run-id) ;; these may be needed by the launching process
+	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
 	  (open-run-close set-run-config-vars #f run-id)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (open-run-close set-megatest-env-vars #f run-id)
+	  (set-megatest-env-vars run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
@@ -190,7 +198,7 @@
 
 						   (debug:print 4 "script: " script)
 
-						   (open-run-close db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+						   (cdb:remote-run db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -208,9 +216,9 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (open-run-close db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+						       (cdb:remote-run db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
-							 (open-run-close db:test-set-log! #f test-id (conc stepname ".html")))
+							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -256,7 +264,7 @@
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (open-run-close test-get-kill-request #f test-id)) ;; run-id test-name itemdat))
+				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
 				       (if kill-job? 
 					   (begin
@@ -277,7 +285,7 @@
 								  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
 								  (system (conc "kill -9 " p-id))))))
 							(car processes))
-						       (system (conc "kill -9 " pid))))
+						       (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
@@ -297,7 +305,8 @@
 	    (thread-join! th2)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (open-run-close db:get-test-info-by-id #f test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+	      ;; Am I completed?
 	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (begin
 		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
@@ -387,13 +396,13 @@
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
 (define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
-  (let* ((run-info (db:get-run-info db run-id))
+  (let* ((run-info (cdb:remote-run db:get-run-info #f run-id))
 	 (item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (key-vals (db:get-key-vals db run-id))
+	 (key-vals (cdb:remote-run db:get-key-vals #f run-id))
 	 (target   (string-intersperse key-vals "/"))
 
 	 (not-iterated  (equal? "" item-path))
@@ -415,7 +424,7 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (db:test-set-rundir-by-test-id! db test-id lnkpathf)
+    (cdb:test-set-rundir-by-test-id *runremote* test-id lnkpathf)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -434,14 +443,15 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (db:get-test-info-by-id db test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (cdb:get-test-info-by-id *runremote* test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
-	  (db:test-set-rundir! db run-id testname "" lnkpath) ;; toptest-path)
+	  ;; NB// Was this for the test or for the parent in an iterated test?
+	  (cdb:test-set-rundir! *runremote* run-id testname "" lnkpath) ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
-		(debug:print 2 "INFO: Creating " toptest-path " and link " lnkpath)
+		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
 		(create-directory toptest-path #t)
 		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
@@ -451,7 +461,7 @@
     ;; level
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
-	  (debug:print 2 "INFO: Creating iterated parent " iterated-parent)
+	  (debug:print-info 2 "Creating iterated parent " iterated-parent)
 	  (create-directory iterated-parent #t)))
 
     (if (symbolic-link? lnkpath) (delete-file lnkpath))
@@ -486,7 +496,7 @@
     ;;   (system  (conc "ln -sf " test-path " " testlink)))
     (if (directory? test-path)
 	(begin
-	  (let* ((cmd    (conc "rsync -av" (if (> *verbosity* 1) "" "q") " " test-src-path "/ " test-path "/"))
+	  (let* ((cmd    (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
@@ -539,8 +549,8 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (test-id    (open-run-close db:get-test-id db run-id test-name item-path))
-	 (testinfo   (open-run-close db:get-test-info-by-id db test-id))
+	 (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
@@ -555,7 +565,7 @@
 	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
-	  (debug:print 2 "INFO: Using work area " work-area))
+	  (debug:print-info 2 "Using work area " work-area))
 	(begin
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)
@@ -578,8 +588,8 @@
 							  (list 'runname   runname)
 							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
-    (debug:print 4 "INFO: FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
-    (open-run-close db:delete-test-step-records db test-id)
+    ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
+    ;; (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond

@@ -12,31 +12,42 @@
 
 
 
-(define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f))
+(define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f)(change-env #t))
   (let* ((keys    (db:get-keys db))
-	 (keyvals (db:get-key-vals db run-id))
-	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/"))
+	 (keyvals (if run-id (db:get-key-vals db run-id) #f))
+	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")
+		      (if (args:get-arg "-reqtarg") 
+			  (args:get-arg "-reqtarg")
+			  (if (args:get-arg "-target")
+			      (args:get-arg "-target")
+			      (begin
+				(debug:print 0 "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
+				"nothing matches this I hope")))))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
 	 (confdat (read-config fname #f #t environ-patt: environ-patt sections: (list "default" thekey)))
 	 (whatfound (make-hash-table))
+	 (finaldat  (make-hash-table))
 	 (sections (list "default" thekey)))
     (if (not *target*)(set! *target* thekey)) ;; may save a db access or two but repeats db:get-target code
     (debug:print 4 "Using key=\"" thekey "\"")
 
-    (for-each
-     (lambda (key val)
-       (setenv (vector-ref key 0) val))
-     keys keyvals)
-
+    (if change-env
+	(for-each
+	 (lambda (key val)
+	   (setenv (vector-ref key 0) val))
+	 keys keyvals))
+	
     (for-each 
      (lambda (section)
        (let ((section-dat (hash-table-ref/default confdat section #f)))
 	 (if section-dat
 	     (for-each 
 	      (lambda (envvar)
+		(let ((val (cadr (assoc envvar section-dat))))
 		(hash-table-set! whatfound section (+ (hash-table-ref/default whatfound section 0) 1))
-		(setenv envvar (cadr (assoc envvar section-dat))))
+		(if change-env (setenv envvar val))
+		(hash-table-set! finaldat envvar val)))
 	      (map car section-dat)))))
      sections)
     (if already-seen
@@ -46,7 +57,8 @@
 		      (debug:print 2 (format #f "~20a ~a\n" fullkey (hash-table-ref/default whatfound fullkey 0))))
 		    sections)
 	  (debug:print 2 "---")
-	  (set! *already-seen-runconfig-info* #t)))))
+	  (set! *already-seen-runconfig-info* #t)))
+    finaldat))
 
 (define (set-run-config-vars db run-id)
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))

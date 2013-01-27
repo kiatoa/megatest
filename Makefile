@@ -1,5 +1,5 @@
 
-PREFIX=.
+PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
 SRCFILES = common.scm items.scm launch.scm \
@@ -12,7 +12,9 @@ GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm dashboard-
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
 
-HELPERS=$(addprefix $(PREFIX)/bin/,mt_laststep mt_runstep mt_ezstep)
+ADTLSCR=mt_laststep mt_runstep mt_ezstep
+HELPERS=$(addprefix $(PREFIX)/bin/,$(ADTLSCR))
+DEPLOYHELPERS=$(addprefix $(DEPLOYTARG)/,$(ADTLSCR))
 MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 all : mtest dboard
 
@@ -21,6 +23,13 @@ mtest: $(OFILES) megatest.o
 
 dboard : $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) -o dboard
+
+$(DEPLOYTARG)/megatest : $(OFILES) megatest.o
+	csc -deployed $(CSCOPTS) $(OFILES) megatest.o -o $(DEPLOYTARG)/megatest
+
+$(DEPLOYTARG)/dashboard :  $(OFILES) $(GOFILES)
+	csc -deployed $(OFILES) $(GOFILES) -o $(DEPLOYTARG)/dashboard
+
 
 # Special dependencies for the includes
 tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o megatest.o : db_records.scm
@@ -49,6 +58,10 @@ $(HELPERS) : utils/mt_*
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+$(DEPLOYHELPERS) : utils/mt_*
+	$(INSTALL) $< $@
+	chmod a+X $@
+
 $(PREFIX)/bin/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
@@ -57,6 +70,15 @@ $(PREFIX)/bin/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
 
+$(DEPLOYTARG)/nbfake : utils/nbfake
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+$(DEPLOYTARG)/nbfind : utils/nbfind
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+
 # install dashboard as dboard so wrapper script can be called dashboard
 $(PREFIX)/bin/dboard : dboard $(FILES)
 	$(INSTALL) dboard $(PREFIX)/bin/dboard
@@ -64,6 +86,9 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	chmod a+x $(PREFIX)/bin/dashboard
 
 install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind
+
+deploy : $(DEPLOYTARG)/megatest $(DEPLOYTARG)/dashboard $(DEPLOYHELPERS) $(DEPLOYTARG)/nbfake $(DEPLOYTARG)/nbfind
+
 
 bin : 
 	mkdir -p $(PREFIX)/bin

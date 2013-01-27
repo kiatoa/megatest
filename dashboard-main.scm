@@ -212,9 +212,14 @@
   (iup:dialog
    #:title "Menu Test"
    #:menu (main-menu)
-   (let ((tabtop (iup:tabs (mtest) (rconfig) (tests) (runs))))
-     (iup:attribute-set! tabtop "TABTITLE0" "Megatest") 
-     (iup:attribute-set! tabtop "TABTITLE1" "Runconfigs")
-     (iup:attribute-set! tabtop "TABTITLE2" "Tests")
-     (iup:attribute-set! tabtop "TABTITLE3" "Runs")
+   (let ((tabtop (iup:tabs 
+		  (runs)
+		  (mtest) 
+		  (rconfig)
+		  (tests)
+		  )))
+     (iup:attribute-set! tabtop "TABTITLE0" "Runs")
+     (iup:attribute-set! tabtop "TABTITLE3" "Tests")
+     (iup:attribute-set! tabtop "TABTITLE1" "megatest.config") 
+     (iup:attribute-set! tabtop "TABTITLE2" "runconfigs.config")
      tabtop)))

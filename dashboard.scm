@@ -78,6 +78,7 @@ Misc
       (exit 1)))
 
 (define *db* #f) ;; (open-db))
+;; (server:client-launch)
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
@@ -86,7 +87,7 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (open-run-close db:get-keys  *db*))
+(define *keys*   (open-run-close db:get-keys #f))
 ;; (define *keys*   (db:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
@@ -96,7 +97,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (open-run-close db:get-num-runs *db* "%"))
+(define *tot-run-count* (open-run-close db:get-num-runs #f "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
@@ -116,16 +117,7 @@ Misc
 (define *tests-sort-reverse* #f)
 (define *hide-empty-runs* #f)
 
-(define *verbosity* (cond
-		     ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
-		     ((args:get-arg "-v")    2)
-		     ((args:get-arg "-q")    0)
-		     (else                   1)))
-
-(if (not (number? *verbosity*))
-    (begin
-      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
-      (exit)))
+(debug:setup)
 
 (define uidat #f)
 
@@ -163,17 +155,17 @@ Misc
     (null? (filter (lambda (x)(> x 3)) delta))))
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat runnamepatt numruns testnamepatt itemnamepatt keypatts)
+(define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let ((modtime (file-modification-time *db-file-path*)))
     (if (or (and (> modtime *last-db-update-time*)
 		 (> (current-seconds)(+ *last-db-update-time* 5)))
 	    (> *delayed-update* 0))
 	(begin
-	  (debug:print 4 "INFO: update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " itemnamepatt: " itemnamepatt " keypatts: " keypatts)
+	  (debug:print-info 4 "update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
-	  (let* ((allruns     (open-run-close db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	  (let* ((allruns     (open-run-close db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
@@ -181,6 +173,7 @@ Misc
 		 (maxtests    0)
 		 (states      (hash-table-keys *state-ignore-hash*))
 		 (statuses    (hash-table-keys *status-ignore-hash*)))
+	    ;; (thread-sleep! 0.1) ;; give some time to other threads
 	    (debug:print 6 "update-rundat, got " (length runs) " runs")
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
@@ -188,9 +181,9 @@ Misc
 		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (open-run-close db:get-tests-for-run *db* run-id testnamepatt itemnamepatt states statuses)))
+			       (tests    (let ((tsts (open-run-close db:get-tests-for-run #f run-id testnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (open-run-close db:get-key-vals *db* run-id)))
+			       (key-vals (open-run-close db:get-key-vals #f run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
@@ -431,14 +424,15 @@ Misc
 	    (iup:frame 
 	     #:title "filter test and items"
 	     (iup:hbox
-	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+	      (iup:textbox #:size "120x15" #:fontsize "10" #:value "%"
 			   #:action (lambda (obj unk val)
 				      (mark-for-update)
 				      (update-search "test-name" val)))
-	      (iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
-			   #:action (lambda (obj unk val)
-				      (mark-for-update)
-				      (update-search "item-name" val)))))
+	      ;;(iup:textbox #:size "60x15" #:fontsize "10" #:value "%"
+	      ;;  	   #:action (lambda (obj unk val)
+	      ;;  		      (mark-for-update)
+	      ;;  		      (update-search "item-name" val))
+	      ))
 	    (iup:vbox
 	     (iup:hbox
 	      (iup:button "Sort" #:action (lambda (obj)
@@ -500,9 +494,9 @@ Misc
 			(iup:label) ;; (iup:valuator)
 			(apply iup:vbox 
 			       (map (lambda (x)		
-				      (let ((res (iup:hbox
-						  (iup:label x #:size "40x15" #:fontsize "10") ;;  #:expand "HORIZONTAL")
-						  (iup:textbox #:size "60x15" #:fontsize "10" #:value "%" ;; #:expand "HORIZONTAL"
+				      (let ((res (iup:hbox #:expand "HORIZONTAL"
+						  (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
+						  (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
 							       #:action (lambda (obj unk val)
 									  (mark-for-update)
 									  (update-search x val))))))
@@ -514,7 +508,7 @@ Misc
       (cond
        ((>= testnum ntests)
 	;; now lftlst will be an hbox with the test keys and the test name labels
-	(set! lftlst (append lftlst (list (iup:hbox 
+	(set! lftlst (append lftlst (list (iup:hbox  #:expand "HORIZONTAL"
 					   (iup:valuator #:valuechanged_cb (lambda (obj)
 									     (let ((val (string->number (iup:attribute obj "VALUE")))
 										   (oldmax  (string->number (iup:attribute obj "MAX")))
@@ -525,7 +519,7 @@ Misc
 									       (if (< val 10)
 										   (iup:attribute-set! obj "MAX" newmax))
 									       ))
-							 #:expand "YES" 
+							 #:expand "VERTICAL" 
 							 #:orientation "VERTICAL")
 					   (apply iup:vbox (reverse res)))))))
        (else
@@ -534,7 +528,8 @@ Misc
 				 #:alignment "ALEFT"
 				 ; #:image img1
 				 ; #:impress img2
-				 #:size "100x15"
+				 #:size "x15"
+				 #:expand "HORIZONTAL"
 				 #:fontsize "10"
 				 #:action (lambda (obj)
 					    (mark-for-update)
@@ -553,7 +548,7 @@ Misc
 	(set! hdrlst (cons (apply iup:vbox (reverse res)) hdrlst))
 	(loop (+ runnum 1) 0 (make-vector nkeys) '()))
        (else
-	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10"))) ;; #:expand "HORIZONTAL"
+	(let ((labl  (iup:label "" #:size "60x15" #:fontsize "10" #:expand "HORIZONTAL"))) ;; #:expand "HORIZONTAL"
 	  (vector-set! keyvec keynum labl)
 	  (loop runnum (+ keynum 1) keyvec (cons labl res))))))
     ;; By here the hdrlst contains a list of vboxes containing nkeys labels
@@ -571,7 +566,7 @@ Misc
 	(let* ((button-key (mkstr runnum testnum))
 	       (butn       (iup:button "" ;; button-key 
 				       #:size "60x15" 
-				       ;; #:expand "HORIZONTAL"
+				       #:expand "HORIZONTAL"
 				       #:fontsize "10" 
 				       #:action (lambda (x)
 						  (let* ((toolpath (car (argv)))
@@ -603,8 +598,8 @@ Misc
     (begin
         (set! *num-tests* (string->number (or (args:get-arg "-rows")
 					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%" "%" '()))
-    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%" "%" '()) 8) 20)))
+	(update-rundat "%" *num-runs* "%/%" '()))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -624,8 +619,8 @@ Misc
   ;; (if (db:been-changed)
   (begin
     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		   (hash-table-ref/default *searchpatts* "test-name" "%")
-		   (hash-table-ref/default *searchpatts* "item-name" "%")
+		   (hash-table-ref/default *searchpatts* "test-name" "%/%")
+		   ;; (hash-table-ref/default *searchpatts* "item-name" "%")
 		   (let ((res '()))
 		     (for-each (lambda (key)
 				 (if (not (equal? key "runname"))
@@ -643,7 +638,7 @@ Misc
 	(begin
 	  (lambda (x)
 	    (on-exit (lambda ()
-		       (sqlite3:finalize! *db*)))
+		       (if *db* (sqlite3:finalize! *db*))))
 	    (open-run-close examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))

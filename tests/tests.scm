@@ -1,5 +1,20 @@
+;; Copyright 2006-2012, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+
+;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
+
 (require-extension test)
 (require-extension regex)
+(require-extension srfi-18)
+(import srfi-18)
+(require-extension zmq)
+(import zmq)
 
 (define test-work-dir (current-directory))
 
@@ -11,6 +26,8 @@
      (load file))
    files))
 
+(define *runremote* #f)
+
 ;;======================================================================
 ;; P R O C E S S E S
 ;;======================================================================
@@ -18,6 +35,78 @@
 (test "cmd-run-with-stderr->list" '("No such file or directory")
       (let ((reslst (cmd-run-with-stderr->list "ls" "/tmp/ihadbetternotexist")))
 	(string-search (regexp "No such file or directory")(car reslst))))
+
+;;======================================================================
+;; T E S T   M A T C H I N G
+;;======================================================================
+
+;; tests:glob-like-match
+(test #f '("abc") (tests:glob-like-match "abc" "abc"))
+(for-each 
+ (lambda (patt str expected)
+   (test (conc patt " " str "=>" expected) expected (tests:glob-like-match patt str)))
+ (list "abc"    "~abc" "~abc" "a*c"  "a%c")
+ (list "abc"    "abcd" "abc"  "ABC"  "ABC")
+ (list '("abc")  #t      #f     #f '("ABC"))
+ )
+
+;; tests:match
+(test #f #t (tests:match "abc/def" "abc" "def"))
+(for-each 
+ (lambda (patterns testname itempath expected)
+   (test (conc patterns " " testname "/" itempath "=>" expected)
+	 expected 
+	 (tests:match patterns testname itempath)))
+ (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/")
+ (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a")
+ (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b")
+ (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f))
+
+;; db:patt->like
+(test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
+(test #f "testname LIKE 't%' AND testname LIKE '%t'" (db:patt->like "testname" "t%,%t" comparator: " AND "))
+(test #f "item_path GLOB ''" (db:patt->like "item_path" ""))
+
+;; test:match->sqlqry
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname GLOB '' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,/b%"))
+(test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
+      (tests:match->sqlqry "a/b,a%,%/b%"))
+
+;;======================================================================
+;; S E R V E R
+;;======================================================================
+
+(test "setup for run" #t (begin (setup-for-run)
+				(string? (getenv "MT_RUN_AREA_HOME"))))
+
+(test "server-register, get-best-server" #t (let ((res #f))
+					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
+					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
+					      (number? (cadddr res))))
+
+(test "de-register server" #t (let ((res #f))
+				(open-run-close tasks:server-deregister tasks:open-db "bob" pullport: 1234)
+				(list? (open-run-close tasks:get-best-server tasks:open-db))))
+
+(define hostinfo #f)
+(test "get-best-server" #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
+			     (set! hostinfo dat) ;; host ip pullport pubport
+			     (and (string? (car dat))
+				  (number? (caddr dat)))))
+
+(test #f #t (let ((zmq-socket (server:client-connect
+			       (cadr hostinfo)
+			       (caddr hostinfo)
+			       ;; (cadddr hostinfo)
+			       )))
+	      (set! *runremote* zmq-socket)
+	      (string? (car *runremote*))))
+
+(test #f #t (let ((res (server:client-login *runremote*)))
+	      (car res)))
+
+(test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
@@ -41,8 +130,6 @@
 
 ;; (define *toppath* "tests")
 (define *db* #f)
-(test "setup for run" #t (begin (setup-for-run)
-				(string? (getenv "MT_RUN_AREA_HOME"))))
 (test "open-db" #t (begin
 		     (set! *db* (open-db))
 		     (if *db* #t #f)))
@@ -58,37 +145,36 @@
 
 (for-each (lambda (item)
 	    (test (conc "get valid items (" item ")")
-		  item (check-valid-items "state" item)))
+		  item (items:check-valid-items "state" item)))
 	  (list "start" "end" "completed"))
 
 (for-each (lambda (item)
 	    (test (conc "get valid items (" item ")")
-		  item (check-valid-items "status" item)))
+		  item (items:check-valid-items "status" item)))
 	  (list "pass" "fail" "n/a"))
+
+(test #f #f (items:check-valid-items "state" "blahfool"))
 
 (test "write env files" "nada.csh" (begin
                                       (save-environment-as-files "nada")
                                       (and (file-exists? "nada.sh")
     			                 (file-exists? "nada.csh"))))
 
+(test #f #t (cdb:client-call *runremote* 'immediate #t 1 (lambda ()(display "Got here eh!?") #t)))
+
+;; (set! *verbosity* 20)
+(test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
+(test #f #f (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" "PASS"))
+;; (set! *verbosity* 1)
+;; (cdb:set-verbosity *runremote* *verbosity*)
+
 (test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
 
-(test "register-test, test info" "NOT_STARTED"
-      (begin
-	(rdb:tests-register-test *db* 1 "nada" "")
-	;; (rdb:flush-queue)
-	(vector-ref (db:get-test-info *db* 1 "nada" "") 3)))
-
-(test #f "NOT_STARTED"    
-      (begin
-	(rdb:tests-register-test #f 1 "nada" "")
-	;; (rdb:flush-queue)
-	(vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3)))
 
 (test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
 
 (define remargs (args:get-args
-		 '("bar" "foo" ":runname" "bob" ":sysname" "ubuntu" ":fsname" "nfs" ":datapath" "blah/foo" "nada")
+		 '("bar" "foo" ":runname" "bob" ":SYSTEM" "ubuntu" ":RELEASE" "v1.2" ":datapath" "blah/foo" "nada")
 		 (list ":runname" ":state" ":status")
 		 (list "-h")
 		 args:arg-hash
@@ -96,19 +182,28 @@
 
 (test "register-run" #t (number? (runs:register-run *db*
 						    (db:get-keys *db*)
-						    '(("SYSTEM" "key1")("OS" "key2"))
+						    '(("SYSTEM" "key1")("RELEASE" "key2"))
 						    "myrun" 
 						    "new"
 						    "n/a" 
 						    "bob")))
+
+(test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
+(test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
+(test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
+(test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
+
 (define keys (db:get-keys *db*))
 
 ;;======================================================================
 ;; D B
 ;;======================================================================
+
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
+(test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
+      (runs:get-runs-by-patt db keys "%"))
 (test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
-(test #f #t (list? (runs:operate-on 'print "%" "%" "%")))
+(test #f #t (runs:operate-on 'print "%" "%" "%"))
 
 ;;(test "update-test-info" #t (test-update-meta-info *db* 1 "nada" 
 (setenv "BLAHFOO" "1234")
@@ -193,36 +288,45 @@
 	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (db:get-tests-for-run db 1 "test1" "" '() '()))))
+	(set! test-id (db:test-get-id (car (cdb:remote-run db:get-tests-for-run #f 1 "test1" '() '()))))
 	(number? test-id)))
 
-(test "Get rundir"       #t (let ((rundir (db:test-get-rundir-from-test-id db test-id)))
-			      (print "Rundir" rundir)
+(test "Get rundir"       #t (let ((rundir (cdb:remote-run db:test-get-rundir-from-test-id #f test-id)))
+			      (print "Rundir " rundir)
+			      (system (conc "mkdir -p " rundir))
 			      (string? rundir)))
-(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db" (let ((tdb (db:open-test-db-by-test-id db test-id)))
-			      (sqlite3#finalize! tdb)
-			      (file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
-(test "Get steps for test" #t (> (length (db:get-steps-for-test db test-id)) 0))
-(test "Get nice table for steps" "2s"
+(test #f #t (sqlite3#database? (open-test-db "./")))
+(test "Create a test db" "../simpleruns/key1/key2/myrun/test1/testdat.db"
+      (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id)))
+	(if tdb (sqlite3#finalize! tdb))
+	(file-exists? "../simpleruns/key1/key2/myrun/test1/testdat.db")))
+
+(test "Get steps for test" #t (let ((steps (cdb:remote-run db:get-steps-for-test #f test-id)))
+				(print steps)
+				(> (length steps) 0)))
+(test "Get nice table for steps" "2.0s"
       (begin
-	(vector-ref (hash-table-ref (db:get-steps-table db test-id) "step1") 4)))
+	(vector-ref (hash-table-ref (open-run-close db:get-steps-table #f test-id) "step1") 4)))
+
+;; (exit)
+
+(test #f "myrun" (cdb:remote-run db:get-run-name-from-id #f 1))
+
+(test #f #f (cdb:remote-run db:roll-up-pass-fail-counts #f 1 "nada" "" "PASS"))
 
 ;;======================================================================
 ;; R E M O T E   C A L L S 
 ;;======================================================================
 
-;; start a server process
-(set! *verbosity* 10)
-(define server-pid (process-run "../../bin/megatest" (list "-server" "-" "-debug" (conc *verbosity*))))
-(sleep 2)
 (define start-wait (current-seconds))
-(server:client-setup)
 (print "Starting intensive cache and rpc test")
 (for-each (lambda (params)
-	    ;;; (rdb:tests-register-test #f 1 (conc "test" (random 20)) "")
-	    (apply rdb:test-set-status-state test-id params)
-	    (rdb:pass-fail-counts test-id (random 100) (random 100))
-	    (rdb:test-rollup-test_data-pass-fail test-id)
+	    (print "Intensive: params=" params)
+	    (cdb:tests-register-test *runremote* 1 (conc "test" (random 20)) "")
+	    (apply cdb:test-set-status-state *runremote* test-id params)
+	    (cdb:pass-fail-counts *runremote* test-id (random 100) (random 100))
+	    (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
+	    (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" (cadr params))
 	    (thread-sleep! 0.01)) ;; cache ordering granularity is at the second level. Should really be at the ms level
 	  '(("COMPLETED"    "PASS" #f)
 	    ("NOT_STARTED"  "FAIL" "Just testing")
@@ -264,20 +368,20 @@
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ("KILLED"       "UNKNOWN" "More testing")
 	    ))
+
 ;; now set all tests to completed
-(rdb:flush-queue)
-(let ((tests (open-run-close db:get-tests-for-run #f 1 "%" "%" '() '())))
+(cdb:flush-queue *runremote*)
+(let ((tests (cdb:remote-run db:get-tests-for-run #f 1 "%" '() '())))
   (print "Setting " (length tests) " to COMPLETED/PASS")
   (for-each
    (lambda (test)
-     (rdb:test-set-status-state (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
+     (cdb:test-set-status-state *runremote* (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
    tests))
 
-(print "Waiting for server to be done, should be about 20 seconds")
-(process-wait server-pid)
-(test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
-			      (print "Server ran for " run-delta " seconds")
-			      (> run-delta 20)))
+;; (process-wait server-pid)
+;; (test "Server wait time" #t (let ((run-delta (- (current-seconds) start-wait)))
+;; 			      (print "Server ran for " run-delta " seconds")
+;; 			      (> run-delta 20)))
 
 (test "Rollup the run(s)" #t (begin
 			       (runs:rollup-run keys (keys->alist keys "na") "rollup" "matt")
@@ -286,6 +390,11 @@
 (hash-table-set! args:arg-hash ":runname" "%")
 
 (test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
+
+(print "Waiting for server to be done, should be about 20 seconds")
+(cdb:kill-server *runremote*)
+
+;; (thread-join! th1 th2 th3)
 
 ;; ADD ME!!!! (db:get-prereqs-not-met *db* 1 '("runfirst") "" mode: 'normal)
 ;; ADD ME!!!! (rdb:get-tests-for-run *db* 1 "runfirst" #f '() '())

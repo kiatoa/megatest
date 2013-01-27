@@ -13,9 +13,8 @@
 ;; Tests
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp rpc)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp)
 (import (prefix sqlite3 sqlite3:))
-(import (prefix rpc rpc:))
 
 (declare (unit tests))
 (declare (uses db))
@@ -29,10 +28,87 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
+(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+    (delete-duplicates
+     (filter (lambda (testname)
+	       (tests:match test-patts testname #f))
+	     (map (lambda (testp)
+		    (last (string-split testp "/")))
+		  tests)))))
+
+;; tests:glob-like-match
+(define (tests:glob-like-match patt str) 
+  (let ((like (substring-index "%" patt)))
+    (let* ((notpatt  (equal? (substring-index "~" patt) 0))
+	   (newpatt  (if notpatt (substring patt 1) patt))
+	   (finpatt  (if like
+			(string-substitute (regexp "%") ".*" newpatt)
+			(string-substitute (regexp "\\*") ".*" newpatt)))
+	   (res      #f))
+      ;; (print "tests:glob-like-match => notpatt: " notpatt ", newpatt: " newpatt ", finpatt: " finpatt)
+      (set! res (string-match (regexp finpatt (if like #t #f)) str))
+      (if notpatt (not res) res))))
+
+;; if itempath is #f then look only at the testname part
+;;
+(define (tests:match patterns testname itempath)
+  (if (string? patterns)
+      (let ((patts (string-split patterns ",")))
+	(if (null? patts) ;;; no pattern(s) means no match
+	    #f
+	    (let loop ((patt (car patts))
+		       (tal  (cdr patts)))
+	      ;; (print "loop: patt: " patt ", tal " tal)
+	      (if (string=? patt "")
+		  #f ;; nothing ever matches empty string - policy
+		  (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
+			 (test-patt  (cadr patt-parts))
+			 (item-patt  (cadddr patt-parts)))
+		    ;; special case: test vs. test/
+		    ;;   test  => "test" "%"
+		    ;;   test/ => "test" ""
+		    (if (and (not (substring-index "/" patt)) ;; no slash in the original
+			     (or (not item-patt)
+				 (equal? item-patt "")))      ;; should always be true that item-patt is ""
+			(set! item-patt "%"))
+		    ;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
+		    (if (and (tests:glob-like-match test-patt testname)
+			     (or (not itempath)
+				 (tests:glob-like-match (if item-patt item-patt "") itempath)))
+			#t
+			(if (null? tal)
+			    #f
+			    (loop (car tal)(cdr tal)))))))))))
+
+;; if itempath is #f then look only at the testname part
+;;
+(define (tests:match->sqlqry patterns)
+  (if (string? patterns)
+      (let ((patts (string-split patterns ",")))
+	(if (null? patts) ;;; no pattern(s) means no match, we will do no query
+	    #f
+	    (let loop ((patt (car patts))
+		       (tal  (cdr patts))
+		       (res  '()))
+	      ;; (print "loop: patt: " patt ", tal " tal)
+	      (let* ((patt-parts (string-match (regexp "^([^\\/]*)(\\/(.*)|)$") patt))
+		     (test-patt  (cadr patt-parts))
+		     (item-patt  (cadddr patt-parts))
+		     (test-qry   (db:patt->like "testname" test-patt))
+		     (item-qry   (db:patt->like "item_path" item-patt))
+		     (qry        (conc "(" test-qry " AND " item-qry ")")))
+		;; (print "tests:match => patt-parts: " patt-parts ", test-patt: " test-patt ", item-patt: " item-patt)
+		(if (null? tal)
+		    (string-intersperse (append (reverse res)(list qry)) " OR ")
+		    (loop (car tal)(cdr tal)(cons qry res)))))))
+      #f))
+
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+  (let* ((keys    (cdb:remote-run db:get-keys #f))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f))
@@ -56,7 +132,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path)'() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -68,7 +144,7 @@
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
 ;; can use wildcards. Also can likely be factored in with get test paths?
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+  (let* ((keys    (cdb:remote-run db:get-keys #f))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -94,7 +170,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed test-name item-path '() '())))
+		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path) '() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -114,11 +190,11 @@
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat)
-  (debug:print 4 "INFO: tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
+  (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (open-run-close db:get-test-info-by-id db test-id))
+	 (testdat     (cdb:get-test-info-by-id *runremote* test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -142,10 +218,10 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(rdb:test-set-status-state test-id real-status state #f))
+	(cdb:test-set-status-state *runremote* test-id real-status state #f))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
-    ;; run area, do not rpc it (yet)
+    ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
 	(db:test-data-rollup #f test-id status))
 
@@ -181,44 +257,42 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (open-run-close db:csv->test-data db test-id
+	    (cdb:remote-run db:csv->test-data #f test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
-    (open-run-close db:roll-up-pass-fail-counts db run-id test-name item-path status)
+    (if (not (equal? item-path ""))
+	(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (open-run-close db:test-set-comment db test-id cmt)))
+	  (cdb:remote-run db:test-set-comment #f test-id cmt)))
     ))
 
+
 (define (tests:test-set-toplog! db run-id test-name logf) 
-  (sqlite3:execute db "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';" 
-		   logf run-id test-name))
+  (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
 
 (define (tests:summarize-items db run-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
-  (let ((outputfilename (conc "megatest-rollup-" test-name ".html"))
-	(orig-dir       (current-directory))
-	(logf           #f))
+  (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
+	 (orig-dir       (current-directory))
+	 (logf-info      (cdb:remote-run db:test-get-logfile-info #f run-id test-name))
+	 (logf           (if logf-info (cadr logf-info) #f))
+	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (sqlite3:for-each-row 
-     (lambda (path final_logf)
-       (set! logf final_logf)
-       (if (directory? path)
-	   (begin
-	     (print "Found path: " path)
-	     (change-directory path))
-	     ;; (set! outputfilename (conc path "/" outputfilename)))
-	   (print "No such path: " path)))
-     db 
-     "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
-     run-id test-name)
-    (print "summarize-items with logf " logf)
+    (set! logf (car logf-info))
+    (if (directory? path)
+	(begin
+	  (debug:print 4 "Found path: " path)
+	  (change-directory path))
+	;; (set! outputfilename (conc path "/" outputfilename)))
+	(print "No such path: " path))
+    (debug:print 1 "summarize-items with logf " logf)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
@@ -230,29 +304,34 @@
 		(counts (make-hash-table))
 		(statecounts (make-hash-table))
 		(outtxt "")
-		(tot    0))
+		(tot    0)
+		(testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
 	    (with-output-to-port
 		oup
 	      (lambda ()
 		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
 				   "</title><body><h2>Summary for " test-name "</h2>"))
-		(sqlite3:for-each-row 
-		 (lambda (id itempath state status run_duration logf comment)
-		   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-		   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-		   (set! outtxt (conc outtxt "<tr>"
-				      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-				      "<td>" state    "</td>" 
-				      "<td><font color=" (common:get-color-from-status status)
-				      ">"   status   "</font></td>"
-				      "<td>" (if (equal? comment "")
-						 "&nbsp;"
-						 comment) "</td>"
-						 "</tr>")))
-		 db
-		 "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
-		 run-id test-name)
-
+		(for-each
+		 (lambda (testrecord)
+		   (let ((id             (vector-ref testrecord 0))
+			 (itempath       (vector-ref testrecord 1))
+			 (state          (vector-ref testrecord 2))
+			 (status         (vector-ref testrecord 3))
+			 (run_duration   (vector-ref testrecord 4))
+			 (logf           (vector-ref testrecord 5))
+			 (comment        (vector-ref testrecord 6)))
+		     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+		     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+		     (set! outtxt (conc outtxt "<tr>"
+					"<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+					"<td>" state    "</td>" 
+					"<td><font color=" (common:get-color-from-status status)
+					">"   status   "</font></td>"
+					"<td>" (if (equal? comment "")
+						   "&nbsp;"
+						   comment) "</td>"
+						   "</tr>"))))
+		 testdat)
 		(print "<table><tr><td valign=\"top\">")
 		;; Print out stats for status
 		(set! tot 0)
@@ -280,13 +359,14 @@
 		(release-dot-lock outputfilename)))
 	    (close-output-port oup)
 	    (change-directory orig-dir)
+	    ;; NB// tests:test-set-toplog! is remote internal...
 	    (tests:test-set-toplog! db run-id test-name outputfilename)
 	    )))))
 
 (define (get-all-legal-tests)
   (let* ((tests  (glob (conc *toppath* "/tests/*")))
 	 (res    '()))
-    (debug:print 4 "INFO: Looking at tests " (string-intersperse tests ","))
+    (debug:print-info 4 "Looking at tests " (string-intersperse tests ","))
     (for-each (lambda (testpath)
 		(if (file-exists? (conc testpath "/testconfig"))
 		    (set! res (cons (last (string-split testpath "/")) res))))
@@ -347,7 +427,7 @@
 
 ;; for each test:
 ;;   
-(define (tests:filter-non-runnable db run-id testkeynames testrecordshash)
+(define (tests:filter-non-runnable run-id testkeynames testrecordshash)
   (let ((runnables '()))
     (for-each
      (lambda (testkeyname)
@@ -357,8 +437,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (db:get-test-id db run-id test-name item-path))
-	      (tdat        (db:get-test-info-by-id db test-id)))
+	      (test-id     (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	      (tdat        (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -373,8 +453,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (db:get-test-id db run-id waiton ""))
-				      (wtdat (db:get-test-info-by-id db test-id)))
+			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
+				      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (member (db:test-get-status wtdat)
 						 '("FAIL" "KILLED"))
 					 (member (db:test-get-state wtdat)
@@ -391,9 +471,9 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request db test-id) ;; run-id test-name itemdat)
+(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
   (let* (;; (item-path (item-list->path itemdat))
-	 (testdat   (db:get-test-info-by-id db test-id))) ;; run-id test-name item-path)))
+	 (testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
     (equal? (test:get-state testdat) "KILLREQ")))
 
 (define (test:tdb-get-rundat-count tdb)

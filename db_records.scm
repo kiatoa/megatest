@@ -120,3 +120,17 @@
 ;; use this one for db-get-run-info
 (define-inline (db:get-row    vec)(vector-ref vec 1))
 
+;; The data structure for handing off requests via wire
+(define (make-cdb:packet)(make-vector 6))
+(define-inline (cdb:packet-get-client-sig   vec)    (vector-ref  vec 0))
+(define-inline (cdb:packet-get-qtype        vec)    (vector-ref  vec 1))
+(define-inline (cdb:packet-get-immediate    vec)    (vector-ref  vec 2))
+(define-inline (cdb:packet-get-query-sig    vec)    (vector-ref  vec 3))
+(define-inline (cdb:packet-get-params       vec)    (vector-ref  vec 4))
+(define-inline (cdb:packet-get-qtime        vec)    (vector-ref  vec 5))
+(define-inline (cdb:packet-set-client-sig!  vec val)(vector-set! vec 0 val))
+(define-inline (cdb:packet-set-qtype!       vec val)(vector-set! vec 1 val))
+(define-inline (cdb:packet-set-immediate!   vec val)(vector-set! vec 2 val))
+(define-inline (cdb:packet-set-query-sig!   vec val)(vector-set! vec 3 val))
+(define-inline (cdb:packet-set-params!      vec val)(vector-set! vec 4 val))
+(define-inline (cdb:packet-set-qtime!       vec val)(vector-set! vec 5 val))

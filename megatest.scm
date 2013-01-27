@@ -10,9 +10,11 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos ) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+
+(use zmq)
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -37,25 +39,25 @@ Megatest, documentation at http://www.kiatoa.com/fossils/megatest
 
 Usage: megatest [options]
   -h                      : this help
+  -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
                             CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
-  -remove-runs            : remove the data for a run, requires :runname, -testpatt and
-                            -itempatt be set. Optionally use :state and :status
+  -remove-runs            : remove the data for a run, requires :runname and -testpatt
+                            Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -rollup                 : fill run (set by :runname)  with latest test(s) from
-                            prior runs with same keys
+  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
+                            from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
   -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
-  -testpatt patt          : % is wildcard
-  -itempatt patt          : % is wildcard
+  -testpatt patt1/patt2,patt3/...  : % is wildcard
   :runname                : required, name for this particular test run
   :state                  : Applies to runs, tests or steps depending on context
   :status                 : Applies to runs, tests or steps depending on context
@@ -97,6 +99,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -list-servers            : list the servers 
   -repl                   : start a repl (useful for extending megatest)
   -debug N                : increase verbosity to N. (try 10 for lots of noise)
   -logging                : turn on logging all debug output to logging.db
@@ -117,10 +120,11 @@ Examples
 megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ") "
-Built from " megatest-fossil-hash ))
+Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
+;;  -kill-server host:port|pid : kill server specified by host:port or pid
 
 ;; process args
 (define remargs (args:get-args 
@@ -157,6 +161,8 @@ Built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
+			"-kill-server"
+			"-port"
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
@@ -168,6 +174,7 @@ Built from " megatest-fossil-hash ))
 			"-test-files"  ;; -test-paths is for listing all
 			) 
 		 (list  "-h"
+			"-version"
 		        "-force"
 		        "-xterm"
 		        "-showkeys"
@@ -181,6 +188,12 @@ Built from " megatest-fossil-hash ))
 			"-repl"
 			"-lock"
 			"-unlock"
+			"-list-servers"
+			;; mist queries
+			"-list-disks"
+			"-list-targets"
+			"-list-db-targets"
+			"-show-runconfig"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -192,6 +205,7 @@ Built from " megatest-fossil-hash ))
 			"-update-meta"
 			"-gen-megatest-area"
 
+			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
 			"-logging"
@@ -204,22 +218,48 @@ Built from " megatest-fossil-hash ))
       (print help)
       (exit)))
 
+(if (args:get-arg "-version")
+    (begin
+      (print megatest-version)
+      (exit)))
+
 (define *didsomething* #f)
 
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
 
-(set! *verbosity* (cond
-		   ((string? (args:get-arg "-debug"))(string->number (args:get-arg "-debug")))
-		   ((args:get-arg "-v")    2)
-		   ((args:get-arg "-q")    0)
-		   (else                   1)))
+(debug:setup)
 
-(if (not (number? *verbosity*))
-    (begin
-      (print "ERROR: Invalid debug value " (args:get-arg "-debug"))
-      (exit)))
+(if (args:get-arg "-logging")(set! *logging* #t))
+
+(if (debug:debug-mode 3) ;; we are obviously debugging
+    (set! open-run-close open-run-close-no-exception-handling))
+
+;; a,b,c % => a/%,b/%,c/%
+(define (tack-on-patt srcstr patt)
+  (let ((strlst (string-split srcstr ",")))
+    (string-intersperse 
+     (map (lambda (str)
+	    (if (not (substring-index "/" str))
+		(conc str "/" patt)
+		str))
+	  strlst)
+	   ",")))
+
+;; to try and not burden Kim too much...
+(if (args:get-arg "-itempatt")
+    (let ((old-testpatt (args:get-arg "-testpatt")))
+      ;; (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
+      (if (args:get-arg "-testpatt")
+	  (hash-table-set! args:arg-hash "-testpatt" (tack-on-patt old-testpatt (args:get-arg "-itempatt"))))
+      ;; (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
+      (if (args:get-arg "-runtests")
+	  (begin
+	    ;; (debug:print 0 "NOTE: Also modifying -runtests")
+	    (hash-table-set! args:arg-hash "-runtests" (tack-on-patt (args:get-arg "-runtests")
+								     (args:get-arg "-itempatt")))))
+      ))
 
 (if (args:get-arg "-logging")(set! *logging* #t))
 
@@ -230,6 +270,97 @@ Built from " megatest-fossil-hash ))
 (if (args:get-arg "-env2file")
     (begin
       (save-environment-as-files (args:get-arg "-env2file"))
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-list-disks")
+    (begin
+      (print 
+       (string-intersperse 
+	(map (lambda (x)
+	       (string-intersperse 
+		x
+		" => "))
+	     (common:get-disks) )
+	"\n"))
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
+;;   we start the server if not running else start the client thread
+;;======================================================================
+
+(if (args:get-arg "-server")
+    (begin
+      (debug:print 2 "Launching server...")
+      (server:launch)))
+
+(if (args:get-arg "-list-servers")
+	;; (args:get-arg "-kill-server"))
+    (let ((tl (setup-for-run)))
+      (if tl 
+	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a\n")
+		(servers-to-kill '()))
+	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State")
+	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====")
+	    (for-each 
+	     (lambda (server)
+	       (let* (;; (killinfo   (args:get-arg "-kill-server"))
+		      ;; (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
+		      ;; (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
+		      (id         (vector-ref server 0))
+		      (pid        (vector-ref server 1))
+		      (hostname   (vector-ref server 2))
+		      (interface  (vector-ref server 3))
+		      (pullport   (vector-ref server 4))
+		      (pubport    (vector-ref server 5))
+		      (start-time (vector-ref server 6))
+		      (priority   (vector-ref server 7))
+		      (state      (vector-ref server 8))
+		      (mt-ver     (vector-ref server 9))
+		      (last-update (vector-ref server 10)) ;;   (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
+		      (killed     #f)
+		      (status     (< last-update 20)))
+		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
+		 ;; no need to login as status of #t indicates we are connecting to correct 
+		 ;; server
+		 (if (equal? state "dead")
+		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
+			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
+		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
+			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
+
+		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
+			 (if status "alive" "dead"))))
+	     servers)
+	    (debug:print-info 1 "Done with listservers")
+	    (set! *didsomething* #t)
+	    (exit) ;; must do, would have to add checks to many/all calls below
+	    )
+	  (exit)))
+    ;; if not list or kill then start a client (if appropriate)
+    (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+	    (eq? (length (hash-table-keys args:arg-hash)) 0))
+	(debug:print-info 1 "Server connection not needed")
+	
+	(server:client-launch)))
+
+;;======================================================================
+;; Weird special calls that need to run *after* the server has started?
+;;======================================================================
+
+(if (args:get-arg "-list-targets")
+    (let ((targets (common:get-runconfig-targets)))
+      (print "Found "(length targets) " targets")
+      (for-each (lambda (x)
+		  ;; (print "[" x "]"))
+		  (print x))
+		targets)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-show-runconfig")
+    (begin
+      (pp (hash-table->alist (open-run-close setup-env-defaults #f "runconfigs.config" #f #f change-env: #f)))
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -246,9 +377,6 @@ Built from " megatest-fossil-hash ))
    ((not (args:get-arg "-testpatt"))
     (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
     (exit 3))
-   ((not (args:get-arg "-itempatt"))
-    (print "ERROR: Missing required parameter for " action ", you must specify the items with -itempatt")
-    (exit 4))
    (else
     (if (not (car *configinfo*))
 	(begin
@@ -258,7 +386,6 @@ Built from " megatest-fossil-hash ))
 	(runs:operate-on  action
 			  (args:get-arg ":runname")
 			  (args:get-arg "-testpatt")
-			  (args:get-arg "-itempatt")
 			  state: (args:get-arg ":state") 
 			  status: (args:get-arg ":status")
 			  new-state-status: (args:get-arg "-set-state-status")))
@@ -282,84 +409,74 @@ Built from " megatest-fossil-hash ))
 ;; Query runs
 ;;======================================================================
 
-(if (args:get-arg "-list-runs")
+(if (or (args:get-arg "-list-runs")
+	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
 	(let* ((db       #f)
 	       (runpatt  (args:get-arg "-list-runs"))
-	       (testpatt (args:get-arg "-testpatt"))
-	       (itempatt (args:get-arg "-itempatt"))
+	       (testpatt (if (args:get-arg "-testpatt") 
+			     (args:get-arg "-testpatt") 
+			     "%"))
 	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (keys     (open-run-close db:get-keys db))
-	       (keynames (map key:get-fieldname keys)))
+	       (keynames (map key:get-fieldname keys))
+	       (db-targets (args:get-arg "-list-db-targets"))
+	       (seen     (make-hash-table)))
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
-	     (debug:print 1 "Run: "
-			  (string-intersperse (map (lambda (x)
-						     (db:get-value-by-header run header x))
-						   keynames) "/")
-			  "/"
-			  (db:get-value-by-header run header "runname")
-			  " status: " (db:get-value-by-header run header "state"))
-	     (let ((run-id (open-run-close db:get-value-by-header run header "id")))
-	       (let ((tests (open-run-close db:get-tests-for-run db run-id testpatt itempatt '() '())))
-		 ;; Each test
-		 (for-each 
-		  (lambda (test)
-		    (format #t
-			    "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-			    (conc (db:test-get-testname test)
-				  (if (equal? (db:test-get-item-path test) "")
-				      "" 
-				      (conc "(" (db:test-get-item-path test) ")")))
-			    (db:test-get-state test)
-			    (db:test-get-status test)
-			    (db:test-get-run_duration test)
-			    (db:test-get-event_time test)
-			    (db:test-get-host test))
-		    (if (not (or (equal? (db:test-get-status test) "PASS")
-				 (equal? (db:test-get-status test) "WARN")
-				 (equal? (db:test-get-state test)  "NOT_STARTED")))
-			(begin
-			  (print "         cpuload:  " (db:test-get-cpuload test)
-				 "\n         diskfree: " (db:test-get-diskfree test)
-				 "\n         uname:    " (db:test-get-uname test)
-				 "\n         rundir:   " (db:test-get-rundir test)
-				 )
-			  ;; Each test
-			  (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
-			    (for-each 
-			     (lambda (step)
-			       (format #t 
-				       "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-				       (db:step-get-stepname step)
-				       (db:step-get-state step)
-				       (db:step-get-status step)
-				       (db:step-get-event_time step)))
-			     steps)))))
-		  tests))))
-	   runs)
-	  (set! *didsomething* #t)
-	  )))
-
-;;======================================================================
-;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
-;;======================================================================
-(if (args:get-arg "-server")
-    (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
-      (debug:print 0 "INFO: Starting the standalone server")
-      (if db 
-	  (let* ((host:port (db:get-var db "SERVER")) ;; this doen't support multiple servers BUG!!!!
-		 (th2 (server:start db (args:get-arg "-server")))
-		 (th3 (make-thread (lambda ()
-				     (server:keep-running db host:port)))))
-	    (thread-start! th3)
-	    (thread-join! th3)
-	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: Failed to setup for megatest"))))
+	     (let ((targetstr (string-intersperse (map (lambda (x)
+							 (db:get-value-by-header run header x))
+						       keynames) "/")))
+	       (if db-targets
+		   (if (not (hash-table-ref/default seen targetstr #f))
+		       (begin
+			 (hash-table-set! seen targetstr #t)
+			 ;; (print "[" targetstr "]"))))
+			 (print targetstr))))
+	       (if (not db-targets)
+		   (let* ((run-id (open-run-close db:get-value-by-header run header "id"))
+			  (tests  (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
+		     (debug:print 1 "Run: " targetstr " status: " (db:get-value-by-header run header "state")
+				  " run-id: " run-id ", number tests: " (length tests))
+		     (for-each 
+		      (lambda (test)
+			(format #t
+				"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+				(conc (db:test-get-testname test)
+				      (if (equal? (db:test-get-item-path test) "")
+					  "" 
+					  (conc "(" (db:test-get-item-path test) ")")))
+				(db:test-get-state test)
+				(db:test-get-status test)
+				(db:test-get-run_duration test)
+				(db:test-get-event_time test)
+				(db:test-get-host test))
+			(if (not (or (equal? (db:test-get-status test) "PASS")
+				     (equal? (db:test-get-status test) "WARN")
+				     (equal? (db:test-get-state test)  "NOT_STARTED")))
+			    (begin
+			      (print "         cpuload:  " (db:test-get-cpuload test)
+				     "\n         diskfree: " (db:test-get-diskfree test)
+				     "\n         uname:    " (db:test-get-uname test)
+				     "\n         rundir:   " (db:test-get-rundir test)
+				     )
+			      ;; Each test
+			      (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
+				(for-each 
+				 (lambda (step)
+				   (format #t 
+					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+					   (db:step-get-stepname step)
+					   (db:step-get-state step)
+					   (db:step-get-status step)
+					   (db:step-get-event_time step)))
+				 steps)))))
+		      tests)))))
+	     runs)
+	   (set! *didsomething* #t))))
 
 ;;======================================================================
 ;; full run
@@ -385,11 +502,12 @@ Built from " megatest-fossil-hash ))
      "-runall"
      "run all tests"
      (lambda (target runname keys keynames keyvallst)
-	 (runs:run-tests target
-			 runname
-			 (args:get-arg "-runtests")
-			 user
-			 args:arg-hash)))) ;; )
+       (runs:run-tests target
+		       runname
+		       "%"
+		       (args:get-arg "-testpatt")
+		       user
+		       args:arg-hash))))
 
 ;;======================================================================
 ;; run one test
@@ -416,6 +534,7 @@ Built from " megatest-fossil-hash ))
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
+		     (args:get-arg "-testpatt")
 		     user
 		     args:arg-hash))))
 
@@ -424,14 +543,17 @@ Built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-rollup")
-    (general-run-call 
-     "-rollup" 
-     "rollup tests" 
-     (lambda (target runname keys keynames keyvallst)
-       (runs:rollup-run keys
-			(keys->alist keys "na")
-			(args:get-arg ":runname") 
-			user))))
+    (begin
+      (debug:print 0 "ERROR: Rollup is currently not working. If you need it please submit a ticket at http://www.kiatoa.com/fossils/megatest")
+      (exit 4)))
+;;     (general-run-call 
+;;      "-rollup" 
+;;      "rollup tests" 
+;;      (lambda (target runname keys keynames keyvallst)
+;;        (runs:rollup-run keys
+;; 			(keys->alist keys "na")
+;; 			(args:get-arg ":runname") 
+;; 			user))))
 
 ;;======================================================================
 ;; Lock or unlock a run
@@ -479,8 +601,7 @@ Built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (open-run-close db:get-keys db))
+	  (let* ((keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
 		 (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
@@ -649,7 +770,7 @@ Built from " megatest-fossil-hash ))
 	      (open-run-close db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(open-run-close db:test-set-log! db test-id logfname)))
+		(cdb:test-set-log! *runremote* test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      (open-run-close tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
@@ -677,7 +798,7 @@ Built from " megatest-fossil-hash ))
 		    ;; mark the start of the test
 		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
-		    (debug:print 2 "INFO: Running \"" fullcmd "\"")
+		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
@@ -687,12 +808,12 @@ Built from " megatest-fossil-hash ))
 			(let* ((htmllogfile (conc stepname ".html"))
 			       (oldexitstat exitstat)
 			       (cmd         (string-intersperse (list "logpro" logprofile htmllogfile "<" logfile ">" (conc stepname "_logpro.log")) " ")))
-			  (debug:print 2 "INFO: running \"" cmd "\"")
+			  (debug:print-info 2 "running \"" cmd "\"")
 			  (change-directory startingdir)
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (open-run-close db:test-set-log! db test-id htmllogfile)))
+			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
 		    )))
@@ -794,20 +915,26 @@ Built from " megatest-fossil-hash ))
       (if db
 	  (begin
 	    (set! *db* db)
-	    (if (not (args:get-arg "-server"))
-		(server:client-setup))
+	    (set! *client-non-blocking-mode* #t)
+	    (server:client-setup)
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager
 	     (string-append
 	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
 	    (current-input-port (make-gnu-readline-port "megatest> "))
-	    (repl)))
+	    (repl))
+	  (exit))
       (set! *didsomething* #t)))
 
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
+
+;; this is the socket if we are a client
+;; (if (and *runremote*
+;; 	 (socket? *runremote*))
+;;     (close-socket *runremote*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

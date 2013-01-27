@@ -13,7 +13,7 @@
 ;; Test info panel
 ;;======================================================================
 
-(use format)
+(use format fmt)
 (require-library iup)
 (import (prefix iup iup:))
 
@@ -83,6 +83,10 @@
 ;;======================================================================
 ;; Test meta panel
 ;;======================================================================
+
+(define (test-meta-panel-get-description testmeta)
+  (fmt #f (with-width 40 (wrap-lines (db:testmeta-get-description testmeta)))))
+
 (define (test-meta-panel testmeta store-meta)
   (iup:frame 
    #:title "Test Meta Data" ; #:expand "YES"
@@ -113,8 +117,9 @@
 			 (iup:label (db:testmeta-get-tags testmeta) #:expand "HORIZONTAL")
 			 (lambda (testmeta)(db:testmeta-get-tags testmeta)))
 	    (store-meta "description" 
-			 (iup:label (db:testmeta-get-description testmeta) #:size "x50"); #:expand "HORIZONTAL")
-			 (lambda (testmeta)(db:testmeta-get-description testmeta)))
+			 (iup:label (test-meta-panel-get-description testmeta) #:size "x50"); #:expand "HORIZONTAL")
+			 (lambda (testmeta)
+			   (test-meta-panel-get-description testmeta)))
 	    )))))
 
 
@@ -130,12 +135,14 @@
 			  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
 				     ))
 			keydat)
-		   (list (iup:label "runname "))))
+		   (list (iup:label "runname ")(iup:label "run-id"))))
     (apply iup:vbox
 	   (append (map (lambda (keyval)
 			  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
 			keydat)
-		   (list (iup:label runname)(iup:label "" #:expand "VERTICAL")))))))
+		   (list (iup:label runname)
+			 (iup:label (conc (db:test-get-run_id testdat)))
+			 (iup:label "" #:expand "VERTICAL")))))))
   
 ;;======================================================================
 ;; Host info panel
@@ -199,7 +206,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(open-run-close db:test-set-state-status-by-id *db* test-id #f #f b)
+					(open-run-close db:test-set-state-status-by-id #f test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -209,7 +216,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id *db* test-id state #f #f)
+								    (open-run-close db:test-set-state-status-by-id #f test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
@@ -229,7 +236,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id *db* test-id #f status #f)
+								    (open-run-close db:test-set-state-status-by-id #f test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
@@ -260,8 +267,8 @@
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (open-run-close db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (open-run-close db:get-run-info db run-id) #f))
+	       (keydat        (if testdat (open-run-close db:get-key-val-pairs #f run-id) #f))
+	       (rundat        (if testdat (open-run-close db:get-run-info #f run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -271,7 +278,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (open-run-close db:testmeta-get-record db testname)))
+				  (let ((tm (open-run-close db:testmeta-get-record #f testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -300,7 +307,7 @@
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
 						       request-update))
-				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id db test-id))))
+				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id #f test-id))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -345,18 +352,18 @@
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -runtests " testname " -target " keystring " :runname " runname 
-				   " -itempatt " (if (equal? item-path "")
-						     "%" 
-						     item-path)
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname " runname 
+				   " -runtests " (conc testname "/" (if (equal? item-path "")
+									"%" 
+									item-path))
 				   ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname " -testpatt " testname " -itempatt "
-				     (if (equal? item-path "")
-					 "%"
-					 item-path)
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+				     " -testpatt " (conc testname "/" (if (equal? item-path "")
+									  "%"
+									  item-path))
 				     " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
@@ -425,8 +432,13 @@
 										     (let ((time-a (vector-ref a 1))
 											   (time-b (vector-ref b 1)))
 										       (if (and (number? time-a)(number? time-b))
-											   (< time-a time-b)
-											   #t))))))
+											   (if (< time-a time-b)
+											       #t
+											       (if (eq? time-a time-b)
+												   (string<? (conc (vector-ref a 2))
+													     (conc (vector-ref b 2)))
+												   #f))
+											   (string<? (conc time-a)(conc time-b))))))))
 								       "\n")))
 							(if (not (equal? currval newval))
 							    (iup:attribute-set! stepsdat "VALUE" newval ))))) ;; "TITLE" newval)))))
@@ -461,7 +473,7 @@
 										       (db:test-data-get-units    x)
 										       (db:test-data-get-type     x)
 										       (db:test-data-get-comment  x)))
-									     (open-run-close db:read-test-data db test-id "%")))
+									     (open-run-close db:read-test-data #f test-id "%")))
 								       "\n")))
 							(if (not (equal? currval newval))
 							    (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
