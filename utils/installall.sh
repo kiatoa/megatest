@@ -1,4 +1,4 @@
-#! /bin/env bash
+#! /usr/bin/env bash
 
 set -x
 
@@ -66,6 +66,7 @@ fi
 export PATH=$PREFIX/bin:$PATH
 export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
 export LD_LIBRARY_PATH=$LIBPATH
+export CHICKEN_INSTALL=$PREFIX/bin/chicken-install
 echo "export PATH=$PREFIX/bin:\$PATH" > setup-chicken4x.sh
 echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> setup-chicken4x.sh
 
@@ -75,30 +76,32 @@ echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 if ! [[ -e $PREFIX/bin/csi ]]; then
     tar xfvz chicken-${CHICKEN_VERSION}.tar.gz
     cd chicken-${CHICKEN_VERSION}
+    make PLATFORM=linux PREFIX=$PREFIX clean
     make PLATFORM=linux PREFIX=$PREFIX
     make PLATFORM=linux PREFIX=$PREFIX install
     cd $BUILDHOME
 fi
 
 # Some eggs are quoted since they are reserved to Bash
-for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
-  if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
-    chicken-install $PROX $f
-    # chicken-install -deploy -prefix $DEPLOYTARG $PROX $f
-  else
-    echo Skipping install of egg $f as it is already installed
-  fi
-done
+# for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
+$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars
+#   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
+#     $CHICKEN_INSTALL $PROX $f
+#     # $CHICKEN_INSTALL -deploy -prefix $DEPLOYTARG $PROX $f
+#   else
+#     echo Skipping install of egg $f as it is already installed
+#   fi
+# done
 
 cd $BUILDHOME
 
 for a in `ls */*.meta|cut -f1 -d/` ; do 
     echo $a
-    (cd $a;chicken-install)
+    (cd $a;$CHICKEN_INSTALL)
 done
 
 export LIBPATH=$PREFIX/lib$ADDITIONAL_LIBPATH
-export LD_LIBRARY_PATH$=$LIBPATH
+export LD_LIBRARY_PATH=$LIBPATH
 
 export SQLITE3_VERSION=3071401
 echo Install sqlite3
@@ -110,12 +113,12 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
     if [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
 	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
 	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
-	# CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install -prefix $DEPLOYTARG -deploy $PROX sqlite3
-	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" chicken-install $PROX sqlite3
+	# CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL -prefix $DEPLOYTARG -deploy $PROX sqlite3
+	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX sqlite3
     fi
 fi
 
-# chicken-install $PROX sqlite3
+# $CHICKEN_INSTALL $PROX sqlite3
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
@@ -157,11 +160,22 @@ make install
 
 cd $BUILDHOME
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web iup
-# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web iup
+# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -feature disable-iup-web -deploy -prefix $DEPLOYTARG iup
 # iup:1.0.2 
-CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks canvas-draw
-# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
+CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks canvas-draw
+# CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
+
+#======================================================================
+# Note uuid needed only for zmq 2.x series
+#======================================================================
+
+# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
+# zpatchlev=-rc2
+# http://download.zeromq.org/zeromq-2.2.0.tar.gz
+# ZEROMQ=zeromq-2.2.0
+
+ZEROMQ=zeromq-3.2.2
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
 UTIL_LINUX=2.21
@@ -255,11 +269,6 @@ fi
 
 cd $BUILDHOME
 
-# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
-# zpatchlev=-rc2
-# http://download.zeromq.org/zeromq-2.2.0.tar.gz
-ZEROMQ=zeromq-2.2.0
-# ZEROMQ=zeromq-3.2.1
 if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
 fi
@@ -275,8 +284,8 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
     make
     make install
-    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX zmq
-    # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" chicken-install $PROX -deploy -prefix $DEPLOYTARG zmq
+    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX zmq
+    # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -deploy -prefix $DEPLOYTARG zmq
 fi
 
 cd $BUILDHOME  
@@ -308,7 +317,7 @@ cd $BUILDHOME
 # unzip -o Canvas_Draw-$CD_REL.zip
 # 
 # cd "Canvas Draw-$CD_REL/chicken"
-# CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" chicken-install $PROX -D no-library-checks
+# CSC_OPTIONS="-I$PREFIX/include -L$LIBPATH" $CHICKEN_INSTALL $PROX -D no-library-checks
 
 echo You may need to add $LD_LIBRARY_PATH to your LD_LIBRARY_PATH variable, a setup-chicken4x.sh 
 echo file can be found in the current directory which should work for setting up to run chicken4x
