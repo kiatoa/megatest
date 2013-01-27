@@ -54,6 +54,7 @@
   (let* (;; (iface           (if (string=? "-" hostn)
 	 ;;        	      #f ;; (get-host-name) 
 	 ;;        	      hostn))
+	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
@@ -67,7 +68,12 @@
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
+
+    ;; Setup the web server and a /ctrl interface
+    ;;
     (vhost-map `(((* any) . ,(lambda (continue)
+			       ;; open the db on the first call 
+			       (if (not db)(set! db (open-db)))
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
@@ -76,6 +82,8 @@
 					   '(/ "hey"))
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
+				  ;; This is the /ctrl path where data is handed to the server and
+				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "ctrl"))
 				   (let* ((packet (db:string->obj dat))
@@ -87,7 +95,8 @@
 					   (set! *last-db-access* (current-seconds))
 					   (mutex-unlock! *heartbeat-mutex*)))
 				     ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
-				     (set! res (open-run-close db:process-queue-item open-db packet))
+				     ;; (set! res (open-run-close db:process-queue-item open-db packet))
+				     (set! res (db:process-queue-item db packet))
 				     ;; (mutex-unlock! *db:process-queue-mutex*)
 				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
 				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
@@ -95,7 +104,10 @@
 								"</body>")
 						    headers: '((content-type text/plain)))))
 				  (else (continue))))))))
-    (server:try-start-server ipaddrstr start-port)))
+    (server:try-start-server ipaddrstr start-port)
+    ;; lite3:finalize! db)))
+    ))
+
 
 
 ;; (define (server:main-loop)
@@ -153,7 +165,7 @@
 		   (current-process-id)
 		   ipaddrstr portnum 0 'live)
    (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   ;; (awful-start server:main-loop port: portnum) ;; ip-address: ipaddrstr 
+   ;; This starts the spiffy server
    (start-server port: portnum)
    (print "INFO: server has been stopped")))
 
@@ -168,6 +180,9 @@
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
+;; When using zmq this would send the message back (two step process)
+;; with spiffy or rpc this simply returns the return data to be returned
+;; 
 (define (server:reply return-addr query-sig success/fail result)
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
@@ -198,11 +213,15 @@
 	 (server:client-send-receive serverdat msg))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
+       ;; set up the http-client here
        (max-retry-attempts 100)
        (retry-request? (lambda (request)
 			 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
 			 (set! numretries (+ numretries 1))
 			 #t))
+       ;; send the data and get the response
+       ;; extract the needed info from the http data and 
+       ;; process and return it.
        (let* ((res   (with-input-from-request fullurl 
 					      ;; #f
 					      ;; msg 
@@ -257,17 +276,17 @@
 	  (debug:print-info 2 "Setting up to connect to " hostinfo)
 	  (server:client-connect iface port)) ;; )
 	(if (> numtries 0)
-	    (let (;; (exe (car (argv)))
+	    (let ((exe (car (argv)))
 		  (pid #f))
 	      (debug:print-info 0 "No server available, attempting to start one...")
-	      ;; (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
-	      ;;   							  (string-intersperse *verbosity* ",")
-	      ;;   							  (conc *verbosity*)))))
-	      (set! pid (process-fork (lambda ()
-					;; (current-input-port  (open-input-file  "/dev/null"))
-					;; (current-output-port (open-output-file "/dev/null"))
-					;; (current-error-port  (open-output-file "/dev/null"))
-					(server:launch))))
+	      (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
+	        							  (string-intersperse *verbosity* ",")
+	        							  (conc *verbosity*)))))
+	      ;; (set! pid (process-fork (lambda ()
+	      ;;   			(current-input-port  (open-input-file  "/dev/null"))
+	      ;;   			(current-output-port (open-output-file "/dev/null"))
+	      ;;   			(current-error-port  (open-output-file "/dev/null"))
+	      ;;   			(server:launch))))
 	      (let loop ((count 0))
 		(let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
 		  (if (not hostinfo)
@@ -300,7 +319,8 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (spid        (open-run-close tasks:server-get-server-id tasks:open-db #f iface port #f)))
+	 (tdb         (tasks:open-db))
+	 (spid        (tasks:server-get-server-id tdb #f iface port #f)))
     (print "Keep-running got server pid " spid ", using iface " iface " and port " port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
@@ -311,7 +331,7 @@
             (loop (+ count 1)))
         
         ;; NOTE: Get rid of this mechanism! It really is not needed...
-        (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
+        (tasks:server-update-heartbeat tdb spid)
       
         ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
         (mutex-lock! *heartbeat-mutex*)
@@ -331,7 +351,7 @@
               (debug:print-info 0 "Starting to shutdown the server.")
               ;; need to delete only *my* server entry (future use)
               (set! *time-to-exit* #t)
-              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+              (tasks:server-deregister-self tdb (get-host-name))
               (thread-sleep! 1)
               (debug:print-info 0 "Max cached queries was " *max-cache-size*)
               (debug:print-info 0 "Server shutdown complete. Exiting")
@@ -346,6 +366,7 @@
 	    (exit))))
   (debug:print-info 2 "Starting the standalone server")
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
+    (debug:print 11 "server:launch hostinfo=" hostinfo)
     (if hostinfo
 	(debug:print-info 2 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
 	(if *toppath* 

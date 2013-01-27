@@ -87,6 +87,7 @@
 
 ;; state: 'live, 'shutting-down, 'dead
 (define (tasks:server-register mdb pid interface port priority state)
+  (debug:print-info 11 "tasks:server-register " pid " " interface " " port " " priority " " state)
   (sqlite3:execute 
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat,interface)

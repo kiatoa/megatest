@@ -100,7 +100,8 @@
      (apply open-run-close-no-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
-(define open-run-close open-run-close-exception-handling)
+;; (define open-run-close open-run-close-exception-handling)
+(define open-run-close open-run-close-no-exception-handling)
 
 (define *global-delta* 0)
 (define *last-global-delta-printed* 0)
