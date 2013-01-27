@@ -24,6 +24,7 @@
 (declare (uses common))
 (declare (uses keys))
 (declare (uses ods))
+(declare (uses fs-transport))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -1129,53 +1130,30 @@
 ;;
 ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
 ;;
+;; cdb:client-call is the unified interface to all the transports. It dispatches the
+;;                 query to a server routine (e.g. server:client-send-recieve) that 
+;;                 transports the data to the server where it is passed to db:process-queue-item
+;;                 which either returns the data to the calling server routine or 
+;;                 directly calls the returning procedure (e.g. zmq).
+;;
 (define (cdb:client-call serverdat qtype immediate numretries . params)
   (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
-  ;; (handle-exceptions
-  ;;  exn
-  ;;  (begin
-  ;;    (thread-sleep! 5) 
-  ;;    (if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
-   (let* ((client-sig  (server:get-client-signature))
-	  (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-	  (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
-	  )
-     (debug:print-info 11 "zdat=" zdat)
-     (let* (
-	  (res  #f)
-	  (rawdat      (server:client-send-receive serverdat zdat))
-	  (tmp         #f))
-     (debug:print-info 11 "Sent " zdat ", received " rawdat)
-     (set! tmp (db:string->obj rawdat))
-     ;; (if (equal? query-sig (vector-ref myres 1))
-     ;; (set! res
-     (vector-ref tmp 2)
-     ;; (loop (server:client-send-receive serverdat zdat)))))))
-	  ;; (timeout (lambda ()
-	  ;;            (let loop ((n numretries))
-	  ;;              (thread-sleep! 15)
-	  ;;              (if (not res)
-	  ;;       	   (if (> numretries 0)
-	  ;;       	       (begin
-	  ;;       		 (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-	  ;;       		 (debug:print-info 11 "re-sending message")
-	  ;;       		 (apply cdb:client-call serverdat qtype immediate numretries params)
-	  ;;       		 (debug:print-info 11 "message re-sent")
-	  ;;       		 (loop (- n 1)))
-	  ;;       	       ;; (apply cdb:client-call serverdats qtype immediate (- numretries 1) params))
-	  ;;       	       (begin
-	  ;;       		 (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-	  ;;       		 (exit 5))))))))
-     ;; (send-receive)
-     )))
-     ;; (debug:print-info 11 "Starting threads")
-     ;; (let ((th1 (make-thread send-receive "send receive"))
-     ;;       (th2 (make-thread timeout      "timeout")))
-     ;;   (thread-start! th1)
-     ;;   (thread-start! th2)
-     ;;   (thread-join!  th1)
-     ;;   (debug:print-info 11 "cdb:client-call returning res=" res)
-     ;;   res))))
+  (case *transport-type* 
+    ((fs)
+     (let ((packet (vector "na" qtype immediate "na" params 0)))
+       (fs:process-queue-item packet)))
+    ((http)
+     (let* ((client-sig  (server:get-client-signature))
+	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
+       (debug:print-info 11 "zdat=" zdat)
+       (let* ((res  #f)
+	      (rawdat      (server:client-send-receive serverdat zdat))
+	      (tmp         #f))
+	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
+	 (set! tmp (db:string->obj rawdat))
+	 (vector-ref tmp 2)
+	 )))))
   
 (define (cdb:set-verbosity serverdat val)
   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))

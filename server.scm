@@ -187,7 +187,9 @@
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
-  (db:obj->string (vector success/fail query-sig result)))
+  (case *transport-type*
+    ((fs) result)
+    ((http)(db:obj->string (vector success/fail query-sig result)))))
 
 ;;======================================================================
 ;; C L I E N T S
@@ -260,45 +262,54 @@
 	  (set! *runremote* #f)
 	  #f))))
 
-;; Do all the connection work, start a server if not already running
+;; Do all the connection work, look up the transport type and set up the
+;; connection if required.
+;;
 (define (server:client-setup #!key (numtries 50))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
-  (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
-    (if hostinfo
-	(let ((host     (list-ref hostinfo 0))
-	      (iface    (list-ref hostinfo 1))
-	      (port     (list-ref hostinfo 2))
-	      (pid      (list-ref hostinfo 3)))
-	  (debug:print-info 2 "Setting up to connect to " hostinfo)
-	  (server:client-connect iface port)) ;; )
-	(if (> numtries 0)
-	    (let ((exe (car (argv)))
-		  (pid #f))
-	      (debug:print-info 0 "No server available, attempting to start one...")
-	      (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
-	        							  (string-intersperse *verbosity* ",")
-	        							  (conc *verbosity*)))))
-	      ;; (set! pid (process-fork (lambda ()
-	      ;;   			(current-input-port  (open-input-file  "/dev/null"))
-	      ;;   			(current-output-port (open-output-file "/dev/null"))
-	      ;;   			(current-error-port  (open-output-file "/dev/null"))
-	      ;;   			(server:launch))))
-	      (let loop ((count 0))
-		(let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
-		  (if (not hostinfo)
-		      (begin
-			(debug:print-info 0 "Waiting for server pid=" pid " to start")
-			(sleep 2) ;; give server time to start
-			(if (< count 5)
-			    (loop (+ count 1)))))))
-	      ;; we are starting a server, do not try again! That can lead to 
-	      ;; recursively starting many processes!!!
-	      (server:client-setup numtries: 0))
-	    (debug:print-info 1 "Too many attempts, giving up")))))
+  (case *transport-type* 
+    ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+    ((http)
+     (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
+       (if hostinfo
+	   (let ((host     (list-ref hostinfo 0))
+		 (iface    (list-ref hostinfo 1))
+		 (port     (list-ref hostinfo 2))
+		 (pid      (list-ref hostinfo 3)))
+	     (debug:print-info 2 "Setting up to connect to " hostinfo)
+	     (server:client-connect iface port)) ;; )
+	   (begin
+	     (debug:print 0 "ERROR: No server found, exiting")
+	     (exit)))))))
+
+;; 	   (if (> numtries 0)
+;; 	       (let ((exe (car (argv)))
+;; 		     (pid #f))
+;; 		 (debug:print-info 0 "No server available, attempting to start one...")
+;; 		 (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
+;; 									     (string-intersperse *verbosity* ",")
+;; 									     (conc *verbosity*)))))
+;; 		 ;; (set! pid (process-fork (lambda ()
+;; 		 ;;   			(current-input-port  (open-input-file  "/dev/null"))
+;; 		 ;;   			(current-output-port (open-output-file "/dev/null"))
+;; 		 ;;   			(current-error-port  (open-output-file "/dev/null"))
+;; 		 ;;   			(server:launch))))
+;; 		 (let loop ((count 0))
+;; 		   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
+;; 		     (if (not hostinfo)
+;; 			 (begin
+;; 			   (debug:print-info 0 "Waiting for server pid=" pid " to start")
+;; 			   (sleep 2) ;; give server time to start
+;; 			   (if (< count 5)
+;; 			       (loop (+ count 1)))))))
+;; 		 ;; we are starting a server, do not try again! That can lead to 
+;; 		 ;; recursively starting many processes!!!
+;; 		 (server:client-setup numtries: 0))
+;; 	       (debug:print-info 1 "Too many attempts, giving up")))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
