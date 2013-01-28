@@ -20,6 +20,9 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
+;; Note, try to remove this dependency 
+(use zmq)
+
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
@@ -1107,18 +1110,29 @@
 ;;     (db:write-cached-data)
 ;;     (loop)))
 
+;; NOTE: Can remove the regex and base64 encoding for zmq
 (define (db:obj->string obj)
-  (string-substitute
-   (regexp "=") "_"
-   (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
-   #t))
+  (case *transport-type*
+    ((fs) obj)
+	((http)
+     (string-substitute
+       (regexp "=") "_"
+         (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+        #t))
+    ((zmq)(with-output-to-string (lambda ()(serialize obj))))
+    (else obj)))
 
 (define (db:string->obj msg)
-  (with-input-from-string 
-      (base64:base64-decode
-       (string-substitute 
-	(regexp "_") "=" msg #t))
-    (lambda ()(deserialize))))
+  (case *transport-type*
+   ((fs) msg)
+   ((http)
+    (with-input-from-string 
+       (base64:base64-decode
+         (string-substitute 
+	   (regexp "_") "=" msg #t))
+       (lambda ()(deserialize))))
+   ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
+   (else msg)))
 
 (define (cdb:use-non-blocking-mode proc)
   (set! *client-non-blocking-mode* #t)
@@ -1152,8 +1166,56 @@
 	      (tmp         #f))
 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
 	 (set! tmp (db:string->obj rawdat))
-	 (vector-ref tmp 2)
-	 )))))
+	 (vector-ref tmp 2))))
+    ((zmq)
+     (handle-exceptions
+      exn
+      (begin
+	(thread-sleep! 5) 
+	(if (> numretries 0)(apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params)))
+      (let* ((push-socket (vector-ref zmq-sockets 0))
+	     (sub-socket  (vector-ref zmq-sockets 1))
+	     (client-sig  (server:get-client-signature))
+	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
+	     (res  #f)
+	     (send-receive (lambda ()
+			     (debug:print-info 11 "sending message")
+			     (send-message push-socket zdat)
+			     (debug:print-info 11 "message sent")
+			     (let loop ()
+			       ;; get the sender info
+			       ;; this should match (server:get-client-signature)
+			       ;; we will need to process "all" messages here some day
+			       (receive-message* sub-socket)
+			       ;; now get the actual message
+			       (let ((myres (db:string->obj (receive-message* sub-socket))))
+				 (if (equal? query-sig (vector-ref myres 1))
+				     (set! res (vector-ref myres 2))
+				     (loop))))))
+	     (timeout (lambda ()
+			(let loop ((n numretries))
+			  (thread-sleep! 15)
+			  (if (not res)
+			      (if (> numretries 0)
+				  (begin
+				    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
+				    (debug:print-info 11 "re-sending message")
+				    (send-message push-socket zdat)
+				    (debug:print-info 11 "message re-sent")
+				    (loop (- n 1)))
+				  ;; (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+				  (begin
+				    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+				    (exit 5))))))))
+	(debug:print-info 11 "Starting threads")
+	(let ((th1 (make-thread send-receive "send receive"))
+	      (th2 (make-thread timeout      "timeout")))
+	  (thread-start! th1)
+	  (thread-start! th2)
+	  (thread-join!  th1)
+	  (debug:print-info 11 "cdb:client-call returning res=" res)
+	  res))))))
   
 (define (cdb:set-verbosity serverdat val)
   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))

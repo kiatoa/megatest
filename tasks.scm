@@ -63,6 +63,7 @@
                                   interface TEXT,
                                   hostname TEXT,
                                   port INTEGER,
+                                  pubport INTEGER,
                                   start_time TIMESTAMP,
                                   priority INTEGER,
                                   state TEXT,
@@ -86,17 +87,18 @@
 ;;======================================================================
 
 ;; state: 'live, 'shutting-down, 'dead
-(define (tasks:server-register mdb pid interface port priority state)
+(define (tasks:server-register mdb pid interface port priority state #!key (pubport -1))
   (debug:print-info 11 "tasks:server-register " pid " " interface " " port " " priority " " state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,start_time,priority,state,mt_version,heartbeat,interface)
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,pubport,start_time,priority,state,mt_version,heartbeat,interface)
                              VALUES(?,  ?,       ?, strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?);"
-   pid (get-host-name) port priority (conc state) megatest-version interface)
+   pid (get-host-name) port pubport priority (conc state) megatest-version interface)
   (list 
    (tasks:server-get-server-id mdb (get-host-name) interface port pid)
    interface
    port
+   pubport
    ))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
@@ -255,10 +257,10 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname interface port start-time priority state mt-version last-update)
-       (set! res (cons (vector id pid hostname interface port start-time priority state mt-version last-update) res)))
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update)
+       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update) res)))
      mdb
-     "SELECT id,pid,hostname,interface,port,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update FROM servers ORDER BY start_time DESC;")
     res))
        
 
