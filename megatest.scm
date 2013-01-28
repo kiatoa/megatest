@@ -287,9 +287,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    (let ((transport (args:get-arg "-transport" 'http)))
+    (let ((transport (args:get-arg "-transport" "http")))
       (debug:print 2 "Launching server using transport " transport)
-      (server:launch transport)))
+      (server:launch (string->symbol transport))))
 
 (if (args:get-arg "-list-servers")
 	;; (args:get-arg "-kill-server"))

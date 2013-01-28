@@ -133,6 +133,9 @@
     ((zmq)
      (send-message pubsock target send-more: #t)
      (send-message pubsock (db:obj->string (vector success/fail query-sig result))))
+    (else 
+     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     result)))
 
 ;;======================================================================
 ;; C L I E N T S
