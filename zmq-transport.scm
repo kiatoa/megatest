@@ -15,12 +15,13 @@
 
 (use zmq)
 
-(declare (unit server))
+(declare (unit zmq-transport))
 
 (declare (uses common))
 (declare (uses db))
 (declare (uses tests))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
+(declare (uses server))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -50,7 +51,7 @@
 ;; [ ]  [ ]           ii. resend request
 ;; [ ]  [ ]    7. Turn self ping back on
 
-(define (server:make-server-url hostport)
+(define (zmq-transport:make-server-url hostport)
   (if (not hostport)
       #f
       (conc "tcp://" (car hostport) ":" (cadr hostport))))
@@ -67,7 +68,7 @@
 (define-inline (zmqsock:set-pub! dat s)(vector-set! dat s 0))
 (define-inline (zmqsock:set-pull! dat s)(vector-set! dat s 0))
 
-(define (server:run hostn)
+(define (zmq-transport:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
       (if (not (setup-for-run))
@@ -90,7 +91,7 @@
 					   #f)))
 			    (if ipstr ipstr hostname)))
 	 (last-run       0))
-    (set! zmq-sockets-dat (server:setup-ports ipaddrstr (if (args:get-arg "-port")
+    (set! zmq-sockets-dat (zmq-transport:setup-ports ipaddrstr (if (args:get-arg "-port")
 			    (string->number (args:get-arg "-port"))
 							    (+ 5000 (random 1001)))))
 
@@ -140,10 +141,10 @@
 	      (loop '()))
 	    (loop (cons packet queue-lst)))))))
 
-;; run server:keep-running in a parallel thread to monitor that the db is being 
+;; run zmq-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (server:keep-running)
+(define (zmq-transport:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -159,7 +160,7 @@
 	 (iface       (cadr server-info))
 	 (pullport    (caddr server-info))
 	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
-	 (zmq-sockets (server:client-connect iface pullport pubport))
+	 (zmq-sockets (zmq-transport:client-connect iface pullport pubport))
 	 (last-access 0))
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
@@ -196,33 +197,40 @@
 	      (debug:print-info 0 "Server shutdown complete. Exiting")
 	      (exit)))))))
 
-(define (server:find-free-port-and-open iface s port stype #!key (trynum 50))
+(define (zmq-transport:find-free-port-and-open iface s port stype #!key (trynum 50))
   (let ((s (if s s (make-socket stype)))
-	(p (if (number? port) port 5555))
- 	(old-handler (current-exception-handler)))
-  (handle-exceptions
-   exn
-   (begin
-     (print-error-message exn)
-     (if (< portnum 9000)
-	 (begin 
-	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
-	   (thread-sleep! 0.1)
-	   (open-run-close tasks:remove-server-records tasks:open-db)
-	   (server:try-start-server ipaddrstr (+ portnum 1)))
-	 (print "ERROR: Tried and tried but could not start the server")))
-   (set! *runremote* (list ipaddrstr portnum))
-   (open-run-close tasks:remove-server-records tasks:open-db)
-   (open-run-close tasks:server-register 
-		   tasks:open-db 
-		   (current-process-id)
-		   ipaddrstr portnum 0 'live)
-   (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   ;; This starts the spiffy server
-   (start-server port: portnum)
-   (print "INFO: server has been stopped")))
+        (p (if (number? port) port 5555))
+        (old-handler (current-exception-handler)))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "Failed to bind to port " p ", trying next port")
+       (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+       ;; (old-handler)
+       ;; (print-call-chain)
+       (if (> trynum 0)
+           (zmq-transport:find-free-port-and-open iface s (+ p 1) trynum: (- trynum 1))
+           (debug:print-info 0 "Tried ports up to " p 
+                             " but all were in use. Please try a different port range by starting the server with parameter \" -port N\" where N is the starting port number to use"))
+       (exit)) ;; To exit or not? That is the question.
+     (let ((zmq-url (conc "tcp://" iface ":" p)))
+       (debug:print 2 "Trying to start server on " zmq-url)
+       (bind-socket s zmq-url)
+       (list iface s port)))))
 
-(define (server:mk-signature)
+(define (zmq-transport:setup-ports ipaddrstr startport)
+  (let* ((s1 (zmq-transport:find-free-port-and-open ipaddrstr #f startport 'pull))
+         (p1 (caddr s1))
+         (s2 (zmq-transport:find-free-port-and-open ipaddrstr #f (+ 1 (if p1 p1 (+ startport 1))) 'pub))
+         (p2 (caddr s2)))
+    (set! *runremote* #f)
+    (debug:print 0 "Server started on " ipaddrstr " ports " p1 " and " p2)
+    (mutex-lock! *heartbeat-mutex*)
+    (set! *server-info* (open-run-close tasks:server-register tasks:open-db (current-process-id) ipaddrstr p1 p2 0 'live 'zmq))
+    (mutex-unlock! *heartbeat-mutex*)
+    (list s1 s2)))
+
+(define (zmq-transport:mk-signature)
   (message-digest-string (md5-primitive) 
 			 (with-output-to-string
 			   (lambda ()
@@ -233,33 +241,18 @@
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
-;; When using zmq this would send the message back (two step process)
-;; with spiffy or rpc this simply returns the return data to be returned
-;; 
-(define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
-  ;; (send-message pubsock target send-more: #t)
-  ;; (send-message pubsock 
-  (db:obj->string (vector success/fail query-sig result)))
-
 ;;======================================================================
 ;; C L I E N T S
 ;;======================================================================
 
-(define (server:get-client-signature)
-  (if *my-client-signature* *my-client-signature*
-      (let ((sig (server:mk-signature)))
-	(set! *my-client-signature* sig)
-	*my-client-signature*)))
-
 ;; 
-(define (server:client-socket-connect iface port #!key (context #f)(type 'req)(subscriptions '()))
+(define (zmq-transport:client-socket-connect iface port #!key (context #f)(type 'req)(subscriptions '()))
   (debug:print-info 3 "client-connect " iface ":" port ", type=" type ", subscriptions=" subscriptions)
   (let ((connect-ok #f)
 	(zmq-socket (if context 
 			(make-socket type context)
 			(make-socket type)))
-	(conurl     (server:make-server-url (list iface port))))
+	(conurl     (zmq-transport:make-server-url (list iface port))))
     (if (socket? zmq-socket)
      (begin
 	  ;; first apply subscriptions
@@ -273,25 +266,14 @@
 	  (debug:print 0 "ERROR: Failed to open socket to " conurl)
 	  #f))))
 
-(define (server:client-login serverdat)
-  (max-retry-attempts 100)
-  (cdb:login serverdat *toppath* (server:get-client-signature)))
-
-;; Not currently used! But, I think it *should* be used!!!
-(define (server:client-logout serverdat)
-  (let ((ok (and (socket? serverdat)
-		 (cdb:logout serverdat *toppath* (server:get-client-signature)))))
-    ;; (close-socket serverdat)
-    ok))
-
-(define (server:client-connect iface pullport pubport)
-  (let* ((push-socket (server:client-socket-connect iface pullport type: 'push))
-	 (sub-socket  (server:client-socket-connect iface pubport
+(define (zmq-transport:client-connect iface pullport pubport)
+  (let* ((push-socket (zmq-transport:client-socket-connect iface pullport type: 'push))
+	 (sub-socket  (zmq-transport:client-socket-connect iface pubport
 						    type: 'sub
-						    subscriptions: (list (server:get-client-signature) "all")))
+						    subscriptions: (list (zmq-transport:get-client-signature) "all")))
 	 (zmq-sockets (vector push-socket sub-socket))
 	 (login-res   #f))
-    (set! login-res (server:client-login zmq-sockets))
+    (set! login-res (zmq-transport:client-login zmq-sockets))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
@@ -303,62 +285,10 @@
 	  (set! *runremote* #f)
 	  #f))))
 
-;; Do all the connection work, start a server if not already running
-(define (server:client-setup #!key (numtries 50))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
-	    (exit))))
-  (let ((hostinfo   (open-run-close tasks:get-best-server tasks:open-db)))
-    (if hostinfo
-	(let ((host     (list-ref hostinfo 0))
-	      (iface    (list-ref hostinfo 1))
-	      (port     (list-ref hostinfo 2))
-          (pubport  (list-ref hostinfo 3))
-	      (pid      (list-ref hostinfo 4)))
-	  (debug:print-info 2 "Setting up to connect to " hostinfo)
-	  ;; (handle-exceptions
-	  ;;   exn
-	  ;;  (begin
-	  ;;    ;; something went wrong in connecting to the server. In this scenario it is ok
-	  ;;    ;; to try again
-	  ;;    (debug:print 0 "ERROR: Failed to open a connection to the server at: " hostinfo)
-	  ;;    (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	  ;;    (debug:print 0 "   perhaps jobs killed with -9? Removing server records")
-	  ;;    (open-run-close tasks:server-deregister tasks:open-db host pullport: pullport)
-	  ;;    (server:client-setup (- numtries 1))
-	  ;;    #f)
-	   (server:client-connect iface port pubport)) ;; )
-	(if (> numtries 0)
-	    (let ((exe (car (argv)))
-		  (pid #f))
-	      (debug:print-info 0 "No server available, attempting to start one...")
-	      ;; (set! pid (process-run exe (list "-server" "-" "-debug" (if (list? *verbosity*)
-	      ;;   							  (string-intersperse *verbosity* ",")
-	      ;;   							  (conc *verbosity*)))))
-	      (set! pid (process-fork (lambda ()
-	      ;;   			(current-input-port  (open-input-file  "/dev/null"))
-	      ;;   			(current-output-port (open-output-file "/dev/null"))
-	      ;;   			(current-error-port  (open-output-file "/dev/null"))
-					(server:launch)))) ;; should never get here ....
-	      (let loop ((count 0))
-		(let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
-		  (if (not hostinfo)
-		      (begin
-			(debug:print-info 0 "Waiting for server pid=" pid " to start")
-			(sleep 2) ;; give server time to start
-			(if (< count 5)
-			    (loop (+ count 1)))))))
-	      ;; we are starting a server, do not try again! That can lead to 
-	      ;; recursively starting many processes!!!
-	      (server:client-setup numtries: 0))
-	    (debug:print-info 1 "Too many attempts, giving up")))))
-
-;; run server:keep-running in a parallel thread to monitor that the db is being 
+;; run zmq-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (server:keep-running)
+(define (zmq-transport:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -413,51 +343,46 @@
               (exit)))))))
 
 ;; all routes though here end in exit ...
-(define (server:launch)
+(define (zmq-transport:launch)
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
-  (debug:print-info 2 "Starting the standalone server")
-  (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
-    (debug:print 11 "server:launch hostinfo=" hostinfo)
-    (if hostinfo
-	(debug:print-info 2 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
-	(if *toppath* 
-	    (let* (;; (th1 (make-thread (lambda ()
-		   ;;      	       (let ((server-info #f))
-		   ;;      		 ;; wait for the server to be online and available
-		   ;;      		 (let loop ()
-		   ;;			   (debug:print-info 2 "Waiting for the server to come online before starting heartbeat")
-		   ;;      		   (thread-sleep! 2)
-		   ;;      		   (mutex-lock! *heartbeat-mutex*)
-		   ;;      		   (set! server-info *server-info* )
-		   ;;      		   (mutex-unlock! *heartbeat-mutex*)
-		   ;;      		   (if (not server-info)(loop)))
-		   ;;			 (debug:print 2 "Server alive, starting self-ping")
-		   ;;      		 (server:self-ping server-info)
-		   ;;      		 ))
-		   ;;      	     "Self ping"))
-		   (th2 (make-thread (lambda ()
-				       (server:run 
-					(if (args:get-arg "-server")
-					    (args:get-arg "-server")
-					    "-"))) "Server run"))
-		   (th3 (make-thread (lambda ()(server:keep-running)) "Keep running"))
-		   )
-	      (set! *client-non-blocking-mode* #t)
-	      ;; (thread-start! th1)
-	      (thread-start! th2)
-	      (thread-start! th3)
-	      (set! *didsomething* #t)
-	      ;; (thread-join! th3)
-	      (thread-join! th2)
-	      )
-	    (debug:print 0 "ERROR: Failed to setup for megatest")))
-    (exit)))
+  (debug:print-info 2 "Starting zmq server")
+  (if *toppath* 
+      (let* (;; (th1 (make-thread (lambda ()
+	     ;;      	       (let ((server-info #f))
+	     ;;      		 ;; wait for the server to be online and available
+	     ;;      		 (let loop ()
+	     ;;			   (debug:print-info 2 "Waiting for the server to come online before starting heartbeat")
+	     ;;      		   (thread-sleep! 2)
+	     ;;      		   (mutex-lock! *heartbeat-mutex*)
+	     ;;      		   (set! server-info *server-info* )
+	     ;;      		   (mutex-unlock! *heartbeat-mutex*)
+	     ;;      		   (if (not server-info)(loop)))
+	     ;;			 (debug:print 2 "Server alive, starting self-ping")
+	     ;;      		 (zmq-transport:self-ping server-info)
+	     ;;      		 ))
+	     ;;      	     "Self ping"))
+	     (th2 (make-thread (lambda ()
+				 (zmq-transport:run 
+				  (if (args:get-arg "-server")
+				      (args:get-arg "-server")
+				      "-"))) "Server run"))
+	     (th3 (make-thread (lambda ()(zmq-transport:keep-running)) "Keep running"))
+	     )
+	(set! *client-non-blocking-mode* #t)
+	;; (thread-start! th1)
+	(thread-start! th2)
+	(thread-start! th3)
+	(set! *didsomething* #t)
+	;; (thread-join! th3)
+	(thread-join! th2)
+	)
+      (debug:print 0 "ERROR: Failed to setup for megatest")))
 
-(define (server:client-signal-handler signum)
+(define (zmq-transport:client-signal-handler signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")
@@ -475,9 +400,9 @@
      (thread-start! th1)
      (thread-join! th2))))
 
-(define (server:client-launch)
-  (set-signal-handler! signal/int server:client-signal-handler)
-   (if (server:client-setup)
+(define (zmq-transport:client-launch)
+  (set-signal-handler! signal/int zmq-transport:client-signal-handler)
+   (if (zmq-transport:client-setup)
        (debug:print-info 2 "connected as client")
        (begin
 	 (debug:print 0 "ERROR: Failed to connect as client")
@@ -489,20 +414,20 @@
 
 ;; ping a server and return number of clients or #f (if no response)
 ;; NOT IN USE!
-(define (server:ping host port #!key (secs 10)(return-socket #f))
+(define (zmq-transport:ping host port #!key (secs 10)(return-socket #f))
   (cdb:use-non-blocking-mode
    (lambda ()
      (let* ((res #f)
 	    (th1 (make-thread
 		  (lambda ()
 		    (let* ((zmq-context (make-context 1))
-			   (zmq-socket  (server:client-connect host port context: zmq-context)))
+			   (zmq-socket  (zmq-transport:client-connect host port context: zmq-context)))
 		      (if zmq-socket
-			  (if (server:client-login zmq-socket)
+			  (if (zmq-transport:client-login zmq-socket)
 			      (let ((numclients (cdb:num-clients zmq-socket)))
 				(if (not return-socket)
 				    (begin
-				      (server:client-logout zmq-socket)
+				      (zmq-transport:client-logout zmq-socket)
 				      (close-socket  zmq-socket)))
 				(set! res (list #t numclients (if return-socket zmq-socket #f))))
 			      (begin
@@ -528,23 +453,23 @@
 	(thread-join! th1 secs))
        res))))
 
-;; (define (server:self-ping server-info)
+;; (define (zmq-transport:self-ping server-info)
 ;;   ;; server-info: server-id interface pullport pubport
 ;;   (let ((iface    (list-ref server-info 1))
 ;; 	(pullport (list-ref server-info 2))
 ;; 	(pubport  (list-ref server-info 3)))
-;;     (server:client-connect iface pullport pubport)
+;;     (zmq-transport:client-connect iface pullport pubport)
 ;;     (let loop ()
 ;;       (thread-sleep! 2)
 ;;       (cdb:client-call *runremote* 'ping #t)
-;;       (debug:print 4 "server:self-ping - I'm alive on " iface ":" pullport "/" pubport "!")
+;;       (debug:print 4 "zmq-transport:self-ping - I'm alive on " iface ":" pullport "/" pubport "!")
 ;;       (mutex-lock! *heartbeat-mutex*)
 ;;       (set! *server-loop-heart-beat* (current-seconds))
 ;;       (mutex-unlock! *heartbeat-mutex*)
 ;;       (loop))))
     
-(define (server:reply pubsock target query-sig success/fail result)
-  (debug:print-info 11 "server:reply target=" target ", result=" result)
+(define (zmq-transport:reply pubsock target query-sig success/fail result)
+  (debug:print-info 11 "zmq-transport:reply target=" target ", result=" result)
   (send-message pubsock target send-more: #t)
   (send-message pubsock (db:obj->string (vector success/fail query-sig result))))
 

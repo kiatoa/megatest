@@ -69,6 +69,7 @@
                                   state TEXT,
                                   mt_version TEXT,
                                   heartbeat TIMESTAMP,
+                                  transport TEXT,
                                CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
@@ -86,19 +87,28 @@
 ;; Server and client management
 ;;======================================================================
 
+;; make-vector-record tasks hostinfo id interface port pubport transport
+(define (make-tasks:hostinfo)(make-vector 5))
+(define (tasks:hostinfo-get-id          vec)    (vector-ref  vec 0))
+(define (tasks:hostinfo-get-interface   vec)    (vector-ref  vec 1))
+(define (tasks:hostinfo-get-port        vec)    (vector-ref  vec 2))
+(define (tasks:hostinfo-get-pubport     vec)    (vector-ref  vec 3))
+(define (tasks:hostinfo-get-transport   vec)    (vector-ref  vec 4))
+
 ;; state: 'live, 'shutting-down, 'dead
-(define (tasks:server-register mdb pid interface port priority state #!key (pubport -1))
+(define (tasks:server-register mdb pid interface port priority state transport #!key (pubport -1))
   (debug:print-info 11 "tasks:server-register " pid " " interface " " port " " priority " " state)
   (sqlite3:execute 
    mdb 
-   "INSERT OR REPLACE INTO servers (pid,hostname,port,pubport,start_time,priority,state,mt_version,heartbeat,interface)
-                             VALUES(?,  ?,       ?, strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?);"
-   pid (get-host-name) port pubport priority (conc state) megatest-version interface)
-  (list 
+   "INSERT OR REPLACE INTO servers (pid,hostname,port,pubport,start_time,priority,state,mt_version,heartbeat,interface,transport)
+                             VALUES(?,  ?,       ?,   ?,  strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?,?);"
+   pid (get-host-name) port pubport priority (conc state) megatest-version interface (conc transport))
+  (vector 
    (tasks:server-get-server-id mdb (get-host-name) interface port pid)
    interface
    port
    pubport
+   transport
    ))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
@@ -257,10 +267,10 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update)
-       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update) res)))
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport)
+       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport) res)))
      mdb
-     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport FROM servers ORDER BY start_time DESC;")
     res))
        
 

@@ -99,7 +99,8 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -list-servers            : list the servers 
+  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -list-servers           : list the servers 
   -repl                   : start a repl (useful for extending megatest)
 
 Spreadsheet generation
@@ -159,6 +160,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
+			"-transport"
 			"-kill-server"
 			"-port"
 			"-extract-ods"
@@ -285,19 +287,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    (begin
-      (debug:print 2 "Launching server...")
-      (server:launch)))
+    (let ((transport (args:get-arg "-transport" 'http)))
+      (debug:print 2 "Launching server using transport " transport)
+      (server:launch transport)))
 
 (if (args:get-arg "-list-servers")
 	;; (args:get-arg "-kill-server"))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a\n")
+		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a~10a\n")
 		(servers-to-kill '()))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State")
-	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====")
+	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State" "Transport")
+	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
 	       (let* (;; (killinfo   (args:get-arg "-kill-server"))
@@ -314,6 +316,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (state      (vector-ref server 8))
 		      (mt-ver     (vector-ref server 9))
 		      (last-update (vector-ref server 10)) ;;   (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
+		      (transport  (vector-ref server 11))
 		      (killed     #f)
 		      (status     (< last-update 20)))
 		 ;;   (zmq-sockets (if status (server:client-connect hostname port) #f)))
@@ -326,7 +329,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
 
 		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
-			 (if status "alive" "dead"))))
+			 (if status "alive" "dead") transport)))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
 	    (set! *didsomething* #t)
