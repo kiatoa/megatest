@@ -1109,7 +1109,10 @@
 ;;     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
 ;;     (db:write-cached-data)
 ;;     (loop)))
-
+;; The queue is a list of vectors where the zeroth slot indicates the type of query to
+;; apply and the second slot is the time of the query and the third entry is a list of 
+;; values to be applied
+;;
 ;; NOTE: Can remove the regex and base64 encoding for zmq
 (define (db:obj->string obj)
   (case *transport-type*
@@ -1312,6 +1315,63 @@
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
+
+(define (db:write-cached-data)
+  (open-run-close
+   (lambda (db . junkparams)
+     (let ((queries    (make-hash-table))
+	   (data       #f))
+       (mutex-lock! *incoming-mutex*)
+       (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+       (set! *incoming-data* '())
+       (mutex-unlock! *incoming-mutex*)
+       (if (> (length data) 0)
+	   (debug:print-info 4 "Writing cached data " data))
+       ;; prepare the needed statements
+       (for-each (lambda (request-item)
+		   (let ((stmt-key (vector-ref request-item 0)))
+		     (if (not (hash-table-ref/default queries stmt-key #f))
+			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (if stmt
+			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
+			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+		 data)
+       (let outerloop ((special-qry #f)
+		       (stmts       data))
+	 (if special-qry
+	     ;; handle a query that cannot be part of the grouped queries
+	     (let* ((stmt-key (vector-ref special-qry 0))
+		    (qry      (hash-table-ref queries stmt-key))
+		    (params   (vector-ref speical-qry 2)))
+	       (apply sqlite3:execute db qry params)
+	       (if (not (null? stmts))
+		   (outerloop #f stmts)))
+	     ;; handle normal queries
+	     (sqlite3:with-transaction 
+	      db
+	      (lambda ()
+		(debug:print-info 11 "flushing " stmts " to db")
+		(if (not (null? stmts))
+		    (let innerloop ((hed (car stmts))
+				    (tal (cdr stmts)))
+		      (let ((params   (vector-ref hed 2))
+			    (stmt-key (vector-ref hed 0)))
+			(if (not (member stmt-key db:special-queries))
+			    (begin
+			      (debug:print-info 11 "Executing " stmt-key " for " params)
+			      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+			      (if (not (null? tal))
+				  (innerloop (car tal)(cdr tal))))
+			    (outerloop hed tal)))))))))
+       (for-each (lambda (stmt-key)
+		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		 (hash-table-keys queries))
+       (let ((cache-size (length data)))
+	 (if (> cache-size *max-cache-size*)
+	     (set! *max-cache-size* cache-size)))
+       ))
+   #f))
+
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
