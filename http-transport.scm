@@ -109,42 +109,6 @@
     ;; lite3:finalize! db)))
     ))
 
-
-
-;; (define (http-transport:main-loop)
-;;   (print "INFO: Exectuing main server loop")
-;;   (access-log "megatest-http.log")
-;;   (server-bind-address #f)
-;;   (define-page (main-page-path)
-;;     (lambda ()
-;;       (let ((dat ($ "dat")))
-;;       ;; (with-request-variables (dat)
-;;         (debug:print-info 12 "Got dat=" dat)
-;; 	(let* ((packet (db:string->obj dat))
-;; 	       (qtype  (cdb:packet-get-qtype packet)))
-;; 	  (debug:print-info 12 "server=> received packet=" packet)
-;; 	  (if (not (member qtype '(sync ping)))
-;; 	      (begin
-;; 		(mutex-lock! *heartbeat-mutex*)
-;; 		(set! *last-db-access* (current-seconds))
-;; 		(mutex-unlock! *heartbeat-mutex*)))
-;; 	  (let ((res (open-run-close db:process-queue-item open-db packet)))
-;; 	    (debug:print-info 11 "Return value from db:process-queue-item is " res)
-;; 	    res))))))
-
-;;; (use spiffy uri-common intarweb)
-;;; 
-;;; (root-path "/var/www")
-;;; 
-;;; (vhost-map `(((* any) . ,(lambda (continue)
-;;;                            (if (equal? (uri-path (request-uri (current-request))) 
-;;;                                        '(/ "hey"))
-;;;                                (send-response body: "hey there!\n"
-;;;                                               headers: '((content-type text/plain)))
-;;;                                (continue))))))
-;;; 
-;;; (start-server port: 12345)
-
 ;; This is recursively run by http-transport:run until sucessful
 ;;
 (define (http-transport:try-start-server ipaddrstr portnum)

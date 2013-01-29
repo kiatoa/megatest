@@ -180,14 +180,15 @@
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
+  (debug:print-info 11 "*transport-type* is " *transport-type*)
   (let* ((hostinfo   (if (not *transport-type*) ;; If we dont' already have transport type set then figure it out
 			 (open-run-close tasks:get-best-server tasks:open-db)
 			 #f)))
     ;; if have hostinfo then extract the transport type 
     ;; else fall back to fs
-    ;; 
+    (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
     (set! *transport-type* (if hostinfo 
-			       (string->vector (tasks:hostinfo-get-transport hostinfo))
+			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			       'fs))
     (debug:print-info 1 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 

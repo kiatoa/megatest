@@ -87,13 +87,14 @@
 ;; Server and client management
 ;;======================================================================
 
-;; make-vector-record tasks hostinfo id interface port pubport transport
-(define (make-tasks:hostinfo)(make-vector 5))
+;; make-vector-record tasks hostinfo id interface port pubport transport pid hostname
 (define (tasks:hostinfo-get-id          vec)    (vector-ref  vec 0))
 (define (tasks:hostinfo-get-interface   vec)    (vector-ref  vec 1))
 (define (tasks:hostinfo-get-port        vec)    (vector-ref  vec 2))
 (define (tasks:hostinfo-get-pubport     vec)    (vector-ref  vec 3))
 (define (tasks:hostinfo-get-transport   vec)    (vector-ref  vec 4))
+(define (tasks:hostinfo-get-pid         vec)    (vector-ref  vec 5))
+(define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
 ;; state: 'live, 'shutting-down, 'dead
 (define (tasks:server-register mdb pid interface port priority state transport #!key (pubport -1))
@@ -190,11 +191,11 @@
   (let ((res '())
 	(best #f))
     (sqlite3:for-each-row
-     (lambda (id hostname interface port pid)
-       (set! res (cons (list hostname interface port pid id) res))
+     (lambda (id interface port pubport transport pid hostname)
+       (set! res (cons (vector id interface port pubport transport pid hostname) res))
        (debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
      mdb
-     "SELECT id,hostname,interface,port,pid FROM servers
+     "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
          WHERE strftime('%s','now')-heartbeat < 10
                AND mt_version=? ORDER BY start_time ASC LIMIT 1;" megatest-version)
     ;; for now we are keeping only one server registered in the db, return #f or first server found

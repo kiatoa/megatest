@@ -1162,7 +1162,7 @@
 	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
        (debug:print-info 11 "zdat=" zdat)
        (let* ((res  #f)
-	      (rawdat      (server:client-send-receive serverdat zdat))
+	      (rawdat      (http-transport:client-send-receive serverdat zdat))
 	      (tmp         #f))
 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
 	 (set! tmp (db:string->obj rawdat))
