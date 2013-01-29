@@ -42,6 +42,8 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
+(define *transport-type*    #f)
+(define *megatest-db*       #f)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    (current-seconds))  ;; update when db is accessed via server

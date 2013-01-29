@@ -20,10 +20,14 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
+;; Note, try to remove this dependency 
+(use zmq)
+
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
 (declare (uses ods))
+(declare (uses fs-transport))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -1105,19 +1109,33 @@
 ;;     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
 ;;     (db:write-cached-data)
 ;;     (loop)))
-
+;; The queue is a list of vectors where the zeroth slot indicates the type of query to
+;; apply and the second slot is the time of the query and the third entry is a list of 
+;; values to be applied
+;;
+;; NOTE: Can remove the regex and base64 encoding for zmq
 (define (db:obj->string obj)
-  (string-substitute
-   (regexp "=") "_"
-   (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
-   #t))
+  (case *transport-type*
+    ((fs) obj)
+	((http)
+     (string-substitute
+       (regexp "=") "_"
+         (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+        #t))
+    ((zmq)(with-output-to-string (lambda ()(serialize obj))))
+    (else obj)))
 
 (define (db:string->obj msg)
-  (with-input-from-string 
-      (base64:base64-decode
-       (string-substitute 
-	(regexp "_") "=" msg #t))
-    (lambda ()(deserialize))))
+  (case *transport-type*
+   ((fs) msg)
+   ((http)
+    (with-input-from-string 
+       (base64:base64-decode
+         (string-substitute 
+	   (regexp "_") "=" msg #t))
+       (lambda ()(deserialize))))
+   ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
+   (else msg)))
 
 (define (cdb:use-non-blocking-mode proc)
   (set! *client-non-blocking-mode* #t)
@@ -1129,53 +1147,78 @@
 ;;
 ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
 ;;
+;; cdb:client-call is the unified interface to all the transports. It dispatches the
+;;                 query to a server routine (e.g. server:client-send-recieve) that 
+;;                 transports the data to the server where it is passed to db:process-queue-item
+;;                 which either returns the data to the calling server routine or 
+;;                 directly calls the returning procedure (e.g. zmq).
+;;
 (define (cdb:client-call serverdat qtype immediate numretries . params)
   (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
-  ;; (handle-exceptions
-  ;;  exn
-  ;;  (begin
-  ;;    (thread-sleep! 5) 
-  ;;    (if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
-   (let* ((client-sig  (server:get-client-signature))
-	  (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-	  (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
-	  )
-     (debug:print-info 11 "zdat=" zdat)
-     (let* (
-	  (res  #f)
-	  (rawdat      (server:client-send-receive serverdat zdat))
-	  (tmp         #f))
-     (debug:print-info 11 "Sent " zdat ", received " rawdat)
-     (set! tmp (db:string->obj rawdat))
-     ;; (if (equal? query-sig (vector-ref myres 1))
-     ;; (set! res
-     (vector-ref tmp 2)
-     ;; (loop (server:client-send-receive serverdat zdat)))))))
-	  ;; (timeout (lambda ()
-	  ;;            (let loop ((n numretries))
-	  ;;              (thread-sleep! 15)
-	  ;;              (if (not res)
-	  ;;       	   (if (> numretries 0)
-	  ;;       	       (begin
-	  ;;       		 (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-	  ;;       		 (debug:print-info 11 "re-sending message")
-	  ;;       		 (apply cdb:client-call serverdat qtype immediate numretries params)
-	  ;;       		 (debug:print-info 11 "message re-sent")
-	  ;;       		 (loop (- n 1)))
-	  ;;       	       ;; (apply cdb:client-call serverdats qtype immediate (- numretries 1) params))
-	  ;;       	       (begin
-	  ;;       		 (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-	  ;;       		 (exit 5))))))))
-     ;; (send-receive)
-     )))
-     ;; (debug:print-info 11 "Starting threads")
-     ;; (let ((th1 (make-thread send-receive "send receive"))
-     ;;       (th2 (make-thread timeout      "timeout")))
-     ;;   (thread-start! th1)
-     ;;   (thread-start! th2)
-     ;;   (thread-join!  th1)
-     ;;   (debug:print-info 11 "cdb:client-call returning res=" res)
-     ;;   res))))
+  (case *transport-type* 
+    ((fs)
+     (let ((packet (vector "na" qtype immediate "na" params 0)))
+       (fs:process-queue-item packet)))
+    ((http)
+     (let* ((client-sig  (server:get-client-signature))
+	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
+       (debug:print-info 11 "zdat=" zdat)
+       (let* ((res  #f)
+	      (rawdat      (http-transport:client-send-receive serverdat zdat))
+	      (tmp         #f))
+	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
+	 (set! tmp (db:string->obj rawdat))
+	 (vector-ref tmp 2))))
+    ((zmq)
+     (handle-exceptions
+      exn
+      (begin
+	(thread-sleep! 5) 
+	(if (> numretries 0)(apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params)))
+      (let* ((push-socket (vector-ref zmq-sockets 0))
+	     (sub-socket  (vector-ref zmq-sockets 1))
+	     (client-sig  (server:get-client-signature))
+	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
+	     (res  #f)
+	     (send-receive (lambda ()
+			     (debug:print-info 11 "sending message")
+			     (send-message push-socket zdat)
+			     (debug:print-info 11 "message sent")
+			     (let loop ()
+			       ;; get the sender info
+			       ;; this should match (server:get-client-signature)
+			       ;; we will need to process "all" messages here some day
+			       (receive-message* sub-socket)
+			       ;; now get the actual message
+			       (let ((myres (db:string->obj (receive-message* sub-socket))))
+				 (if (equal? query-sig (vector-ref myres 1))
+				     (set! res (vector-ref myres 2))
+				     (loop))))))
+	     (timeout (lambda ()
+			(let loop ((n numretries))
+			  (thread-sleep! 15)
+			  (if (not res)
+			      (if (> numretries 0)
+				  (begin
+				    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
+				    (debug:print-info 11 "re-sending message")
+				    (send-message push-socket zdat)
+				    (debug:print-info 11 "message re-sent")
+				    (loop (- n 1)))
+				  ;; (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+				  (begin
+				    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+				    (exit 5))))))))
+	(debug:print-info 11 "Starting threads")
+	(let ((th1 (make-thread send-receive "send receive"))
+	      (th2 (make-thread timeout      "timeout")))
+	  (thread-start! th1)
+	  (thread-start! th2)
+	  (thread-join!  th1)
+	  (debug:print-info 11 "cdb:client-call returning res=" res)
+	  res))))))
   
 (define (cdb:set-verbosity serverdat val)
   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
@@ -1272,6 +1315,63 @@
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
+
+(define (db:write-cached-data)
+  (open-run-close
+   (lambda (db . junkparams)
+     (let ((queries    (make-hash-table))
+	   (data       #f))
+       (mutex-lock! *incoming-mutex*)
+       (set! data (sort *incoming-data* (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+       (set! *incoming-data* '())
+       (mutex-unlock! *incoming-mutex*)
+       (if (> (length data) 0)
+	   (debug:print-info 4 "Writing cached data " data))
+       ;; prepare the needed statements
+       (for-each (lambda (request-item)
+		   (let ((stmt-key (vector-ref request-item 0)))
+		     (if (not (hash-table-ref/default queries stmt-key #f))
+			 (let ((stmt (alist-ref stmt-key db:queries)))
+			   (if stmt
+			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
+			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
+		 data)
+       (let outerloop ((special-qry #f)
+		       (stmts       data))
+	 (if special-qry
+	     ;; handle a query that cannot be part of the grouped queries
+	     (let* ((stmt-key (vector-ref special-qry 0))
+		    (qry      (hash-table-ref queries stmt-key))
+		    (params   (vector-ref speical-qry 2)))
+	       (apply sqlite3:execute db qry params)
+	       (if (not (null? stmts))
+		   (outerloop #f stmts)))
+	     ;; handle normal queries
+	     (sqlite3:with-transaction 
+	      db
+	      (lambda ()
+		(debug:print-info 11 "flushing " stmts " to db")
+		(if (not (null? stmts))
+		    (let innerloop ((hed (car stmts))
+				    (tal (cdr stmts)))
+		      (let ((params   (vector-ref hed 2))
+			    (stmt-key (vector-ref hed 0)))
+			(if (not (member stmt-key db:special-queries))
+			    (begin
+			      (debug:print-info 11 "Executing " stmt-key " for " params)
+			      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+			      (if (not (null? tal))
+				  (innerloop (car tal)(cdr tal))))
+			    (outerloop hed tal)))))))))
+       (for-each (lambda (stmt-key)
+		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		 (hash-table-keys queries))
+       (let ((cache-size (length data)))
+	 (if (> cache-size *max-cache-size*)
+	     (set! *max-cache-size* cache-size)))
+       ))
+   #f))
+
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
