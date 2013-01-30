@@ -90,6 +90,9 @@ Queries
                             returns list sorted by age ascending, see examples below
   -test-paths             : get the test paths matching target, runname, item and test
                             patterns.
+  -list-disks             : list the disks available for storing runs
+  -list-targets           : list the targets in runconfigs.config
+  -list-db-targets        : list the target combinations used in the db
 
 Misc 
   -rebuild-db             : bring the database schema up to date

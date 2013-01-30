@@ -129,6 +129,7 @@
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
 
 (define (tasks:server-get-server-id mdb hostname iface port pid)
+  (debug:print-info 12 "tasks:server-get-server-id " mdb " " hostname " " iface " " port " " pid)
   (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id)
