@@ -122,7 +122,7 @@
 (define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-delay* 0)
 (define (runs:shrink-can-run-more-tests-delay)
-  (set! *runs:can-run-more-tests-delay* (/ *runs:can-run-more-tests-delay* 2)))
+  (set! *runs:can-run-more-tests-delay* 0)) ;; (/ *runs:can-run-more-tests-delay* 2)))
 
 (define (runs:can-run-more-tests test-record)
   (thread-sleep! *runs:can-run-more-tests-delay*)
@@ -142,7 +142,7 @@
     (if (and (> (+ num-running num-running-in-jobgroup) 0)
 	     (< *runs:can-run-more-tests-delay* 10))
 	(begin
-	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.1))
+	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 1)) ;; 0.1))
 	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
