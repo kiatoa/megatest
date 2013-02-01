@@ -162,6 +162,7 @@
 	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
 	 (zmq-sockets (zmq-transport:client-connect iface pullport pubport))
 	 (last-access 0))
+    (debug:print-info 11 "heartbeat started for zmq server on " iface " " pullport " " pubport)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
@@ -226,7 +227,14 @@
     (set! *runremote* #f)
     (debug:print 0 "Server started on " ipaddrstr " ports " p1 " and " p2)
     (mutex-lock! *heartbeat-mutex*)
-    (set! *server-info* (open-run-close tasks:server-register tasks:open-db (current-process-id) ipaddrstr p1 p2 0 'live 'zmq))
+    (set! *server-info* (open-run-close tasks:server-register 
+					tasks:open-db 
+					(current-process-id) 
+					ipaddrstr p1 
+					0 
+					'live
+					'zmq
+					pubport: p2))
     (mutex-unlock! *heartbeat-mutex*)
     (list s1 s2)))
 
@@ -273,6 +281,7 @@
 						    subscriptions: (list (zmq-transport:get-client-signature) "all")))
 	 (zmq-sockets (vector push-socket sub-socket))
 	 (login-res   #f))
+    (debug:print-info 11 "zmq-transport:client-connect started. Next is login")
     (set! login-res (zmq-transport:client-login zmq-sockets))
     (if (and (not (null? login-res))
 	     (car login-res))

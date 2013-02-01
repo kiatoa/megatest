@@ -1377,13 +1377,13 @@
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
-(define (db:process-queue db pubsock indata)
-  (let* ((data       (sort indata (lambda (a b)
-				    (< (cdb:packet-get-qtime a)(cdb:packet-get-qtime b))))))
-    (for-each
-     (lambda (item)
-       (db:process-queue-item db pubsock item))
-     data)))
+;; (define (db:process-queue db pubsock indata)
+;;   (let* ((data       (sort indata (lambda (a b)
+;; 				    (< (cdb:packet-get-qtime a)(cdb:packet-get-qtime b))))))
+;;     (for-each
+;;      (lambda (item)
+;;        (db:process-queue-item db pubsock item))
+;;      data)))
 
 (define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
@@ -1395,6 +1395,8 @@
     (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
     (cond
      (query
+      ;; transactionize needed here.
+
       (apply sqlite3:execute db query params)
       (server:reply return-address qry-sig #t #t))
      ((member stmt-key db:special-queries)
