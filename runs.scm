@@ -120,9 +120,18 @@
 	    itemdat))
 
 (define *last-num-running-tests* 0)
+(define *runs:can-run-more-tests-delay* 0)
+(define (runs:shrink-can-run-more-tests-delay)
+  (set! *runs:can-run-more-tests-delay* 0)) ;; (/ *runs:can-run-more-tests-delay* 2)))
+
 (define (runs:can-run-more-tests test-record)
+  (thread-sleep! *runs:can-run-more-tests-delay*)
   (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
 	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
+	 ;; Heuristic fix. These are getting called too rapidly when jobs are running or stuck
+	 ;; so we are going to increment a global delay by 0.1 seconds up to 10 seconds
+	 ;; every time runs:can-run-more-tests is called.
+	 ;; when a test is launched or other activity occurs divide the delay by 2
 	 (num-running             (cdb:remote-run db:get-count-tests-running #f))
 	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
 	 (max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
@@ -130,6 +139,11 @@
 					(string->number mcj)
 					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
+    (if (and (> (+ num-running num-running-in-jobgroup) 0)
+	     (< *runs:can-run-more-tests-delay* 10))
+	(begin
+	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 1)) ;; 0.1))
+	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
 	  (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
@@ -418,6 +432,7 @@
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  (thread-sleep! *global-delta*)
+(runs:shrink-can-run-more-tests-delay)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
@@ -429,6 +444,7 @@
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
+(runs:shrink-can-run-more-tests-delay)
 		  (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
@@ -448,10 +464,12 @@
 			    (if (vector? hed)
 				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 						    " from the launch list as it has prerequistes that are FAIL")
+(runs:shrink-can-run-more-tests-delay)
 				       (thread-sleep! *global-delta*)
 				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+(runs:shrink-can-run-more-tests-delay)
 				  (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
