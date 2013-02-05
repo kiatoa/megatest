@@ -125,16 +125,17 @@
     ;;
     ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
     ;;
+    (debug:print-info 11 "Server setup complete, start listening for messages")
     (let loop ((queue-lst '()))
       (let* ((rawmsg (receive-message* pull-socket))
 	     (packet (db:string->obj rawmsg))
-					  (qtype  (cdb:packet-get-qtype packet)))
-				     (debug:print-info 12 "server=> received packet=" packet)
-				     (if (not (member qtype '(sync ping)))
-					 (begin
-					   (mutex-lock! *heartbeat-mutex*)
-					   (set! *last-db-access* (current-seconds))
-					   (mutex-unlock! *heartbeat-mutex*)))
+	     (qtype  (cdb:packet-get-qtype packet)))
+	(debug:print-info 12 "server=> received packet=" packet)
+	(if (not (member qtype '(sync ping)))
+	    (begin
+	      (mutex-lock! *heartbeat-mutex*)
+	      (set! *last-db-access* (current-seconds))
+	      (mutex-unlock! *heartbeat-mutex*)))
 	(if #t ;; (cdb:packet-get-immediate packet) ;; process immediately or put in queue
 	    (begin
 	      (open-run-close db:process-queue #f pub-socket (cons packet queue-lst))
@@ -155,18 +156,20 @@
 			  (mutex-unlock! *heartbeat-mutex*)
 			  (if sdat sdat
 			      (begin
+				(debug:print 12 "WARNING: server not started yet, waiting few seconds before trying again")
 				(sleep 4)
 				(loop))))))
 	 (iface       (cadr server-info))
 	 (pullport    (caddr server-info))
 	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
-	 (zmq-sockets (zmq-transport:client-connect iface pullport pubport))
+	 ;; (zmq-sockets (zmq-transport:client-connect iface pullport pubport))
 	 (last-access 0))
     (debug:print-info 11 "heartbeat started for zmq server on " iface " " pullport " " pubport)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
-      (let ((queue-len (cdb:client-call zmq-sockets 'sync #t 1)))
+      ;; GET REAL QUEUE LENGTH FROM THE VARIABLE
+      (let ((queue-len 0)) ;; FOR NOW DO NOT DO THIS (cdb:client-call zmq-sockets 'sync #t 1)))
       ;; (print "Server running, count is " count)
 	(if (< count 1) ;; 3x3 = 9 secs aprox
 	    (loop (+ count 1)))
@@ -235,6 +238,7 @@
 					'live
 					'zmq
 					pubport: p2))
+    (debug:print-info 11 "*server-info* set to " *server-info*)
     (mutex-unlock! *heartbeat-mutex*)
     (list s1 s2)))
 

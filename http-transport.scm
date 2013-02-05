@@ -120,11 +120,11 @@
 	 (begin 
 	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
-	   (open-run-close tasks:remove-server-records tasks:open-db)
+	   ;; (open-run-close tasks:remove-server-records tasks:open-db)
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1)))
 	 (print "ERROR: Tried and tried but could not start the server")))
    (set! *runremote* (list ipaddrstr portnum))
-   (open-run-close tasks:remove-server-records tasks:open-db)
+   ;; (open-run-close tasks:remove-server-records tasks:open-db)
    (open-run-close tasks:server-register 
 		   tasks:open-db 
 		   (current-process-id)

@@ -190,7 +190,7 @@
     (set! *transport-type* (if hostinfo 
 			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			       'fs))
-    (debug:print-info 1 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
+    (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 
     ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
     ((http)
