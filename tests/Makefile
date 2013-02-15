@@ -1,6 +1,6 @@
 # run some tests
 
-BINPATH=$(shell realpath ../bin)
+BINPATH=$(PWD)/../bin
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)

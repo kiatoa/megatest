@@ -51,7 +51,7 @@ else
   echo Using KTYPE=$KTYPE
 fi
 
-export CHICKEN_VERSION=4.8.0
+export CHICKEN_VERSION=4.8.0.1
 if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
     wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz
 fi 
@@ -173,9 +173,9 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-
 # http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
 # zpatchlev=-rc2
 # http://download.zeromq.org/zeromq-2.2.0.tar.gz
-# ZEROMQ=zeromq-2.2.0
 
-ZEROMQ=zeromq-3.2.2
+ZEROMQ=zeromq-2.2.0
+# ZEROMQ=zeromq-3.2.2
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
 UTIL_LINUX=2.21
