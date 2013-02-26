@@ -77,7 +77,7 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (db:set-sync db)
+    ;; (db:set-sync db)
     db))
 
 ;; keeping it around for debugging purposes only
@@ -117,7 +117,7 @@
   (let* ((start-ms (current-milliseconds))
 	 (db       (if idb idb (open-db)))
          (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
-    (db:set-sync db)
+    ;; (db:set-sync db)
     (set! res      (apply proc db params))
     (if (not idb)(sqlite3:finalize! db))
     ;; scale by 10, average with current value.

@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -x
+# set -x
 
 # Copyright 2007-2010, Matthew Welland.
 # 
@@ -22,7 +22,7 @@ echo You are using proxy="$proxy"
 echo 
 echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
 echo ADDITIONAL_LIBPATH=$ADDITIONAL_LIBPATH
-echo
+echo  
 echo To use previous IUP libraries set USEOLDIUP to yes
 echo USEOLDIUP=$USEOLDIUP
 echo 
@@ -76,7 +76,7 @@ echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 if ! [[ -e $PREFIX/bin/csi ]]; then
     tar xfvz chicken-${CHICKEN_VERSION}.tar.gz
     cd chicken-${CHICKEN_VERSION}
-    make PLATFORM=linux PREFIX=$PREFIX clean
+    # make PLATFORM=linux PREFIX=$PREFIX spotless
     make PLATFORM=linux PREFIX=$PREFIX
     make PLATFORM=linux PREFIX=$PREFIX install
     cd $BUILDHOME
@@ -173,9 +173,13 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-
 # http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
 # zpatchlev=-rc2
 # http://download.zeromq.org/zeromq-2.2.0.tar.gz
-# ZEROMQ=zeromq-2.2.0
 
-ZEROMQ=zeromq-3.2.2
+if [[ -e /usr/lib/libzmq.so ]]; then
+  echo "Using system installed zmq library"
+  $CHICKEN_INSTALL zmq
+else
+ZEROMQ=zeromq-2.2.0
+# ZEROMQ=zeromq-3.2.2
 
 # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
 UTIL_LINUX=2.21
@@ -287,6 +291,7 @@ if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX zmq
     # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -deploy -prefix $DEPLOYTARG zmq
 fi
+fi # if zmq is in /usr/lib
 
 cd $BUILDHOME  
 
