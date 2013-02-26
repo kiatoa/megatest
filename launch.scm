@@ -61,7 +61,7 @@
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
-	       (db-host   (assoc/default 'db-host   cmdinfo))
+	       (runremote (assoc/default 'runremote cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
@@ -81,8 +81,10 @@
                                               fulln
                                               runscript))))) ;; assume it is on the path
 	       (rollup-status 0))
-	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
+	  ;; Setup the *runremote* global var
+	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
+	  (set! *runremote* runremote)
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -570,23 +572,25 @@
 	  (set! work-area (conc test-path "/tmp_run"))
 	  (create-directory work-area #t)
 	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory under tmp_run")))
-    (set! cmdparms (base64:base64-encode (with-output-to-string
-					   (lambda () ;; (list 'hosts     hosts)
-					     (write (list (list 'testpath  test-path)
-							  (list 'toppath   *toppath*)
-							  (list 'work-area work-area)
-							  (list 'test-name test-name) 
-							  (list 'runscript runscript) 
-							  (list 'run-id    run-id   )
-							  (list 'test-id   test-id  )
-							  (list 'itemdat   itemdat  )
-							  (list 'megatest  remote-megatest)
-							  (list 'ezsteps   ezsteps) 
-							  (list 'target    mt_target)
-							  (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
-							  (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
-							  (list 'runname   runname)
-							  (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
+    (set! cmdparms (base64:base64-encode 
+		    (with-output-to-string
+		      (lambda () ;; (list 'hosts     hosts)
+			(write (list (list 'testpath  test-path)
+				     (list 'runremote *runremote*)
+				     (list 'toppath   *toppath*)
+				     (list 'work-area work-area)
+				     (list 'test-name test-name) 
+				     (list 'runscript runscript) 
+				     (list 'run-id    run-id   )
+				     (list 'test-id   test-id  )
+				     (list 'itemdat   itemdat  )
+				     (list 'megatest  remote-megatest)
+				     (list 'ezsteps   ezsteps) 
+				     (list 'target    mt_target)
+				     (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
+				     (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
+				     (list 'runname   runname)
+				     (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
     ;; clean out step records from previous run if they exist
     ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     ;; (open-run-close db:delete-test-step-records db test-id)
