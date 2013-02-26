@@ -68,7 +68,7 @@ cleanprep : ../*.scm Makefile */*.config
 
 fullprep : cleanprep
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUNNAME)% -target %/%/% -testpatt %/%
-	cd fullrun;$(BINPATH)/dboard -rows 15 &
+	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
 	cd fullrun && $(BINPATH)/dashboard -rows 25 &
