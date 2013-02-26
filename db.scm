@@ -1417,7 +1417,8 @@
 	       (if (and (equal? calling-path *toppath*)
 			(equal? megatest-version calling-vers))
 		   (begin
-		     (hash-table-set! *logged-in-clients* client-key (current-seconds))
+		     ;; *logged-in-clients* NOT IN USE, REMOVE?
+		     ;; (hash-table-set! *logged-in-clients* client-key (current-seconds))
 		     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
 		   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
 	((flush sync)

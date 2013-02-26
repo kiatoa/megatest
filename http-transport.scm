@@ -33,8 +33,9 @@
       #f
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
-(define  *server-loop-heart-beat* (current-seconds))
-(define *heartbeat-mutex* (make-mutex))
+(define *server-loop-heart-beat* (current-seconds))
+(define *heartbeat-mutex*        (make-mutex))
+(define *query-count-mutex*      (make-mutex))
 
 ;;======================================================================
 ;; S E R V E R
@@ -87,9 +88,11 @@
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "ctrl"))
+				   
 				   (let* ((packet (db:string->obj dat))
 					  (qtype  (cdb:packet-get-qtype packet)))
 				     (debug:print-info 12 "server=> received packet=" packet)
+
 				     (if (not (member qtype '(sync ping)))
 					 (begin
 					   (mutex-lock! *heartbeat-mutex*)
@@ -268,7 +271,7 @@
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print 11 "http-transport:launch hostinfo=" hostinfo)
     (if hostinfo
-	(debug:print-info 2 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
+	(debug:print-info 2 "NOT starting new server, one is already running on " (vector-ref hostinfo 1) ":" (vector-ref hostinfo 2))
 	(if *toppath* 
 	    (let* ((th2 (make-thread (lambda ()
 				       (http-transport:run 

@@ -48,13 +48,15 @@
 (define *runremote*         #f) ;; if set up for server communication this will hold <host port>
 (define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
 (define *max-cache-size*    0)
-(define *logged-in-clients* (make-hash-table))
+;; *logged-in-clients* NOT IN USE, REMOVE?
+;; (define *logged-in-clients* (make-hash-table))
 (define *client-non-blocking-mode* #f)
 (define *server-id*         #f)
 (define *server-info*       #f)
 (define *time-to-exit*      #f)
 (define *received-response* #f)
 (define *default-numtries*  10)
+(define *current-query-count* 0)
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
