@@ -42,9 +42,10 @@
   license GPL, Copyright (C) Matt Welland 2011
 
 Usage: dashboard [options]
-  -h              : this help
-  -test testid    : control test identified by testid
-  -guimonitor     : control panel for runs
+  -h                : this help
+  -server host:port : connect to host:port instead of db access
+  -test testid      : control test identified by testid
+  -guimonitor       : control panel for runs
 
 Misc
   -rows N         : set number of rows
@@ -57,6 +58,7 @@ Misc
 			"-run"
 			"-test"
 			"-debug"
+			"-server" 
 			) 
 		 (list  "-h"
 			"-guimonitor"
@@ -78,7 +80,11 @@ Misc
       (exit 1)))
 
 (define *db* #f) ;; (open-db))
-;; (server:client-launch)
+
+(if (args:get-arg "-server")
+    (begin
+      (set! *runremote* (string-split (args:get-arg "-server" ":")))
+      (server:client-launch)))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
