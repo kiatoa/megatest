@@ -336,9 +336,8 @@
 	(owner     (car (user-information (current-user-id))))
 	(runname   (hash-table-ref/default var-params "runname" #f))
 	(testpatts (hash-table-ref/default var-params "testpatts" "%"))
-	(itempatts (hash-table-ref/default var-params "itempatts" "%"))
 	(params    (hash-table-ref/default var-params "params"    "")))
-    (tasks:add mdb action owner target runname testpatts itempatts params)))
+    (tasks:add mdb action owner target runname testpatts params)))
 
 ;; return one task from those who are 'new' OR 'waiting' AND more than 10sec old
 ;;
@@ -446,8 +445,8 @@
     ))
 
 (define (tasks:tasks->text tasks)
-  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~12a~10a"))
-    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "itempatts" "params") "\n"
+  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~10a"))
+    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "params") "\n"
 	  (string-intersperse 
 	   (map (lambda (task)
 		  (format #f fmtstr
@@ -458,7 +457,7 @@
 			  (tasks:task-get-target task)
 			  (tasks:task-get-name   task)
 			  (tasks:task-get-test   task)
-			  (tasks:task-get-item   task)
+			  ;; (tasks:task-get-item   task)
 			  (tasks:task-get-params task)))
 		tasks) "\n"))))
    

@@ -144,7 +144,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":status"
 			"-list-runs"
 			"-testpatt" 
-			"-itempatt"
 			"-setlog"
 			"-set-toplog"
 			"-runstep"
@@ -237,31 +236,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (debug:debug-mode 3) ;; we are obviously debugging
     (set! open-run-close open-run-close-no-exception-handling))
-
-;; a,b,c % => a/%,b/%,c/%
-(define (tack-on-patt srcstr patt)
-  (let ((strlst (string-split srcstr ",")))
-    (string-intersperse 
-     (map (lambda (str)
-	    (if (not (substring-index "/" str))
-		(conc str "/" patt)
-		str))
-	  strlst)
-	   ",")))
-
-;; to try and not burden Kim too much...
-(if (args:get-arg "-itempatt")
-    (let ((old-testpatt (args:get-arg "-testpatt")))
-      ;; (debug:print 0 "ERROR: parameter \"-itempatt\" has been deprecated. For now I will tweak your -testpatt for you")
-      (if (args:get-arg "-testpatt")
-	  (hash-table-set! args:arg-hash "-testpatt" (tack-on-patt old-testpatt (args:get-arg "-itempatt"))))
-      ;; (debug:print 0 "    old: " old-testpatt ", new: " (args:get-arg "-testpatt"))
-      (if (args:get-arg "-runtests")
-	  (begin
-	    ;; (debug:print 0 "NOTE: Also modifying -runtests")
-	    (hash-table-set! args:arg-hash "-runtests" (tack-on-patt (args:get-arg "-runtests")
-								     (args:get-arg "-itempatt")))))
-      ))
 
 ;;======================================================================
 ;; Misc general calls
@@ -576,7 +550,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Get paths to tests
 ;;======================================================================
-;; Get test paths matching target, runname, testpatt, and itempatt
+;; Get test paths matching target, runname, and testpatt
 (if (or (args:get-arg "-test-files")(args:get-arg "-test-paths"))
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
@@ -617,7 +591,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 "Get paths to test"
 	 (lambda (target runname keys keynames keyvallst)
 	   (let* ((db       #f)
-		  (itempatt (args:get-arg "-itempatt"))
 		  (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
@@ -626,7 +599,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Archive tests
 ;;======================================================================
-;; Archive tests matching target, runname, testpatt, and itempatt
+;; Archive tests matching target, runname, and testpatt
 (if (args:get-arg "-archive")
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
@@ -653,8 +626,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (let* ((itempatt (args:get-arg "-itempatt"))
-		 (keys     (open-run-close db:get-keys db))
+	  (let* ((keys     (open-run-close db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
 		 (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
@@ -667,7 +639,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 "Get paths to tests"
 	 (lambda (target runname keys keynames keyvallst)
 	   (let* ((db       #f)
-		  (itempatt (args:get-arg "-itempatt"))
 		  (paths    (open-run-close db:test-get-paths-matching db keynames target)))
 	     (for-each (lambda (path)
 			 (print path))

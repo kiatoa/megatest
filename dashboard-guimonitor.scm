@@ -56,7 +56,7 @@
 					(iup:textbox   #:expand "HORIZONTAL"
 						       #:action (lambda (obj a val)
 								  (hash-table-set! var-params var val)))))
-			    (list "runname" "testpatts" "itempatts" "params")))))
+			    (list "runname" "testpatts" "params")))))
 	 (controls   (iup:frame
 		      #:title "Controls"
 		      (iup:hbox 
