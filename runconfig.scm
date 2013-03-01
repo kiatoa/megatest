@@ -12,9 +12,10 @@
 
 
 
-(define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f)(change-env #t))
-  (let* ((keys    (db:get-keys db))
-	 (keyvals (if run-id (db:get-key-vals db run-id) #f))
+;; (define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f)(change-env #t))
+(define (setup-env-defaults fname run-id already-seen keys keyvals #!key (environ-patt #f)(change-env #t))
+  (let* (;; (keys    (db:get-keys db))
+	 ;; (keyvals (if run-id (db:get-key-vals db run-id) #f))
 	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")
 		      (if (args:get-arg "-reqtarg") 
 			  (args:get-arg "-reqtarg")
@@ -60,15 +61,16 @@
 	  (set! *already-seen-runconfig-info* #t)))
     finaldat))
 
-(define (set-run-config-vars db run-id)
+(define (set-run-config-vars db run-id keys keyvals)
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
 	(targ       (or (args:get-arg "-target")
 			(args:get-arg "-reqtarg")
 			(db:get-target db run-id))))
     (if (file-exists? runconfigf)
-	(setup-env-defaults db runconfigf run-id #t environ-patt: (conc "(default"
-									(if targ
-									    (conc "|" targ ")")
-									    ")")))
+	(setup-env-defaults runconfigf run-id #t keys keyvals
+			    environ-patt: (conc "(default"
+						(if targ
+						    (conc "|" targ ")")
+						    ")")))
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))))
  

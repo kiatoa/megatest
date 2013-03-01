@@ -71,6 +71,8 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
+	       (keys      #f)
+	       (keyvals   #f)
 	       (fullrunscript (if (not runscript)
                                   #f
                                   (if (substring-index "/" runscript)
@@ -85,6 +87,8 @@
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  (set! *runremote* runremote)
+	  (set! keys       (cdb:remote-run db:get-keys #f))
+	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -119,7 +123,7 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (open-run-close set-run-config-vars #f run-id)
+	  (open-run-close set-run-config-vars #f run-id keys keyvals)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)

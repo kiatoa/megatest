@@ -217,6 +217,7 @@
 	 (keys        (cdb:remote-run db:get-keys #f))
 	 (keyvallst   (keys:target->keyval keys target))
 	 (run-id      (cdb:remote-run runs:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
+	 (keyvals     (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
@@ -227,7 +228,7 @@
     (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
-	(open-run-close setup-env-defaults db runconfigf run-id *already-seen-runconfig-info* "pre-launch-env-vars")
+	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
     
     ;; look up all tests matching the comma separated list of globs in
