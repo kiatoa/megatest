@@ -268,7 +268,7 @@
 
 ;; find and open the testdat.db file for an existing test
 (define (db:open-test-db-by-test-id db test-id)
-  (let* ((test-path (db:test-get-rundir-from-test-id db test-id)))
+  (let* ((test-path (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -918,37 +918,6 @@
   (set! *test-id-cache* (make-hash-table)))
 
 ;; Get test data using test_id
-(define (db:get-test-info-cached-by-id db test-id)
-  ;; is all this crap really worth it? I somehow doubt it.
-  (let* ((last-delete-str (db:get-var db "DELETED_TESTS"))
-	 (last-delete     (if (string? last-delete-str)(string->number last-delete-str) #f)))
-    (if (and last-delete (> last-delete *last-test-cache-delete*))
-	(begin
-	  (set! *test-info* (make-hash-table))
-	  (set! *test-id-cache* (make-hash-table))
-	  (set! *last-test-cache-delete* last-delete)
-	  (debug:print-info 4 "Clearing test data cache"))))
-  (if (not test-id)
-      (begin
-	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
-	#f)
-      (let* ((res (hash-table-ref/default *test-info* test-id #f)))
-	(if (and res
-		 (member (db:test-get-state res) '("RUNNING" "COMPLETED")))
-	    (db:patch-tdb-data-into-test-info db test-id res)
-	    ;; if no cached value then full read and write to cache
-	    (begin
-	      (sqlite3:for-each-row
-	       (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-		 ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-		 (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
-	       db 
-	       "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
-	       test-id)
-	      (if res (db:patch-tdb-data-into-test-info db test-id res))
-	      res)))))
-
-;; Get test data using test_id
 (define (db:get-test-info-not-cached-by-id db test-id)
   (if (not test-id)
       (begin
@@ -1571,6 +1540,7 @@
 	  (reverse res))
 	'())))
 
+;; NOTE: Run this local with #f for db !!!
 (define (db:load-test-data db test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
@@ -1588,7 +1558,7 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup db test-id status)
-  (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id))
+  (let ((tdb (db:open-test-db-by-test-id db test-id))
 	(fail-count 0)
 	(pass-count 0))
     (if tdb
@@ -1772,6 +1742,7 @@
 
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
+  ;;                 db:open-test-db-by-test-id does cdb:remote-run
   (let* ((tdb       (db:open-test-db-by-test-id db test-id))
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))

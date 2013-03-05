@@ -93,6 +93,8 @@ Queries
   -list-disks             : list the disks available for storing runs
   -list-targets           : list the targets in runconfigs.config
   -list-db-targets        : list the target combinations used in the db
+  -show-config            : dump the internal representation of the megatest.config file
+  -show-runconfig         : dump the internal representation of the runconfigs.config file
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -198,6 +200,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-targets"
 			"-list-db-targets"
 			"-show-runconfig"
+			"-show-config"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -337,7 +340,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-show-runconfig")
     (begin
+      ;; keep this one local
       (pp (hash-table->alist (open-run-close setup-env-defaults #f "runconfigs.config" #f #f change-env: #f)))
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-show-config")
+    (begin
+      ;; keep this one local
+      (pp (hash-table->alist (open-run-close setup-env-defaults #f "megatest.config" #f #f change-env: #f)))
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -441,7 +451,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     "\n         rundir:   " (db:test-get-rundir test)
 				     )
 			      ;; Each test
-			      (let ((steps (cdb:remote-run db:get-steps-for-test #f (db:test-get-id test))))
+			      ;; DO NOT remote run
+			      (let ((steps (db:get-steps-for-test #f (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
@@ -582,9 +593,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((keys     (open-run-close db:get-keys db))
+	  (let* ((keys     (cdb:remote-run db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		 (paths    (cdb:remote-run db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -595,7 +606,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 "Get paths to test"
 	 (lambda (target runname keys keynames keyvallst)
 	   (let* ((db       #f)
-		  (paths    (open-run-close db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		  (paths    (cdb:remote-run db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -632,9 +643,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (let* ((keys     (open-run-close db:get-keys db))
+	  (let* ((keys     (cdb:remote-run db:get-keys db))
 		 (keynames (map key:get-fieldname keys))
-		 (paths    (open-run-close db:test-get-paths-matching db keynames target)))
+		 (paths    (cdb:remote-run db:test-get-paths-matching db keynames target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -645,7 +656,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 "Get paths to tests"
 	 (lambda (target runname keys keynames keyvallst)
 	   (let* ((db       #f)
-		  (paths    (open-run-close db:test-get-paths-matching db keynames target)))
+		  (paths    (cdb:remote-run db:test-get-paths-matching db keynames target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -665,7 +676,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (pathmod    (args:get-arg "-pathmod"))
 	     (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
-	 (open-run-close db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
+	 (cdb:remote-run db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
 ;; execute the test
@@ -708,7 +719,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
-	    (open-run-close db:teststep-set-status! db test-id step state status msg logfile)
+	    ;; DO NOT remote run
+	    (db:teststep-set-status! db test-id step state status msg logfile)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -746,7 +758,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (db        #f)
+	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
 	  (change-directory testpath)
@@ -762,14 +774,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      (open-run-close db:load-test-data db test-id))
+	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
+	      (db:load-test-data db test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
 		(cdb:test-set-log! *runremote* test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
-	      (open-run-close tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      ;; DO NOT run remote
+	      (tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
-	      (open-run-close tests:summarize-items db run-id test-name #t)) ;; do force here
+	      ;; DO NOT run remote
+	      (tests:summarize-items db run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
@@ -791,7 +806,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    (open-run-close db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
+		    ;; DO NOT run remote
+		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -810,7 +826,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (change-directory testpath)
 			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      (open-run-close db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
+		      ;; DO NOT run remote
+		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -852,7 +869,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (open-run-close db:get-keys db))
+      (set! keys (cbd:remote-run db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
       (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
@@ -883,6 +900,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
+      ;; keep this one local
       (open-run-close patch-db #f)
       (set! *didsomething* #t)))
 
@@ -897,6 +915,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       ;; now can find our db
+      ;; keep this one local
       (open-run-close runs:update-all-test_meta db)
       (set! *didsomething* #t)))
 
