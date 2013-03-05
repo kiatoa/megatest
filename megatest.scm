@@ -105,6 +105,7 @@ Misc
   -transport http|zmq     : use http or zmq for transport (default is http) 
   -list-servers           : list the servers 
   -repl                   : start a repl (useful for extending megatest)
+  -load file.scm          : load and run file.scm
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -174,6 +175,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-gen-megatest-test"
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
+			"-load"        ;; load and exectute a scheme file
 			) 
 		 (list  "-h"
 			"-version"
@@ -392,10 +394,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
 			     "%"))
-	       (runsdat  (open-run-close db:get-runs db runpatt #f #f '()))
+	       (runsdat  (cdb:remote-run db:get-runs #f runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
-	       (keys     (open-run-close db:get-keys db))
+	       (keys     (cdb:remote-run db:get-keys #f))
 	       (keynames (map key:get-fieldname keys))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
@@ -412,8 +414,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 ;; (print "[" targetstr "]"))))
 			 (print targetstr))))
 	       (if (not db-targets)
-		   (let* ((run-id (open-run-close db:get-value-by-header run header "id"))
-			  (tests  (open-run-close db:get-tests-for-run db run-id testpatt '() '())))
+		   (let* ((run-id (db:get-value-by-header run header "id"))
+			  (tests  (cdb:remote-run db:get-tests-for-run #f run-id testpatt '() '())))
 		     (debug:print 1 "Run: " targetstr " status: " (db:get-value-by-header run header "state")
 				  " run-id: " run-id ", number tests: " (length tests))
 		     (for-each 
@@ -439,7 +441,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     "\n         rundir:   " (db:test-get-rundir test)
 				     )
 			      ;; Each test
-			      (let ((steps (open-run-close db:get-steps-for-test db (db:test-get-id test))))
+			      (let ((steps (cdb:remote-run db:get-steps-for-test #f (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
@@ -678,39 +680,44 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Test commands (i.e. for use inside tests)
 ;;======================================================================
 
-(if (args:get-arg "-step")
-    (if (not (getenv "MT_CMDINFO"))
-	(begin
-	  (debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
-	  (exit 5))
-	(let* ((step      (args:get-arg "-step"))
-	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
-	       (runremote (assoc/default 'runremote cmdinfo))
-	       (testpath  (assoc/default 'testpath  cmdinfo))
-	       (test-name (assoc/default 'test-name cmdinfo))
-	       (runscript (assoc/default 'runscript cmdinfo))
-	       (db-host   (assoc/default 'db-host   cmdinfo))
-	       (run-id    (assoc/default 'run-id    cmdinfo))
-	       (test-id   (assoc/default 'test-id   cmdinfo))
-	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (db        #f)
-	       (state    (args:get-arg ":state"))
-	       (status   (args:get-arg ":status"))
-	       (logfile  (args:get-arg "-setlog")))
-	  (change-directory testpath)
-	  (set! *runremote* runremote)
-	  (if (not (setup-for-run))
-	      (begin
-		(debug:print 0 "Failed to setup, exiting")
-		(exit 1)))
-	  (if (and state status)
-	      (open-run-close db:teststep-set-status! db test-id step state status (args:get-arg "-m") logfile)
-	      (begin
-		(debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
-		(exit 6)))
-	  (if db (sqlite3:finalize! db))
-	  (set! *didsomething* #t))))
+(define (megatest:step step state status logfile msg)
+  (if (not (getenv "MT_CMDINFO"))
+      (begin
+	(debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
+	(exit 5))
+      (let* ((cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
+	     (runremote (assoc/default 'runremote cmdinfo))
+	     (testpath  (assoc/default 'testpath  cmdinfo))
+	     (test-name (assoc/default 'test-name cmdinfo))
+	     (runscript (assoc/default 'runscript cmdinfo))
+	     (db-host   (assoc/default 'db-host   cmdinfo))
+	     (run-id    (assoc/default 'run-id    cmdinfo))
+	     (test-id   (assoc/default 'test-id   cmdinfo))
+	     (itemdat   (assoc/default 'itemdat   cmdinfo))
+	     (db        #f))
+	(change-directory testpath)
+	(set! *runremote* runremote)
+	(if (not (setup-for-run))
+	    (begin
+	      (debug:print 0 "Failed to setup, exiting")
+	      (exit 1)))
+	(if (and state status)
+	    (open-run-close db:teststep-set-status! db test-id step state status msg logfile)
+	    (begin
+	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
+	      (exit 6))))))
 
+(if (args:get-arg "-step")
+    (begin
+      (megatest:step 
+       (args:get-arg "-step")
+       (args:get-arg ":state")
+       (args:get-arg ":status")
+       (args:get-arg "-setlog")
+       (args:get-arg "-m"))
+      ;; (if db (sqlite3:finalize! db))
+      (set! *didsomething* #t)))
+    
 (if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
@@ -889,7 +896,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Start a repl
 ;;======================================================================
 
-(if (args:get-arg "-repl")
+(if (or (args:get-arg "-repl")
+	(args:get-arg "-load"))
     (let* ((toppath (setup-for-run))
 	   (db      (if toppath (open-db) #f)))
       (if db
@@ -903,7 +911,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (string-append
 	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
 	    (current-input-port (make-gnu-readline-port "megatest> "))
-	    (repl))
+	    (if (args:get-arg "-repl")
+		(repl)
+		(load (args:get-arg "-load"))))
 	  (exit))
       (set! *didsomething* #t)))
 

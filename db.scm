@@ -1127,9 +1127,9 @@
       exn
       (begin
 	(thread-sleep! 5) 
-	(if (> numretries 0)(apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params)))
-      (let* ((push-socket (vector-ref zmq-sockets 0))
-	     (sub-socket  (vector-ref zmq-sockets 1))
+	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
+      (let* ((push-socket (vector-ref serverdat 0))
+	     (sub-socket  (vector-ref serverdat 1))
 	     (client-sig  (server:get-client-signature))
 	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
@@ -1159,7 +1159,7 @@
 				    (send-message push-socket zdat)
 				    (debug:print-info 11 "message re-sent")
 				    (loop (- n 1)))
-				  ;; (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+				  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
 				  (begin
 				    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
 				    (exit 5))))))))

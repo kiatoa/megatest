@@ -62,6 +62,7 @@
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       (runremote (assoc/default 'runremote cmdinfo))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
@@ -87,6 +88,7 @@
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  (set! *runremote* runremote)
+	  (set! *transport-type* transport)
 	  (set! keys       (cdb:remote-run db:get-keys #f))
 	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -581,6 +583,7 @@
 		      (lambda () ;; (list 'hosts     hosts)
 			(write (list (list 'testpath  test-path)
 				     (list 'runremote *runremote*)
+				     (list 'transport *transport-type*)
 				     (list 'toppath   *toppath*)
 				     (list 'work-area work-area)
 				     (list 'test-name test-name) 

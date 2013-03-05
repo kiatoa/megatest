@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
 (import (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
@@ -131,8 +131,9 @@
     ((fs) result)
     ((http)(db:obj->string (vector success/fail query-sig result)))
     ((zmq)
-     (send-message pubsock target send-more: #t)
-     (send-message pubsock (db:obj->string (vector success/fail query-sig result))))
+     (let ((pub-socket (vector-ref *runremote* 1)))
+       (send-message pub-socket return-addr send-more: #t)
+       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     (else 
      (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
      result)))
@@ -156,23 +157,13 @@
 		 (cdb:logout serverdat *toppath* (server:get-client-signature)))))
     ok))
 
-(define (server:client-connect iface port)
-  (let* ((login-res   #f)
-	 (serverdat   (list iface port)))
-    (set! login-res (server:client-login serverdat))
-    (if (and (not (null? login-res))
-	     (car login-res))
-	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-	  (set! *runremote* serverdat)
-	  serverdat)
-	(begin
-	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
-	  (set! *runremote* #f)
-	  #f))))
-
 ;; Do all the connection work, look up the transport type and set up the
 ;; connection if required.
+;;
+;; There are two scenarios. 
+;;   1. We are a test manager and we received *transport-type* and *runremote* via cmdline
+;;   2. We are a run tests, list runs or other interactive process and we mush figure out
+;;      *transport-type* and *runremote* from the monitor.db
 ;;
 (define (server:client-setup #!key (numtries 50))
   (if (not *toppath*)
@@ -180,30 +171,33 @@
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
-  (debug:print-info 11 "*transport-type* is " *transport-type*)
-  (let* ((hostinfo   (if (not *transport-type*) ;; If we dont' already have transport type set then figure it out
-			 (open-run-close tasks:get-best-server tasks:open-db)
-			 #f)))
+  (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
+  (let* ((hostinfo  (if (not *transport-type*) ;; If we dont' already have transport type set then figure it out
+			(open-run-close tasks:get-best-server tasks:open-db)
+			#f)))
     ;; if have hostinfo then extract the transport type 
     ;; else fall back to fs
     (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
     (set! *transport-type* (if hostinfo 
-			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
+    			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			       'fs))
+    ;; DEBUG STUFF
+    (if (eq? *transport-type* 'fs)(begin (print "ERROR!!!!!!! refusing to run with transport " *transport-type*)(exit 99)))
+    
     (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 
-    ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-    ((http)
-     (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				    (tasks:hostinfo-get-port hostinfo)))
-    ((zmq)
-     (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				   (tasks:hostinfo-get-port      hostinfo)
-				   (tasks:hostinfo-get-pubport   hostinfo)))
-    (else  ;; default to fs
-     (set! *transport-type* 'fs)
-     (set! *megatest-db*    (open-db))))))
-
+      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+      ((http)
+       (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
+				      (tasks:hostinfo-get-port hostinfo)))
+      ((zmq)
+       (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
+				     (tasks:hostinfo-get-port      hostinfo)
+				     (tasks:hostinfo-get-pubport   hostinfo)))
+      (else  ;; default to fs
+       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " attempting to continue with fs")
+       (set! *transport-type* 'fs)
+       (set! *megatest-db*    (open-db))))))
 
 
 ;; all routes though here end in exit ...
