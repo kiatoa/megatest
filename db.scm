@@ -58,7 +58,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print-info 11 "db:set-sync, setting pragma synchronous to " val)
+	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -148,7 +148,8 @@
 			(system (conc "rm -f " dbpath))
 			(exit 1)))))
 	      keys)
-    (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
 		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
