@@ -77,7 +77,7 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    ;; (db:set-sync db)
+    (db:set-sync db)
     db))
 
 ;; keeping it around for debugging purposes only
