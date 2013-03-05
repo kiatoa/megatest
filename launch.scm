@@ -61,7 +61,7 @@
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
-	       (runremote (assoc/default 'runremote cmdinfo))
+	       ;; (runremote (assoc/default 'runremote cmdinfo))
 	       (transport (assoc/default 'transport cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
@@ -87,8 +87,8 @@
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
-	  (set! *runremote* runremote)
-	  (set! *transport-type* transport)
+	  ;; (set! *runremote* runremote)
+	  (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
 	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -119,7 +119,7 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  ;; Can setup as client for server mode now
-	  (server:client-setup)
+	  ;; (server:client-setup)
 
 	  (change-directory *toppath*) 
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
@@ -582,8 +582,8 @@
 		    (with-output-to-string
 		      (lambda () ;; (list 'hosts     hosts)
 			(write (list (list 'testpath  test-path)
-				     (list 'runremote *runremote*)
-				     (list 'transport *transport-type*)
+				     ;; (list 'runremote *runremote*)
+				     (list 'transport (conc *transport-type*))
 				     (list 'toppath   *toppath*)
 				     (list 'work-area work-area)
 				     (list 'test-name test-name) 

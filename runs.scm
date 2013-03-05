@@ -887,11 +887,11 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (args:get-arg "-server")
-	    (open-run-close server:start db (args:get-arg "-server"))
- 	    (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
- 			 (args:get-arg "-runtests")))
-		(server:client-setup) ;; This is a duplicate startup!!!??? BUG?
-		))
+	    (open-run-close server:start db (args:get-arg "-server")))
+ 	    ;; (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
+ 	    ;;     	 (args:get-arg "-runtests")))
+	    ;;     (server:client-setup) ;; This is a duplicate startup!!!??? BUG?
+	    ;;     ))
 	(set! keys (open-run-close db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
