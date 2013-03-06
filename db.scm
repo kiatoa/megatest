@@ -970,13 +970,13 @@
 ;;======================================================================
 
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
-  (let ((paths-from-db (db:test-get-paths-matching-keynames-target db keynames target res)))
+  (let ((paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res)))
     (if fnamepatt
 	(apply append 
 	       (map (lambda (p)
 		      (glob (conc p "/" fnamepatt)))
-		    res))
-	res)))
+		    paths-from-db))
+	paths-from-db)))
 
 (define (db:test-get-paths-matching-keynames-target db keynames target res)
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
