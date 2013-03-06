@@ -61,7 +61,8 @@
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
-	       (runremote (assoc/default 'runremote cmdinfo))
+	       ;; (runremote (assoc/default 'runremote cmdinfo))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
@@ -71,6 +72,8 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
+	       (keys      #f)
+	       (keyvals   #f)
 	       (fullrunscript (if (not runscript)
                                   #f
                                   (if (substring-index "/" runscript)
@@ -84,7 +87,10 @@
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
-	  (set! *runremote* runremote)
+	  ;; (set! *runremote* runremote)
+	  (set! *transport-type* (string->symbol transport))
+	  (set! keys       (cdb:remote-run db:get-keys #f))
+	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -113,19 +119,20 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  ;; Can setup as client for server mode now
-	  (server:client-setup)
+	  ;; (server:client-setup)
 
 	  (change-directory *toppath*) 
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (open-run-close set-run-config-vars #f run-id)
+	  (open-run-close set-run-config-vars #f run-id keys keyvals)
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
-	  (open-run-close test-set-meta-info #f test-id run-id test-name itemdat 0)
+	  ;; open-run-close not needed for test-set-meta-info
+	  (test-set-meta-info #f test-id run-id test-name itemdat 0)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -199,8 +206,8 @@
 						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
-
-						   (cdb:remote-run db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+						   ;; DO NOT remote
+						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -218,7 +225,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (cdb:remote-run db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
 							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -267,7 +274,8 @@
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
-				       (open-run-close test-set-meta-info #f test-id run-id test-name itemdat minutes)
+				       ;; open-run-close not needed for test-set-meta-info
+				       (test-set-meta-info #f test-id run-id test-name itemdat minutes)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -576,7 +584,8 @@
 		    (with-output-to-string
 		      (lambda () ;; (list 'hosts     hosts)
 			(write (list (list 'testpath  test-path)
-				     (list 'runremote *runremote*)
+				     ;; (list 'runremote *runremote*)
+				     (list 'transport (conc *transport-type*))
 				     (list 'toppath   *toppath*)
 				     (list 'work-area work-area)
 				     (list 'test-name test-name) 

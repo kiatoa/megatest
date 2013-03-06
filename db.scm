@@ -58,7 +58,7 @@
 		     #f))))
     (if val
 	(begin
-	  (debug:print-info 11 "db:set-sync, setting pragma synchronous to " val)
+	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -77,7 +77,7 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    ;; (db:set-sync db)
+    (db:set-sync db)
     db))
 
 ;; keeping it around for debugging purposes only
@@ -148,7 +148,8 @@
 			(system (conc "rm -f " dbpath))
 			(exit 1)))))
 	      keys)
-    (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
+    (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
 		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
@@ -267,7 +268,7 @@
 
 ;; find and open the testdat.db file for an existing test
 (define (db:open-test-db-by-test-id db test-id)
-  (let* ((test-path (db:test-get-rundir-from-test-id db test-id)))
+  (let* ((test-path (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -917,38 +918,7 @@
   (set! *test-id-cache* (make-hash-table)))
 
 ;; Get test data using test_id
-(define (db:get-test-info-cached-by-id db test-id)
-  ;; is all this crap really worth it? I somehow doubt it.
-  (let* ((last-delete-str (db:get-var db "DELETED_TESTS"))
-	 (last-delete     (if (string? last-delete-str)(string->number last-delete-str) #f)))
-    (if (and last-delete (> last-delete *last-test-cache-delete*))
-	(begin
-	  (set! *test-info* (make-hash-table))
-	  (set! *test-id-cache* (make-hash-table))
-	  (set! *last-test-cache-delete* last-delete)
-	  (debug:print-info 4 "Clearing test data cache"))))
-  (if (not test-id)
-      (begin
-	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
-	#f)
-      (let* ((res (hash-table-ref/default *test-info* test-id #f)))
-	(if (and res
-		 (member (db:test-get-state res) '("RUNNING" "COMPLETED")))
-	    (db:patch-tdb-data-into-test-info db test-id res)
-	    ;; if no cached value then full read and write to cache
-	    (begin
-	      (sqlite3:for-each-row
-	       (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
-		 ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-		 (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
-	       db 
-	       "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
-	       test-id)
-	      (if res (db:patch-tdb-data-into-test-info db test-id res))
-	      res)))))
-
-;; Get test data using test_id
-(define (db:get-test-info-not-cached-by-id db test-id)
+(define (db:get-test-info-by-id db test-id)
   (if (not test-id)
       (begin
 	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
@@ -962,8 +932,6 @@
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
 	res)))
-
-(define db:get-test-info-by-id db:get-test-info-not-cached-by-id)
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
@@ -1002,6 +970,15 @@
 ;;======================================================================
 
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
+  (let ((paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (glob (conc p "/" fnamepatt)))
+		    paths-from-db))
+	paths-from-db)))
+
+(define (db:test-get-paths-matching-keynames-target db keynames target res)
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
@@ -1023,12 +1000,7 @@
        (set! res (cons p res)))
      db 
      qrystr)
-    (if fnamepatt
-	(apply append 
-	       (map (lambda (p)
-		      (glob (conc p "/" fnamepatt)))
-		    res))
-	res)))
+    res))
 
 ;; look through tests from matching runs for a file
 (define (db:test-get-first-path-matching db keynames target fname)
@@ -1127,9 +1099,9 @@
       exn
       (begin
 	(thread-sleep! 5) 
-	(if (> numretries 0)(apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params)))
-      (let* ((push-socket (vector-ref zmq-sockets 0))
-	     (sub-socket  (vector-ref zmq-sockets 1))
+	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
+      (let* ((push-socket (vector-ref serverdat 0))
+	     (sub-socket  (vector-ref serverdat 1))
 	     (client-sig  (server:get-client-signature))
 	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
@@ -1159,7 +1131,7 @@
 				    (send-message push-socket zdat)
 				    (debug:print-info 11 "message re-sent")
 				    (loop (- n 1)))
-				  ;; (apply cdb:client-call zmq-sockets qtype immediate (- numretries 1) params))
+				  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
 				  (begin
 				    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
 				    (exit 5))))))))
@@ -1570,6 +1542,7 @@
 	  (reverse res))
 	'())))
 
+;; NOTE: Run this local with #f for db !!!
 (define (db:load-test-data db test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
@@ -1587,7 +1560,7 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup db test-id status)
-  (let ((tdb (open-run-close db:open-test-db-by-test-id db test-id))
+  (let ((tdb (db:open-test-db-by-test-id db test-id))
 	(fail-count 0)
 	(pass-count 0))
     (if tdb
@@ -1771,6 +1744,7 @@
 
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
+  ;;                 db:open-test-db-by-test-id does cdb:remote-run
   (let* ((tdb       (db:open-test-db-by-test-id db test-id))
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))

@@ -487,31 +487,29 @@
 	res))
   0)
 
+(define (db:update-central-meta-info db test-id cpuload diskfree minutes num-records uname hostname)
+  (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;"
+		   cpuload
+		   diskfree
+		   test-id)
+  (if minutes (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
+  (if (eq? num-records 0)
+      (sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;"
+		       uname hostname test-id)))
+
 (define (test-set-meta-info db test-id run-id testname itemdat minutes)
+  ;; DOES cdb:remote-run under the hood!
   (let* ((tdb         (db:open-test-db-by-test-id db test-id))
 	 (num-records (test:tdb-get-rundat-count tdb))
-	 (item-path   (item-list->path itemdat))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
     (if (eq? (modulo num-records 10) 0) ;; every ten records update central
-	(begin
-	  (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE run_id=? AND testname=? AND item_path=?;"
-			   cpuload
-			   diskfree
-			   run-id
-			   testname
-			   item-path)
-	  (if minutes (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
-	  (if (eq? num-records 0)
-	      (let ((uname (get-uname "-srvpio"))
-		    (hostname (get-host-name)))
-		(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE run_id=? AND testname=? AND item_path=?;"
-				 uname hostname run-id testname item-path)))))
-                
+	(let ((uname    (get-uname "-srvpio"))
+	      (hostname (get-host-name)))
+	  (cdb:remote-run db:update-central-meta-info db test-id cpuload diskfree minutes num-records uname hostname)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 		     cpuload diskfree minutes)))
 	  
-
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================

@@ -58,7 +58,7 @@ Misc
 			"-run"
 			"-test"
 			"-debug"
-			"-server" 
+			"-host" 
 			) 
 		 (list  "-h"
 			"-guimonitor"
@@ -81,10 +81,11 @@ Misc
 
 (define *db* #f) ;; (open-db))
 
-(if (args:get-arg "-server")
+(if (args:get-arg "-host")
     (begin
-      (set! *runremote* (string-split (args:get-arg "-server" ":")))
-      (server:client-launch)))
+      (set! *runremote* (string-split (args:get-arg "-host" ":")))
+      (server:client-launch))
+    (server:client-launch))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
@@ -93,7 +94,8 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (open-run-close db:get-keys #f))
+;; (define *keys*   (open-run-close db:get-keys #f))
+(define *keys*   (cdb:remote-run db:get-keys #f))
 ;; (define *keys*   (db:get-keys   *db*))
 (define *dbkeys*  (map (lambda (x)(vector-ref x 0))
 		      (append *keys* (list (vector "runname" "blah")))))
@@ -103,7 +105,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (open-run-close db:get-num-runs #f "%"))
+(define *tot-run-count* (cdb:remote-run db:get-num-runs #f "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
 (define *num-tests*     15)
@@ -171,7 +173,7 @@ Misc
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
 	  (set! *delayed-update* (- *delayed-update* 1))
-	  (let* ((allruns     (open-run-close db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	  (let* ((allruns     (cdb:remote-run db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 					   *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
@@ -187,9 +189,9 @@ Misc
 		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (open-run-close db:get-tests-for-run #f run-id testnamepatt states statuses)))
+			       (tests    (let ((tsts (cdb:remote-run db:get-tests-for-run #f run-id testnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (open-run-close db:get-key-vals #f run-id)))
+			       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
@@ -645,7 +647,7 @@ Misc
 	  (lambda (x)
 	    (on-exit (lambda ()
 		       (if *db* (sqlite3:finalize! *db*))))
-	    (open-run-close examine-run *db* runid)))
+	    (cdb:remote-run examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))

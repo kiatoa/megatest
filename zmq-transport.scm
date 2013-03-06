@@ -75,7 +75,8 @@
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
 	    (exit))))
-  (let* ((zmq-sdat1       #f)
+  (let* ((db              (open-db)) ;; here we *do not* want to be opening and closing the db
+	 (zmq-sdat1       #f)
 	 (zmq-sdat2       #f)
 	 (pull-socket     #f)
 	 (pub-socket      #f)
@@ -104,6 +105,8 @@
     (set! p2           (caddr zmq-sdat2))
 
     (set! *cache-on* #t)
+
+    (set! *runremote* (vector pull-socket pub-socket)) ;; overloading the use of *runremote* BUG!?
 
     ;; what to do when we quit
     ;;
@@ -138,7 +141,9 @@
 	      (mutex-unlock! *heartbeat-mutex*)))
 	(if #t ;; (cdb:packet-get-immediate packet) ;; process immediately or put in queue
 	    (begin
-	      (open-run-close db:process-queue #f pub-socket (cons packet queue-lst))
+	      (db:process-queue-item db packet)
+	      ;; (open-run-close db:process-queue #f pub-socket (cons packet queue-lst))
+	      
 	      (loop '()))
 	    (loop (cons packet queue-lst)))))))
 
@@ -282,11 +287,11 @@
   (let* ((push-socket (zmq-transport:client-socket-connect iface pullport type: 'push))
 	 (sub-socket  (zmq-transport:client-socket-connect iface pubport
 						    type: 'sub
-						    subscriptions: (list (zmq-transport:get-client-signature) "all")))
+						    subscriptions: (list (server:get-client-signature) "all")))
 	 (zmq-sockets (vector push-socket sub-socket))
 	 (login-res   #f))
     (debug:print-info 11 "zmq-transport:client-connect started. Next is login")
-    (set! login-res (zmq-transport:client-login zmq-sockets))
+    (set! login-res (server:client-login zmq-sockets))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
@@ -383,12 +388,12 @@
 				  (if (args:get-arg "-server")
 				      (args:get-arg "-server")
 				      "-"))) "Server run"))
-	     (th3 (make-thread (lambda ()(zmq-transport:keep-running)) "Keep running"))
+	     ;; (th3 (make-thread (lambda ()(zmq-transport:keep-running)) "Keep running"))
 	     )
 	(set! *client-non-blocking-mode* #t)
 	;; (thread-start! th1)
 	(thread-start! th2)
-	(thread-start! th3)
+	;; (thread-start! th3)
 	(set! *didsomething* #t)
 	;; (thread-join! th3)
 	(thread-join! th2)
