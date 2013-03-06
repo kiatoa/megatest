@@ -181,8 +181,8 @@
     (set! *transport-type* (if hostinfo 
     			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			       'fs))
-    ;; DEBUG STUFF
-    (if (eq? *transport-type* 'fs)(begin (print "ERROR!!!!!!! refusing to run with transport " *transport-type*)(exit 99)))
+    ;; ;; DEBUG STUFF
+    ;; (if (eq? *transport-type* 'fs)(begin (print "ERROR!!!!!!! refusing to run with transport " *transport-type*)(exit 99)))
     
     (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 

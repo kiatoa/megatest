@@ -918,7 +918,7 @@
   (set! *test-id-cache* (make-hash-table)))
 
 ;; Get test data using test_id
-(define (db:get-test-info-not-cached-by-id db test-id)
+(define (db:get-test-info-by-id db test-id)
   (if (not test-id)
       (begin
 	(debug:print-info 4 "db:get-test-info-by-id called with test-id=" test-id)
@@ -932,8 +932,6 @@
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
 	res)))
-
-(define db:get-test-info-by-id db:get-test-info-not-cached-by-id)
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
@@ -972,6 +970,15 @@
 ;;======================================================================
 
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
+  (let ((paths-from-db (db:test-get-paths-matching-keynames-target db keynames target res)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (glob (conc p "/" fnamepatt)))
+		    res))
+	res)))
+
+(define (db:test-get-paths-matching-keynames-target db keynames target res)
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
@@ -993,12 +1000,7 @@
        (set! res (cons p res)))
      db 
      qrystr)
-    (if fnamepatt
-	(apply append 
-	       (map (lambda (p)
-		      (glob (conc p "/" fnamepatt)))
-		    res))
-	res)))
+    res))
 
 ;; look through tests from matching runs for a file
 (define (db:test-get-first-path-matching db keynames target fname)
