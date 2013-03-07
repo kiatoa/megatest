@@ -969,6 +969,7 @@
 ;; Misc. test related queries
 ;;======================================================================
 
+;; MUST BE CALLED local!
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
   (let ((paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res)))
     (if fnamepatt
