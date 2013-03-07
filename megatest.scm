@@ -141,12 +141,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":runname"   
 			"-target"
 			"-reqtarg"
-			":item"
-			":runname"   
+			":runname"
+			"-runname"
 			":state"  
+			"-state"
 			":status"
+			"-status"
 			"-list-runs"
 			"-testpatt" 
+			"-itempatt"
 			"-setlog"
 			"-set-toplog"
 			"-runstep"
@@ -241,6 +244,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (debug:debug-mode 3) ;; we are obviously debugging
     (set! open-run-close open-run-close-no-exception-handling))
+
+(if (args:get-arg "-itempatt")
+    (let ((newval (conc (args:get-arg "-testpatt") "/" (args:get-arg "-itempatt"))))
+      (debug:print 0 "WARNING: -itempatt has been deprecated, please use -testpatt testpatt/itempatt method, new testpatt is "newval)
+      (hash-table-set! args:arg-hash "-testpatt" newval)
+      (hash-table-delete! args:arg-hash "-itempatt")))
 
 ;;======================================================================
 ;; Misc general calls
