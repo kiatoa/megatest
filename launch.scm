@@ -84,6 +84,7 @@
                                               fulln
                                               runscript))))) ;; assume it is on the path
 	       (rollup-status 0))
+	  (change-directory top-path)
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
@@ -111,7 +112,7 @@
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
-	  (change-directory top-path)
+	  ;; (change-directory top-path)
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
