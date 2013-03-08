@@ -6,3 +6,6 @@ tests/megatest.db
 tests/monitor.db
 megatest
 dboard
+tests/fullrun/tmp/*
+tests/simpleruns
+tests/simplelinks
