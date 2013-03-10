@@ -971,20 +971,32 @@
 
 ;; MUST BE CALLED local!
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
-  (let ((paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res)))
-    (if fnamepatt
-	(apply append 
-	       (map (lambda (p)
-		      (glob (conc p "/" fnamepatt)))
-		    paths-from-db))
-	paths-from-db)))
-
-(define (db:test-get-paths-matching-keynames-target db keynames target res)
+  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
-	 (keystr (string-intersperse 
+	 (paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res
+					testpatt:   testpatt
+					statepatt:  statepatt
+					statuspatt: statuspatt
+					runname:    runname)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (if (directory-exists? p)
+			  (glob (conc p "/" fnamepatt))
+			  '()))
+		    paths-from-db))
+	paths-from-db)))
+
+(define (db:test-get-paths-matching-keynames-target db keynames target res 
+						    #!key
+						    (testpatt   "%")
+						    (statepatt  "%")
+						    (statuspatt "%")
+						    (runname    "%"))
+  (let* ((keystr (string-intersperse 
 		  (map (lambda (key val)
 			 (conc "r." key " like '" val "'"))
 		       keynames 
