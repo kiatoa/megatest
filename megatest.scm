@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos ) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -96,6 +96,7 @@ Queries
   -list-db-targets        : list the target combinations used in the db
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
+  -dumpmode json          : dump in json format instead of sexpr
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -182,6 +183,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
 			"-load"        ;; load and exectute a scheme file
+			"-dumpmode"
 			) 
 		 (list  "-h"
 			"-version"
@@ -349,15 +351,34 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-runconfig")
-    (begin
+    (let* ((target (if (args:get-arg "-reqtarg")
+		       (args:get-arg "-reqtarg")
+		       (if (args:get-arg "-target")
+			   (args:get-arg "-target")
+			   #f)))
+	   (sections (if target (list "default" target) #f))
+	   (data     (read-config "runconfigs.config" #f #f sections: sections)))
+
       ;; keep this one local
-      (pp (hash-table->alist (open-run-close setup-env-defaults #f "runconfigs.config" #f #f change-env: #f)))
+      (cond
+       ((not (args:get-arg "-dumpmode"))
+	(pp (hash-table->alist data)))
+       ((string=? (args:get-arg "-dumpmode") "json")
+	(json-write data))
+       (else
+	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-config")
-    (begin
+    (let ((data (read-config "megatest.config" #f #f)))
       ;; keep this one local
-      (pp (hash-table->alist (open-run-close setup-env-defaults #f "megatest.config" #f #f change-env: #f)))
+      (cond 
+       ((not (args:get-arg "-dumpmode"))
+	(pp (hash-table->alist data)))
+       ((string=? (args:get-arg "-dumpmode") "json")
+	(json-write data))
+       (else
+	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)))
 
 ;;======================================================================
