@@ -357,7 +357,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (args:get-arg "-target")
 			   #f)))
 	   (sections (if target (list "default" target) #f))
-	   (data     (read-config "runconfigs.config" #f #f sections: sections)))
+	   (data     (read-config "runconfigs.config" #f #t sections: sections)))
 
       ;; keep this one local
       (cond
@@ -370,7 +370,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-config")
-    (let ((data (read-config "megatest.config" #f #f)))
+    (let ((data (read-config "megatest.config" #f #t)))
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))
