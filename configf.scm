@@ -129,7 +129,7 @@
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
-  (debug:print-info 4 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections)
+  (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (if (not (file-exists? path))
       (begin 
 	(debug:print-info 4 "read-config - file not found " path " current path: " (current-directory))

@@ -28,6 +28,7 @@
 (declare (uses keys))
 (declare (uses ods))
 (declare (uses fs-transport))
+(declare (uses client))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -971,20 +972,32 @@
 
 ;; MUST BE CALLED local!
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
-  (let ((paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res)))
-    (if fnamepatt
-	(apply append 
-	       (map (lambda (p)
-		      (glob (conc p "/" fnamepatt)))
-		    paths-from-db))
-	paths-from-db)))
-
-(define (db:test-get-paths-matching-keynames-target db keynames target res)
+  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
-	 (keystr (string-intersperse 
+	 (paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target db keynames target res
+					testpatt:   testpatt
+					statepatt:  statepatt
+					statuspatt: statuspatt
+					runname:    runname)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (if (directory-exists? p)
+			  (glob (conc p "/" fnamepatt))
+			  '()))
+		    paths-from-db))
+	paths-from-db)))
+
+(define (db:test-get-paths-matching-keynames-target db keynames target res 
+						    #!key
+						    (testpatt   "%")
+						    (statepatt  "%")
+						    (statuspatt "%")
+						    (runname    "%"))
+  (let* ((keystr (string-intersperse 
 		  (map (lambda (key val)
 			 (conc "r." key " like '" val "'"))
 		       keynames 
@@ -1085,7 +1098,7 @@
      (let ((packet (vector "na" qtype immediate "na" params 0)))
        (fs:process-queue-item packet)))
     ((http)
-     (let* ((client-sig  (server:get-client-signature))
+     (let* ((client-sig  (client:get-signature))
 	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
        (debug:print-info 11 "zdat=" zdat)
@@ -1103,7 +1116,7 @@
 	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
       (let* ((push-socket (vector-ref serverdat 0))
 	     (sub-socket  (vector-ref serverdat 1))
-	     (client-sig  (server:get-client-signature))
+	     (client-sig  (client:get-signature))
 	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
 	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
 	     (res  #f)
@@ -1113,7 +1126,7 @@
 			     (debug:print-info 11 "message sent")
 			     (let loop ()
 			       ;; get the sender info
-			       ;; this should match (server:get-client-signature)
+			       ;; this should match (client:get-signature)
 			       ;; we will need to process "all" messages here some day
 			       (receive-message* sub-socket)
 			       ;; now get the actual message

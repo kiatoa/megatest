@@ -63,6 +63,8 @@
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
 	       (transport (assoc/default 'transport cmdinfo))
+	       (serverinf (assoc/default 'serverinf cmdinfo))
+	       (port      (assoc/default 'port      cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (target    (assoc/default 'target    cmdinfo))
@@ -120,7 +122,7 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  ;; Can setup as client for server mode now
-	  ;; (server:client-setup)
+	  ;; (client:setup)
 
 	  (change-directory *toppath*) 
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
@@ -587,6 +589,7 @@
 			(write (list (list 'testpath  test-path)
 				     ;; (list 'runremote *runremote*)
 				     (list 'transport (conc *transport-type*))
+				     (list 'serverinf *server-info*)
 				     (list 'toppath   *toppath*)
 				     (list 'work-area work-area)
 				     (list 'test-name test-name) 

@@ -27,7 +27,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 
-(define (server:make-server-url hostport)
+(define (rpc-server:make-server-url hostport)
   (if (not hostport)
       #f
       (conc "http://" (car hostport) ":" (cadr hostport))))
@@ -44,7 +44,7 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
-(define (server:run hostn)
+(define (rpc-server:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
       (if (not (setup-for-run))
@@ -110,7 +110,7 @@
 
 
 
-;; (define (server:main-loop)
+;; (define (rpc-server:main-loop)
 ;;   (print "INFO: Exectuing main server loop")
 ;;   (access-log "megatest-http.log")
 ;;   (server-bind-address #f)
@@ -146,7 +146,7 @@
 
 ;; This is recursively run by server:run until sucessful
 ;;
-(define (server:try-start-server ipaddrstr portnum)
+(define (rpc-server:try-start-server ipaddrstr portnum)
   (handle-exceptions
    exn
    (begin
@@ -169,7 +169,7 @@
    (start-server port: portnum)
    (print "INFO: server has been stopped")))
 
-(define (server:mk-signature)
+(define (rpc-server:mk-signature)
   (message-digest-string (md5-primitive) 
 			 (with-output-to-string
 			   (lambda ()
@@ -183,7 +183,7 @@
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
-(define (server:reply return-addr query-sig success/fail result)
+(define (rpc-server:reply return-addr query-sig success/fail result)
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
@@ -193,17 +193,11 @@
 ;; C L I E N T S
 ;;======================================================================
 
-(define (server:get-client-signature)
-  (if *my-client-signature* *my-client-signature*
-      (let ((sig (server:mk-signature)))
-	(set! *my-client-signature* sig)
-	*my-client-signature*)))
-
 ;; <html>
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
-(define (server:client-send-receive serverdat msg)
+(define (rpc-server:client-send-receive serverdat msg)
   (let* ((url        (server:make-server-url serverdat))
 	 (fullurl    (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
 	 (numretries 0))     
@@ -234,21 +228,21 @@
 	     (debug:print-info 11 "final=" final)
 	     final)))))))
 
-(define (server:client-login serverdat)
+(define (client:login serverdat serverdat)
   (max-retry-attempts 100)
-  (cdb:login serverdat *toppath* (server:get-client-signature)))
+  (cdb:login serverdat *toppath* (client:get-signature)))
 
 ;; Not currently used! But, I think it *should* be used!!!
-(define (server:client-logout serverdat)
+(define (client:logout serverdat)
   (let ((ok (and (socket? serverdat)
-		 (cdb:logout serverdat *toppath* (server:get-client-signature)))))
+		 (cdb:logout serverdat *toppath* (client:get-signature)))))
     ;; (close-socket serverdat)
     ok))
 
-(define (server:client-connect iface port)
+(define (rpc-server:client-connect iface port)
   (let* ((login-res   #f)
 	 (serverdat   (list iface port)))
-    (set! login-res (server:client-login serverdat))
+    (set! login-res (client:login serverdat serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
@@ -261,7 +255,7 @@
 	  #f))))
 
 ;; Do all the connection work, start a server if not already running
-(define (server:client-setup #!key (numtries 50))
+(define (client:setup #!key (numtries 50))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -297,13 +291,13 @@
 			    (loop (+ count 1)))))))
 	      ;; we are starting a server, do not try again! That can lead to 
 	      ;; recursively starting many processes!!!
-	      (server:client-setup numtries: 0))
+	      (client:setup numtries: 0))
 	    (debug:print-info 1 "Too many attempts, giving up")))))
 
 ;; run server:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (server:keep-running)
+(define (rpc-server:keep-running)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -358,7 +352,7 @@
               (exit)))))))
 
 ;; all routes though here end in exit ...
-(define (server:launch)
+(define (rpc-server:launch)
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -384,29 +378,4 @@
 	      )
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
-
-(define (server:client-signal-handler signum)
-  (handle-exceptions
-   exn
-   (debug:print " ... exiting ...")
-   (let ((th1 (make-thread (lambda ()
-			     "") ;; do nothing for now (was flush out last call if applicable)
-			   "eat response"))
-	 (th2 (make-thread (lambda ()
-			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
-			     (debug:print 0 "       Done.")
-			     (exit 4))
-			   "exit on ^C timer")))
-     (thread-start! th2)
-     (thread-start! th1)
-     (thread-join! th2))))
-
-(define (server:client-launch)
-  (set-signal-handler! signal/int server:client-signal-handler)
-   (if (server:client-setup)
-       (debug:print-info 2 "connected as client")
-       (begin
-	 (debug:print 0 "ERROR: Failed to connect as client")
-	 (exit))))
 

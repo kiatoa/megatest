@@ -890,13 +890,13 @@
 	    (open-run-close server:start db (args:get-arg "-server")))
  	    ;; (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
  	    ;;     	 (args:get-arg "-runtests")))
-	    ;;     (server:client-setup) ;; This is a duplicate startup!!!??? BUG?
+	    ;;     (client:setup) ;; This is a duplicate startup!!!??? BUG?
 	    ;;     ))
 	(set! keys (open-run-close db:get-keys db))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
-		   (runconfig  (read-config runconfigf #f #f environ-patt: #f))) 
+		   (runconfig  (read-config runconfigf #f #t environ-patt: #f))) 
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		  (begin

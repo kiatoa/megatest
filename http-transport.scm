@@ -187,7 +187,7 @@
 (define (http-transport:client-connect iface port)
   (let* ((login-res   #f)
 	 (serverdat   (list iface port)))
-    (set! login-res (server:client-login serverdat))
+    (set! login-res (client:login serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin

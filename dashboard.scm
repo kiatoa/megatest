@@ -84,12 +84,12 @@ Misc
 (if (args:get-arg "-host")
     (begin
       (set! *runremote* (string-split (args:get-arg "-host" ":")))
-      (server:client-launch))
-    (server:client-launch))
+      (client:launch))
+    (client:launch))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
-;; (server:client-setup *db*)
+;; (client:setup *db*)
 
 (define toplevel #f)
 (define dlg      #f)

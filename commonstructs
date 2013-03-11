@@ -1,0 +1,18 @@
+
+The database keys, runs are indexed on this
+keys: (db:get-keys #f) =>
+
+      (#("OS"  "TEXT") 
+       #("FS"  "TEXT") 
+       #("TAG" "TEXT"))
+
+keyvallst: (keys:target->keyval keys "ubuntu/nfs/none")
+
+      (("OS"  "ubuntu")
+       ("FS"  "nfs")
+       ("TAG" "none"))
+
+keyvals: (db:get-key-vals #f 3) ;; get the key vals for run #3
+
+      ("ubuntu" "nfs" "none")
+
