@@ -287,11 +287,11 @@
   (let* ((push-socket (zmq-transport:client-socket-connect iface pullport type: 'push))
 	 (sub-socket  (zmq-transport:client-socket-connect iface pubport
 						    type: 'sub
-						    subscriptions: (list (server:get-client-signature) "all")))
+						    subscriptions: (list (client:get-signature) "all")))
 	 (zmq-sockets (vector push-socket sub-socket))
 	 (login-res   #f))
     (debug:print-info 11 "zmq-transport:client-connect started. Next is login")
-    (set! login-res (server:client-login zmq-sockets))
+    (set! login-res (client:login serverdat zmq-sockets))
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin

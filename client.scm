@@ -12,21 +12,37 @@
 ;; C L I E N T S
 ;;======================================================================
 
-;; server:get-client-signature
+(require-extension (srfi 18) extras tcp s11n)
+
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
+(import (prefix sqlite3 sqlite3:))
+
+(use spiffy uri-common intarweb http-client spiffy-request-vars)
+
+(declare (unit client))
+
+(declare (uses common))
+(declare (uses db))
+(declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
+
+(include "common_records.scm")
+(include "db_records.scm")
+
+;; client:get-signature
 (define (client:get-signature)
   (if *my-client-signature* *my-client-signature*
       (let ((sig (server:mk-signature)))
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
 
-;; server:client-login
+;; client:login serverdat
 (define (client:login serverdat)
-  (cdb:login serverdat *toppath* (server:get-client-signature)))
+  (cdb:login serverdat *toppath* (client:get-signature)))
 
 ;; Not currently used! But, I think it *should* be used!!!
 (define (client:logout serverdat)
   (let ((ok (and (socket? serverdat)
-		 (cdb:logout serverdat *toppath* (server:get-client-signature)))))
+		 (cdb:logout serverdat *toppath* (client:get-signature)))))
     ok))
 
 ;; Do all the connection work, look up the transport type and set up the
@@ -37,7 +53,7 @@
 ;;   2. We are a run tests, list runs or other interactive process and we mush figure out
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
-;; server:client-setup
+;; client:setup
 (define (client:setup #!key (numtries 50))
   (if (not *toppath*)
       (if (not (setup-for-run))
@@ -72,7 +88,7 @@
        (set! *transport-type* 'fs)
        (set! *megatest-db*    (open-db))))))
 
-;; server:client-signal-handler
+;; client:signal-handler
 (define (client:signal-handler signum)
   (handle-exceptions
    exn
@@ -90,9 +106,9 @@
      (thread-start! th1)
      (thread-join! th2))))
 
-;; server:client-launch
+;; client:launch
 (define (client:launch)
-  (set-signal-handler! signal/int server:client-signal-handler)
+  (set-signal-handler! signal/int client:signal-handler)
    (if (client:setup)
        (debug:print-info 2 "connected as client")
        (begin

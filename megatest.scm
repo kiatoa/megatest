@@ -22,6 +22,7 @@
 (declare (uses runs))
 (declare (uses launch))
 (declare (uses server))
+(declare (uses client))
 (declare (uses tests))
 (declare (uses genexample))
 
@@ -332,7 +333,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (eq? (length (hash-table-keys args:arg-hash)) 0))
 	(debug:print-info 1 "Server connection not needed")
 	;; ok, so lets connect to the server
-	(server:client-launch)))
+	(client:launch)))
 
 ;;======================================================================
 ;; Weird special calls that need to run *after* the server has started?
@@ -783,7 +784,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(exit 1)))
 
 	  ;; can setup as client for server mode now
-	  ;; (server:client-setup)
+	  ;; (client:setup)
 
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
@@ -944,8 +945,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* db)
 	    (set! *client-non-blocking-mode* #t)
-	    ;; (server:client-setup)
-	    ;; (server:client-launch)
+	    ;; (client:setup)
+	    ;; (client:launch)
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager

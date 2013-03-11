@@ -10,8 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
-(import (prefix sqlite3 sqlite3:))
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
@@ -19,7 +18,6 @@
 
 (declare (uses common))
 (declare (uses db))
-(declare (uses tests))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses http-transport))
 (declare (uses zmq-transport))

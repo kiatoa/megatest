@@ -122,7 +122,7 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  ;; Can setup as client for server mode now
-	  ;; (server:client-setup)
+	  ;; (client:setup)
 
 	  (change-directory *toppath*) 
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
