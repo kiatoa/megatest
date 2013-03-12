@@ -61,9 +61,13 @@
 					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname)))
-	 (start-port    (if (args:get-arg "-port")
+	 (start-port    (if (and (args:get-arg "-port")
+				 (string->number (args:get-arg "-port")))
 			    (string->number (args:get-arg "-port"))
-			    (+ 5000 (random 1001))))
+			    (if (and (config-lookup  *configdat* "server" "port")
+				     (string->number (config-lookup  *configdat* "server" "port")))
+				(string->number (config-lookup  *configdat* "server" "port"))
+				(+ 5000 (random 1001)))))
 	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
     (set! *cache-on* #t)
     (root-path     (if link-tree-path 
@@ -220,8 +224,14 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdb         (tasks:open-db))
-	 (spid        (tasks:server-get-server-id tdb #f iface port #f)))
-    (print "Keep-running got server pid " spid ", using iface " iface " and port " port)
+	 (spid        (tasks:server-get-server-id tdb #f iface port #f))
+	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
+			   (if (and (string? tmo)
+				    (string->number tmo))
+			       (* 60 60 (string->number tmo))
+			       ;; default to three days
+			       (* 3 24 60)))))
+    (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
@@ -237,12 +247,8 @@
         (mutex-lock! *heartbeat-mutex*)
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
-        (if (> (+ last-access
-                  ;; (* 50 60 60)    ;; 48 hrs
-                  ;; 60              ;; one minute
-                  ;; (* 60 60)       ;; one hour
-                  (* 45 60)          ;; 45 minutes, until the db deletion bug is fixed.
-                  )
+	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
+        (if (> (+ last-access server-timeout)
                (current-seconds))
             (begin
               (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
@@ -267,21 +273,38 @@
   (debug:print-info 2 "Starting the standalone server")
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print 11 "http-transport:launch hostinfo=" hostinfo)
+    ;; #(1 "143.182.207.24" 5736 -1 "http" 22771 "hostname")
     (if hostinfo
-	(debug:print-info 2 "NOT starting new server, one is already running on " (car hostinfo) ":" (cadr hostinfo))
+	(debug:print-info 2 "NOT starting new server, one is already running on " (vector-ref hostinfo 1) ":" (vector-ref hostinfo 2))
 	(if *toppath* 
 	    (let* ((th2 (make-thread (lambda ()
 				       (http-transport:run 
 					(if (args:get-arg "-server")
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
-		   (th3 (make-thread (lambda ()(http-transport:keep-running)) "Keep running"))
-		   )
+		   (th3 (make-thread (lambda ()(http-transport:keep-running)) "Keep running")))
 	      (thread-start! th2)
 	      (thread-start! th3)
 	      (set! *didsomething* #t)
-	      (thread-join! th2)
-	      )
+	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
 
+(define (http-transport:server-signal-handler signum)
+  (handle-exceptions
+   exn
+   (debug:print " ... exiting ...")
+   (let ((th1 (make-thread (lambda ()
+			     (thread-sleep! 1))
+			     ;; (if (not *received-response*)
+			     ;;	 (receive-message* *runremote*))) ;; flush out last call if applicable
+			   "eat response"))
+	 (th2 (make-thread (lambda ()
+			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			     (thread-sleep! 3) ;; give the flush three seconds to do it's stuff
+			     (debug:print 0 "       Done.")
+			     (exit 4))
+			   "exit on ^C timer")))
+     (thread-start! th2)
+     (thread-start! th1)
+     (thread-join! th2))))
