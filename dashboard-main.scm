@@ -53,6 +53,7 @@
 		       ))))
 
 
+
 (define (mtest)
   (let* ((curr-row-num     0)
 	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
@@ -94,7 +95,8 @@
 			    #:numcol 1
 			    #:numlin 20
 			    #:numcol-visible 1
-			    #:numlin-visible 8)))
+			    #:numlin-visible 8))
+	 )
     (iup:attribute-set! keys-matrix "0:0" "Field Num")
     (iup:attribute-set! keys-matrix "0:1" "Field Name")
     (iup:attribute-set! keys-matrix "WIDTH1" "100")
@@ -205,8 +207,68 @@
    (iup:frame #:title "Tests browser")))
 
 (define (runs)
-  (iup:hbox
-   (iup:frame #:title "Runs browser")))
+  (let* ((runs-matrix     (iup:matrix
+			   #:expand "YES"
+			   ;; #:fittosize "YES"
+			   #:scrollbar "YES"
+			   #:numcol 100
+			   #:numlin 100
+			   #:numcol-visible 7
+			   #:numlin-visible 7
+			   #:click-cb (lambda (obj lin col status)
+					(print "obj: " obj " lin: " lin " col: " col " status: " status)))))
+;;     (iup:attribute-set! keys-matrix "0:0" "Field Num")
+;;     (iup:attribute-set! keys-matrix "0:1" "Field Name")
+;;     (iup:attribute-set! keys-matrix "WIDTH1" "100")
+;;     (iup:attribute-set! disks-matrix "0:0" "Disk Name")
+;;     (iup:attribute-set! disks-matrix "0:1" "Disk Path")
+;;     (iup:attribute-set! disks-matrix "WIDTH1" "120")
+;;     (iup:attribute-set! disks-matrix "WIDTH0" "100")
+;;     (iup:attribute-set! disks-matrix "ALIGNMENT1" "ALEFT")
+;;     (iup:attribute-set! disks-matrix "FIXTOTEXT" "C1")
+;;     (iup:attribute-set! disks-matrix "RESIZEMATRIX" "YES")
+    ;; fill in keys
+;;     (set! curr-row-num 1)
+;;     (for-each 
+;;      (lambda (var)
+;;        (iup:attribute-set! keys-matrix (conc curr-row-num ":0") curr-row-num)
+;;        (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
+;;        (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
+;;      (configf:section-vars rawconfig "fields"))
+
+    ;; fill in existing info
+;;    (for-each 
+;;     (lambda (mat fname)
+;;       (set! curr-row-num 1)
+;;       (for-each
+;;	(lambda (var)
+;;	  (iup:attribute-set! mat (conc curr-row-num ":0") var)
+;;	  (iup:attribute-set! mat (conc curr-row-num ":1") (config-lookup rawconfig fname var))
+;;	  (set! curr-row-num (+ curr-row-num 1)))
+;;	(configf:section-vars rawconfig fname)))
+;;     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
+;;     (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
+
+    (for-each
+     (lambda (mat)
+       (iup:attribute-set! mat "0:1" "ubuntu\nnfs\nnone")
+       (iup:attribute-set! mat "0:0" "Test")
+       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
+       ;; (iup:attribute-set! mat "FIXTOTEXT" "C1")
+       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
+       (iup:attribute-set! mat "WIDTH1" "120")
+       (iup:attribute-set! mat "WIDTH0" "100")
+       )
+     (list runs-matrix))
+
+;;    (iup:attribute-set! validvals-matrix "WIDTH1" "290")
+;;    (iup:attribute-set! envovrd-matrix   "WIDTH1" "290")
+    
+    (iup:hbox
+     (iup:frame 
+      #:title "Runs browser"
+      (iup:vbox
+       runs-matrix)))))
 
 (define (main-panel)
   (iup:dialog
