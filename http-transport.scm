@@ -138,13 +138,6 @@
    (start-server port: portnum)
    (print "INFO: server has been stopped")))
 
-(define (http-transport:mk-signature)
-  (message-digest-string (md5-primitive) 
-			 (with-output-to-string
-			   (lambda ()
-			     (write (list (current-directory)
-					  (argv)))))))
-
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================

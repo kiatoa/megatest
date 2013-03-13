@@ -59,3 +59,32 @@
      (debug:print "WARNING: unrecognised transport " transport)
      (exit))))
 
+(define (server:mk-signature)
+  (message-digest-string (md5-primitive) 
+			 (with-output-to-string
+			   (lambda ()
+			     (write (list (current-directory)
+					  (argv)))))))
+
+;;======================================================================
+;; S E R V E R   U T I L I T I E S 
+;;======================================================================
+
+;; When using zmq this would send the message back (two step process)
+;; with spiffy or rpc this simply returns the return data to be returned
+;; 
+(define (server:reply return-addr query-sig success/fail result)
+  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
+  ;; (send-message pubsock target send-more: #t)
+  ;; (send-message pubsock 
+  (case *transport-type*
+    ((fs) result)
+    ((http)(db:obj->string (vector success/fail query-sig result)))
+    ((zmq)
+     (let ((pub-socket (vector-ref *runremote* 1)))
+       (send-message pub-socket return-addr send-more: #t)
+       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
+    (else 
+     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     result)))
+
