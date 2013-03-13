@@ -29,7 +29,7 @@
 (declare (uses runs))
 (declare (uses dashboard-tests))
 (declare (uses dashboard-guimonitor))
-(declare (uses dashboard-main))
+;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
 
 (include "common_records.scm")
@@ -689,8 +689,6 @@ Misc
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))
- ((args:get-arg "-main")
-  (iup:show (main-panel)))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*

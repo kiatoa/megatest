@@ -7,9 +7,9 @@ SRCFILES = common.scm items.scm launch.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm zmq-transport.scm http-transport.scm \
-           client.scm
+           client.scm gutils.scm
 
-GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm dashboard-main.scm
+GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
@@ -26,8 +26,8 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES) dashboard.scm
 	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
-newdashboard : newdashboard.scm $(OFILES) $(GUISRCF)
-	csc $(OFILES) $(GUISRCF) newdashboard.scm -o newdashboard
+newdashboard : newdashboard.scm $(OFILES)
+	csc $(OFILES) newdashboard.scm -o newdashboard
 
 $(DEPLOYTARG)/megatest : $(OFILES) megatest.o
 	csc -deployed $(CSCOPTS) $(OFILES) megatest.o -o $(DEPLOYTARG)/megatest
