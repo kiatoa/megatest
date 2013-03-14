@@ -375,21 +375,29 @@ Misc
 ;;  2. Update synchash to understand "get-runs", "get-tests" etc.
 ;;  3. Add extraction of filters to synchash calls
 ;;
-(define (run-update data filters)
-  (synchash:client-get db:get-runs  "get-runs"  data filters)
-  (synchash:client-get db:get-tests "get-tests" data filters))
+(define (run-update data runname keypatts testpatt states statuses)
+  (let ((run-ids '()))
+    ;; count and offset => #f so not used
+    ;; the synchash calls modify the "data" hash
+    (synchash:client-get 'db:get-runs  "get-runs" (length keypatts) data runname #f #f keypatts)
+    ;; Now can calculate the run-ids
+    (let* ((run-hash (hash-table-ref/default data "get-runs" #f))
+	   (run-ids (if run-hash (filter number? (hash-table-keys run-hash)) '())))
+      (synchash:client-get 'db:get-tests-for-runs "get-tests-for-runs" 0 data run-ids testpatt states statuses))))
 
 (define (newdashboard)
-  (let* ((data    (make-hash-table))
-	 (filters (make-hash-table))
-	 (keys    (cdb:remote-run db:get-keys #f))
-	 (keyvals (map (lambda (k)(list (vector-ref k 0) "%")) keys)))
+  (let* ((data     (make-hash-table))
+	 (keys     (cdb:remote-run db:get-keys #f))
+	 (runname  "%")
+	 (testpatt "%")
+	 (keypatts (map (lambda (k)(list (vector-ref k 0) "%")) keys))
+	 (states   '())
+	 (statuses '()))
     (iup:show (main-panel))
-    ;; (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)
-			 (run-update rundata keyvals)))))
+			 (run-update data runname keypatts testpatt states statuses)))))
 
 (newdashboard)    
 (iup:main-loop)

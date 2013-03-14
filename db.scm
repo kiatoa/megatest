@@ -755,10 +755,8 @@
 ;; run-ids is a list of run-ids or a single number
 (define (db:get-tests-for-runs db run-ids testpatt states statuses 
 			      #!key (not-in #t)
-			      (sort-by #f) ;; 'rundir 'event_time
-			      (keypatts #f)
-			      )
-  (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
+			      (sort-by #f)) ;; 'rundir 'event_time
+  (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
@@ -781,7 +779,7 @@
 				(if run-ids
 				    (if (list? run-ids)
 					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")
-					(conc "run_id=" run-id " "))
+					(conc "run_id=" run-ids " "))
 				    " ") ;; #f => run-ids don't filter on run-ids
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
@@ -798,7 +796,7 @@
      db 
      qry
      )
-    (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
+    (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; this one is a bit broken BUG FIXME

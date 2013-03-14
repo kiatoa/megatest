@@ -58,8 +58,11 @@
 ;; (cdb:remote-run db:get-keys #f)  
 ;; (cdb:remote-run db:get-num-runs #f "%")
 ;; (cdb:remote-run db:get-runs #f runnamepatt numruns *start-run-offset* keypatts)
+;;
+;; keynum => the field to use as the unique key (usually 0 but can be other field)
+;;
 (define (synchash:client-get proc synckey keynum synchash . params)
-  (let* ((data   (apply cdb:remote-run synchash:server-get #f proc synckey params))
+  (let* ((data   (apply cdb:remote-run synchash:server-get #f proc synckey keynum params))
 	 (newdat (car data))
 	 (removs (cadr data)))
     (for-each 
@@ -78,11 +81,30 @@
 (define *synchashes* (make-hash-table))
 
 (define (synchash:server-get db proc synckey keynum . params)
+  (debug:print 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
   (let* ((synchash (hash-table-ref/default *synchashes* synckey #f))
-	 (newdat   (apply proc db params)))
+	 (newdat   (apply (case proc
+			    ((db:get-runs) db:get-runs)
+			    ((db:get-tests-for-runs) db:get-tests-for-runs)
+			    (else print))
+			  db params))
+	 (postdat  #f)
+	 (make-indexed (lambda (x)
+			 (list (vector-ref x keynum) x))))
+    ;; Now process newdat based on the query type
+    (set! postdat (case proc
+		    ((db:get-runs)
+		     (debug:print 2 "Get runs call")
+		     (let ((header (vector-ref newdat 0))
+			   (data   (vector-ref newdat 1)))
+		       (list (list "header" header)         ;; add the header keyed by the word "header"
+			     (map make-indexed data))))        ;; add each element keyed by the keynum'th val
+		    (else 
+		     (debug:print 2 "Non-get runs call")
+		     (map make-indexed newdat))))
     (if (not synchash)
 	(begin
 	  (set! synchash (make-hash-table))
 	  (hash-table-set! *synchashes* synckey synchash)))
-    (synchash:get-delta newdat synchash)))
+    (synchash:get-delta postdat synchash)))
 
