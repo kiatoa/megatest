@@ -376,17 +376,17 @@ Misc
 ;;  3. Add extraction of filters to synchash calls
 ;;
 (define (run-update data runname keypatts testpatt states statuses)
-  (let ((run-ids '()))
-    ;; count and offset => #f so not used
-    ;; the synchash calls modify the "data" hash
-    (synchash:client-get 'db:get-runs  "get-runs" (length keypatts) data runname #f #f keypatts)
-    ;; Now can calculate the run-ids
-    (let* ((run-hash (hash-table-ref/default data "get-runs" #f))
-	   (run-ids (if run-hash (filter number? (hash-table-keys run-hash)) '())))
-      ;; (debug:print-info 2 "run-hash-keys: " (hash-table-keys run-hash))
-      ;; (debug:print-info 2 "run-hash: ")(pp (hash-table->alist run-hash))
-      ;; (debug:print-info 2 "run-ids: " run-ids)
-      (synchash:client-get 'db:get-tests-for-runs "get-tests-for-runs" 0 data run-ids testpatt states statuses))))
+  (let* (;; count and offset => #f so not used
+	 ;; the synchash calls modify the "data" hash
+	 (run-changes (synchash:client-get 'db:get-runs  "get-runs" (length keypatts) data runname #f #f keypatts))
+	 ;; Now can calculate the run-ids
+	 (run-hash    (hash-table-ref/default data "get-runs" #f))
+	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+	 ;; (debug:print-info 2 "run-hash-keys: " (hash-table-keys run-hash))
+	 ;; (debug:print-info 2 "run-hash: ")(pp (hash-table->alist run-hash))
+	 ;; (debug:print-info 2 "run-ids: " run-ids)
+	 (test-changes (synchash:client-get 'db:get-tests-for-runs "get-tests-for-runs" 0 data run-ids testpatt states statuses)))
+    (list run-changes test-changes)))
 
 (define (newdashboard)
   (let* ((data     (make-hash-table))
@@ -400,7 +400,8 @@ Misc
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)
-			 (run-update data runname keypatts testpatt states statuses)))))
+			 (let ((changes (run-update data runname keypatts testpatt states statuses)))
+			   (debug:print 0 "CHANGES: " changes))))))
 
 (newdashboard)    
 (iup:main-loop)
