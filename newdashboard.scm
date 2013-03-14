@@ -383,6 +383,9 @@ Misc
     ;; Now can calculate the run-ids
     (let* ((run-hash (hash-table-ref/default data "get-runs" #f))
 	   (run-ids (if run-hash (filter number? (hash-table-keys run-hash)) '())))
+      ;; (debug:print-info 2 "run-hash-keys: " (hash-table-keys run-hash))
+      ;; (debug:print-info 2 "run-hash: ")(pp (hash-table->alist run-hash))
+      ;; (debug:print-info 2 "run-ids: " run-ids)
       (synchash:client-get 'db:get-tests-for-runs "get-tests-for-runs" 0 data run-ids testpatt states statuses))))
 
 (define (newdashboard)

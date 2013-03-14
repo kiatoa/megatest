@@ -53,7 +53,9 @@
 	     (set! deleted (cons id deleted))
 	     (hash-table-delete! synchash id))))
      orig-keys)
-    (list changed deleted)))
+    (list changed deleted)
+    ;; (list indat '()) ;; just for debugging
+    ))
     
 ;; (cdb:remote-run db:get-keys #f)  
 ;; (cdb:remote-run db:get-num-runs #f "%")
@@ -64,16 +66,22 @@
 (define (synchash:client-get proc synckey keynum synchash . params)
   (let* ((data   (apply cdb:remote-run synchash:server-get #f proc synckey keynum params))
 	 (newdat (car data))
-	 (removs (cadr data)))
+	 (removs (cadr data))
+	 (myhash (hash-table-ref/default synchash synckey #f)))
+    (if (not myhash)
+	(begin
+	  (set! myhash (make-hash-table))
+	  (hash-table-set! synchash synckey myhash)))
     (for-each 
      (lambda (item)
        (let ((id  (car item))
 	     (dat (cadr item)))
-	 (hash-table-set! synchash id dat)))
+	 ;; (debug:print-info 2 "Processing item: " item)
+	 (hash-table-set! myhash id dat)))
      newdat)
     (for-each
      (lambda (id)
-       (hash-table-delete! synchash id))
+       (hash-table-delete! myhash id))
      removs)
     synchash))
 
@@ -81,7 +89,7 @@
 (define *synchashes* (make-hash-table))
 
 (define (synchash:server-get db proc synckey keynum . params)
-  (debug:print 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
+  ;; (debug:print-info 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
   (let* ((synchash (hash-table-ref/default *synchashes* synckey #f))
 	 (newdat   (apply (case proc
 			    ((db:get-runs) db:get-runs)
@@ -94,14 +102,16 @@
     ;; Now process newdat based on the query type
     (set! postdat (case proc
 		    ((db:get-runs)
-		     (debug:print 2 "Get runs call")
+		     ;; (debug:print-info 2 "Get runs call")
 		     (let ((header (vector-ref newdat 0))
 			   (data   (vector-ref newdat 1)))
-		       (list (list "header" header)         ;; add the header keyed by the word "header"
+		       ;; (debug:print-info 2 "header: " header ", data: " data)
+		       (cons (list "header" header)         ;; add the header keyed by the word "header"
 			     (map make-indexed data))))        ;; add each element keyed by the keynum'th val
 		    (else 
-		     (debug:print 2 "Non-get runs call")
+		     ;; (debug:print-info 2 "Non-get runs call")
 		     (map make-indexed newdat))))
+    ;; (debug:print-info 2 "postdat: " postdat)
     (if (not synchash)
 	(begin
 	  (set! synchash (make-hash-table))
