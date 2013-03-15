@@ -506,6 +506,7 @@
 ;;  R U N S
 ;;======================================================================
 
+;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
   (let* ((header    (append (map key:get-fieldname keys)
 			    remfields))

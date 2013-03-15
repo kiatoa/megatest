@@ -83,7 +83,7 @@
      (lambda (id)
        (hash-table-delete! myhash id))
      removs)
-    synchash))
+    (list newdat removs))) ;; synchash))
 
 
 (define *synchashes* (make-hash-table))
