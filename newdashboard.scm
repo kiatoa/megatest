@@ -118,7 +118,7 @@ Misc
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
    (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
 		       (iup:menu-item "Open"  action: (lambda (obj)
-							(show (iup:file-dialog))
+							(iup:show (iup:file-dialog))
 							(print "File->open " obj)))
 		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
 		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
@@ -332,17 +332,8 @@ Misc
 ;;     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
 ;;     (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
 
-    (for-each
-     (lambda (mat)
-       (iup:attribute-set! mat "0:1" "ubuntu\nnfs\nnone")
-       (iup:attribute-set! mat "0:0" "Test")
-       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
-       ;; (iup:attribute-set! mat "FIXTOTEXT" "C1")
-       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
-       (iup:attribute-set! mat "WIDTH1" "120")
-       (iup:attribute-set! mat "WIDTH0" "100")
-       )
-     (list runs-matrix))
+    (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
+    (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
 ;;    (iup:attribute-set! validvals-matrix "WIDTH1" "290")
 ;;    (iup:attribute-set! envovrd-matrix   "WIDTH1" "290")
@@ -386,12 +377,14 @@ Misc
 (define (run-update keys data runname keypatts testpatt states statuses mode)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
-	 (run-changes (synchash:client-get 'db:get-runs  "get-runs" (length keypatts) data runname #f #f keypatts))
+	 (get-runs-sig  (conc (client:get-signature) " get-runs"))
+	 (get-tests-sig (conc (client:get-signature) " get-tests"))
+	 (run-changes  (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
 	 ;; Now can calculate the run-ids
-	 (run-hash    (hash-table-ref/default data "get-runs" #f))
+	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
-	 (test-changes (synchash:client-get 'db:get-tests-for-runs "get-tests-for-runs" 0 data run-ids testpatt states statuses))
-	 (runs-hash    (hash-table-ref/default data "get-runs" #f))
+	 (test-changes (synchash:client-get 'db:get-tests-for-runs get-tests-sig 0 data run-ids testpatt states statuses))
+	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (header       (hash-table-ref/default runs-hash "header" #f))
 	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
 			     (lambda (a b)
@@ -438,25 +431,36 @@ Misc
 						 (> time-a time-b)))))
 		       ;; test-changes is a list of (( id record ) ... )
 		       ;; Get list of test names sorted by time, remove tests
-		       (test-names (delete-duplicates (map db:test-get-testname tests)))
+		       (test-names (delete-duplicates (map (lambda (t)
+							     (let ((i (db:test-get-item-path t))
+								   (n (db:test-get-testname  t)))
+							       (if (string=? i "")
+								   (conc "   " i)
+								   n)))
+							   tests)))
 		       (colnum     (car (hash-table-ref runid-to-col run-id))))
 		  ;; for each test name get the slot if it exists and fill in the cell
 		  ;; or take the next slot and fill in the cell, deal with items in the
 		  ;; run view panel? The run view panel can have a tree selector for
 		  ;; browsing the tests/items
+
+		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
 		  (for-each (lambda (test)
 			      (let* ((state    (db:test-get-state test))
 				     (status   (db:test-get-status test))
 				     (testname (db:test-get-testname test))
-				     (rownum   (hash-table-ref/default testname-to-row testname #f)))
+				     (itempath (db:test-get-item-path test))
+				     (fullname (conc testname "/" itempath))
+				     (dispname (if (string=? itempath "") testname (conc "   " itempath)))
+				     (rownum   (hash-table-ref/default testname-to-row fullname #f)))
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
 						       1
 						       (+ 1 (apply max rownums))))
-				      (hash-table-set! testname-to-row testname rownum )
+				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
-				      (iup:attribute-set! *runs-matrix* (conc rownum ":" 0) testname)
+				      (iup:attribute-set! *runs-matrix* (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
@@ -465,7 +469,8 @@ Misc
 				))
 			    tests)))
 	      run-ids)
-    
+
+    (iup:attribute-set! *runs-matrix* "REDRAW" "ALL")
     ;; (debug:print 2 "run-changes: " run-changes)
     ;; (debug:print 2 "test-changes: " test-changes)
     (list run-changes test-changes)))
