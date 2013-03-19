@@ -41,8 +41,6 @@
 ;; Call this to start the actual server
 ;;
 
-(define *db:process-queue-mutex* (make-mutex))
-
 ;; all routes though here end in exit ...
 (define (server:launch transport)
   (if (not *toppath*)
@@ -60,6 +58,28 @@
      (debug:print "WARNING: unrecognised transport " transport)
      (exit))))
 
+;;======================================================================
+;; Q U E U E   M A N A G E M E N T
+;;======================================================================
+
+;; Flush the queue every third of a second. Can we assume that setup-for-run 
+;; has already been done?
+(define (server:write-queue-handler)
+  (if (setup-for-run)
+      (let ((db (open-db)))
+	(let loop ()
+	  (db:process-cached-writes db)
+	  (thread-sleep! 0.3)
+	  (loop)))
+      (begin
+	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
+	(exit 1))))
+    
+;;======================================================================
+;; S E R V E R   U T I L I T I E S 
+;;======================================================================
+
+;; Generate a unique signature for this server
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 
 			 (with-output-to-string
@@ -67,9 +87,6 @@
 			     (write (list (current-directory)
 					  (argv)))))))
 
-;;======================================================================
-;; S E R V E R   U T I L I T I E S 
-;;======================================================================
 
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned

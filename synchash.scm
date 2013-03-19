@@ -83,6 +83,8 @@
      (lambda (id)
        (hash-table-delete! myhash id))
      removs)
+    ;; WHICH ONE!?
+    ;; data)) ;; return the changed and deleted list
     (list newdat removs))) ;; synchash))
 
 (define *synchashes* (make-hash-table))
