@@ -1300,6 +1300,7 @@
     (mutex-lock! *incoming-mutex*)
     ;; data is a list of query packets <vector qry-sig query params
     (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+    (set! *server:last-write-flush* (current-milliseconds))
     (set! *incoming-writes* '())
     (mutex-unlock! *incoming-mutex*)
     (if (> (length data) 0)
@@ -1354,6 +1355,9 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
+(define *number-of-writes*   0)
+(define *writes-total-delay* 0)
+
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
@@ -1363,6 +1367,7 @@
 	(res        #f)
 	(got-it     #f)
 	(qry-pkt    (vector qry-sig query params))
+	(start-time (current-milliseconds))
 	(timeout    (+ 10 (current-seconds)))) ;; set the time out to 10 secs in future
 
     ;; Put the item in the queue *incoming-writes* 
@@ -1387,6 +1392,8 @@
       (if (and (not got-it)
 	       (< (current-seconds) timeout))
 	  (loop)))
+    (set! *number-of-writes*   (+ *number-of-writes*   1))
+    (set! *writes-total-delay* (+ *writes-total-delay* 1))
     got-it))
 	  
 (define (db:process-queue-item db item)

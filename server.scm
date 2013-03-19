@@ -62,16 +62,25 @@
 ;; Q U E U E   M A N A G E M E N T
 ;;======================================================================
 
+;; We don't want to flush the queue if it was just flushed
+(define *server:last-write-flush* (current-milliseconds))
+
 ;; Flush the queue every third of a second. Can we assume that setup-for-run 
 ;; has already been done?
 (define (server:write-queue-handler)
   (if (setup-for-run)
       (let ((db (open-db)))
 	(let loop ()
-	  (mutex-lock! *db:process-queue-mutex*)
-	  (db:process-cached-writes db)
-	  (mutex-unlock! *db:process-queue-mutex*)
-	  (thread-sleep! 0.3)
+	  (let ((last-write-flush-time #f))
+	    (mutex-lock! *incoming-mutex*)
+	    (set! last-write-flush-time *server:last-write-flush*)
+	    (mutex-unlock! *incoming-mutex*)
+	    (if (> (- (current-milliseconds) last-write-flush-time) 400)
+		(begin
+		  (mutex-lock! *db:process-queue-mutex*)
+		  (db:process-cached-writes db)
+		  (mutex-unlock! *db:process-queue-mutex*)
+		  (thread-sleep! 0.5))))
 	  (loop)))
       (begin
 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")

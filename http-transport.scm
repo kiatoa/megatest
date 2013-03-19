@@ -252,7 +252,9 @@
               (set! *time-to-exit* #t)
               (tasks:server-deregister-self tdb (get-host-name))
               (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+              (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+	      (debug:print-info 0 "Average cached write time " (/ *writes-total-delay* *number-of-writes*) " ms")
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)))))))
 
