@@ -1411,7 +1411,10 @@
 	;; otherwise if appropriate flush the queue (this is a read or complex query)
 	(begin
 	  (case *transport-type*
-	    ((http)(db:process-cached-writes db)))
+	    ((http)
+	  (mutex-lock! *db:process-queue-mutex*)
+	  (db:process-cached-writes db)
+	  (mutex-unlock! *db:process-queue-mutex*)))
 	  (cond
 	   ((member stmt-key db:special-queries)
 	    (debug:print-info 11 "Handling special statement " stmt-key)

@@ -68,7 +68,9 @@
   (if (setup-for-run)
       (let ((db (open-db)))
 	(let loop ()
+	  (mutex-lock! *db:process-queue-mutex*)
 	  (db:process-cached-writes db)
+	  (mutex-unlock! *db:process-queue-mutex*)
 	  (thread-sleep! 0.3)
 	  (loop)))
       (begin
