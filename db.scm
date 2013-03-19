@@ -755,7 +755,6 @@
 (define (db:get-tests-for-runs-mindata db run-ids testpatt states status)
   (db:get-tests-for-runs db run-ids testpatt states status qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
-
 ;; NB // This is get tests for "runs" (note the plural!!)
 ;;
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
@@ -1365,8 +1364,10 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
-(define *number-of-writes*   0)
-(define *writes-total-delay* 0)
+(define *number-of-writes*         0)
+(define *writes-total-delay*       0)
+(define *total-non-write-delay*    0)
+(define *number-non-write-queries* 0)
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -1427,48 +1428,53 @@
 	  (server:reply return-address qry-sig response response))
 	;; otherwise if appropriate flush the queue (this is a read or complex query)
 	(begin
-	  (case *transport-type*
-	    ((http)
-	  (mutex-lock! *db:process-queue-mutex*)
-	  (db:process-cached-writes db)
-	  (mutex-unlock! *db:process-queue-mutex*)))
 	  (cond
 	   ((member stmt-key db:special-queries)
-	    (debug:print-info 11 "Handling special statement " stmt-key)
-	    (case stmt-key
-	      ((immediate)
-	       (let ((proc      (car params))
-		     (remparams (cdr params)))
-		 ;; we are being handed a procedure so call it
-		 (debug:print-info 11 "Running (apply " proc " " remparams ")")
-		 (server:reply return-address qry-sig #t (apply proc remparams))))
-	      ((login)
-	       (if (< (length params) 3) ;; should get toppath, version and signature
-		   (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
-		   (let ((calling-path (car   params))
-			 (calling-vers (cadr  params))
-			 (client-key   (caddr params)))
-		     (if (and (equal? calling-path *toppath*)
-			      (equal? megatest-version calling-vers))
-			 (begin
-			   (hash-table-set! *logged-in-clients* client-key (current-seconds))
-			   (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
-			 (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
-	      ((flush sync)
-	       (server:reply return-address qry-sig #t 1)) ;; (length data)))
-	      ((set-verbosity)
-	       (set! *verbosity* (car params))
-	       (server:reply return-address qry-sig #t '(#t *verbosity*)))
-	      ((killserver)
-	       (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
-	       (open-run-close tasks:server-deregister tasks:open-db 
-			       (car *runremote*)
-			       pullport: (cadr *runremote*))
-	       (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-	       (server:reply return-address qry-sig #t '(#t "exit process started")))
-	      (else ;; not a command, i.e. is a query
-	       (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
-	       (server:reply pubsock return-address qry-sig #f 'failed))))
+	    (let ((starttime (current-milliseconds)))
+	      (debug:print-info 11 "Handling special statement " stmt-key)
+	      (case stmt-key
+		((immediate)
+		 ;; This is a read or mixed read-write query, must clear the cache
+		 (case *transport-type*
+		   ((http)
+		    (mutex-lock! *db:process-queue-mutex*)
+		    (db:process-cached-writes db)
+		    (mutex-unlock! *db:process-queue-mutex*)))
+		 (let* ((proc      (car params))
+			(remparams (cdr params))
+			;; we are being handed a procedure so call it
+			;; (debug:print-info 11 "Running (apply " proc " " remparams ")")
+			(result (server:reply return-address qry-sig #t (apply proc remparams))))
+		   (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
+		   (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
+		   result))
+		((login)
+		 (if (< (length params) 3) ;; should get toppath, version and signature
+		     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
+		     (let ((calling-path (car   params))
+			   (calling-vers (cadr  params))
+			   (client-key   (caddr params)))
+		       (if (and (equal? calling-path *toppath*)
+				(equal? megatest-version calling-vers))
+			   (begin
+			     (hash-table-set! *logged-in-clients* client-key (current-seconds))
+			     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+			   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
+		((flush sync)
+		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
+		((set-verbosity)
+		 (set! *verbosity* (car params))
+		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
+		((killserver)
+		 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
+		 (open-run-close tasks:server-deregister tasks:open-db 
+				 (car *runremote*)
+				 pullport: (cadr *runremote*))
+		 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
+		 (server:reply return-address qry-sig #t '(#t "exit process started")))
+		(else ;; not a command, i.e. is a query
+		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
+		 (server:reply return-address qry-sig #f 'failed)))))
 	   (else
 	    (debug:print-info 11 "Executing " stmt-key " for " params)
 	    (apply sqlite3:execute (hash-table-ref queries stmt-key) params)

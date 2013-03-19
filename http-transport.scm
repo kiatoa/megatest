@@ -109,9 +109,7 @@
 								"</body>")
 						    headers: '((content-type text/plain)))))
 				  (else (continue))))))))
-    (http-transport:try-start-server ipaddrstr start-port)
-    ;; lite3:finalize! db)))
-    ))
+    (http-transport:try-start-server ipaddrstr start-port)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
@@ -254,7 +252,19 @@
               (thread-sleep! 1)
               (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
 	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
-	      (debug:print-info 0 "Average cached write time " (/ *writes-total-delay* *number-of-writes*) " ms")
+	      (debug:print-info 0 "Average cached write time "
+				(if (eq? *number-of-writes* 0)
+				    "n/a (no writes)"
+				    (/ *writes-total-delay*
+				       *number-of-writes*))
+				" ms")
+	      (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+	      (debug:print-info 0 "Average non-cached time   "
+				(if (eq? *number-non-write-queries* 0)
+				    "n/a (no queries)"
+				    (/ *total-non-write-delay* 
+				       *number-non-write-queries*))
+				" ms")
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)))))))
 
