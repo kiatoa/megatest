@@ -482,13 +482,21 @@ Misc
 	 (testpatt "%")
 	 (keypatts (map (lambda (k)(list (vector-ref k 0) "%")) keys))
 	 (states   '())
-	 (statuses '()))
+	 (statuses '())
+	 (nextmintime (current-milliseconds)))
     (iup:show (main-panel))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)
-			 (let ((changes (run-update keys data runname keypatts testpatt states statuses 'full)))
-			   (debug:print 0 "CHANGE(S): " (car changes) "..."))))))
+			 ;; Want to dedicate no more than 50% of the time to this so skip if
+			 ;; 2x delta time has not passed since last query
+			 (if (< nextmintime (current-milliseconds))
+			     (let* ((starttime (current-milliseconds))
+				    (changes   (run-update keys data runname keypatts testpatt states statuses 'full))
+				    (endtime   (current-milliseconds)))
+			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
+			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
+			     (debug:print-info 11 "Server overloaded"))))))
 
 (newdashboard)    
 (iup:main-loop)

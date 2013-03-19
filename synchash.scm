@@ -85,17 +85,16 @@
      removs)
     (list newdat removs))) ;; synchash))
 
-
 (define *synchashes* (make-hash-table))
 
 (define (synchash:server-get db proc synckey keynum . params)
   ;; (debug:print-info 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
-  (let* ((synchash (hash-table-ref/default *synchashes* synckey #f))
-	 (newdat   (apply (case proc
-			    ((db:get-runs) db:get-runs)
-			    ((db:get-tests-for-runs) db:get-tests-for-runs)
-			    (else print))
-			  db params))
+  (let* ((synchash  (hash-table-ref/default *synchashes* synckey #f))
+	 (newdat    (apply (case proc
+			     ((db:get-runs) db:get-runs)
+			     ((db:get-tests-for-runs) db:get-tests-for-runs)
+			     (else print))
+			   db params))
 	 (postdat  #f)
 	 (make-indexed (lambda (x)
 			 (list (vector-ref x keynum) x))))
