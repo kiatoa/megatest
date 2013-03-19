@@ -7,9 +7,9 @@ SRCFILES = common.scm items.scm launch.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm zmq-transport.scm http-transport.scm \
-           client.scm
+           client.scm gutils.scm synchash.scm
 
-GUISRCF  = dashboard.scm dashboard-tests.scm dashboard-guimonitor.scm dashboard-main.scm
+GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
 OFILES   = $(SRCFILES:%.scm=%.o)
 GOFILES  = $(GUISRCF:%.scm=%.o)
@@ -18,13 +18,16 @@ ADTLSCR=mt_laststep mt_runstep mt_ezstep
 HELPERS=$(addprefix $(PREFIX)/bin/,$(ADTLSCR))
 DEPLOYHELPERS=$(addprefix $(DEPLOYTARG)/,$(ADTLSCR))
 MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
-all : mtest dboard
+all : mtest dboard newdashboard
 
 mtest: $(OFILES) megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
-dboard : $(OFILES) $(GOFILES)
-	csc $(OFILES) $(GOFILES) -o dboard
+dboard : $(OFILES) $(GOFILES) dashboard.scm
+	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
+
+newdashboard : newdashboard.scm $(OFILES)
+	csc $(OFILES) newdashboard.scm -o newdashboard
 
 $(DEPLOYTARG)/megatest : $(OFILES) megatest.o
 	csc -deployed $(CSCOPTS) $(OFILES) megatest.o -o $(DEPLOYTARG)/megatest

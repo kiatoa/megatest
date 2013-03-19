@@ -21,7 +21,7 @@ TARGET     = "-target ubuntu/nfs/none"
 all : test1 test2 test3 test4 test5
 
 server :
-	(cd ..;make install) && \
+	(cd ..;make;make install) && \
 	(cd fullrun;../../bin/megatest -server - -debug 22) &
 
 test0 : cleanprep
@@ -66,7 +66,7 @@ test6: fullprep
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p /tmp/mt_runs /tmp/mt_links
-	cd ..;make install
+	cd ..;make;make install
 	rm -f */logging.db
 	touch cleanprep
 

@@ -9,35 +9,116 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-;;======================================================================
-;; Main Megatest Panel
-;;======================================================================
-
 (use format)
 (require-library iup)
 (import (prefix iup iup:))
-
 (use canvas-draw)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
 
-(declare (unit dashboard-main))
-(declare (uses common))
-(declare (uses keys))
+(declare (uses margs))
+(declare (uses launch))
+(declare (uses megatest-version))
+(declare (uses gutils))
 (declare (uses db))
-(declare (uses tasks))
+(declare (uses server))
+(declare (uses synchash))
 
 (include "common_records.scm")
 (include "db_records.scm")
-(include "run_records.scm")
-(include "task_records.scm")
+(include "key_records.scm")
+
+(define help (conc 
+"Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
+  version " megatest-version "
+  license GPL, Copyright (C) Matt Welland 2011
+
+Usage: dashboard [options]
+  -h                : this help
+  -server host:port : connect to host:port instead of db access
+  -test testid      : control test identified by testid
+  -guimonitor       : control panel for runs
+
+Misc
+  -rows N         : set number of rows
+"))
+
+;; process args
+(define remargs (args:get-args 
+		 (argv)
+		 (list  "-rows"
+			"-run"
+			"-test"
+			"-debug"
+			"-host" 
+			) 
+		 (list  "-h"
+			"-guimonitor"
+			"-main"
+			"-v"
+			"-q"
+		       )
+		 args:arg-hash
+		 0))
+
+(if (args:get-arg "-h")
+    (begin
+      (print help)
+      (exit)))
+
+(if (not (setup-for-run))
+    (begin
+      (print "Failed to find megatest.config, exiting") 
+      (exit 1)))
+
+(if (args:get-arg "-host")
+    (begin
+      (set! *runremote* (string-split (args:get-arg "-host" ":")))
+      (client:launch))
+    (client:launch))
+
+
+(debug:setup)
+
+(define *tim* (iup:timer))
+(define *ord* #f)
+(iup:attribute-set! *tim* "TIME" 300)
+(iup:attribute-set! *tim* "RUN" "YES")
+
+(define (message-window msg)
+  (iup:show
+   (iup:dialog
+    (iup:vbox 
+     (iup:label msg #:margin "40x40")))))
+
+(define (iuplistbox-fill-list lb items . default)
+  (let ((i 1)
+	(selected-item (if (null? default) #f (car default))))
+    (iup:attribute-set! lb "VALUE" (if selected-item selected-item ""))
+    (for-each (lambda (item)
+		(iup:attribute-set! lb (number->string i) item)
+		(if selected-item
+		    (if (equal? selected-item item)
+			(iup:attribute-set! lb "VALUE" item))) ;; (number->string i))))
+		(set! i (+ i 1)))
+	      items)
+    i))
+
+(define (pad-list l n)(append l (make-list (- n (length l)))))
+
+
+(define (mkstr . x)
+  (string-intersperse (map conc x) ","))
+
+(define (update-search x val)
+  (hash-table-set! *searchpatts* x val))
 
 (define (main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
    (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
 		       (iup:menu-item "Open"  action: (lambda (obj)
-							(show (iup:file-dialog))
+							(iup:show (iup:file-dialog))
 							(print "File->open " obj)))
 		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
 		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
@@ -206,6 +287,8 @@
   (iup:hbox 
    (iup:frame #:title "Tests browser")))
 
+(define *runs-matrix* #f)
+
 (define (runs)
   (let* ((runs-matrix     (iup:matrix
 			   #:expand "YES"
@@ -249,21 +332,12 @@
 ;;     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
 ;;     (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
 
-    (for-each
-     (lambda (mat)
-       (iup:attribute-set! mat "0:1" "ubuntu\nnfs\nnone")
-       (iup:attribute-set! mat "0:0" "Test")
-       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
-       ;; (iup:attribute-set! mat "FIXTOTEXT" "C1")
-       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
-       (iup:attribute-set! mat "WIDTH1" "120")
-       (iup:attribute-set! mat "WIDTH0" "100")
-       )
-     (list runs-matrix))
+    (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
+    (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
 ;;    (iup:attribute-set! validvals-matrix "WIDTH1" "290")
 ;;    (iup:attribute-set! envovrd-matrix   "WIDTH1" "290")
-    
+    (set! *runs-matrix* runs-matrix)
     (iup:hbox
      (iup:frame 
       #:title "Runs browser"
@@ -285,3 +359,147 @@
      (iup:attribute-set! tabtop "TABTITLE1" "megatest.config") 
      (iup:attribute-set! tabtop "TABTITLE2" "runconfigs.config")
      tabtop)))
+
+;;======================================================================
+;; Process runs
+;;======================================================================
+
+(define *data* (make-hash-table))
+(hash-table-set! *data* "runid-to-col"    (make-hash-table))
+(hash-table-set! *data* "testname-to-row" (make-hash-table))
+
+;; TO-DO
+;;  1. Make "data" hash-table hierarchial store of all displayed data
+;;  2. Update synchash to understand "get-runs", "get-tests" etc.
+;;  3. Add extraction of filters to synchash calls
+;;
+;; Mode is 'full or 'incremental for full refresh or incremental refresh
+(define (run-update keys data runname keypatts testpatt states statuses mode)
+  (let* (;; count and offset => #f so not used
+	 ;; the synchash calls modify the "data" hash
+	 (get-runs-sig  (conc (client:get-signature) " get-runs"))
+	 (get-tests-sig (conc (client:get-signature) " get-tests"))
+	 (run-changes  (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 ;; Now can calculate the run-ids
+	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
+	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses))
+	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
+	 (header       (hash-table-ref/default runs-hash "header" #f))
+	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+			     (lambda (a b)
+			       (let* ((record-a (hash-table-ref runs-hash a))
+				      (record-b (hash-table-ref runs-hash b))
+				      (time-a   (db:get-value-by-header record-a header "event_time"))
+				      (time-b   (db:get-value-by-header record-b header "event_time")))
+				 (> time-a time-b)))
+			     ))
+	 (runid-to-col    (hash-table-ref *data* "runid-to-col"))
+	 (testname-to-row (hash-table-ref *data* "testname-to-row")) 
+	 (colnum       1)
+	 (rownum       0)) ;; rownum = 0 is the header
+	 ;; tests related stuff
+	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
+
+    ;; Given a run-id and testname/item_path calculate a cell R:C
+
+
+    ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
+    (for-each (lambda (run-id)
+		(let* (;; (run-id    (db:get-value-by-header rundat header "id"))
+		       (run-record (hash-table-ref/default runs-hash run-id #f))
+		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
+					  (map key:get-fieldname keys)))
+		       (run-name   (db:get-value-by-header run-record header "runname"))
+		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name)))
+		    (iup:attribute-set! *runs-matrix* (conc rownum ":" colnum) col-name)
+		    (hash-table-set! runid-to-col run-id (list colnum run-record))
+		    (set! colnum (+ colnum 1))))
+		run-ids)
+
+    ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
+    ;; Do this analysis in the order of the run-ids, the most recent run wins
+    (for-each (lambda (run-id)
+		(let* ((new-test-dat   (car test-changes))
+		       (removed-tests  (cadr test-changes))
+		       (tests          (sort (map cadr (filter (lambda (testrec)
+								 (eq? run-id (db:mintest-get-run_id (cadr testrec))))
+							       new-test-dat))
+					     (lambda (a b)
+					       (let ((time-a (db:mintest-get-event_time a))
+						     (time-b (db:mintest-get-event_time b)))
+						 (> time-a time-b)))))
+		       ;; test-changes is a list of (( id record ) ... )
+		       ;; Get list of test names sorted by time, remove tests
+		       (test-names (delete-duplicates (map (lambda (t)
+							     (let ((i (db:mintest-get-item_path t))
+								   (n (db:mintest-get-testname  t)))
+							       (if (string=? i "")
+								   (conc "   " i)
+								   n)))
+							   tests)))
+		       (colnum     (car (hash-table-ref runid-to-col run-id))))
+		  ;; for each test name get the slot if it exists and fill in the cell
+		  ;; or take the next slot and fill in the cell, deal with items in the
+		  ;; run view panel? The run view panel can have a tree selector for
+		  ;; browsing the tests/items
+
+		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
+		  (for-each (lambda (test)
+			      (let* ((state    (db:mintest-get-state test))
+				     (status   (db:mintest-get-status test))
+				     (testname (db:mintest-get-testname test))
+				     (itempath (db:mintest-get-item_path test))
+				     (fullname (conc testname "/" itempath))
+				     (dispname (if (string=? itempath "") testname (conc "   " itempath)))
+				     (rownum   (hash-table-ref/default testname-to-row fullname #f)))
+				(if (not rownum)
+				    (let ((rownums (hash-table-values testname-to-row)))
+				      (set! rownum (if (null? rownums)
+						       1
+						       (+ 1 (apply max rownums))))
+				      (hash-table-set! testname-to-row fullname rownum)
+				      ;; create the label
+				      (iup:attribute-set! *runs-matrix* (conc rownum ":" 0) dispname)
+				      ))
+				;; set the cell text and color
+				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
+				(iup:attribute-set! *runs-matrix* (conc rownum ":" colnum)
+						    (if (string=? state "COMPLETED")
+							status
+							state))
+				(iup:attribute-set! *runs-matrix* (conc "BGCOLOR" rownum ":" colnum) (gutils:get-color-for-state-status state status))
+				))
+			    tests)))
+	      run-ids)
+
+    (iup:attribute-set! *runs-matrix* "REDRAW" "ALL")
+    ;; (debug:print 2 "run-changes: " run-changes)
+    ;; (debug:print 2 "test-changes: " test-changes)
+    (list run-changes test-changes)))
+
+(define (newdashboard)
+  (let* ((data     (make-hash-table))
+	 (keys     (cdb:remote-run db:get-keys #f))
+	 (runname  "%")
+	 (testpatt "%")
+	 (keypatts (map (lambda (k)(list (vector-ref k 0) "%")) keys))
+	 (states   '())
+	 (statuses '())
+	 (nextmintime (current-milliseconds)))
+    (iup:show (main-panel))
+    (iup:callback-set! *tim*
+		       "ACTION_CB"
+		       (lambda (x)
+			 ;; Want to dedicate no more than 50% of the time to this so skip if
+			 ;; 2x delta time has not passed since last query
+			 (if (< nextmintime (current-milliseconds))
+			     (let* ((starttime (current-milliseconds))
+				    (changes   (run-update keys data runname keypatts testpatt states statuses 'full))
+				    (endtime   (current-milliseconds)))
+			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
+			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
+			     (debug:print-info 11 "Server overloaded"))))))
+
+(newdashboard)    
+(iup:main-loop)

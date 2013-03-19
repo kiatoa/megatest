@@ -19,6 +19,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
+(declare (uses synchash))
 (declare (uses http-transport))
 (declare (uses zmq-transport))
 
@@ -40,8 +41,6 @@
 ;; Call this to start the actual server
 ;;
 
-(define *db:process-queue-mutex* (make-mutex))
-
 ;; all routes though here end in exit ...
 (define (server:launch transport)
   (if (not *toppath*)
@@ -59,6 +58,39 @@
      (debug:print "WARNING: unrecognised transport " transport)
      (exit))))
 
+;;======================================================================
+;; Q U E U E   M A N A G E M E N T
+;;======================================================================
+
+;; We don't want to flush the queue if it was just flushed
+(define *server:last-write-flush* (current-milliseconds))
+
+;; Flush the queue every third of a second. Can we assume that setup-for-run 
+;; has already been done?
+(define (server:write-queue-handler)
+  (if (setup-for-run)
+      (let ((db (open-db)))
+	(let loop ()
+	  (let ((last-write-flush-time #f))
+	    (mutex-lock! *incoming-mutex*)
+	    (set! last-write-flush-time *server:last-write-flush*)
+	    (mutex-unlock! *incoming-mutex*)
+	    (if (> (- (current-milliseconds) last-write-flush-time) 400)
+		(begin
+		  (mutex-lock! *db:process-queue-mutex*)
+		  (db:process-cached-writes db)
+		  (mutex-unlock! *db:process-queue-mutex*)
+		  (thread-sleep! 0.5))))
+	  (loop)))
+      (begin
+	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
+	(exit 1))))
+    
+;;======================================================================
+;; S E R V E R   U T I L I T I E S 
+;;======================================================================
+
+;; Generate a unique signature for this server
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 
 			 (with-output-to-string
@@ -66,9 +98,6 @@
 			     (write (list (current-directory)
 					  (argv)))))))
 
-;;======================================================================
-;; S E R V E R   U T I L I T I E S 
-;;======================================================================
 
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned

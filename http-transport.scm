@@ -109,9 +109,7 @@
 								"</body>")
 						    headers: '((content-type text/plain)))))
 				  (else (continue))))))))
-    (http-transport:try-start-server ipaddrstr start-port)
-    ;; lite3:finalize! db)))
-    ))
+    (http-transport:try-start-server ipaddrstr start-port)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
@@ -252,7 +250,21 @@
               (set! *time-to-exit* #t)
               (tasks:server-deregister-self tdb (get-host-name))
               (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+              (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+	      (debug:print-info 0 "Average cached write time "
+				(if (eq? *number-of-writes* 0)
+				    "n/a (no writes)"
+				    (/ *writes-total-delay*
+				       *number-of-writes*))
+				" ms")
+	      (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+	      (debug:print-info 0 "Average non-cached time   "
+				(if (eq? *number-non-write-queries* 0)
+				    "n/a (no queries)"
+				    (/ *total-non-write-delay* 
+				       *number-non-write-queries*))
+				" ms")
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)))))))
 
@@ -275,9 +287,11 @@
 					(if (args:get-arg "-server")
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
-		   (th3 (make-thread (lambda ()(http-transport:keep-running)) "Keep running")))
+		   (th3 (make-thread http-transport:keep-running "Keep running"))
+		   (th1 (make-thread server:write-queue-handler  "write queue")))
 	      (thread-start! th2)
 	      (thread-start! th3)
+	      (thread-start! th1)
 	      (set! *didsomething* #t)
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
