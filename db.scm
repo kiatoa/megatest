@@ -709,6 +709,7 @@
 (define (db:get-tests-for-run db run-id testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f) ;; 'rundir 'event_time
+			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
 			      )
   (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
@@ -728,7 +729,7 @@
 				    (string-intersperse statuses "','")
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+	 (qry             (conc "SELECT " qryvals
 				" FROM tests WHERE run_id=? "
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
@@ -749,6 +750,14 @@
     (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
+;; get a useful subset of the tests data (used in dashboard
+;; use db:mintests-get-{id ,run_id,testname ...}
+(define (db:get-tests-for-runs-mindata db run-ids testpatt states status)
+  (db:get-tests-for-runs db run-ids testpatt states status qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+
+
+;; NB // This is get tests for "runs" (note the plural!!)
+;;
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
@@ -756,7 +765,8 @@
 ;; run-ids is a list of run-ids or a single number
 (define (db:get-tests-for-runs db run-ids testpatt states statuses 
 			      #!key (not-in #t)
-			      (sort-by #f)) ;; 'rundir 'event_time
+			      (sort-by #f)
+			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
   (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
@@ -775,7 +785,7 @@
 				    (string-intersperse statuses "','")
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+	 (qry             (conc "SELECT " qryvals 
 				" FROM tests WHERE " 
 				(if run-ids
 				    (if (list? run-ids)

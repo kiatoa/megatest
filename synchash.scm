@@ -94,7 +94,7 @@
   (let* ((synchash  (hash-table-ref/default *synchashes* synckey #f))
 	 (newdat    (apply (case proc
 			     ((db:get-runs) db:get-runs)
-			     ((db:get-tests-for-runs) db:get-tests-for-runs)
+			     ((db:get-tests-for-runs-mindata) db:get-tests-for-runs-mindata)
 			     (else print))
 			   db params))
 	 (postdat  #f)

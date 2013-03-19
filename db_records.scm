@@ -32,6 +32,17 @@
 (define-inline (db:get-header vec)(vector-ref vec 0))
 (define-inline (db:get-rows   vec)(vector-ref vec 1))
 
+;; make-vector-record "" db mintest id run_id testname state status event_time item_path
+;;
+(define (make-db:mintest)(make-vector 7))
+(define-inline (db:mintest-get-id           vec)    (vector-ref  vec 0))
+(define-inline (db:mintest-get-run_id       vec)    (vector-ref  vec 1))
+(define-inline (db:mintest-get-testname     vec)    (vector-ref  vec 2))
+(define-inline (db:mintest-get-state        vec)    (vector-ref  vec 3))
+(define-inline (db:mintest-get-status       vec)    (vector-ref  vec 4))
+(define-inline (db:mintest-get-event_time   vec)    (vector-ref  vec 5))
+(define-inline (db:mintest-get-item_path    vec)    (vector-ref  vec 6))
+
 ;; make-vector-record db testmeta id testname author owner description reviewed iterated avg_runtime avg_disk
 (define (make-db:testmeta)(make-vector 10 ""))
 (define-inline (db:testmeta-get-id            vec)    (vector-ref  vec 0))
