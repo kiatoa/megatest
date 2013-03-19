@@ -464,7 +464,10 @@ Misc
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(iup:attribute-set! *runs-matrix* (conc rownum ":" colnum) status)
+				(iup:attribute-set! *runs-matrix* (conc rownum ":" colnum)
+						    (if (string=? state "COMPLETED")
+							status
+							state))
 				(iup:attribute-set! *runs-matrix* (conc "BGCOLOR" rownum ":" colnum) (gutils:get-color-for-state-status state status))
 				))
 			    tests)))
