@@ -83,8 +83,20 @@ Misc
 
 (define *tim* (iup:timer))
 (define *ord* #f)
-(define *runs-matrix* #f) ;; This is the table of the runs, need it to be global (for now)
-(define *runs-data*   #f)
+
+(define *data* (make-vector 6 #f))
+(define-inline (dboard:data-get-runs          vec)    (vector-ref  vec 0))
+(define-inline (dboard:data-get-tests         vec)    (vector-ref  vec 1))
+(define-inline (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
+(define-inline (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
+(define-inline (dboard:data-get-tree-keys     vec)    (vector-ref  vec 4))
+(define-inline (dboard:data-set-runs!         vec val)(vector-set! vec 0 val))
+(define-inline (dboard:data-set-tests!        vec val)(vector-set! vec 1 val))
+(define-inline (dboard:data-set-runs-matrix!  vec val)(vector-set! vec 2 val))
+(define-inline (dboard:data-set-tests-tree!   vec val)(vector-set! vec 3 val))
+(define-inline (dboard:data-set-tree-keys!    vec val)(vector-set! vec 4 val))
+
+(dboard:data-set-tree-keys! *data* (make-hash-table))
 
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
@@ -288,9 +300,6 @@ Misc
   (iup:vbox
    (iup:frame #:title "Default")))
 
-(define *tests-treebox* #f)
-(define *tests-node-map* (make-hash-table)) ;; map paths to nodes
-
 ;;======================================================================
 ;; tree stuff
 ;;======================================================================
@@ -303,24 +312,60 @@ Misc
 ;;
 (define (tree-find-node obj path)
   ;; start at the base of the tree
-  (let loop ((hed      (car path))
-	     (tal      (cdr path))
-	     (depth    0)
-	     (nodenum  0)
-)
-;;	     (maxdepth 9999999999999)) ;; Use TOTALCHILDCOUNTid
-    (iup:attribute-set! obj "VALUE" nodenum)
-    (if (not (equal? (string->number (iup:attribute obj "VALUE")) nodenum))
-	;; when not equal we have reached the end of the line
-	#f
-	(let ((node-depth (string->number (iup:attribute obj (conc "DEPTH" nodenum))))
-	      (node-title (iup:attribute obj (conc "TITLE" nodenum))))
-	  (if (and (equal? depth node-depth)
-		   (equal? hed   node-title)) ;; yep, this is the one!
-	      (if (null? tal) ;; end of the line
-		  nodenum
-		  (loop (car tal)(cdr tal)(+ depth 1) nodenum))
-	      (loop hed tal depth (+ nodenum 1)))))))
+  (if (null? path)
+      #f ;; or 0 ????
+      (let loop ((hed      (car path))
+		 (tal      (cdr path))
+		 (depth    0)
+		 (nodenum  0))
+	;; nodes in iup tree are 100% sequential so iterate over nodenum
+	(if (iup:attribute obj (conc "DEPTH" nodenum)) ;; end when no more nodes
+	    (let ((node-depth (string->number (iup:attribute obj (conc "DEPTH" nodenum))))
+		  (node-title (iup:attribute obj (conc "TITLE" nodenum))))
+	      (if (and (equal? depth node-depth)
+		       (equal? hed   node-title)) ;; yep, this is the one!
+		  (if (null? tal) ;; end of the line
+		      nodenum
+		      (loop (car tal)(cdr tal)(+ depth 1)(+ 1 nodenum)))
+		  ;; this is the case where we found part of the hierarchy but not 
+		  ;; all of it, i.e. the node-depth went from deep to less deep
+		  (if (> depth node-depth) ;; (+ 1 node-depth))
+		      #f
+		      (loop hed tal depth (+ nodenum 1)))))
+	    #f))))
+
+;; top is the top node name zeroeth node VALUE=0
+(define (tree-add-node obj top nodelst)
+  (if (not (iup:attribute obj "TITLE0"))
+      (iup:attribute-set! obj "ADDBRANCH0" top))
+  (cond
+   ((not (string=? top (iup:attribute obj "TITLE0")))
+    (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
+   ((null? nodelst))
+   (else
+    (let loop ((hed      (car nodelst))
+	       (tal      (cdr nodelst))
+	       (depth    1)
+	       (pathl    (list top)))
+      ;; Because the tree dialog changes node numbers when
+      ;; nodes are added or removed we must look up nodes
+      ;; each and every time. 0 is the top node so default
+      ;; to that.
+      (let* ((newpath    (append pathl (list hed)))
+	     (parentnode (tree-find-node obj pathl))
+	     (nodenum    (tree-find-node obj newpath)))
+	;; Add the branch under lastnode if not found
+	(if (not nodenum)
+	    (begin
+	      (iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
+	      (if (null? tal)
+		  #t
+		  ;; reset to top
+		  (loop (car nodelst)(cdr nodelst) 1 (list top)))) 
+	    (if (null? tal) ;; if null here then this path has already been added
+		#t
+		(loop (car tal)(cdr tal)(+ depth 1) newpath))))))))
+
 
 ;; Test browser
 (define (tests)
@@ -328,7 +373,9 @@ Misc
    (let* ((tb      (iup:treebox
 		    #:selection_cb (lambda (obj id state)
 				     (print "obj: " obj ", id: " id ", state: " state)))))
-     (set! *tests-treebox* tb)
+     (iup:attribute-set! tb "VALUE" "0")
+     (iup:attribute-set! tb "NAME" "Runs")
+     (dboard:data-set-tests-tree! *data* tb)
      tb)
    (iup:vbox
     )))
@@ -350,7 +397,7 @@ Misc
     (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
-    (set! *runs-matrix* runs-matrix)
+    (dboard:data-set-runs-matrix! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
       #:title "Runs browser"
@@ -385,9 +432,10 @@ Misc
 ;; Process runs
 ;;======================================================================
 
-(define *data* (make-hash-table))
-(hash-table-set! *data* "runid-to-col"    (make-hash-table))
-(hash-table-set! *data* "testname-to-row" (make-hash-table))
+;; MOVE THIS INTO *data*
+(define *cachedata* (make-hash-table))
+(hash-table-set! *cachedata* "runid-to-col"    (make-hash-table))
+(hash-table-set! *cachedata* "testname-to-row" (make-hash-table))
 
 ;; TO-DO
 ;;  1. Make "data" hash-table hierarchial store of all displayed data
@@ -415,8 +463,8 @@ Misc
 				      (time-b   (db:get-value-by-header record-b header "event_time")))
 				 (> time-a time-b)))
 			     ))
-	 (runid-to-col    (hash-table-ref *data* "runid-to-col"))
-	 (testname-to-row (hash-table-ref *data* "testname-to-row")) 
+	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
+	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
 	 (rownum       0) ;; rownum = 0 is the header
 	 ;; These are used in populating the tests tree
@@ -438,38 +486,13 @@ Misc
 					  (map key:get-fieldname keys)))
 		       (run-name   (db:get-value-by-header run-record header "runname"))
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name)))
-		    (iup:attribute-set! *runs-matrix* (conc rownum ":" colnum) col-name)
-		    (hash-table-set! runid-to-col run-id (list colnum run-record))
-		    ;; Here we update *tests-treebox* and *tests-node-map* 
-		    (let loop ((hed      (car key-vals))
-			       (tal      (cdr key-vals))
-			       (depth    0)
-			       (pathl    '()))
-		      (let* ((newpath (append pathl (list hed)))
-			     (nodenum (tree-find-node *tests-treebox* newpath)))
-			(debug:print-info 0 "nodenum: " nodenum ", newpath: " newpath)
-			(if nodenum ;;
-			    (if (not (null? tal)) ;; if null here then this path has already been added
-				(loop (car tal)(cdr tal)(+ depth 1) newpath))
-			    ;; (if (eq? depth 0)
-			    (iup:attribute-set! *tests-treebox* "INSERTBRANCH" hed)
-			    ;; (debug:print 0 "ERROR: Failed to add " hed " no parent matching " pathl)))))
-			    )))
-
-
-;;		      (let* ((path         (string-intersperse pathl "/"))
-;;			     (parent-found (hash-table-ref/default *tests-node-map* prevpath #f))
-;;			     (found        (hash-table-ref/default *tests-node-map* path #f))
-;;			     (refnode      (if parent-found parent-found 0))) ;; add to this node
-;;			(if (not found) ;; this level in the hierarchy might have already been added
-;;			    (begin
-;;			      ;; first add to the tree
-;;			      (iup:attribute-set! *tests-treebox* (conc "ADDBRANCH" (if refnode refnode 0)) hed)
-;;			      (hash-table-set! *tests-node-map* path (iup:attribute *tests-treebox* "PARENT")))
-;;		      (if (not (null? tal))
-;;			  (loop (car tal)(cdr tal)(+ depth 1)(conc path "/" hed))))
-		    (set! colnum (+ colnum 1))))
-		run-ids)
+		  (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+				      (conc rownum ":" colnum) col-name)
+		  (hash-table-set! runid-to-col run-id (list colnum run-record))
+		  ;; Here we update the tests treebox and tree keys
+		  (tree-add-node (dboard:data-get-tests-tree *data*) "Runs" key-vals)
+		  (set! colnum (+ colnum 1))))
+	      run-ids)
 
     ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
     ;; Do this analysis in the order of the run-ids, the most recent run wins
@@ -514,40 +537,29 @@ Misc
 						       (+ 1 (apply max rownums))))
 				      (hash-table-set! testname-to-row fullname rownum)
 				      ;; create the label
-				      (iup:attribute-set! *runs-matrix* (conc rownum ":" 0) dispname)
+				      (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+							  (conc rownum ":" 0) dispname)
 				      ))
 				;; set the cell text and color
 				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(iup:attribute-set! *runs-matrix* (conc rownum ":" colnum)
+				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+						    (conc rownum ":" colnum)
 						    (if (string=? state "COMPLETED")
 							status
 							state))
-				(iup:attribute-set! *runs-matrix* (conc "BGCOLOR" rownum ":" colnum) (gutils:get-color-for-state-status state status))
+				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+						    (conc "BGCOLOR" rownum ":" colnum)
+						    (gutils:get-color-for-state-status state status))
 				))
 			    tests)))
 	      run-ids)
 
-    (iup:attribute-set! *runs-matrix* "REDRAW" "ALL")
+    (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
     ;; (debug:print 2 "run-changes: " run-changes)
     ;; (debug:print 2 "test-changes: " test-changes)
     (list run-changes test-changes)))
 
-;; Given the master data struct and a key fill out the tree
-;; browser for tests
-;;
-;; node-path is a hash of node-id to path key1/key2/key3/runname/testname/itempath
-;;
-;; (define (test-tree-update testtree runsdata node-path)
-;;   (let* ((runs-sig   (conc (client:get-signature " get-runs")))
-;; 	 (tests-sig  (conc (client:get-signature) " get-tests"))
-;; 	 (runs-data  (hash-table-ref/default runsdata #f))
-;; 	 (tests-data (hash-table-ref/default runsdata #f)))
-;;     (if (not runs-data) 
-;; 	(debug:print 0 "ERROR: no data found for " runs-sig)
-;; 	(for-each (lambda (run-id)
-;; 		    (let ((run-dat (hash-table-ref runs-data run-id)))
-		    
-
+;; 
 (define (newdashboard)
   (let* ((data     (make-hash-table))
 	 (keys     (cdb:remote-run db:get-keys #f))
@@ -557,7 +569,7 @@ Misc
 	 (states   '())
 	 (statuses '())
 	 (nextmintime (current-milliseconds)))
-    (set! *runs-data* data) ;; make this data available to the rest of the application
+    (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
     (iup:show (main-panel))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
