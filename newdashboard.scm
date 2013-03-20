@@ -89,14 +89,14 @@ Misc
 (define-inline (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define-inline (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
 (define-inline (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
-(define-inline (dboard:data-get-tree-keys     vec)    (vector-ref  vec 4))
+(define-inline (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
 (define-inline (dboard:data-set-runs!         vec val)(vector-set! vec 0 val))
 (define-inline (dboard:data-set-tests!        vec val)(vector-set! vec 1 val))
 (define-inline (dboard:data-set-runs-matrix!  vec val)(vector-set! vec 2 val))
 (define-inline (dboard:data-set-tests-tree!   vec val)(vector-set! vec 3 val))
-(define-inline (dboard:data-set-tree-keys!    vec val)(vector-set! vec 4 val))
+(define-inline (dboard:data-set-run-keys!     vec val)(vector-set! vec 4 val))
 
-(dboard:data-set-tree-keys! *data* (make-hash-table))
+(dboard:data-set-run-keys! *data* (make-hash-table))
 
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
@@ -375,6 +375,7 @@ Misc
 				     (print "obj: " obj ", id: " id ", state: " state)))))
      (iup:attribute-set! tb "VALUE" "0")
      (iup:attribute-set! tb "NAME" "Runs")
+     (iup:attribute-set! tb "ADDEXPANDED" "NO")
      (dboard:data-set-tests-tree! *data* tb)
      tb)
    (iup:vbox
@@ -480,24 +481,26 @@ Misc
     ;;
     ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
     (for-each (lambda (run-id)
-		(let* (;; (run-id    (db:get-value-by-header rundat header "id"))
-		       (run-record (hash-table-ref/default runs-hash run-id #f))
+		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
 		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
 					  (map key:get-fieldname keys)))
 		       (run-name   (db:get-value-by-header run-record header "runname"))
-		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name)))
+		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+		       (run-path   (append key-vals (list run-name))))
+		  (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
 		  (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 				      (conc rownum ":" colnum) col-name)
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
-		  (tree-add-node (dboard:data-get-tests-tree *data*) "Runs" key-vals)
+		  (tree-add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name)))
 		  (set! colnum (+ colnum 1))))
 	      run-ids)
 
     ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
     ;; Do this analysis in the order of the run-ids, the most recent run wins
     (for-each (lambda (run-id)
-		(let* ((new-test-dat   (car test-changes))
+		(let* ((run-path       (hash-table-ref (dboard:data-get-run-keys *data*) run-id))
+		       (new-test-dat   (car test-changes))
 		       (removed-tests  (cadr test-changes))
 		       (tests          (sort (map cadr (filter (lambda (testrec)
 								 (eq? run-id (db:mintest-get-run_id (cadr testrec))))
@@ -530,6 +533,10 @@ Misc
 				     (fullname (conc testname "/" itempath))
 				     (dispname (if (string=? itempath "") testname (conc "   " itempath)))
 				     (rownum   (hash-table-ref/default testname-to-row fullname #f)))
+				(tree-add-node (dboard:data-get-tests-tree *data*) "Runs" 
+					       (append run-path (if (equal? itempath "") 
+								    (list testname)
+								    (list testname itempath))))
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
