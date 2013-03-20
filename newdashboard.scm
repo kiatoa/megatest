@@ -83,6 +83,9 @@ Misc
 
 (define *tim* (iup:timer))
 (define *ord* #f)
+(define *runs-matrix* #f) ;; This is the table of the runs, need it to be global (for now)
+(define *runs-data*   #f)
+
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
 
@@ -133,8 +136,8 @@ Misc
 		       ;;  )					     
 		       ))))
 
-
-
+;; mtest is actually the megatest.config file
+;;
 (define (mtest)
   (let* ((curr-row-num     0)
 	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
@@ -279,16 +282,59 @@ Misc
 	 tabs))
        ))))
 
+;; The runconfigs.config file
+;;
 (define (rconfig)
   (iup:vbox
    (iup:frame #:title "Default")))
 
+(define *tests-treebox* #f)
+(define *tests-node-map* (make-hash-table)) ;; map paths to nodes
+
+;;======================================================================
+;; tree stuff
+;;======================================================================
+
+;; path is a list of nodes, each the child of the previous
+;; this routine returns the id so another node can be added
+;; either as a leaf or as a branch
+;;
+;; BUG: This needs a stop sensor for when a branch is exhausted
+;;
+(define (tree-find-node obj path)
+  ;; start at the base of the tree
+  (let loop ((hed      (car path))
+	     (tal      (cdr path))
+	     (depth    0)
+	     (nodenum  0)
+)
+;;	     (maxdepth 9999999999999)) ;; Use TOTALCHILDCOUNTid
+    (iup:attribute-set! obj "VALUE" nodenum)
+    (if (not (equal? (string->number (iup:attribute obj "VALUE")) nodenum))
+	;; when not equal we have reached the end of the line
+	#f
+	(let ((node-depth (string->number (iup:attribute obj (conc "DEPTH" nodenum))))
+	      (node-title (iup:attribute obj (conc "TITLE" nodenum))))
+	  (if (and (equal? depth node-depth)
+		   (equal? hed   node-title)) ;; yep, this is the one!
+	      (if (null? tal) ;; end of the line
+		  nodenum
+		  (loop (car tal)(cdr tal)(+ depth 1) nodenum))
+	      (loop hed tal depth (+ nodenum 1)))))))
+
+;; Test browser
 (define (tests)
   (iup:hbox 
-   (iup:frame #:title "Tests browser")))
-
-(define *runs-matrix* #f)
-
+   (let* ((tb      (iup:treebox
+		    #:selection_cb (lambda (obj id state)
+				     (print "obj: " obj ", id: " id ", state: " state)))))
+     (set! *tests-treebox* tb)
+     tb)
+   (iup:vbox
+    )))
+       
+;; Overall runs browser
+;;
 (define (runs)
   (let* ((runs-matrix     (iup:matrix
 			   #:expand "YES"
@@ -300,43 +346,10 @@ Misc
 			   #:numlin-visible 7
 			   #:click-cb (lambda (obj lin col status)
 					(print "obj: " obj " lin: " lin " col: " col " status: " status)))))
-;;     (iup:attribute-set! keys-matrix "0:0" "Field Num")
-;;     (iup:attribute-set! keys-matrix "0:1" "Field Name")
-;;     (iup:attribute-set! keys-matrix "WIDTH1" "100")
-;;     (iup:attribute-set! disks-matrix "0:0" "Disk Name")
-;;     (iup:attribute-set! disks-matrix "0:1" "Disk Path")
-;;     (iup:attribute-set! disks-matrix "WIDTH1" "120")
-;;     (iup:attribute-set! disks-matrix "WIDTH0" "100")
-;;     (iup:attribute-set! disks-matrix "ALIGNMENT1" "ALEFT")
-;;     (iup:attribute-set! disks-matrix "FIXTOTEXT" "C1")
-;;     (iup:attribute-set! disks-matrix "RESIZEMATRIX" "YES")
-    ;; fill in keys
-;;     (set! curr-row-num 1)
-;;     (for-each 
-;;      (lambda (var)
-;;        (iup:attribute-set! keys-matrix (conc curr-row-num ":0") curr-row-num)
-;;        (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
-;;        (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
-;;      (configf:section-vars rawconfig "fields"))
-
-    ;; fill in existing info
-;;    (for-each 
-;;     (lambda (mat fname)
-;;       (set! curr-row-num 1)
-;;       (for-each
-;;	(lambda (var)
-;;	  (iup:attribute-set! mat (conc curr-row-num ":0") var)
-;;	  (iup:attribute-set! mat (conc curr-row-num ":1") (config-lookup rawconfig fname var))
-;;	  (set! curr-row-num (+ curr-row-num 1)))
-;;	(configf:section-vars rawconfig fname)))
-;;     (list setup-matrix jobtools-matrix validvals-matrix envovrd-matrix disks-matrix)
-;;     (list "setup"      "jobtools"      "validvalues"      "env-override" "disks"))
 
     (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! runs-matrix "WIDTH0" "100")
 
-;;    (iup:attribute-set! validvals-matrix "WIDTH1" "290")
-;;    (iup:attribute-set! envovrd-matrix   "WIDTH1" "290")
     (set! *runs-matrix* runs-matrix)
     (iup:hbox
      (iup:frame 
@@ -344,20 +357,28 @@ Misc
       (iup:vbox
        runs-matrix)))))
 
+;; Browse and control a single run
+;;
+(define (runcontrol)
+  (iup:hbox))
+
+;; Main Panel
 (define (main-panel)
   (iup:dialog
-   #:title "Menu Test"
+   #:title "Megatest Control Panel"
    #:menu (main-menu)
    (let ((tabtop (iup:tabs 
 		  (runs)
+		  (tests)
+		  (runcontrol)
 		  (mtest) 
 		  (rconfig)
-		  (tests)
 		  )))
      (iup:attribute-set! tabtop "TABTITLE0" "Runs")
-     (iup:attribute-set! tabtop "TABTITLE3" "Tests")
-     (iup:attribute-set! tabtop "TABTITLE1" "megatest.config") 
-     (iup:attribute-set! tabtop "TABTITLE2" "runconfigs.config")
+     (iup:attribute-set! tabtop "TABTITLE1" "Tests")
+     (iup:attribute-set! tabtop "TABTITLE2" "Run Control")
+     (iup:attribute-set! tabtop "TABTITLE3" "megatest.config") 
+     (iup:attribute-set! tabtop "TABTITLE4" "runconfigs.config")
      tabtop)))
 
 ;;======================================================================
@@ -379,7 +400,7 @@ Misc
 	 ;; the synchash calls modify the "data" hash
 	 (get-runs-sig  (conc (client:get-signature) " get-runs"))
 	 (get-tests-sig (conc (client:get-signature) " get-tests"))
-	 (run-changes  (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 (run-changes   (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
 	 ;; Now can calculate the run-ids
 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
@@ -397,13 +418,18 @@ Misc
 	 (runid-to-col    (hash-table-ref *data* "runid-to-col"))
 	 (testname-to-row (hash-table-ref *data* "testname-to-row")) 
 	 (colnum       1)
-	 (rownum       0)) ;; rownum = 0 is the header
+	 (rownum       0) ;; rownum = 0 is the header
+	 ;; These are used in populating the tests tree
+	 (branchnum   0)
+	 (leafnum     0)) ;; IUP is funky here, keep adding using 
+    
 	 ;; tests related stuff
 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
 
     ;; Given a run-id and testname/item_path calculate a cell R:C
 
-
+    ;; NOTE: Also build the test tree browser and look up table
+    ;;
     ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
     (for-each (lambda (run-id)
 		(let* (;; (run-id    (db:get-value-by-header rundat header "id"))
@@ -414,6 +440,32 @@ Misc
 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name)))
 		    (iup:attribute-set! *runs-matrix* (conc rownum ":" colnum) col-name)
 		    (hash-table-set! runid-to-col run-id (list colnum run-record))
+		    ;; Here we update *tests-treebox* and *tests-node-map* 
+		    (let loop ((hed      (car key-vals))
+			       (tal      (cdr key-vals))
+			       (depth    0)
+			       (pathl    (list (car key-vals))))
+		      (let ((nodenum (tree-find-node *tests-treebox* pathl)))
+			(if nodenum ;;
+			    (if (not (null? tal)) ;; if null here then this path has already been added
+				(loop (car tal)(cdr tal)(+ depth 1)(append pathl (list hed))))
+			    (if (eq? depth 0)
+				(iup:attribute-set! *tests-treebox* "INSERTBRANCH" hed)
+				(debug:print 0 "ERROR: Failed to add " hed " no parent matching " pathl)))))
+			    
+
+
+;;		      (let* ((path         (string-intersperse pathl "/"))
+;;			     (parent-found (hash-table-ref/default *tests-node-map* prevpath #f))
+;;			     (found        (hash-table-ref/default *tests-node-map* path #f))
+;;			     (refnode      (if parent-found parent-found 0))) ;; add to this node
+;;			(if (not found) ;; this level in the hierarchy might have already been added
+;;			    (begin
+;;			      ;; first add to the tree
+;;			      (iup:attribute-set! *tests-treebox* (conc "ADDBRANCH" (if refnode refnode 0)) hed)
+;;			      (hash-table-set! *tests-node-map* path (iup:attribute *tests-treebox* "PARENT")))
+;;		      (if (not (null? tal))
+;;			  (loop (car tal)(cdr tal)(+ depth 1)(conc path "/" hed))))
 		    (set! colnum (+ colnum 1))))
 		run-ids)
 
@@ -478,6 +530,22 @@ Misc
     ;; (debug:print 2 "test-changes: " test-changes)
     (list run-changes test-changes)))
 
+;; Given the master data struct and a key fill out the tree
+;; browser for tests
+;;
+;; node-path is a hash of node-id to path key1/key2/key3/runname/testname/itempath
+;;
+;; (define (test-tree-update testtree runsdata node-path)
+;;   (let* ((runs-sig   (conc (client:get-signature " get-runs")))
+;; 	 (tests-sig  (conc (client:get-signature) " get-tests"))
+;; 	 (runs-data  (hash-table-ref/default runsdata #f))
+;; 	 (tests-data (hash-table-ref/default runsdata #f)))
+;;     (if (not runs-data) 
+;; 	(debug:print 0 "ERROR: no data found for " runs-sig)
+;; 	(for-each (lambda (run-id)
+;; 		    (let ((run-dat (hash-table-ref runs-data run-id)))
+		    
+
 (define (newdashboard)
   (let* ((data     (make-hash-table))
 	 (keys     (cdb:remote-run db:get-keys #f))
@@ -487,6 +555,7 @@ Misc
 	 (states   '())
 	 (statuses '())
 	 (nextmintime (current-milliseconds)))
+    (set! *runs-data* data) ;; make this data available to the rest of the application
     (iup:show (main-panel))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
