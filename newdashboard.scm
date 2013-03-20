@@ -444,15 +444,17 @@ Misc
 		    (let loop ((hed      (car key-vals))
 			       (tal      (cdr key-vals))
 			       (depth    0)
-			       (pathl    (list (car key-vals))))
-		      (let ((nodenum (tree-find-node *tests-treebox* pathl)))
+			       (pathl    '()))
+		      (let* ((newpath (append pathl (list hed)))
+			     (nodenum (tree-find-node *tests-treebox* newpath)))
+			(debug:print-info 0 "nodenum: " nodenum ", newpath: " newpath)
 			(if nodenum ;;
 			    (if (not (null? tal)) ;; if null here then this path has already been added
-				(loop (car tal)(cdr tal)(+ depth 1)(append pathl (list hed))))
-			    (if (eq? depth 0)
-				(iup:attribute-set! *tests-treebox* "INSERTBRANCH" hed)
-				(debug:print 0 "ERROR: Failed to add " hed " no parent matching " pathl)))))
-			    
+				(loop (car tal)(cdr tal)(+ depth 1) newpath))
+			    ;; (if (eq? depth 0)
+			    (iup:attribute-set! *tests-treebox* "INSERTBRANCH" hed)
+			    ;; (debug:print 0 "ERROR: Failed to add " hed " no parent matching " pathl)))))
+			    )))
 
 
 ;;		      (let* ((path         (string-intersperse pathl "/"))
