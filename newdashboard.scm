@@ -301,7 +301,7 @@ Misc
    (iup:frame #:title "Default")))
 
 ;;======================================================================
-;; tree stuff
+;; T R E E   S T U F F 
 ;;======================================================================
 
 ;; path is a list of nodes, each the child of the previous
@@ -368,13 +368,47 @@ Misc
 		#t
 		(loop (car tal)(cdr tal)(+ depth 1) newpath))))))))
 
+(define (tree-node->path obj nodenum)
+  ;; (print "\ncurrnode  nodenum  depth  node-depth  node-title   path")
+  (let loop ((currnode 0)
+	     (depth    0)
+	     (path     '()))
+    (let ((node-depth (iup:attribute obj (conc "DEPTH" currnode)))
+	  (node-title (iup:attribute obj (conc "TITLE" currnode))))
+      ;; (display (conc "\n   "currnode "        " nodenum "       " depth "         " node-depth "          " node-title "         " path))
+      (if (> currnode nodenum)
+	  path
+	  (if (not node-depth) ;; #f if we are out of nodes
+	      '()
+	      (let ((ndepth (string->number node-depth)))
+		(if (eq? ndepth depth)
+		    ;; This next is the match condition depth == node-depth
+		    (if (eq? currnode nodenum)
+			(begin
+			  ;; (display " <X>")
+			  (append path (list node-title)))
+			(loop (+ currnode 1)
+			      (+ depth 1)
+			      (append path (list node-title))))
+		    ;; didn't match, reset to base path and keep looking
+		    ;; due to more iup odditys we don't reset to base
+		    (begin 
+		      ;; (display " <L>")
+		      (loop (+ 1 currnode)
+			    2
+			    (append (take path ndepth)(list node-title)))))))))))
+
+;;======================================================================
+;; T E S T S
+;;======================================================================
 
 ;; Test browser
 (define (tests)
   (iup:hbox 
    (let* ((tb      (iup:treebox
-		    #:selection_cb (lambda (obj id state)
-				     (print "obj: " obj ", id: " id ", state: " state)))))
+		    #:selection-cb (lambda (obj id state)
+				     (print "obj: " obj ", id: " id ", state: " state)
+				     (print "path: " (tree-node->path obj id))))))
      (iup:attribute-set! tb "VALUE" "0")
      (iup:attribute-set! tb "NAME" "Runs")
      (iup:attribute-set! tb "ADDEXPANDED" "NO")
@@ -383,6 +417,10 @@ Misc
    (iup:vbox
     )))
        
+;;======================================================================
+;; R U N   C O N T R O L
+;;======================================================================
+
 ;; Overall runs browser
 ;;
 (define (runs)
@@ -412,27 +450,8 @@ Misc
 (define (runcontrol)
   (iup:hbox))
 
-;; Main Panel
-(define (main-panel)
-  (iup:dialog
-   #:title "Megatest Control Panel"
-   #:menu (main-menu)
-   (let ((tabtop (iup:tabs 
-		  (runs)
-		  (tests)
-		  (runcontrol)
-		  (mtest) 
-		  (rconfig)
-		  )))
-     (iup:attribute-set! tabtop "TABTITLE0" "Runs")
-     (iup:attribute-set! tabtop "TABTITLE1" "Tests")
-     (iup:attribute-set! tabtop "TABTITLE2" "Run Control")
-     (iup:attribute-set! tabtop "TABTITLE3" "megatest.config") 
-     (iup:attribute-set! tabtop "TABTITLE4" "runconfigs.config")
-     tabtop)))
-
 ;;======================================================================
-;; Process runs
+;; P R O C E S S   R U N S
 ;;======================================================================
 
 ;; MOVE THIS INTO *data*
@@ -571,7 +590,29 @@ Misc
     ;; (debug:print 2 "test-changes: " test-changes)
     (list run-changes test-changes)))
 
-;; 
+;;======================================================================
+;; D A S H B O A R D
+;;======================================================================
+
+;; Main Panel
+(define (main-panel)
+  (iup:dialog
+   #:title "Megatest Control Panel"
+   #:menu (main-menu)
+   (let ((tabtop (iup:tabs 
+		  (runs)
+		  (tests)
+		  (runcontrol)
+		  (mtest) 
+		  (rconfig)
+		  )))
+     (iup:attribute-set! tabtop "TABTITLE0" "Runs")
+     (iup:attribute-set! tabtop "TABTITLE1" "Tests")
+     (iup:attribute-set! tabtop "TABTITLE2" "Run Control")
+     (iup:attribute-set! tabtop "TABTITLE3" "megatest.config") 
+     (iup:attribute-set! tabtop "TABTITLE4" "runconfigs.config")
+     tabtop)))
+
 (define (newdashboard)
   (let* ((data     (make-hash-table))
 	 (keys     (cdb:remote-run db:get-keys #f))
