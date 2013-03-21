@@ -31,7 +31,7 @@
 ;; client:get-signature
 (define (client:get-signature)
   (if *my-client-signature* *my-client-signature*
-      (let ((sig (server:mk-signature)))
+      (let ((sig (conc (get-host-name) " " (current-process-id))))
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
 

@@ -194,11 +194,13 @@
     (sqlite3:for-each-row
      (lambda (id interface port pubport transport pid hostname)
        (set! res (cons (vector id interface port pubport transport pid hostname) res))
-       (debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
+       ;;(debug:print-info 2 "Found existing server " hostname ":" port " registered in db"))
+       )
      mdb
-     ;;          strftime('%s','now')-heartbeat < 10 AND
+     
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
-               WHERE mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
+          WHERE strftime('%s','now')-heartbeat < 10 
+          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
     ;; for now we are keeping only one server registered in the db, return #f or first server found
     (if (null? res) #f (car res))))
 

@@ -29,7 +29,7 @@
 (declare (uses runs))
 (declare (uses dashboard-tests))
 (declare (uses dashboard-guimonitor))
-(declare (uses dashboard-main))
+;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
 
 (include "common_records.scm")
@@ -101,6 +101,9 @@ Misc
 		      (append *keys* (list (vector "runname" "blah")))))
 (define *header*       #f)
 (define *allruns*     '())
+(define *allruns-by-id* (make-hash-table)) ;; 
+(define *runchangerate* (make-hash-table))
+
 (define *buttondat*    (make-hash-table)) ;; <run-id color text test run-key>
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
@@ -164,11 +167,15 @@ Misc
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
-  (let ((modtime (file-modification-time *db-file-path*)))
+  (let ((modtime             (file-modification-time *db-file-path*))
+	(referenced-run-ids '()))
     (if (or (and (> modtime *last-db-update-time*)
 		 (> (current-seconds)(+ *last-db-update-time* 5)))
 	    (> *delayed-update* 0))
-	(begin
+	;;
+	;; Run this stuff only when the megatest.db file has changed
+	;;
+	(let ((full-run (> (random 100) 75))) ;; 25% of the time do a full refresh
 	  (debug:print-info 4 "update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
 	  (set! *please-update-buttons* #t)
 	  (set! *last-db-update-time* modtime)
@@ -186,24 +193,46 @@ Misc
 	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
 		(begin
 		  (set! *last-update* (current-seconds))
-		  (set! *tot-run-count* (length runs)))) ;; (rdb:get-num-runs *db* runnamepatt))))
+		  (set! *tot-run-count* (length runs))))
+	    ;; 
+	    ;; trim runs to only those that are changing often here
+
+	    ;; 
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
 			       (tests    (let ((tsts (cdb:remote-run db:get-tests-for-run #f run-id testnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
 			       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
+			  ;; Not sure this is needed?
+			  (set! referenced-run-ids (cons run-id referenced-run-ids))
 			  (if (> (length tests) maxtests)
 			      (set! maxtests (length tests)))
 			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
 				  (not (null? tests)))
-			      (set! result (cons (vector run tests key-vals) result)))))
+			      (let ((dstruct (vector run tests key-vals)))
+				;;
+				;; compare the tests with the tests in *allruns-by-id* same run-id 
+				;; if different then increment value in *runchangerate*
+				;;
+				(hash-table-set! *allruns-by-id* run-id dstruct)
+				(set! result (cons dstruct result))))))
 		      runs)
+	    
+	    ;;
+	    ;; if full-run use referenced-run-ids to delete data in *all-runs-by-id* and *runchangerate*
+	    ;;
+
 	    (set! *header*  header)
 	    (set! *allruns* result)
 	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
 	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
 	    maxtests))
-	*num-tests*))) ;; FIXME, naughty coding eh?
+	;; 
+	;; Run this if the megatest.db file did not get touched
+	;;
+	(begin
+	  
+	  *num-tests*)))) ;; FIXME, naughty coding eh?
 
 (define *collapsed* (make-hash-table))
 ; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
@@ -660,8 +689,6 @@ Misc
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))
- ((args:get-arg "-main")
-  (iup:show (main-panel)))
  (else
   (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*

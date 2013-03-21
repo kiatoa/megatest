@@ -34,7 +34,7 @@
 (include "megatest-fossil-hash.scm")
 
 (define help (conc "
-Megatest, documentation at http://www.kiatoa.com/fossils/megatest
+Megatest, documentation at http://chiselapp.com/user/kiatoa/repository/megatest
   version " megatest-version "
   license GPL, Copyright Matt Welland 2006-2012
 

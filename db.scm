@@ -38,7 +38,7 @@
 ;; timestamp type (val1 val2 ...)
 ;; type: meta-info, step
 (define *incoming-writes*      '())
-(define *completed-writes*   '())
+(define *completed-writes*   (make-hash-table))
 (define *incoming-last-time* (current-seconds))
 (define *incoming-mutex*     (make-mutex))
 (define *completed-mutex*    (make-mutex))
@@ -506,6 +506,7 @@
 ;;  R U N S
 ;;======================================================================
 
+;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
   (let* ((header    (append (map key:get-fieldname keys)
 			    remfields))
@@ -701,7 +702,6 @@
   (debug:print-info 11 "db:tests-register-test END db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
     #f))
 
-
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
@@ -709,6 +709,7 @@
 (define (db:get-tests-for-run db run-id testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f) ;; 'rundir 'event_time
+			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
 			      )
   (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
@@ -728,7 +729,7 @@
 				    (string-intersperse statuses "','")
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment "
+	 (qry             (conc "SELECT " qryvals
 				" FROM tests WHERE run_id=? "
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
@@ -747,6 +748,65 @@
      run-id
      )
     (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
+    res))
+
+;; get a useful subset of the tests data (used in dashboard
+;; use db:mintests-get-{id ,run_id,testname ...}
+(define (db:get-tests-for-runs-mindata db run-ids testpatt states status)
+  (db:get-tests-for-runs db run-ids testpatt states status qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+
+;; NB // This is get tests for "runs" (note the plural!!)
+;;
+;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
+;; i.e. these lists define what to NOT show.
+;; states and statuses are required to be lists, empty is ok
+;; not-in #t = above behaviour, #f = must match
+;; run-ids is a list of run-ids or a single number
+(define (db:get-tests-for-runs db run-ids testpatt states statuses 
+			      #!key (not-in #t)
+			      (sort-by #f)
+			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
+  (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
+  (let* ((res '())
+	 ;; if states or statuses are null then assume match all when not-in is false
+	 (states-qry      (if (null? states) 
+			      #f
+			      (conc " state "  
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse states   "','")
+				    "')")))
+	 (statuses-qry    (if (null? statuses)
+			      #f
+			      (conc " status "
+				    (if not-in "NOT" "") 
+				    " IN ('" 
+				    (string-intersperse statuses "','")
+				    "')")))
+	 (tests-match-qry (tests:match->sqlqry testpatt))
+	 (qry             (conc "SELECT " qryvals 
+				" FROM tests WHERE " 
+				(if run-ids
+				    (if (list? run-ids)
+					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")
+					(conc "run_id=" run-ids " "))
+				    " ") ;; #f => run-ids don't filter on run-ids
+				(if states-qry   (conc " AND " states-qry)   "")
+				(if statuses-qry (conc " AND " statuses-qry) "")
+				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+				(case sort-by
+				  ((rundir)     " ORDER BY length(rundir) DESC;")
+				  ((event_time) " ORDER BY event_time ASC;")
+				  (else         ";"))
+			 )))
+    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
+    (sqlite3:for-each-row 
+     (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+       (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+     db 
+     qry
+     )
+    (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; this one is a bit broken BUG FIXME
@@ -918,6 +978,8 @@
   (set! *test-info* (make-hash-table))
   (set! *test-id-cache* (make-hash-table)))
 
+;; Use db:test-get* to access
+;;
 ;; Get test data using test_id
 (define (db:get-test-info-by-id db test-id)
   (if (not test-id)
@@ -932,6 +994,25 @@
 	 db 
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
+	res)))
+
+;; Use db:test-get* to access
+;;
+;; Get test data using test_ids
+(define (db:get-test-info-by-ids db test-ids)
+  (if (null? test-ids)
+      (begin
+	(debug:print-info 4 "db:get-test-info-by-ids called with test-ids=" test-ids)
+	'())
+      (let ((res '()))
+	(sqlite3:for-each-row
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+	   (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+			   res)))
+	 db 
+	 (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id in ("
+	       (string-intersperse (map conc test-ids) ",") ");"))
 	res)))
 
 (define (db:get-test-info db run-id testname item-path)
@@ -1040,17 +1121,6 @@
 ;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS
 ;;======================================================================
 
-;; db:updater is run in a thread to write out the cached data periodically
-;; (define (db:updater)
-;;   (debug:print-info 4 "Starting cache processing")
-;;   (let loop ()
-;;     (thread-sleep! 10) ;; move save time around to minimize regular collisions?
-;;     (db:write-cached-data)
-;;     (loop)))
-;; The queue is a list of vectors where the zeroth slot indicates the type of query to
-;; apply and the second slot is the time of the query and the third entry is a list of 
-;; values to be applied
-;;
 ;; NOTE: Can remove the regex and base64 encoding for zmq
 (define (db:obj->string obj)
   (case *transport-type*
@@ -1254,105 +1324,109 @@
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
 
-(define (db:write-cached-data)
-  (open-run-close
-   (lambda (db . junkparams)
-     (let ((queries    (make-hash-table))
-	   (data       #f))
-       (mutex-lock! *incoming-mutex*)
-       (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
-       (set! *incoming-writes* '())
-       (mutex-unlock! *incoming-mutex*)
-       (if (> (length data) 0)
-	   (debug:print-info 4 "Writing cached data " data))
-       ;; prepare the needed statements
-       (for-each (lambda (request-item)
-		   (let ((stmt-key (vector-ref request-item 0)))
-		     (if (not (hash-table-ref/default queries stmt-key #f))
-			 (let ((stmt (alist-ref stmt-key db:queries)))
-			   (if stmt
-			       (hash-table-set! queries stmt-key (sqlite3:prepare db (car stmt)))
-			       (debug:print 0 "ERROR: Missing query spec for " stmt-key "!"))))))
-		 data)
-       ;; No outer loop needed. Single loop for write items only. Reads trigger flush of queue
-       ;; and then are executed.
-       (sqlite3:with-transaction 
-	db
-	(lambda ()
-	  (debug:print-info 11 "flushing " data " to db")
-	  (for-each
-	   (lambda (hed)
-	     (let ((params   (vector-ref hed 2))
-		   (stmt-key (vector-ref hed 0)))
-	       (debug:print-info 11 "Executing " stmt-key " for " params)
-	       (apply sqlite3:execute (hash-table-ref queries stmt-key) params)))
-	   data)))
-       ;; let all the waiting calls know all is done
-       (mutex-lock! *completed-mutex*)
-       (set! *completed-writes* (append *completed-writes* data))
-       (mutex-unlock! *completed-mutex*)
-       ;; finalize the statements
-       (for-each (lambda (stmt-key)
-		   (sqlite3:finalize! (hash-table-ref queries stmt-key)))
-		 (hash-table-keys queries))
-       ;; keep a little chest thumping data around
-       (let ((cache-size (length data)))
-	 (if (> cache-size *max-cache-size*)
-	     (set! *max-cache-size* cache-size)))
-       ))
-   #f))
+(define (db:process-cached-writes db)
+  (let ((queries    (make-hash-table))
+	(data       #f))
+    (mutex-lock! *incoming-mutex*)
+    ;; data is a list of query packets <vector qry-sig query params
+    (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+    (set! *server:last-write-flush* (current-milliseconds))
+    (set! *incoming-writes* '())
+    (mutex-unlock! *incoming-mutex*)
+    (if (> (length data) 0)
+	;; Process if we have data
+	(begin
+	  (debug:print-info 7 "Writing cached data " data)
+    
+	  ;; Prepare the needed sql statements
+	  ;;
+	  (for-each (lambda (request-item)
+		      (let ((stmt-key (vector-ref request-item 0))
+			    (query    (vector-ref request-item 1)))
+			(hash-table-set! queries stmt-key (sqlite3:prepare db query))))
+		    data)
+	  
+	  ;; No outer loop needed. Single loop for write items only. Reads trigger flush of queue
+	  ;; and then are executed.
+	  (sqlite3:with-transaction 
+	   db
+	   (lambda ()
+	     (for-each
+	      (lambda (hed)
+		(let* ((params   (vector-ref hed 2))
+		       (stmt-key (vector-ref hed 0))
+		       (stmt     (hash-table-ref/default queries stmt-key #f)))
+		  (if stmt
+		      (apply sqlite3:execute stmt params)
+		      (debug:print 0 "ERROR: Problem Executing " stmt-key " for " params))))
+	      data)))
+	  
+	  ;; let all the waiting calls know all is done
+	  (mutex-lock! *completed-mutex*)
+	  (for-each (lambda (item)
+		      (let ((qry-sig (cdb:packet-get-client-sig item)))
+			(debug:print-info 7 "Registering query " qry-sig " as done")
+			(hash-table-set! *completed-writes* qry-sig #t)))
+		    data)
+	  (mutex-unlock! *completed-mutex*)
+	  
+	  ;; Finalize the statements. Should this be done inside the mutex above?
+	  ;; I think sqlite3 mutexes will keep the data safe
+	  (for-each (lambda (stmt-key)
+		      (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+		    (hash-table-keys queries))
+	  
+	  ;; Do a little record keeping
+	  (let ((cache-size (length data)))
+	    (if (> cache-size *max-cache-size*)
+		(set! *max-cache-size* cache-size)))
+	  #t)
+	#f)))
 
+(define *db:process-queue-mutex* (make-mutex))
+
+(define *number-of-writes*         0)
+(define *writes-total-delay*       0)
+(define *total-non-write-delay*    0)
+(define *number-non-write-queries* 0)
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
-;; (define (db:process-queue db pubsock indata)
-;;   (let* ((data       (sort indata (lambda (a b)
-;; 				    (< (cdb:packet-get-qtime a)(cdb:packet-get-qtime b))))))
-;;     (for-each
-;;      (lambda (item)
-;;        (db:process-queue-item db pubsock item))
-;;      data)))
+(define (db:queue-write-and-wait db qry-sig query params)
+  (let ((queue-len  0)
+	(res        #f)
+	(got-it     #f)
+	(qry-pkt    (vector qry-sig query params))
+	(start-time (current-milliseconds))
+	(timeout    (+ 10 (current-seconds)))) ;; set the time out to 10 secs in future
 
-(define (db:queue-write-and-wait db item)
-  (let ((res      #f)
-	(got-it   #f)
-	(qry-sig  (cdb:packet-get-query-sig item)))
+    ;; Put the item in the queue *incoming-writes* 
     (mutex-lock! *incoming-mutex*)
-    (set! *incoming-writes (cons item *incoming-writes*))
+    (set! *incoming-writes* (cons qry-pkt *incoming-writes*))
+    (set! queue-len (length *incoming-writes*))
     (mutex-unlock! *incoming-mutex*)
-    ;; let the queue build three times, look for processed 
-    ;; item.
-    (let loop ((count 0))
-      (debug:print-info 11 "db:queue-write-and-wait count=" count ", item=" item)
+
+    (debug:print-info 7 "Current write queue length is " queue-len)
+
+    ;; poll for the write to complete, timeout after 10 seconds
+    ;; periodic flushing of the queue is taken care of by 
+    ;; db:flush-queue
+    (let loop ()
       (thread-sleep! 0.1)
       (mutex-lock! *completed-mutex*)
-      (for-each (lambda (result)
-		  (if (equal? (cdb:packet-get-query-sig result) qry-sig)
-		      (set! got-it #t)))
-		*completed-writes*)
-      (mutex-unlock! *completed-mutex*)
-      (if (not got-it)
-	  (if (< count 4) ;; give it 3/10 of a second of queue up time
-	      (loop (+ count 1))
-	      (db:write-cached-data))))
-    ;; at the point db:write-cached-data was called either by this call
-    ;; or by another. Now every 1/100 sec check to see if this query is
-    ;; at the "head" of the completed queue and pop it off
-    (let loop () 
-      (thread-sleep! 0.001)
-      ;; there must always be at least one item in the completed-writes at this point, right?
-      (mutex-lock! *completed-mutex*)
-      (set! res (car *completed-writes*))
-      (mutex-unlock! *completed-mutex*)
-      (if (equal? (cdb:packet-get-query-sig res) qry-sig) ;; yay! we are done!
+      (if (hash-table-ref/default *completed-writes* qry-sig #f)
 	  (begin
-	    (mutex-lock! *completed-mutex*)
-	    (set! *completed-writes* (cdr *completed-writes*))
-	    (mutex-unlock! *completed-mutex*)
-	    res)
-	    (loop)))))
+	    (hash-table-delete! *completed-writes* qry-sig)
+	    (set! got-it #t)))
+      (mutex-unlock! *completed-mutex*)
+      (if (and (not got-it)
+	       (< (current-seconds) timeout))
+	  (loop)))
+    (set! *number-of-writes*   (+ *number-of-writes*   1))
+    (set! *writes-total-delay* (+ *writes-total-delay* 1))
+    got-it))
 	  
 (define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
@@ -1362,55 +1436,70 @@
 	 (query          (let ((q (alist-ref stmt-key db:queries)))
 			   (if q (car q) #f))))
     (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
-    (cond
-     (query
-      ;; transactionize needed here.
-      ;; (case *transport-type*
-      ;;   ((http)(db:queue-write-and-wait db item))
-      ;;   (else  
-       (apply sqlite3:execute db query params)
-       ;; ))
-       (server:reply return-address qry-sig #t #t))
-     ((member stmt-key db:special-queries)
-      (debug:print-info 11 "Handling special statement " stmt-key)
-      (case stmt-key
-	((immediate)
-	 (let ((proc      (car params))
-	       (remparams (cdr params)))
-	   ;; we are being handed a procedure so call it
-	   (debug:print-info 11 "Running (apply " proc " " remparams ")")
-	   (server:reply return-address qry-sig #t (apply proc remparams))))
-	((login)
-	 (if (< (length params) 3) ;; should get toppath, version and signature
-	     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
-	     (let ((calling-path (car   params))
-		   (calling-vers (cadr  params))
-		   (client-key   (caddr params)))
-	       (if (and (equal? calling-path *toppath*)
-			(equal? megatest-version calling-vers))
-		   (begin
-		     (hash-table-set! *logged-in-clients* client-key (current-seconds))
-		     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
-		   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
-	((flush sync)
-	 (server:reply return-address qry-sig #t 1)) ;; (length data)))
-	((set-verbosity)
-	 (set! *verbosity* (car params))
-	 (server:reply return-address qry-sig #t '(#t *verbosity*)))
-	((killserver)
-	 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
-	 (open-run-close tasks:server-deregister tasks:open-db 
-			 (car *runremote*)
-			 pullport: (cadr *runremote*))
-	 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-	 (server:reply return-address qry-sig #t '(#t "exit process started")))
-	(else ;; not a command, i.e. is a query
-	 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
-	 (server:reply pubsock return-address qry-sig #f 'failed))))
-     (else
-      (debug:print-info 11 "Executing " stmt-key " for " params)
-      (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-      (server:reply return-address qry-sig #t #t)))))
+    (if query
+	;; hand queries off to the write queue
+	(let ((response (case *transport-type*
+			  ((http)
+			   (debug:print-info 7 "Queuing item " item " for wrapped write")
+			   (db:queue-write-and-wait db qry-sig query params))
+			  (else  
+			   (apply sqlite3:execute db query params)
+			   #t))))
+	  (debug:print-info 7 "Received " response " from wrapped write")
+	  (server:reply return-address qry-sig response response))
+	;; otherwise if appropriate flush the queue (this is a read or complex query)
+	(begin
+	  (cond
+	   ((member stmt-key db:special-queries)
+	    (let ((starttime (current-milliseconds)))
+	      (debug:print-info 11 "Handling special statement " stmt-key)
+	      (case stmt-key
+		((immediate)
+		 ;; This is a read or mixed read-write query, must clear the cache
+		 (case *transport-type*
+		   ((http)
+		    (mutex-lock! *db:process-queue-mutex*)
+		    (db:process-cached-writes db)
+		    (mutex-unlock! *db:process-queue-mutex*)))
+		 (let* ((proc      (car params))
+			(remparams (cdr params))
+			;; we are being handed a procedure so call it
+			;; (debug:print-info 11 "Running (apply " proc " " remparams ")")
+			(result (server:reply return-address qry-sig #t (apply proc remparams))))
+		   (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
+		   (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
+		   result))
+		((login)
+		 (if (< (length params) 3) ;; should get toppath, version and signature
+		     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
+		     (let ((calling-path (car   params))
+			   (calling-vers (cadr  params))
+			   (client-key   (caddr params)))
+		       (if (and (equal? calling-path *toppath*)
+				(equal? megatest-version calling-vers))
+			   (begin
+			     (hash-table-set! *logged-in-clients* client-key (current-seconds))
+			     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+			   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
+		((flush sync)
+		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
+		((set-verbosity)
+		 (set! *verbosity* (car params))
+		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
+		((killserver)
+		 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
+		 (open-run-close tasks:server-deregister tasks:open-db 
+				 (car *runremote*)
+				 pullport: (cadr *runremote*))
+		 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
+		 (server:reply return-address qry-sig #t '(#t "exit process started")))
+		(else ;; not a command, i.e. is a query
+		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
+		 (server:reply return-address qry-sig #f 'failed)))))
+	   (else
+	    (debug:print-info 11 "Executing " stmt-key " for " params)
+	    (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+	    (server:reply return-address qry-sig #t #t)))))))
 
 (define (db:test-get-records-for-index-file db run-id test-name)
   (let ((res '()))
