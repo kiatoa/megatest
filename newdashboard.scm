@@ -335,7 +335,7 @@ Misc
 	    #f))))
 
 ;; top is the top node name zeroeth node VALUE=0
-(define (tree-add-node obj top nodelst)
+(define (tree-add-node obj top nodelst #!key (userdata #f))
   (if (not (iup:attribute obj "TITLE0"))
       (iup:attribute-set! obj "ADDBRANCH0" top))
   (cond
@@ -358,6 +358,8 @@ Misc
 	(if (not nodenum)
 	    (begin
 	      (iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
+	      (if userdata
+		  (iup:attribute-set! obj (conc "USERDATA"   parentnode) userdata))
 	      (if (null? tal)
 		  #t
 		  ;; reset to top
@@ -492,7 +494,8 @@ Misc
 				      (conc rownum ":" colnum) col-name)
 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
 		  ;; Here we update the tests treebox and tree keys
-		  (tree-add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name)))
+		  (tree-add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name))
+				 userdata: (conc "run-id: " run-id))
 		  (set! colnum (+ colnum 1))))
 	      run-ids)
 
@@ -526,7 +529,8 @@ Misc
 
 		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
 		  (for-each (lambda (test)
-			      (let* ((state    (db:mintest-get-state test))
+			      (let* ((test-id  (db:mintest-get-id test))
+				     (state    (db:mintest-get-state test))
 				     (status   (db:mintest-get-status test))
 				     (testname (db:mintest-get-testname test))
 				     (itempath (db:mintest-get-item_path test))
@@ -536,7 +540,8 @@ Misc
 				(tree-add-node (dboard:data-get-tests-tree *data*) "Runs" 
 					       (append run-path (if (equal? itempath "") 
 								    (list testname)
-								    (list testname itempath))))
+								    (list testname itempath)))
+					       userdata: (conc "test-id: " test-id))
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
