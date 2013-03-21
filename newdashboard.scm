@@ -84,17 +84,22 @@ Misc
 (define *tim* (iup:timer))
 (define *ord* #f)
 
-(define *data* (make-vector 6 #f))
+(define *data* (make-vector 10 #f))
 (define-inline (dboard:data-get-runs          vec)    (vector-ref  vec 0))
 (define-inline (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define-inline (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
 (define-inline (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
 (define-inline (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
+(define-inline (dboard:data-get-curr-test-id  vec)    (vector-ref  vec 5))
+(define-inline (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
+
 (define-inline (dboard:data-set-runs!         vec val)(vector-set! vec 0 val))
 (define-inline (dboard:data-set-tests!        vec val)(vector-set! vec 1 val))
 (define-inline (dboard:data-set-runs-matrix!  vec val)(vector-set! vec 2 val))
 (define-inline (dboard:data-set-tests-tree!   vec val)(vector-set! vec 3 val))
 (define-inline (dboard:data-set-run-keys!     vec val)(vector-set! vec 4 val))
+(define-inline (dboard:data-set-curr-test-id! vec val)(vector-set! vec 5 val))
+(define-inline (dboard:data-set-test-details! vec val)(vector-set! vec 6 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 
@@ -402,6 +407,119 @@ Misc
 ;; T E S T S
 ;;======================================================================
 
+(define (test-panel)
+  (let* (
+
+	 (curr-row-num 0)
+	 (viewlog    (lambda (x)
+		       (if (file-exists? logfile)
+					;(system (conc "firefox " logfile "&"))
+			   (iup:send-url logfile)
+			   (message-window (conc "File " logfile " not found")))))
+	 (xterm      (lambda (x)
+		       (if (directory-exists? rundir)
+			   (let ((shell (if (get-environment-variable "SHELL") 
+					    (conc "-e " (get-environment-variable "SHELL"))
+					    "")))
+			     (system (conc "cd " rundir 
+					   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+			   (message-window  (conc "Directory " rundir " not found")))))
+	 (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
+	 (command-launch-button (iup:button "Execute!" #:action (lambda (x)
+								  (let ((cmd (iup:attribute command-text-box "VALUE")))
+								    (system (conc cmd "  &"))))))
+	 (run-test  (lambda (x)
+		      (iup:attribute-set! 
+		       command-text-box "VALUE"
+		       (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname " runname 
+			     " -runtests " (conc testname "/" (if (equal? item-path "")
+								  "%" 
+								  item-path))
+			     ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+	 (remove-test (lambda (x)
+			(iup:attribute-set!
+			 command-text-box "VALUE"
+			 (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+			       " -testpatt " (conc testname "/" (if (equal? item-path "")
+								    "%"
+								    item-path))
+			       " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+    	 (run-info-matrix  (iup:matrix 		            
+			    #:expand "YES"
+			    ;; #:scrollbar "YES"
+			    #:numcol 1
+			    #:numlin 5
+			    #:numcol-visible 1
+			    #:numlin-visible 5
+			    #:click-cb (lambda (obj lin col status)
+					 (print "obj: " obj " lin: " lin " col: " col " status: " status))))
+	 (test-info-matrix (iup:matrix
+		            #:expand "YES"
+		            #:numcol 1
+		            #:numlin 5
+		            #:numcol-visible 1
+		            #:numlin-visible 5))
+	 (test-run-matrix  (iup:matrix
+			    #:expand "YES"
+			    #:numcol 1
+			    #:numlin 7
+			    #:numcol-visible 1
+			    #:numlin-visible 7))
+	 (meta-dat-matrix  (iup:matrix
+			    #:expand "YES"
+			    #:numcol 1
+			    #:numlin 5
+			    #:numcol-visible 1
+			    #:numlin-visible 5))
+	 (steps-matrix     (iup:matrix
+			    #:expand "YES"
+			    #:numcol 1
+			    #:numlin 20
+			    #:numcol-visible 1
+			    #:numlin-visible 8))
+	 (data-matrix      (iup:matrix
+			    #:expand "YES"
+			    #:numcol 1
+			    #:numlin 20
+			    #:numcol-visible 1
+			    #:numlin-visible 8))
+	 )
+    ;; 
+    (for-each
+     (lambda (mat)
+       ;; (iup:attribute-set! mat "0:1" "Value")
+       ;; (iup:attribute-set! mat "0:0" "Var")
+       (iup:attribute-set! mat "HEIGHT0" 0)
+       (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
+       (iup:attribute-set! mat "FIXTOTEXT" "C1")
+       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
+       (iup:attribute-set! mat "WIDTH1" "120")
+       (iup:attribute-set! mat "WIDTH0" "100")
+       )
+     (list run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix))
+
+    (iup:vbox
+     (iup:hbox
+      run-info-matrix
+      test-info-matrix)
+     (iup:hbox
+      test-run-matrix
+      meta-dat-matrix)
+     (iup:vbox
+      (iup:vbox
+       (iup:hbox 
+	(iup:button "View Log"    #:action viewlog     #:size "80x")
+	(iup:button "Start Xterm" #:action xterm       #:size "80x")
+	(iup:button "Run Test"    #:action run-test    #:size "80x")
+	(iup:button "Clean Test"  #:action remove-test #:size "80x"))
+       (apply 
+	iup:hbox
+	(list command-text-box command-launch-button))))
+     (iup:vbox
+      (iup:tabs
+       steps-matrix
+       data-matrix)))))
+       
 ;; Test browser
 (define (tests)
   (iup:hbox 
@@ -414,9 +532,9 @@ Misc
      (iup:attribute-set! tb "ADDEXPANDED" "NO")
      (dboard:data-set-tests-tree! *data* tb)
      tb)
-   (iup:vbox
-    )))
+   (test-panel)))
        
+
 ;;======================================================================
 ;; R U N   C O N T R O L
 ;;======================================================================
@@ -468,12 +586,20 @@ Misc
 (define (run-update keys data runname keypatts testpatt states statuses mode)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
-	 (get-runs-sig  (conc (client:get-signature) " get-runs"))
-	 (get-tests-sig (conc (client:get-signature) " get-tests"))
-	 (run-changes   (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
+	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
+	 (get-details-sig (conc (client:get-signature) " get-test-details"))
+	 (detail-test-id  (dboard:data-get-curr-test-id *data*))
+
+ 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 (test-detail-changes (if detail-test-id 
+				  (synchash:client-get 'db:get-test-info-by-id   detail-test-id 0  data detail-test-id)
+				  #f))
+
 	 ;; Now can calculate the run-ids
 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+
 	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses))
 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (header       (hash-table-ref/default runs-hash "header" #f))
@@ -488,10 +614,7 @@ Misc
 	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
-	 (rownum       0) ;; rownum = 0 is the header
-	 ;; These are used in populating the tests tree
-	 (branchnum   0)
-	 (leafnum     0)) ;; IUP is funky here, keep adding using 
+	 (rownum       0)) ;; rownum = 0 is the header
     
 	 ;; tests related stuff
 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
