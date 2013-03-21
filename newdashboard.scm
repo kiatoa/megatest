@@ -448,9 +448,9 @@ Misc
 			    #:expand "YES"
 			    ;; #:scrollbar "YES"
 			    #:numcol 1
-			    #:numlin 5
+			    #:numlin 4
 			    #:numcol-visible 1
-			    #:numlin-visible 5
+			    #:numlin-visible 4
 			    #:click-cb (lambda (obj lin col status)
 					 (print "obj: " obj " lin: " lin " col: " col " status: " status))))
 	 (test-info-matrix (iup:matrix
@@ -462,9 +462,9 @@ Misc
 	 (test-run-matrix  (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
-			    #:numlin 7
+			    #:numlin 5
 			    #:numcol-visible 1
-			    #:numlin-visible 7))
+			    #:numlin-visible 5))
 	 (meta-dat-matrix  (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
@@ -496,8 +496,38 @@ Misc
        (iup:attribute-set! mat "WIDTH1" "120")
        (iup:attribute-set! mat "WIDTH0" "100")
        )
-     (list run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix))
+     (list run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix))
 
+    ;; Steps and Data are a bit different
+    (iup:attribute-set! steps-matrix "0:1" "Step Name")
+    (iup:attribute-set! steps-matrix "0:2" "Start")
+    (iup:attribute-set! steps-matrix "0:3" "End")
+    (iup:attribute-set! steps-matrix "0:4" "Status")
+    (iup:attribute-set! steps-matrix "0:5" "Log File")
+    (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
+    (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
+    (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
+    (iup:attribute-set! steps-matrix "WIDTH1" "120")
+    (iup:attribute-set! steps-matrix "WIDTH0" "100")
+;; steps-matrix data-matrix))
+
+    (for-each 
+     (lambda (data)
+       (let ((mat    (car data))
+	     (keys   (cadr data))
+	     (rownum 1))
+	 (for-each
+	  (lambda (key)
+	    (iup:attribute-set! mat (conc rownum ":0") key)
+	    (set! rownum (+ rownum 1)))
+	  keys)
+	 (iup:attribute-set! mat "REDRAW" "ALL")))
+     (list
+      (list run-info-matrix  '("Run Id"  "Target"   "Runname" "Run Start Time" ))
+      (list test-info-matrix '("Test Id" "Testname" "State"   "Status" "Test Start Time" "Comment"))
+      (list test-run-matrix  '("Hostname" "Host info" "Disk Free" "CPU Load" "Run Duration"))
+      (list meta-dat-matrix  '("Author"   "Owner"     "Last Reviewed" "Tags" "Description"))))
+	    
     (iup:vbox
      (iup:hbox
       run-info-matrix
@@ -516,9 +546,12 @@ Misc
 	iup:hbox
 	(list command-text-box command-launch-button))))
      (iup:vbox
-      (iup:tabs
-       steps-matrix
-       data-matrix)))))
+      (let ((tabs (iup:tabs
+		   steps-matrix
+		   data-matrix)))
+	(iup:attribute-set! tabs "TABTITLE0" "Test Steps")
+	(iup:attribute-set! tabs "TABTITLE1" "Test Data")
+	tabs)))))
        
 ;; Test browser
 (define (tests)
