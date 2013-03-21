@@ -90,18 +90,31 @@ Misc
 (define-inline (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
 (define-inline (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
 (define-inline (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
-(define-inline (dboard:data-get-curr-test-id  vec)    (vector-ref  vec 5))
-(define-inline (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
+(define-inline (dboard:data-get-curr-test-ids vec)    (vector-ref  vec 5))
+;; (define-inline (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
+(define-inline (dboard:data-get-path-test-ids vec)    (vector-ref  vec 7))
+(define-inline (dboard:data-get-updaters      vec)    (vector-ref  vec 8))
 
-(define-inline (dboard:data-set-runs!         vec val)(vector-set! vec 0 val))
-(define-inline (dboard:data-set-tests!        vec val)(vector-set! vec 1 val))
-(define-inline (dboard:data-set-runs-matrix!  vec val)(vector-set! vec 2 val))
-(define-inline (dboard:data-set-tests-tree!   vec val)(vector-set! vec 3 val))
-(define-inline (dboard:data-set-run-keys!     vec val)(vector-set! vec 4 val))
-(define-inline (dboard:data-set-curr-test-id! vec val)(vector-set! vec 5 val))
-(define-inline (dboard:data-set-test-details! vec val)(vector-set! vec 6 val))
+(define-inline (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
+(define-inline (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
+(define-inline (dboard:data-set-runs-matrix!   vec val)(vector-set! vec 2 val))
+(define-inline (dboard:data-set-tests-tree!    vec val)(vector-set! vec 3 val))
+(define-inline (dboard:data-set-run-keys!      vec val)(vector-set! vec 4 val))
+(define-inline (dboard:data-set-curr-test-ids! vec val)(vector-set! vec 5 val))
+;; (define-inline (dboard:data-set-test-details!  vec val)(vector-set! vec 6 val))
+(define-inline (dboard:data-set-path-test-ids! vec val)(vector-set! vec 7 val))
+(define-inline (dboard:data-set-updaters!      vec val)(vector-set! vec 8 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
+
+;; List of test ids being viewed in various panels
+(dboard:data-set-curr-test-ids! *data* (make-hash-table))
+
+;; Look up test-ids by (key1 key2 ... testname [itempath])
+(dboard:data-set-path-test-ids! *data* (make-hash-table))
+
+;; Each test panel has an updater, only call when the tab is exposed
+(dboard:data-set-updaters!      *data* (make-hash-table))
 
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
@@ -155,7 +168,7 @@ Misc
 
 ;; mtest is actually the megatest.config file
 ;;
-(define (mtest)
+(define (mtest window-id)
   (let* ((curr-row-num     0)
 	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
 	 (keys-matrix      (iup:matrix
@@ -301,7 +314,7 @@ Misc
 
 ;; The runconfigs.config file
 ;;
-(define (rconfig)
+(define (rconfig window-id)
   (iup:vbox
    (iup:frame #:title "Default")))
 
@@ -407,10 +420,13 @@ Misc
 ;; T E S T S
 ;;======================================================================
 
-(define (test-panel)
-  (let* (
+(define (tree-path->test-id path)
+  (if (not (null? path))
+      (hash-table-ref/default (dboard:data-get-path-test-ids *data*) path #f)
+      #f))
 
-	 (curr-row-num 0)
+(define (test-panel window-id)
+  (let* ((curr-row-num 0)
 	 (viewlog    (lambda (x)
 		       (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
@@ -456,9 +472,9 @@ Misc
 	 (test-info-matrix (iup:matrix
 		            #:expand "YES"
 		            #:numcol 1
-		            #:numlin 5
+		            #:numlin 7
 		            #:numcol-visible 1
-		            #:numlin-visible 5))
+		            #:numlin-visible 7))
 	 (test-run-matrix  (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
@@ -473,17 +489,21 @@ Misc
 			    #:numlin-visible 5))
 	 (steps-matrix     (iup:matrix
 			    #:expand "YES"
-			    #:numcol 1
-			    #:numlin 20
-			    #:numcol-visible 1
+			    #:numcol 5
+			    #:numlin 50
+			    #:numcol-visible 5
 			    #:numlin-visible 8))
 	 (data-matrix      (iup:matrix
 			    #:expand "YES"
-			    #:numcol 1
-			    #:numlin 20
-			    #:numcol-visible 1
+			    #:numcol 8
+			    #:numlin 50
+			    #:numcol-visible 8
 			    #:numlin-visible 8))
-	 )
+	 (updater          (lambda (testdat)
+			     (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix))))
+
+    ;; Set the updater in updaters
+    (hash-table-set! (dboard:data-get-updaters *data*) window-id updater)
     ;; 
     (for-each
      (lambda (mat)
@@ -491,26 +511,37 @@ Misc
        ;; (iup:attribute-set! mat "0:0" "Var")
        (iup:attribute-set! mat "HEIGHT0" 0)
        (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
-       (iup:attribute-set! mat "FIXTOTEXT" "C1")
-       (iup:attribute-set! mat "RESIZEMATRIX" "YES")
-       (iup:attribute-set! mat "WIDTH1" "120")
-       (iup:attribute-set! mat "WIDTH0" "100")
-       )
+       ;; (iup:attribute-set! mat "FIXTOTEXT" "C1")
+       (iup:attribute-set! mat "RESIZEMATRIX" "YES"))
+       ;; (iup:attribute-set! mat "WIDTH1" "120")
+       ;; (iup:attribute-set! mat "WIDTH0" "100"))
      (list run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix))
 
-    ;; Steps and Data are a bit different
+    ;; Steps matrix
     (iup:attribute-set! steps-matrix "0:1" "Step Name")
     (iup:attribute-set! steps-matrix "0:2" "Start")
     (iup:attribute-set! steps-matrix "0:3" "End")
+    (iup:attribute-set! steps-matrix "WIDTH3" "50")
     (iup:attribute-set! steps-matrix "0:4" "Status")
+    (iup:attribute-set! steps-matrix "WIDTH4" "50")
     (iup:attribute-set! steps-matrix "0:5" "Log File")
     (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
-    (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
+    ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
     (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
-    (iup:attribute-set! steps-matrix "WIDTH1" "120")
-    (iup:attribute-set! steps-matrix "WIDTH0" "100")
-;; steps-matrix data-matrix))
+    ;; (iup:attribute-set! steps-matrix "WIDTH1" "120")
+    ;; (iup:attribute-set! steps-matrix "WIDTH0" "100")
 
+    ;; Data matrix
+    ;; 
+    (let ((rownum 1))
+      (for-each
+       (lambda (x)
+	 (iup:attribute-set! data-matrix (conc "0:" rownum) x)
+	 (iup:attribute-set! data-matrix (conc "WIDTH" rownum) "50")
+	 (set! rownum (+ rownum 1)))
+       (list "Category" "Variable" "Value" "Expected" "Tolerance"  "Status" "Units" "Type" "Comment")))
+    (iup:attribute-set! data-matrix "REDRAW" "ALL")
+    
     (for-each 
      (lambda (data)
        (let ((mat    (car data))
@@ -524,7 +555,7 @@ Misc
 	 (iup:attribute-set! mat "REDRAW" "ALL")))
      (list
       (list run-info-matrix  '("Run Id"  "Target"   "Runname" "Run Start Time" ))
-      (list test-info-matrix '("Test Id" "Testname" "State"   "Status" "Test Start Time" "Comment"))
+      (list test-info-matrix '("Test Id" "Testname" "Itempath" "State"   "Status" "Test Start Time" "Comment"))
       (list test-run-matrix  '("Hostname" "Host info" "Disk Free" "CPU Load" "Run Duration"))
       (list meta-dat-matrix  '("Author"   "Owner"     "Last Reviewed" "Tags" "Description"))))
 	    
@@ -554,19 +585,103 @@ Misc
 	tabs)))))
        
 ;; Test browser
-(define (tests)
+(define (tests window-id)
   (iup:hbox 
    (let* ((tb      (iup:treebox
-		    #:selection-cb (lambda (obj id state)
-				     (print "obj: " obj ", id: " id ", state: " state)
-				     (print "path: " (tree-node->path obj id))))))
+		    #:selection-cb
+		    (lambda (obj id state)
+		      ;; (print "obj: " obj ", id: " id ", state: " state)
+		      (let* ((run-path (tree-node->path obj id))
+			     (test-id  (tree-path->test-id (cdr run-path))))
+			(if test-id
+			    (hash-table-set! (dboard:data-get-curr-test-ids *data*)
+					     window-id test-id))
+			(print "path: " (tree-node->path obj id) " test-id: " test-id))))))
      (iup:attribute-set! tb "VALUE" "0")
      (iup:attribute-set! tb "NAME" "Runs")
-     (iup:attribute-set! tb "ADDEXPANDED" "NO")
+     ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
      (dboard:data-set-tests-tree! *data* tb)
      tb)
-   (test-panel)))
-       
+   (test-panel window-id)))
+
+;; The function to update the fields in the test view panel
+(define (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix)
+  ;; get test-id
+  ;; then get test record
+  (if testdat
+      (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
+	     (test-data    (hash-table-ref/default testdat test-id #f))
+	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
+						   (db:test-get-run_id test-data) '()))
+	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
+	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname)))))
+	(if test-data
+	    (begin
+	      ;; 
+	      (for-each 
+	       (lambda (data)
+		 (let ((mat    (car data))
+		       (vals   (cadr data))
+		       (rownum 1))
+		   (for-each 
+		    (lambda (key)
+		      (let ((cell   (conc rownum ":1")))
+			(if (not (equal? (iup:attribute mat cell)(conc key)))
+			    (begin
+			      ;; (print "setting cell " cell " in matrix " mat " to value " key)
+			      (iup:attribute-set! mat cell (conc key))
+			      (iup:attribute-set! mat "REDRAW" cell)))
+			(set! rownum (+ rownum 1))))
+		    vals)))
+	       (list 
+		(list run-info-matrix
+		      (if test-id
+			  (list (db:test-get-run_id test-data)
+				target
+				runname
+				"n/a")
+			  (make-list 4 "")))
+		(list test-info-matrix
+		      (if test-id
+			  (list test-id
+				(db:test-get-testname test-data)
+				(db:test-get-item-path test-data)
+				(db:test-get-state    test-data)
+				(db:test-get-status   test-data)
+				(seconds->string (db:test-get-event_time test-data))
+				(db:test-get-comment  test-data))
+			  (make-list 7 "")))
+		(list test-run-matrix
+		      (if test-id
+			  (list (db:test-get-host     test-data)
+				(db:test-get-uname    test-data)
+				(db:test-get-diskfree test-data)
+				(db:test-get-cpuload  test-data)
+				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
+			  (make-list 5 "")))
+		;;(list meta-dat-matrix
+		;;      (if test-id
+		;;	  (list (
+		)))))))
+
+  
+;; db:test-get-id           
+;; db:test-get-run_id       
+;; db:test-get-testname     
+;; db:test-get-state        
+;; db:test-get-status       
+;; db:test-get-event_time   
+;; db:test-get-host         
+;; db:test-get-cpuload      
+;; db:test-get-diskfree     
+;; db:test-get-uname        
+;; db:test-get-rundir       
+;; db:test-get-item-path    
+;; db:test-get-run_duration 
+;; db:test-get-final_logf   
+;; db:test-get-comment      
+;; db:test-get-fullname     	  
+
 
 ;;======================================================================
 ;; R U N   C O N T R O L
@@ -574,7 +689,7 @@ Misc
 
 ;; Overall runs browser
 ;;
-(define (runs)
+(define (runs window-id)
   (let* ((runs-matrix     (iup:matrix
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
@@ -598,7 +713,7 @@ Misc
 
 ;; Browse and control a single run
 ;;
-(define (runcontrol)
+(define (runcontrol window-id)
   (iup:hbox))
 
 ;;======================================================================
@@ -616,18 +731,20 @@ Misc
 ;;  3. Add extraction of filters to synchash calls
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
-(define (run-update keys data runname keypatts testpatt states statuses mode)
+(define (run-update keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
 	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
 	 (get-details-sig (conc (client:get-signature) " get-test-details"))
-	 (detail-test-id  (dboard:data-get-curr-test-id *data*))
+
+	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
+	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
 
  	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
-	 (test-detail-changes (if detail-test-id 
-				  (synchash:client-get 'db:get-test-info-by-id   detail-test-id 0  data detail-test-id)
-				  #f))
+	 (tests-detail-changes (if (not (null? test-ids))
+				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data test-ids)
+				   '()))
 
 	 ;; Now can calculate the run-ids
 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
@@ -648,6 +765,7 @@ Misc
 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
 	 (colnum       1)
 	 (rownum       0)) ;; rownum = 0 is the header
+;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
     
 	 ;; tests related stuff
 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
@@ -704,19 +822,21 @@ Misc
 
 		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
 		  (for-each (lambda (test)
-			      (let* ((test-id  (db:mintest-get-id test))
-				     (state    (db:mintest-get-state test))
-				     (status   (db:mintest-get-status test))
-				     (testname (db:mintest-get-testname test))
-				     (itempath (db:mintest-get-item_path test))
-				     (fullname (conc testname "/" itempath))
-				     (dispname (if (string=? itempath "") testname (conc "   " itempath)))
-				     (rownum   (hash-table-ref/default testname-to-row fullname #f)))
+			      (let* ((test-id   (db:mintest-get-id test))
+				     (state     (db:mintest-get-state test))
+				     (status    (db:mintest-get-status test))
+				     (testname  (db:mintest-get-testname test))
+				     (itempath  (db:mintest-get-item_path test))
+				     (fullname  (conc testname "/" itempath))
+				     (dispname  (if (string=? itempath "") testname (conc "   " itempath)))
+				     (rownum    (hash-table-ref/default testname-to-row fullname #f))
+				     (test-path (append run-path (if (equal? itempath "") 
+								     (list testname)
+								     (list testname itempath)))))
 				(tree-add-node (dboard:data-get-tests-tree *data*) "Runs" 
-					       (append run-path (if (equal? itempath "") 
-								    (list testname)
-								    (list testname itempath)))
+					       test-path
 					       userdata: (conc "test-id: " test-id))
+				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
 				(if (not rownum)
 				    (let ((rownums (hash-table-values testname-to-row)))
 				      (set! rownum (if (null? rownums)
@@ -741,6 +861,9 @@ Misc
 			    tests)))
 	      run-ids)
 
+    (let ((updater (hash-table-ref/default  (dboard:data-get-updaters *data*) window-id #f)))
+      (if updater (updater (hash-table-ref/default data get-details-sig #f))))
+
     (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
     ;; (debug:print 2 "run-changes: " run-changes)
     ;; (debug:print 2 "test-changes: " test-changes)
@@ -751,16 +874,16 @@ Misc
 ;;======================================================================
 
 ;; Main Panel
-(define (main-panel)
+(define (main-panel window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
    #:menu (main-menu)
    (let ((tabtop (iup:tabs 
-		  (runs)
-		  (tests)
-		  (runcontrol)
-		  (mtest) 
-		  (rconfig)
+		  (runs window-id)
+		  (tests window-id)
+		  (runcontrol window-id)
+		  (mtest window-id) 
+		  (rconfig window-id)
 		  )))
      (iup:attribute-set! tabtop "TABTITLE0" "Runs")
      (iup:attribute-set! tabtop "TABTITLE1" "Tests")
@@ -768,6 +891,8 @@ Misc
      (iup:attribute-set! tabtop "TABTITLE3" "megatest.config") 
      (iup:attribute-set! tabtop "TABTITLE4" "runconfigs.config")
      tabtop)))
+
+(define *current-window-id* 0)
 
 (define (newdashboard)
   (let* ((data     (make-hash-table))
@@ -777,9 +902,13 @@ Misc
 	 (keypatts (map (lambda (k)(list (vector-ref k 0) "%")) keys))
 	 (states   '())
 	 (statuses '())
-	 (nextmintime (current-milliseconds)))
+	 (nextmintime (current-milliseconds))
+	 (my-window-id *current-window-id*))
+    (set! *current-window-id* (+ 1 *current-window-id*))
     (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
-    (iup:show (main-panel))
+    (iup:show (main-panel my-window-id))
+    ;; Yes, running iup:show will pop up a new panel
+    ;; (iup:show (main-panel my-window-id))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)
@@ -787,7 +916,7 @@ Misc
 			 ;; 2x delta time has not passed since last query
 			 (if (< nextmintime (current-milliseconds))
 			     (let* ((starttime (current-milliseconds))
-				    (changes   (run-update keys data runname keypatts testpatt states statuses 'full))
+				    (changes   (run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
 				    (endtime   (current-milliseconds)))
 			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
 			       (debug:print 11 "CHANGE(S): " (car changes) "..."))

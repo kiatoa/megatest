@@ -93,9 +93,12 @@
   ;; (debug:print-info 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
   (let* ((synchash  (hash-table-ref/default *synchashes* synckey #f))
 	 (newdat    (apply (case proc
-			     ((db:get-runs) db:get-runs)
+			     ((db:get-runs)                   db:get-runs)
 			     ((db:get-tests-for-runs-mindata) db:get-tests-for-runs-mindata)
-			     (else print))
+			     ((db:get-test-info-by-ids)       db:get-test-info-by-ids)
+			     (else
+			      (print "ERROR: sync for hash " proc " not setup! Edits needed in synchash.scm")
+			      print))
 			   db params))
 	 (postdat  #f)
 	 (make-indexed (lambda (x)

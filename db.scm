@@ -978,6 +978,8 @@
   (set! *test-info* (make-hash-table))
   (set! *test-id-cache* (make-hash-table)))
 
+;; Use db:test-get* to access
+;;
 ;; Get test data using test_id
 (define (db:get-test-info-by-id db test-id)
   (if (not test-id)
@@ -992,6 +994,25 @@
 	 db 
 	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
 	 test-id)
+	res)))
+
+;; Use db:test-get* to access
+;;
+;; Get test data using test_ids
+(define (db:get-test-info-by-ids db test-ids)
+  (if (null? test-ids)
+      (begin
+	(debug:print-info 4 "db:get-test-info-by-ids called with test-ids=" test-ids)
+	'())
+      (let ((res '()))
+	(sqlite3:for-each-row
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+	   (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+			   res)))
+	 db 
+	 (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id in ("
+	       (string-intersperse (map conc test-ids) ",") ");"))
 	res)))
 
 (define (db:get-test-info db run-id testname item-path)
