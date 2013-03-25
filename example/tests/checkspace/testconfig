@@ -1,0 +1,9 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+checkspace checkspace.sh
+
+# Iteration for your tests are controlled by the items section
+[itemstable]
+DIRECTORY    /tmp   /opt
+REQUIRED  1000000 100000
+
