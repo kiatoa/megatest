@@ -1,10 +1,8 @@
 #!/bin/bash -e
-diskpath=$1
-spacereq=$2
-freespace=`df -k $diskpath | grep $diskpath | awk '{print $4}'`
-if [[ $freespace -lt $spacereq ]];then
-  echo "ERROR: insufficient space on $diskpath"
+freespace=`df -k $DIRECTORY | grep $DIRECTORY | awk '{print $4}'`
+if [[ $freespace -lt $REQUIRED ]];then
+  echo "ERROR: insufficient space on $DIRECTORY"
   exit 1
 else
-  echo "There is adequate space on $diskpath"
+  echo "There is adequate space on $DIRECTORY"
 fi
