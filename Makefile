@@ -37,6 +37,7 @@ deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 	for i in iup im cd av call sqlite; do \
 	  cp $(CKPATH)/lib/lib$$i* deploytarg/ ; \
 	done
+	cp $(CKPATH)/include/*.h deploytarg
 
 # puts deployed megatest in directory "megatest"
 deploytarg/megatest : $(OFILES) megatest.o
@@ -70,6 +71,9 @@ $(PREFIX)/bin/mtest : mtest
 	$(INSTALL) mtest $(PREFIX)/bin/mtest
 	utils/mk_wrapper $(PREFIX) mtest > $(PREFIX)/bin/megatest
 	chmod a+x $(PREFIX)/bin/megatest
+
+$(PREFIX)/bin/newdashboard : newdashboard
+	$(INSTALL) newdashboard $(PREFIX)/bin/newdashboard
 
 $(HELPERS) : utils/mt_* 
 	$(INSTALL) $< $@
@@ -107,6 +111,11 @@ install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(
 deploytarg/apropos.so : Makefile
 	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common zmq check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
 	chicken-install -prefix deploytarg -deploy $$i;done
+
+deploytarg/libsqlite3.so : 
+	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
+
+
 
 deploy : deploytarg/megatest deploytarg/dashboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/libiupcd.so deploytarg/apropos.so
 

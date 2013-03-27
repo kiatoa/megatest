@@ -1,0 +1,10 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+install install.sh
+
+# Iteration for your tests are controlled by the items section
+# However it is impractical to code the actual directory here 
+# so use names here and dereference to variables in runconfigs
+[itemstable]
+EXECUTABLE megatest dashboard
+
