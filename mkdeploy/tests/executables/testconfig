@@ -1,6 +1,9 @@
 # Add steps here. Format is "stepname script"
 [ezsteps]
+linksrc linksrc.sh
+make_mt make
 install install.sh
+addlibs addlibs.sh
 
 # Iteration for your tests are controlled by the items section
 # However it is impractical to code the actual directory here 
