@@ -475,12 +475,29 @@
     (if (not not-iterated) ;; i.e. iterated
 	(let ((iterated-parent  (pathname-directory (conc lnkpath "/" item-path))))
 	  (debug:print-info 2 "Creating iterated parent " iterated-parent)
-	  (create-directory iterated-parent #t)))
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 0 "ERROR:  Failed to create directory " iterated-parent ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (exit 1))
+	   (create-directory iterated-parent #t))))
 
-    (if (symbolic-link? lnkpath) (delete-file lnkpath))
+    (if (symbolic-link? lnkpath) 
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "ERROR:  Failed to remove symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (exit 1))
+	 (delete-file lnkpath)))
+
     (if (not (or (file-exists? lnkpath)
 		 (symbolic-link? lnkpath)))
-	(create-symbolic-link toptest-path lnkpath))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "ERROR:  Failed to create symlink " lnkpath ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	   (exit 1))
+	 (create-symbolic-link toptest-path lnkpath)))
     
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
@@ -488,15 +505,24 @@
 	(let ((lnktarget (conc lnkpath "/" item-path)))
 	  (debug:print 2 "Setting up sub test run area")
 	  (debug:print 2 " - creating run area in " test-path)
-	  (create-directory test-path #t) ;; (system  (conc "mkdir -p " test-path))
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 0 "ERROR:  Failed to create directory " test-path ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (exit 1))
+	   (create-directory test-path #t))
 	  (debug:print 2 
 		       " - creating link from: " test-path "\n"
 		       "                   to: " lnktarget)
-	  ;; (create-directory lnkpath #t) ;; (system  (conc "mkdir -p " lnkpath))
 
 	  ;; If there is already a symlink delete it and recreate it.
-	  (if (symbolic-link? lnktarget)     (delete-file lnktarget))
-	  (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget))))
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 0 "ERROR:  Failed to re-create link " linktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (exit))
+	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
+	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
     ;; I suspect this section was deleting test directories under some 
     ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
@@ -509,7 +535,15 @@
     ;;   (system  (conc "ln -sf " test-path " " testlink)))
     (if (directory? test-path)
 	(begin
-	  (let* ((cmd    (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"))
+	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+			   (if cmd
+			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
+			       (string-substitute "TEST_TARG_PATH" test-path
+						  (string-substitute "TEST_SRC_PATH" test-src-path cmd))
+			       #f)))
+		 (cmd    (if ovrcmd 
+			     ovrcmd
+			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))

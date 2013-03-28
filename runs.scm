@@ -819,11 +819,17 @@
 			 (if (symbolic-link? run-dir)
 			     (begin
 			       (debug:print-info 1 "Removing symlink " run-dir)
-			       (delete-file run-dir))
+			       (handle-exceptions
+				exn
+				(debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+				(delete-file run-dir)))
 			     (if (directory? run-dir)
 				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
 				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-				     (delete-directory run-dir)) ;; it should be empty by here BUG BUG, add error catch
+				      (handle-exceptions
+				       exn
+				       (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+				       (delete-directory run-dir)))
 				 (if run-dir
 				     (debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
 				     (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
