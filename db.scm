@@ -262,6 +262,16 @@
 	      (db:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	(debug:print-info 11 "open-test-db END (sucessful)" testpath)
+	;; now let's test that everything is correct
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "ERROR: problem accessing test db " testpath ", you probably should clean and re-run this test"
+			((condition-property-accessor 'exn 'message) exn))
+	   #f)
+	 ;; Is there a cheaper single line operation that will check for existance of a table
+	 ;; and raise an exception ?
+	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
 	db)
       (begin
 	(debug:print-info 11 "open-test-db END (unsucessful)" testpath)
