@@ -1,0 +1,12 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+install install.sh
+
+[requirements]
+waiton executables
+
+# Iteration for your tests are controlled by the items section
+# However it is impractical to code the actual directory here 
+# so use names here and dereference to variables in runconfigs
+[items]
+EGGNAME apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common zmq check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile openssl lookup-table list-utils stack

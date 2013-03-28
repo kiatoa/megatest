@@ -61,6 +61,7 @@ Misc
 			"-host" 
 			) 
 		 (list  "-h"
+			"-use-server"
 			"-guimonitor"
 			"-main"
 			"-v"
@@ -85,7 +86,9 @@ Misc
     (begin
       (set! *runremote* (string-split (args:get-arg "-host" ":")))
       (client:launch))
-    (client:launch))
+    (if (not (args:get-arg "-use-server"))
+	(set! *transport-type* 'fs) ;; force fs access
+	(client:launch)))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))

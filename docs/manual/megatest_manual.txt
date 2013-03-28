@@ -9,22 +9,18 @@ v1.0, April 2012
 Dedication
 ==========
 
-Dedicated to my wife, Joanna, who has, for many years now, supported
-all my wacky ideas and nutty projects with only the occasional grumble
-and roll of the eyes.
+Dedicated to my wife Joanna who has kindly supported my working on various projects over the years.
 
 Thanks
 ------
 
-To all the great people from the various places I've worked over the
-years, thank you. I've benefitted from your patience and insight and I
-hope that some of what I've learned from you has been incorporated
-into Megatest.
+Thank you the many people I've worked over the years who have 
+shared their knowledge and insights with me.
 
-Also, my thanks to all the wonderful open source creators. These
-truly free projects, from Linux, xemacs, chicken scheme, and fossil to
-asciidoc and bash are the philosophical and direct underpinnings of
-the Megatest project.
+Thanks also to the creators of the various open source projects that
+Megatest is built on. These include Linux, xemacs, chicken scheme,
+fossil and asciidoc. Without these projects something like Megatest 
+would be difficult or impossible to do.
 
 [preface]
 Preface

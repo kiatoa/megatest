@@ -9,3 +9,5 @@ dboard
 tests/fullrun/tmp/*
 tests/simpleruns
 tests/simplelinks
+mkdeploy/runs
+mkdeploy/links

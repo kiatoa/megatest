@@ -1,0 +1,5 @@
+(expect:ignore in   "LogFileBody" >= 0 "ignore setup-error-handling" #/setup-error-handling/)
+(expect:ignore in   "LogFileBody" >= 0 "ignore check-errors" (list #/check-errors/ #/type-errors/ #/srfi-4-errors/))
+(expect:error in    "LogFileBody" = 0 "Any error"         #/error/i)
+(expect:required in "LogFileBody" = 1 "Sucess signature" #/DONE/)
+
