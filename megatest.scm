@@ -118,8 +118,8 @@ Spreadsheet generation
                             if it contains forward slashes the path will be converted
                             to windows style
 Getting started
-  -gen-megatest-area      : create a skeleton megatest area. You will be prompted for paths
-  -gen-megatest-test      : create a skeleton megatest test. You will be prompted for info
+  -gen-megatest-area       : create a skeleton megatest area. You will be prompted for paths
+  -gen-megatest-test tname : create a skeleton megatest test. You will be prompted for info
 
 Examples
 
