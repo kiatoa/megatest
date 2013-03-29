@@ -258,12 +258,23 @@
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (debug:print-info 4 "hed=" hed " at top of loop")
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
-		 (waitons (if config (string-split (let ((w (config-lookup config "requirements" "waiton")))
-						     (if w w "")))
-			      (begin
-				(debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-                                (if db (sqlite3:finalize! db))
-				(exit 1)))))
+		 (waitons (let ((instr (if config 
+					   (config-lookup config "requirements" "waiton")
+					   (begin ;; No config means this is a non-existant test
+					     (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
+					     (if db (sqlite3:finalize! db))
+					     (exit 1)))))
+			    (debug:print-info 8 "waitons string is " instr)
+			    (string-split (cond
+					   ((procedure? instr)
+					    (let ((res (instr)))
+					      (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+					      res))
+					   ((string? instr)     instr)
+					   (else 
+					    ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+					    ""))))))
+	    (debug:print-info 8 "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
 	    (if (member hed waitons)
