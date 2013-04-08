@@ -4,6 +4,21 @@
 lookittmp   ls /tmp
 lookithome  ls /home
 
+# logpro_file  input_glob
+# matching file(s) will be diff'd with previous run and logpro applied
+# if PASS or WARN result from logpro then WAIVER state is set
+#
+[waivers]
+waiver_1 logpro lookittmp.log
+
+[waiver_rules]
+
+# This builtin rule is the default if there is no <waivername>.logpro file
+# diff   diff %file1% %file2%
+
+# This builtin rule is applied if a <waivername>.logpro file exists
+# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html
+
 [test_meta]
 author matt
 owner  bob
