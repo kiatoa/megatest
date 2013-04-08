@@ -13,7 +13,7 @@
 ;; Tests
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp directory-utils)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit tests))
@@ -188,6 +188,63 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
+;; Check for waiver eligibility
+;;
+(define (tests:check-waiver-eligibility testdat prev-testdat)
+  (let* ((testconfig  (tests:get-testconfig (db:test-get-testname testdat) #f))
+	 (test-rundir (db:test-get-rundir testdat))
+	 (prev-rundir (db:test-get-rundir prev-testdat))
+	 (waivers     (configf:section-vars testconfig "waivers"))
+	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
+	 (diff-rule   "diff %file1% %file2%")
+	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
+    (push-directory test-rundir)
+    (let ((result (if (null? waivers)
+		      #f
+		      (let loop ((hed (car waivers))
+				 (tal (cdr waivers)))
+			(debug:print 0 "INFO: Applying waiver rule \"" hed "\"")
+			(let* ((waiver      (configf:lookup testconfig "waivers" hed))
+			       (wparts      (if waiver (string-match waiver-rx waiver) #f))
+			       (waiver-rule (if wparts (cadr wparts)  #f))
+			       (waiver-glob (if wparts (caddr wparts) #f))
+			       (logpro-file (if waiver
+						(let ((fname (conc hed ".logpro")))
+						  (if (file-exists? fname)
+						      fname 
+						      (begin
+							(debug:print 0 "INFO: No logpro file " fname " falling back to diff")
+							#f)))
+						#f))
+			       ;; if rule by name of waiver-rule is found in testconfig - use it
+			       ;; else if waivername.logpro exists use logpro-rule
+			       ;; else default to diff-rule
+			       (rule-string (let ((rule (configf:lookup testconfig "waiver_rules" waiver-rule)))
+					      (if rule
+						  rule
+						  (if logpro-file
+						      logpro-rule
+						      (begin
+							(debug:print 0 "INFO: No logpro file " logpro-file " found, using diff rule")
+							diff-rule)))))
+			       ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
+			       (processed-cmd (string-substitute 
+					       "%file1%" (conc test-rundir "/" waiver-glob)
+					       (string-substitute
+						"%file2%" (conc prev-rundir "/" waiver-glob)
+						(string-substitute
+						 "%waivername%" hed rule-string #t) #t) #t))
+			       (res            #f))
+			  (debug:print 0 "INFO: waiver command is \"" processed-cmd "\"")
+			  (if (eq? (system processed-cmd) 0)
+			      (if (null? tal)
+				  #t
+				  (loop (car tal)(cdr tal)))
+			      #f))))))
+      (pop-directory)
+      result)))
+
+
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat)
   (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
@@ -200,25 +257,37 @@
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
-	 (waived   (if (equal? status "FAIL")
-		       (let ((prev-test (open-run-close test:get-previous-test-run-record db run-id test-name item-path)))
-			 (if prev-test ;; true if we found a previous test in this run series
-			     (let ((prev-status (db:test-get-status   prev-test))
-				   (prev-state  (db:test-get-state    prev-test))
-				   (prev-comment (db:test-get-comment prev-test)))
-			       (debug:print 4 "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
-			       (if (and (equal? prev-state  "COMPLETED")
-					(equal? prev-status "WAIVED"))
-				   prev-comment ;; waived is either the comment or #f
-				   #f))
-			     #f))
+
+	 ;; NOTES:
+	 ;;  1. Is the call to test:get-previous-run-record remotified?
+	 ;;  2. Add test for testconfig waiver propagation control here
+	 ;;
+	 (prev-test   (if (equal? status "FAIL")
+			  (open-run-close test:get-previous-test-run-record db run-id test-name item-path)
+			  #f))
+	 (waived   (if prev-test
+		       (if prev-test ;; true if we found a previous test in this run series
+			   (let ((prev-status  (db:test-get-status  prev-test))
+				 (prev-state   (db:test-get-state   prev-test))
+				 (prev-comment (db:test-get-comment prev-test)))
+			     (debug:print 4 "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
+			     (if (and (equal? prev-state  "COMPLETED")
+				      (equal? prev-status "WAIVED"))
+				 (if comment
+				     comment
+				     prev-comment) ;; waived is either the comment or #f
+				 #f))
+			   #f)
 		       #f)))
-    (if waived (set! real-status "WAIVED"))
+    (if (and waived 
+	     (tests:check-waiver-eligibility testdat prev-test))
+	(set! real-status "WAIVED"))
+
     (debug:print 4 "real-status " real-status ", waived " waived ", status " status)
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(cdb:test-set-status-state *runremote* test-id real-status state #f))
+	(cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.

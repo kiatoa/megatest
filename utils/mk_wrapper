@@ -10,4 +10,4 @@ fi
 
 fullcmd="$prefix/bin/$cmd"
 
-echo "$fullcmd \$*"
+echo "$fullcmd \"\$@\""

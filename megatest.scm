@@ -33,6 +33,14 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
+;; (use trace)
+;; (trace db:teststep-set-status!
+;;        tests:test-set-status!
+;;        cdb:test-set-status-state
+;;        cdb:client-call
+;;        tests:check-waiver-eligibility)
+       
+
 (define help (conc "
 Megatest, documentation at http://chiselapp.com/user/kiatoa/repository/megatest
   version " megatest-version "

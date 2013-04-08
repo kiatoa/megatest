@@ -242,6 +242,8 @@
 	    ))
       #f))
 
+(define configf:lookup config-lookup)
+
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
     (if (null? sectdat)
