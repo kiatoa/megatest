@@ -7,7 +7,7 @@ SRCFILES = common.scm items.scm launch.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm zmq-transport.scm http-transport.scm \
-           client.scm gutils.scm synchash.scm
+           client.scm gutils.scm synchash.scm daemon.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 

@@ -22,10 +22,10 @@ all : test1 test2 test3 test4 test5
 
 server :
 	(cd ..;make;make install) && \
-	(cd fullrun;../../bin/megatest -server - -debug 22) &
+	(cd fullrun;../../bin/megatest -server - -debug 22) 
 
 test0 : cleanprep
-	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)&
+	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
 
 test1 : cleanprep
 	rm -f simplerun/megatest.db

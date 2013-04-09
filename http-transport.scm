@@ -276,6 +276,7 @@
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
   (debug:print-info 2 "Starting the standalone server")
+  (daemon:ize)
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print 11 "http-transport:launch hostinfo=" hostinfo)
     ;; #(1 "143.182.207.24" 5736 -1 "http" 22771 "hostname")
