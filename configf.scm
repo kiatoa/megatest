@@ -13,7 +13,7 @@
 ;; Config file handling
 ;;======================================================================
 
-(use regex regex-case)
+(use regex regex-case directory-utils)
 (declare (unit configf))
 (declare (uses common))
 (declare (uses process))
@@ -150,12 +150,17 @@
 	       inl 
 	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
 	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-	       (configf:include-rx ( x include-file ) (let ((curr-dir (current-directory))
-							    (conf-dir  (pathname-directory path)))
-							(if conf-dir (change-directory conf-dir))
-							(read-config include-file res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
-							(change-directory curr-dir)
-							(loop (configf:read-line inp res allow-system) curr-section-name #f #f)))
+	       (configf:include-rx ( x include-file ) (if (file-exists? include-file)
+							  (let ((curr-dir (current-directory))
+								(conf-dir (pathname-directory include-file))
+								(incfname (pathname-strip-directory include-file))) 
+							    (push-directory conf-dir)
+							    (read-config incfname res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
+							    (pop-directory)
+							    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
+							  (begin
+							    (debug:print 0 "INFO: include file " include-file " not found (called from " path ")")
+							    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))))
 	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system)
 							    ;; if we have the sections list then force all settings into "" and delete it later?
 							    (if (or (not sections) 
