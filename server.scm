@@ -22,6 +22,7 @@
 (declare (uses synchash))
 (declare (uses http-transport))
 (declare (uses zmq-transport))
+(declare (uses daemon))
 
 (include "common_records.scm")
 (include "db_records.scm")

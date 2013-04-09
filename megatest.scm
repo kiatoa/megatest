@@ -220,7 +220,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 			"-runall"    ;; run all tests
 			"-remove-runs"
-			"-usequeue"
 			"-rebuild-db"
 			"-rollup"
 			"-update-meta"
@@ -291,7 +290,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-server")
     (let ((transport (args:get-arg "-transport" "http")))
       (debug:print 2 "Launching server using transport " transport)
-      (server:launch (string->symbol transport))))
+      (server:launch (string->symbol transport)))
+    (if (not (null? (lset-intersection 
+		     equal?
+		     (hash-table-keys args:arg-hash)
+		     '("-runtests"    "-list-runs"   "-rollup"
+		       "-remove-runs" "-lock"        "-unlock"
+		       "-update-meta" "-extract-ods"))))
+	(if (setup-for-run)
+	    (let ((servers (open-run-close tasks:get-best-server tasks:open-db)))
+	      (if (or (not servers)
+		      (null? servers))
+		  (begin
+		    (debug:print 0 "INFO: Starting server as none running ...")
+		    ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+		    (system (conc (car (argv)) " -server - -transport " (args:get-arg "-transport" "http")))
+		    (thread-sleep! 3)) ;; give the server a few seconds to start
+		  (debug:print 0 "INFO: Servers already running " servers)
+		  )))))
+	
 
 (if (args:get-arg "-list-servers")
 	;; (args:get-arg "-kill-server"))
