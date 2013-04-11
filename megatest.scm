@@ -33,9 +33,14 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-(use trace)
-(trace
- thread-sleep!
+;; (use trace)
+;; (trace
+;;  thread-sleep!
+;;  sqlite3:execute
+;;  sqlite3:for-each-row
+;;  open-run-close
+;;  runs:can-run-more-tests
+;;  cdb:remote-run
 ;;  nice-path
 ;;  read-config
 ;; db:teststep-set-status!
@@ -43,7 +48,7 @@
 ;; cdb:test-set-status-state
 ;; cdb:client-call
 ;; tests:check-waiver-eligibility
-)
+;; )
        
 
 (define help (conc "
@@ -120,6 +125,7 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -transport http|zmq     : use http or zmq for transport (default is http) 
+  -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
@@ -309,7 +315,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (begin
 		    (debug:print 0 "INFO: Starting server as none running ...")
 		    ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		    (system (conc (car (argv)) " -server - -transport " (args:get-arg "-transport" "http")))
+		    (system (conc (car (argv)) " -server - -daemonize -transport " (args:get-arg "-transport" "http")))
 		    (thread-sleep! 3)) ;; give the server a few seconds to start
 		  (debug:print 0 "INFO: Servers already running " servers)
 		  )))))
