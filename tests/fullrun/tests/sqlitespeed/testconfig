@@ -1,5 +1,6 @@
 [setup]
-runscript runscript.rb
+runscript runscript.rb | logpro logcheck.logpro logcheck.html
+
 tags non important,dumb junk
 
 [requirements]

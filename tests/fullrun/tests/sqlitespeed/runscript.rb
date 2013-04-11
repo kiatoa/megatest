@@ -11,6 +11,8 @@ if (! File.exists?("../../runfirst/I_was_here"))
     exit 1
 end
 
+system "megatest -setlog logcheck.html"
+
 # file_size_checker(stepname, filename, minsize, maxsize) - negative means ignore
 # file_size_checker('create db','testing.db',100,-1)
 
@@ -32,7 +34,4 @@ else
 end
 
 record_step("add #{num_records}","end",status)
-
-
-
 

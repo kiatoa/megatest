@@ -341,10 +341,10 @@
     ))
 
 
-(define (tests:test-set-toplog! db run-id test-name logf) 
+(define (tests:test-set-toplog! run-id test-name logf) 
   (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
 
-(define (tests:summarize-items db run-id test-name force)
+(define (tests:summarize-items run-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
@@ -429,7 +429,7 @@
 	    (close-output-port oup)
 	    (change-directory orig-dir)
 	    ;; NB// tests:test-set-toplog! is remote internal...
-	    (tests:test-set-toplog! db run-id test-name outputfilename)
+	    (tests:test-set-toplog! run-id test-name outputfilename)
 	    )))))
 
 (define (get-all-legal-tests)

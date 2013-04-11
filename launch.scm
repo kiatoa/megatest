@@ -338,7 +338,7 @@
 				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
+		  (tests:summarize-items run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
@@ -437,7 +437,10 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (cdb:test-set-rundir-by-test-id *runremote* test-id lnkpathf)
+    (cdb:test-set-rundir-by-test-id *runremote* test-id 
+				    (if (equal? (configf:lookup *configdat* "setup" "testpath") "runpath")
+					test-path
+					lnkpathf))
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -460,7 +463,10 @@
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  (cdb:test-set-rundir! *runremote* run-id testname "" lnkpath) ;; toptest-path)
+	  (cdb:test-set-rundir! *runremote* run-id testname "" 
+				(if (equal? (configf:lookup *configdat* "setup" "testpath") "runpath")
+				    toptest-path
+				    lnkpath))
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin

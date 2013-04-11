@@ -853,10 +853,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(cdb:test-set-log! *runremote* test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
-	      (tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (tests:test-set-toplog! run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      ;; DO NOT run remote
-	      (tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (tests:summarize-items run-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
