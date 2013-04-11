@@ -132,7 +132,7 @@
   (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (if (not (file-exists? path))
       (begin 
-	(debug:print-info 4 "read-config - file not found " path " current path: " (current-directory))
+	(debug:print-info 1 "read-config - file not found " path " current path: " (current-directory))
 	(if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))

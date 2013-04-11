@@ -33,12 +33,17 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-;; (use trace)
-;; (trace db:teststep-set-status!
-;;        tests:test-set-status!
-;;        cdb:test-set-status-state
-;;        cdb:client-call
-;;        tests:check-waiver-eligibility)
+(use trace)
+(trace
+ thread-sleep!
+;;  nice-path
+;;  read-config
+;; db:teststep-set-status!
+;; tests:test-set-status!
+;; cdb:test-set-status-state
+;; cdb:client-call
+;; tests:check-waiver-eligibility
+)
        
 
 (define help (conc "
@@ -395,7 +400,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-config")
-    (let ((data (read-config "megatest.config" #f #t)))
+    (let ((data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))
