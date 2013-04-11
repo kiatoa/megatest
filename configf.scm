@@ -150,12 +150,11 @@
 	       inl 
 	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
 	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-	       (configf:include-rx ( x include-file ) (let* ((curr-dir  (current-directory))
-							     (full-conf (if (absolute-pathname? include-file)
-									    include-file
-									    (conc curr-dir "/" include-file)))
-							     (conf-dir (pathname-directory include-file))
-							     (incfname (pathname-strip-directory include-file))) 
+	       (configf:include-rx ( x include-file ) (let* ((curr-conf-dir (pathname-directory path))
+							     (full-conf     (if (absolute-pathname? include-file)
+										include-file
+										(nice-path 
+										 (conc curr-conf-dir "/" include-file)))))
 							(if (file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)
@@ -163,7 +162,8 @@
 							      ;; (pop-directory)
 							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
 							    (begin
-							      (debug:print 0 "INFO: include file " include-file " not found (called from " path ")")
+							      (debug:print 2 "INFO: include file " include-file " not found (called from " path ")")
+							      (debug:print 2 "        " full-conf)
 							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))))
 	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system)
 							    ;; if we have the sections list then force all settings into "" and delete it later?

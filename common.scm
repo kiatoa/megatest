@@ -149,6 +149,12 @@
 ;; System stuff
 ;;======================================================================
 
+;; return a nice clean pathname made absolute
+(define (nice-path dir)
+  (normalize-pathname (if (absolute-pathname? dir)
+			  dir
+			  (conc (current-directory) "/" dir))))
+
 (define (get-df path)
   (let* ((df-results (cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
