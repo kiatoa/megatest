@@ -154,7 +154,10 @@
 							     (full-conf     (if (absolute-pathname? include-file)
 										include-file
 										(nice-path 
-										 (conc curr-conf-dir "/" include-file)))))
+										 (conc (if curr-conf-dir
+											   curr-conf-dir
+											   ".")
+										       "/" include-file)))))
 							(if (file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)

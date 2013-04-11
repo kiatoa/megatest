@@ -214,6 +214,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
+			"-daemonize"
 			;; misc
 			"-archive"
 			"-repl"
