@@ -1525,13 +1525,13 @@
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK")))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (begin
 	(sqlite3:execute 
 	 db
 	 "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
         ;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
@@ -1807,7 +1807,7 @@
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
 ;; Note: do not convert to remote as it calls remote under the hood
-;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK or WAIVED)
+;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK, SKIP or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
