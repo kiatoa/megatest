@@ -33,7 +33,7 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-;; (use trace)
+;; (use trace dot-locking)
 ;; (trace
 ;;  thread-sleep!
 ;;  sqlite3:execute
@@ -48,6 +48,11 @@
 ;; cdb:test-set-status-state
 ;; cdb:client-call
 ;; tests:check-waiver-eligibility
+;;  tests:summarize-items
+;;  db:test-get-logfile-info
+;;  obtain-dot-lock
+;;  change-directory
+;;  cdb:remote-run
 ;; )
        
 
