@@ -250,10 +250,16 @@
 	   (file-read-access? testpath))
       (let* ((dbpath    (conc testpath "/testdat.db"))
 	     (dbexists  (file-exists? dbpath))
-	     (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
 					       136000))))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "ERROR: problem accessing test db " testpath ", you probably should clean and re-run this test"
+			((condition-property-accessor 'exn 'message) exn))
+	   #f)
+	 (set! db (sqlite3:open-database dbpath)))
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
 	    (begin
