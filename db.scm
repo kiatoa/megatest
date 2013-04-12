@@ -1832,7 +1832,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
-		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED")))
+		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
