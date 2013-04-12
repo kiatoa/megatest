@@ -339,7 +339,7 @@
 	    (and (vector? test) ;; not (string? test))
 		 (equal? (db:test-get-state test) "COMPLETED")
 		 (not (member (db:test-get-status test)
-			      '("PASS" "WARN" "CHECK" "WAIVED")))))
+			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
 (define (runs:calc-not-completed prereqs-not-met)
@@ -693,7 +693,7 @@
 	    ((and (or (not rerun)
 		      keepgoing)
 		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
-		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
+		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (debug:print-info 2 "running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
 	     (set! runflag #f))
