@@ -511,7 +511,7 @@
 	     (begin
 	       ;; Look at the test state and status
 	       (if (or (member (db:test-get-status tdat) 
-			       '("PASS" "WARN" "WAIVED" "CHECK"))
+			       '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
 		       (member (db:test-get-state tdat)
 			       '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))

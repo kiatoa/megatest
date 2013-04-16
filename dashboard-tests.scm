@@ -64,7 +64,7 @@
 				       (oldstatus (iup:attribute lbl "TITLE")))
 				   (if (not (equal? oldstatus newstatus))
 				       (begin
-					 (iup:attribute-set! lbl "FGCOLOR" (get-color-for-state-status (db:test-get-state testdat)
+					 (iup:attribute-set! lbl "FGCOLOR" (common:get-color-for-state-status (db:test-get-state testdat)
 												       (db:test-get-status testdat)))
 					 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
 	      lbl)
@@ -190,7 +190,7 @@
 (define (update-state-status-buttons testdat)
   (let* ((state  (db:test-get-state  testdat))
 	 (status (db:test-get-status testdat))
-	 (color  (get-color-for-state-status state status)))
+	 (color  (common:get-color-for-state-status state status)))
     ((vector-ref *state-status* 0) state color)
     ((vector-ref *state-status* 1) status color)))
 
@@ -239,7 +239,7 @@
 								    (open-run-close db:test-set-state-status-by-id #f test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
-				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED"))))
+				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
 			    (lambda (status color)
 			      (for-each 
