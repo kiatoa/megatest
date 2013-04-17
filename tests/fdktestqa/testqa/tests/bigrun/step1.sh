@@ -1,3 +1,3 @@
 #!/bin/sh
-sleep 100
+sleep 10
 exit 0

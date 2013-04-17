@@ -140,9 +140,9 @@
 					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (and (> (+ num-running num-running-in-jobgroup) 0)
-	     (< *runs:can-run-more-tests-delay* 10))
+	     (< *runs:can-run-more-tests-delay* 2))
 	(begin
-	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 1)) ;; 0.1))
+	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.01))
 	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
