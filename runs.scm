@@ -434,7 +434,7 @@
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 ( ;; (and
@@ -443,12 +443,12 @@
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 (runs:shrink-can-run-more-tests-delay)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
-		  (thread-sleep! (+ 2 *global-delta*))
+		  ;; (thread-sleep! (+ 2 *global-delta*))
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
@@ -457,7 +457,7 @@
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
 (runs:shrink-can-run-more-tests-delay)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 (else ;; must be we have unmet prerequisites
@@ -468,7 +468,7 @@
 			(begin
 			  ;; couldn't run, take a breather
 			  (debug:print-info 4 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-			  (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
+			  ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
 			  (loop (car newtal)(cdr newtal) reruns))
 			;; the waiton is FAIL so no point in trying to run hed ever again
@@ -477,12 +477,12 @@
 				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 						    " from the launch list as it has prerequistes that are FAIL")
 (runs:shrink-can-run-more-tests-delay)
-				       (thread-sleep! *global-delta*)
+				       ;; (thread-sleep! *global-delta*)
 				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 (runs:shrink-can-run-more-tests-delay)
-				  (thread-sleep! (+ 0.01 *global-delta*))
+				  ;; (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
 	     ;; case where an items came in as a list been processed
@@ -509,7 +509,7 @@
 	      (if (not (null? tal))
 		  (begin
 		    (debug:print-info 4 "End of items list, looping with next after short delay")
-		    (thread-sleep! (+ 0.01 *global-delta*))
+                    ;; (thread-sleep! (+ 0.01 *global-delta*))
 		    (loop (car tal)(cdr tal) reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
