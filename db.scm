@@ -1757,6 +1757,66 @@
 	 (let ((record (hash-table-ref/default 
 			res 
 			(db:step-get-stepname step) 
+			;;        stepname                start end status Duration  Logfile 
+			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))
+	   (case (string->symbol (db:step-get-state step))
+	     ((start)(vector-set! record 1 (db:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(db:step-get-status step)))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (db:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     (else
+	      (vector-set! record 2 (db:step-get-state step))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (db:step-get-event_time step))))
+	   (hash-table-set! res (db:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
+       (sort steps (lambda (a b)
+		     (cond
+		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
+		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
+		       (<   (db:step-get-id a)        (db:step-get-id b)))
+		      (else #f)))))
+      res)))
+
+;; get a pretty table to summarize steps
+;;
+(define (db:get-steps-table-list db test-id)
+  (let ((steps   (db:get-steps-for-test db test-id)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(db:step-get-stepname step) 
 			;;        stepname                start end status    
 			(vector (db:step-get-stepname step) ""   "" ""     "" ""))))
 	   (debug:print 6 "record(before) = " record 
@@ -1804,6 +1864,32 @@
 		       (<   (db:step-get-id a)        (db:step-get-id b)))
 		      (else #f)))))
       res)))
+
+(define (db:get-compressed-steps test-id)
+  (let* ((comprsteps (open-run-close db:get-steps-table #f test-id)))
+    (map (lambda (x)
+	   ;; take advantage of the \n on time->string
+	   (vector
+	    (vector-ref x 0)
+	    (let ((s (vector-ref x 1)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (let ((s (vector-ref x 2)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (vector-ref x 3)    ;; status
+	    (vector-ref x 4)
+	    (vector-ref x 5)))  ;; time delta
+	 (sort (hash-table-values comprsteps)
+	       (lambda (a b)
+		 (let ((time-a (vector-ref a 1))
+		       (time-b (vector-ref b 1)))
+		   (if (and (number? time-a)(number? time-b))
+		       (if (< time-a time-b)
+			   #t
+			   (if (eq? time-a time-b)
+			       (string<? (conc (vector-ref a 2))
+					 (conc (vector-ref b 2)))
+			       #f))
+		       (string<? (conc time-a)(conc time-b)))))))))
 
 ;;======================================================================
 ;; M I S C   M A N A G E M E N T   I T E M S 
