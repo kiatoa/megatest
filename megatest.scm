@@ -35,7 +35,7 @@
 
 ;; (use trace dot-locking)
 ;; (trace
-;;  thread-sleep!
+;;   thread-sleep!
 ;;  sqlite3:execute
 ;;  sqlite3:for-each-row
 ;;  open-run-close

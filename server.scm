@@ -81,7 +81,7 @@
 		  (mutex-lock! *db:process-queue-mutex*)
 		  (db:process-cached-writes db)
 		  (mutex-unlock! *db:process-queue-mutex*)
-		  (thread-sleep! 0.01))))
+		  (thread-sleep! 0.005))))
 	  (loop)))
       (begin
 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")

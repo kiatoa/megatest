@@ -1430,7 +1430,7 @@
     ;; periodic flushing of the queue is taken care of by 
     ;; db:flush-queue
     (let loop ()
-      (thread-sleep! 0.002)
+      (thread-sleep! 0.001)
       (mutex-lock! *completed-mutex*)
       (if (hash-table-ref/default *completed-writes* qry-sig #f)
 	  (begin

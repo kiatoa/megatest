@@ -140,9 +140,9 @@
 					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (and (> (+ num-running num-running-in-jobgroup) 0)
-	     (< *runs:can-run-more-tests-delay* 2))
+	     (< *runs:can-run-more-tests-delay* 1))
 	(begin
-	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.01))
+	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.009))
 	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
@@ -547,7 +547,7 @@
 			    (if (list? items-list)
 				(begin
 				  (tests:testqueue-set-items! test-record items-list)
-				  (thread-sleep! *global-delta*)
+				  ;; (thread-sleep! *global-delta*)
 				  (loop hed tal reruns))
 				(begin
 				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
@@ -571,7 +571,7 @@
 				     ", removing it from to-do list")
 			(if (not (null? tal))
 			    (begin
-			      (thread-sleep! *global-delta*)
+                              ;; (thread-sleep! *global-delta*)
 			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
@@ -581,7 +581,7 @@
 		    ;; if can't run more just loop with next possible test
 		    (begin
 		      (debug:print-info 4 "processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
-		      (thread-sleep! (+ 2 *global-delta*))
+		      ;; (thread-sleep! (+ 2 *global-delta*))
 		      (loop (car newtal)(cdr newtal) reruns))))) ;; END OF (or (procedure? items)(eq? items 'have-procedure))
 	     
 	     ;; this case should not happen, added to help catch any bugs
@@ -595,7 +595,7 @@
 		(if (< num-retries max-retries)
 		    (set! newlst (append reruns newlst)))
 		(set! num-retries (+ num-retries 1))
-		(thread-sleep! (+ 1 *global-delta*))
+		;; (thread-sleep! (+ 1 *global-delta*))
 		(if (not (null? newlst))
 		    ;; since reruns have been tacked on to newlst create new reruns from junked
 		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))
