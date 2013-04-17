@@ -76,12 +76,12 @@
 	    (mutex-lock! *incoming-mutex*)
 	    (set! last-write-flush-time *server:last-write-flush*)
 	    (mutex-unlock! *incoming-mutex*)
-	    (if (> (- (current-milliseconds) last-write-flush-time) 400)
+	    (if (> (- (current-milliseconds) last-write-flush-time) 10)
 		(begin
 		  (mutex-lock! *db:process-queue-mutex*)
 		  (db:process-cached-writes db)
 		  (mutex-unlock! *db:process-queue-mutex*)
-		  (thread-sleep! 0.5))))
+		  (thread-sleep! 0.01))))
 	  (loop)))
       (begin
 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
