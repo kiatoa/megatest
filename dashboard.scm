@@ -424,8 +424,60 @@ Misc
 
 (define (mark-for-update)
   (set! *last-db-update-time* 0)
-  (set! *delayed-update* 1)
-  )
+  (set! *delayed-update* 1))
+
+;;======================================================================
+;; R U N C O N T R O L
+;;======================================================================
+
+(define (dashboard:run-controls)
+  (let* ((targets       (make-hash-table))
+	 (runconf-targs (common:get-runconfig-targets))
+	 (db-target-dat (open-run-close db:get-targets #f))
+	 (header        (vector-ref db-target-dat 0))
+	 (db-targets    (vector-ref db-target-dat 1))
+	 (tests         (make-hash-table))
+	 (action        "-runtests")
+	 (cmdln         "")
+	 (runlogs       (make-hash-table)))
+    ;; refer to *keys*, *dbkeys* for keys
+    (print "db-targets: " db-targets)
+    (iup:vbox
+     (iup:hbox
+      ;; Target and action
+      (iup:vbox
+       ;; Target selectors
+       (apply iup:hbox
+	      (map 
+	       (lambda (key)
+		 (print "Label key=" key)
+		 (iup:label key #:size "x15" #:fontsize "10" #:expand "HORIZONTAL"))
+	       header)))
+      ;; key1 key2 key3 ...
+      ;; target entry (wild cards allowed)
+      
+      ;; The action
+      (iup:hbox
+       ;; label Action | action selector
+       ))
+     ;; Test/items selector
+     (iup:hbox
+      ;; tests
+      ;; items
+      ))
+    ;; The command line
+    (iup:hbox
+     ;; commandline entry
+     ;; GO button
+     )
+    ;; The command log monitor
+    (iup:tabs
+     ;; log monitor
+     )))
+   
+;;======================================================================
+;; R U N S 
+;;======================================================================
 
 (define (make-dashboard-buttons nruns ntests keynames)
   (let* ((nkeys   (length keynames))
@@ -604,16 +656,22 @@ Misc
     (iup:show
      (iup:dialog 
       #:title "Megatest dashboard"
-      (iup:vbox
-	(apply iup:hbox 
-	       (cons (apply iup:vbox lftlst)
-		     (list 
-		      (iup:vbox
-		       ;; the header
-		       (apply iup:hbox (reverse hdrlst))
-		       (apply iup:hbox (reverse bdylst))))))
-       controls)))
-    (vector keycol lftcol header runsvec)))
+      (let ((tabs (iup:tabs
+		   (iup:vbox
+		    (apply iup:hbox 
+			   (cons (apply iup:vbox lftlst)
+				 (list 
+				  (iup:vbox
+				   ;; the header
+				   (apply iup:hbox (reverse hdrlst))
+				   (apply iup:hbox (reverse bdylst))))))
+		    controls)
+		   (dashboard:run-controls)
+		   )))
+	(iup:attribute-set! tabs "TABTITLE0" "Runs")
+	(iup:attribute-set! tabs "TABTITLE1" "Run Control")
+	tabs)))
+     (vector keycol lftcol header runsvec)))
 
 (if (or (args:get-arg "-rows")
 	(get-environment-variable "DASHBOARDROWS" ))

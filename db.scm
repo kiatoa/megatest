@@ -585,6 +585,27 @@
     (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
+;; Get all targets from the db
+;;
+(define (db:get-targets db)
+  (let* ((res       '())
+	 (keys       (db:get-keys db))
+	 (header     (map key:get-fieldname keys))
+	 (keystr     (keys->keystr keys))
+	 (qrystr     (conc "SELECT " keystr " FROM runs;"))
+	 (seen       (make-hash-table)))
+    (sqlite3:for-each-row
+     (lambda (a . x)
+       (let ((targ (cons a x)))
+	 (if (not (hash-table-ref/default seen targ #f))
+	     (begin
+	       (hash-table-set! seen targ #t)
+	       (set! res (cons (apply vector targ) res))))))
+     db
+     qrystr)
+    (debug:print-info 11 "db:get-targets END qrystr: " qrystr )
+    (vector header res)))
+
 ;; just get count of runs
 (define (db:get-num-runs db runpatt)
   (let ((numruns 0))
