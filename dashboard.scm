@@ -430,6 +430,41 @@ Misc
 ;; R U N C O N T R O L
 ;;======================================================================
 
+;; target populating logic
+;;  
+;; lb            = <vector curr-label-object next-label-object>
+;; field         = target field name for this dropdown
+;; referent-vals = selected value in the left dropdown
+;; targets       = list of targets to use to build the dropdown
+;; 
+;; each node is chained: key1 -> key2 -> key3
+;;
+;; must select values from only apropriate targets
+;;   a b c
+;;   a d e
+;;   a b f
+;;        a/b => c f
+;;
+(define (dashboard:populate-target-dropdown lb referent-vals targets)
+  ;; is the current value in the new list? choose new default if not
+  (let* ((remvalues  (map (lambda (row)
+			    (common:list-is-sublist referent-vals (vector->list row)))
+			  targets))
+	 (values     (map car (filter list? remvalues)))
+	 (sel-valnum (iup:attribute lb "VALUE"))
+	 (sel-val    (iup:attribute lb sel-valnum))
+	 (val-num    0))
+    ;; first check if the current value is in the new list, otherwise replace with 
+    ;; first value from values
+    (iup:attribute-set! lb "REMOVEITEM" "ALL")
+    (for-each (lambda (val)
+		(iup:attribute-set! lb "APPENDITEM" val)
+		(if (equal? sel-val val)
+		    (iup:attribute-set! lb "VALUE" val-num))
+		(set! val-num (+ val-num 1)))
+	      values)))
+  
+
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (runconf-targs (common:get-runconfig-targets))
@@ -442,30 +477,34 @@ Misc
 	 (runlogs       (make-hash-table)))
     ;; refer to *keys*, *dbkeys* for keys
     (print "db-targets: " db-targets)
-     (iup:vbox
-      (iup:hbox
+    (iup:vbox
+     (iup:hbox
        ;; Target and action
       (iup:vbox
         ;; Target selectors
         (apply iup:hbox
-	       (map 
-		(lambda (key)
-		  (print "Label key=" key)
-		  (let ((lb (iup:listbox 
-			     key 
-			     #:size "x15" 
-			     #:fontsize "10"
-			     #:expand "YES"
-			     #:value "1"
-			     #:dropdown "YES"
-			     )))
-		    (let loop ((count 1))
-		      (iup:attribute-set!
-		       lb count 
-		       (db:get-value-by-header row header field)
-		header)))
-))))
-
+	       (let loop ((key     (car header))
+			  (remkeys (cdr header))
+			  (refvals '())
+			  (indx    0)
+			  (lbs     '()))
+		 (let ((lb (iup:listbox 
+			    key 
+			    #:size "x15" 
+			    #:fontsize "10"
+			    #:expand "YES"
+			    #:dropdown "YES"
+			    #:editbox "YES"
+			    )))
+		    ;; loop though all the targets and build the list for this dropdown
+		    (dashboard:populate-target-dropdown lb refvals db-targets)
+		    (if (null? remkeys)
+			(append lbs (list lb))
+			(loop (car remkeys)
+			      (cdr remkeys)
+			      (append refvals (list key))
+			      (+ indx 1)
+			      (append lbs (list lb))))))))))))
 ;;       ;; key1 key2 key3 ...
 ;;       ;; target entry (wild cards allowed)
 ;;       
