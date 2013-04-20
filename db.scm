@@ -508,6 +508,7 @@
 	(debug:print-info 11 "db:get-keys END (cache miss)")
 	res)))
 
+;; 
 (define (db:get-value-by-header row header field)
   (debug:print-info 4 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f

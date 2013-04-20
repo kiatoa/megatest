@@ -442,38 +442,51 @@ Misc
 	 (runlogs       (make-hash-table)))
     ;; refer to *keys*, *dbkeys* for keys
     (print "db-targets: " db-targets)
-    (iup:vbox
-     (iup:hbox
-      ;; Target and action
-      (iup:vbox
-       ;; Target selectors
-       (apply iup:hbox
-	      (map 
-	       (lambda (key)
-		 (print "Label key=" key)
-		 (iup:label key #:size "x15" #:fontsize "10" #:expand "HORIZONTAL"))
-	       header)))
-      ;; key1 key2 key3 ...
-      ;; target entry (wild cards allowed)
-      
-      ;; The action
+     (iup:vbox
       (iup:hbox
-       ;; label Action | action selector
-       ))
-     ;; Test/items selector
-     (iup:hbox
-      ;; tests
-      ;; items
-      ))
-    ;; The command line
-    (iup:hbox
-     ;; commandline entry
-     ;; GO button
-     )
-    ;; The command log monitor
-    (iup:tabs
-     ;; log monitor
-     )))
+       ;; Target and action
+      (iup:vbox
+        ;; Target selectors
+        (apply iup:hbox
+	       (map 
+		(lambda (key)
+		  (print "Label key=" key)
+		  (let ((lb (iup:listbox 
+			     key 
+			     #:size "x15" 
+			     #:fontsize "10"
+			     #:expand "YES"
+			     #:value "1"
+			     #:dropdown "YES"
+			     )))
+		    (let loop ((count 1))
+		      (iup:attribute-set!
+		       lb count 
+		       (db:get-value-by-header row header field)
+		header)))
+))))
+
+;;       ;; key1 key2 key3 ...
+;;       ;; target entry (wild cards allowed)
+;;       
+;;       ;; The action
+;;       (iup:hbox
+;;        ;; label Action | action selector
+;;        ))
+;;      ;; Test/items selector
+;;      (iup:hbox
+;;       ;; tests
+;;       ;; items
+;;       ))
+;;     ;; The command line
+;;     (iup:hbox
+;;      ;; commandline entry
+;;      ;; GO button
+;;      )
+;;     ;; The command log monitor
+;;     (iup:tabs
+;;      ;; log monitor
+;;      )))
    
 ;;======================================================================
 ;; R U N S 
