@@ -481,7 +481,26 @@ Misc
 	 (tests         (make-hash-table))
 	 (action        "-runtests")
 	 (cmdln         "")
-	 (runlogs       (make-hash-table)))
+	 (runlogs       (make-hash-table))
+	 (key-listboxes #f)
+	 (update-target (lambda (a b c d)
+			  (let* ((db-target-dat (open-run-close db:get-targets #f))
+				 (db-targets    (vector-ref db-target-dat 1)))
+			    (let loop ((key     (car header))
+				       (remkeys (cdr header))
+				       (refvals '())
+				       (indx    0)
+				       (lbs     '()))
+			      (let* ((lb (list-ref key-listboxes indx))
+				     ;; loop though all the targets and build the list for this dropdown
+				     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
+				(if (null? remkeys)
+				    (append lbs (list lb))
+				    (loop (car remkeys)
+					  (cdr remkeys)
+					  (append refvals (list selected-value))
+					  (+ indx 1)
+					  (append lbs (list lb))))))))))
     ;; refer to *keys*, *dbkeys* for keys
     (print "db-targets: " db-targets)
     (iup:vbox
@@ -490,28 +509,32 @@ Misc
       (iup:vbox
         ;; Target selectors
         (apply iup:hbox
-	       (let loop ((key     (car header))
-			  (remkeys (cdr header))
-			  (refvals '())
-			  (indx    0)
-			  (lbs     '()))
-		 (let* ((lb (iup:listbox 
-			     key 
-			     #:size "x15" 
-			     #:fontsize "10"
-			     #:expand "YES"
-			     ;; #:dropdown "YES"
-			     #:editbox "YES"
-			     ))
-			;; loop though all the targets and build the list for this dropdown
-			(selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
-		    (if (null? remkeys)
-			(append lbs (list lb))
-			(loop (car remkeys)
-			      (cdr remkeys)
-			      (append refvals (list selected-value))
-			      (+ indx 1)
-			      (append lbs (list lb))))))))))))
+	       (let ((key-lb
+		      (let loop ((key     (car header))
+				 (remkeys (cdr header))
+				 (refvals '())
+				 (indx    0)
+				 (lbs     '()))
+			(let* ((lb (iup:listbox 
+				    key 
+				    #:size "x15" 
+				    #:fontsize "10"
+				    #:expand "YES"
+				    ;; #:dropdown "YES"
+				    #:editbox "YES"
+				    #:action update-target
+				    ))
+			       ;; loop though all the targets and build the list for this dropdown
+			       (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
+			  (if (null? remkeys)
+			      (append lbs (list lb))
+			      (loop (car remkeys)
+				    (cdr remkeys)
+				    (append refvals (list selected-value))
+				    (+ indx 1)
+				    (append lbs (list lb))))))))
+		 (set! key-listboxes key-lb)
+		 key-lb)))))))
 
 (trace dashboard:populate-target-dropdown
        common:list-is-sublist)
