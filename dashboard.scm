@@ -17,6 +17,7 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
+(use trace)
 
 (declare (uses common))
 (declare (uses margs))
@@ -450,20 +451,26 @@ Misc
   (let* ((remvalues  (map (lambda (row)
 			    (common:list-is-sublist referent-vals (vector->list row)))
 			  targets))
-	 (values     (map car (filter list? remvalues)))
+	 (values     (delete-duplicates (map car (filter list? remvalues))))
 	 (sel-valnum (iup:attribute lb "VALUE"))
 	 (sel-val    (iup:attribute lb sel-valnum))
-	 (val-num    0))
+	 (val-num    1))
     ;; first check if the current value is in the new list, otherwise replace with 
     ;; first value from values
     (iup:attribute-set! lb "REMOVEITEM" "ALL")
     (for-each (lambda (val)
-		(iup:attribute-set! lb "APPENDITEM" val)
+		;; (iup:attribute-set! lb "APPENDITEM" val)
+		(iup:attribute-set! lb (conc val-num) val)
 		(if (equal? sel-val val)
 		    (iup:attribute-set! lb "VALUE" val-num))
 		(set! val-num (+ val-num 1)))
-	      values)))
-  
+	      values)
+    (let ((val (iup:attribute lb "VALUE")))
+      (if val
+	  val
+	  (let ((newval (car values)))
+	    (iup:attribute-set! lb "VALUE" newval)
+	    newval)))))
 
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
@@ -488,23 +495,27 @@ Misc
 			  (refvals '())
 			  (indx    0)
 			  (lbs     '()))
-		 (let ((lb (iup:listbox 
-			    key 
-			    #:size "x15" 
-			    #:fontsize "10"
-			    #:expand "YES"
-			    #:dropdown "YES"
-			    #:editbox "YES"
-			    )))
-		    ;; loop though all the targets and build the list for this dropdown
-		    (dashboard:populate-target-dropdown lb refvals db-targets)
+		 (let* ((lb (iup:listbox 
+			     key 
+			     #:size "x15" 
+			     #:fontsize "10"
+			     #:expand "YES"
+			     ;; #:dropdown "YES"
+			     #:editbox "YES"
+			     ))
+			;; loop though all the targets and build the list for this dropdown
+			(selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
 		    (if (null? remkeys)
 			(append lbs (list lb))
 			(loop (car remkeys)
 			      (cdr remkeys)
-			      (append refvals (list key))
+			      (append refvals (list selected-value))
 			      (+ indx 1)
 			      (append lbs (list lb))))))))))))
+
+(trace dashboard:populate-target-dropdown
+       common:list-is-sublist)
+
 ;;       ;; key1 key2 key3 ...
 ;;       ;; target entry (wild cards allowed)
 ;;       
