@@ -472,69 +472,68 @@ Misc
 	    (iup:attribute-set! lb "VALUE" newval)
 	    newval)))))
 
+(define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
+  (let* ((db-target-dat (open-run-close db:get-targets #f))
+	 (header        (vector-ref db-target-dat 0))
+	 (db-targets    (vector-ref db-target-dat 1))
+	 (key-listboxes (if key-lbs key-lbs (make-list (length header) #f))))
+    (let loop ((key     (car header))
+	       (remkeys (cdr header))
+	       (refvals '())
+	       (indx    0)
+	       (lbs     '()))
+      (let* ((lb (let ((lb (list-ref key-listboxes indx)))
+		   (if lb
+		       lb
+		       (iup:listbox 
+			#:size "x15" 
+				    #:fontsize "10"
+				    #:expand "YES"
+				    ;; #:dropdown "YES"
+				    #:editbox "YES"
+				    #:action action-proc
+				    ))))
+	     ;; loop though all the targets and build the list for this dropdown
+	     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
+	(if (null? remkeys)
+	    ;; return a list of the listbox items and an iup:hbox with the labels and listboxes
+	    (let ((listboxes (append lbs (list lb))))
+	      (list listboxes
+		    (map (lambda (htxt lb)
+			   (iup:vbox
+			    (iup:label htxt)
+			    lb))
+			 header
+			 listboxes)))
+	    (loop (car remkeys)
+		  (cdr remkeys)
+		  (append refvals (list selected-value))
+		  (+ indx 1)
+		  (append lbs (list lb))))))))
+
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (open-run-close db:get-targets #f))
-	 (header        (vector-ref db-target-dat 0))
-	 (db-targets    (vector-ref db-target-dat 1))
 	 (tests         (make-hash-table))
 	 (action        "-runtests")
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
-	 (update-target (lambda (a b c d)
-			  (let* ((db-target-dat (open-run-close db:get-targets #f))
-				 (db-targets    (vector-ref db-target-dat 1)))
-			    (let loop ((key     (car header))
-				       (remkeys (cdr header))
-				       (refvals '())
-				       (indx    0)
-				       (lbs     '()))
-			      (let* ((lb (list-ref key-listboxes indx))
-				     ;; loop though all the targets and build the list for this dropdown
-				     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
-				(if (null? remkeys)
-				    (append lbs (list lb))
-				    (loop (car remkeys)
-					  (cdr remkeys)
-					  (append refvals (list selected-value))
-					  (+ indx 1)
-					  (append lbs (list lb))))))))))
+	 (update-keyvals (lambda (obj b c d)
+			   (print "obj: " obj ", b " b ", c " c ", d " d)
+			   (dashboard:update-target-selector key-listboxes))))
     ;; refer to *keys*, *dbkeys* for keys
-    (print "db-targets: " db-targets)
     (iup:vbox
      (iup:hbox
        ;; Target and action
       (iup:vbox
         ;; Target selectors
         (apply iup:hbox
-	       (let ((key-lb
-		      (let loop ((key     (car header))
-				 (remkeys (cdr header))
-				 (refvals '())
-				 (indx    0)
-				 (lbs     '()))
-			(let* ((lb (iup:listbox 
-				    key 
-				    #:size "x15" 
-				    #:fontsize "10"
-				    #:expand "YES"
-				    ;; #:dropdown "YES"
-				    #:editbox "YES"
-				    #:action update-target
-				    ))
-			       ;; loop though all the targets and build the list for this dropdown
-			       (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
-			  (if (null? remkeys)
-			      (append lbs (list lb))
-			      (loop (car remkeys)
-				    (cdr remkeys)
-				    (append refvals (list selected-value))
-				    (+ indx 1)
-				    (append lbs (list lb))))))))
+	       (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+		      (key-lb   (car dat))
+		      (combos   (cadr dat)))
 		 (set! key-listboxes key-lb)
-		 key-lb)))))))
+		 combos)))))))
 
 (trace dashboard:populate-target-dropdown
        common:list-is-sublist)
