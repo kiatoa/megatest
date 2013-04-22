@@ -5,23 +5,6 @@ v1.0, April 2012
 :doctype: book
 
 
-[dedication]
-Dedication
-==========
-
-Dedicated to my wife Joanna who has kindly supported my working on various projects over the years.
-
-Thanks
-------
-
-Thank you the many people I've worked over the years who have 
-shared their knowledge and insights with me.
-
-Thanks also to the creators of the various open source projects that
-Megatest is built on. These include Linux, xemacs, chicken scheme,
-fossil and asciidoc. Without these projects something like Megatest 
-would be difficult or impossible to do.
-
 [preface]
 Preface
 =======

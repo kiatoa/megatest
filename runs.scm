@@ -979,7 +979,7 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (get-all-legal-tests)))
+  (let ((test-names (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-path    (conc *toppath* "/tests/" test-name))

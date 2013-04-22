@@ -14,6 +14,7 @@
 (import (prefix iup iup:))
 
 (use canvas-draw)
+(import canvas-draw-iup)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
@@ -511,29 +512,68 @@ Misc
 		  (+ indx 1)
 		  (append lbs (list lb))))))))
 
+;(define (dashboard:display-tests cnv x y)
+
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (runconf-targs (common:get-runconfig-targets))
-	 (tests         (make-hash-table))
+	 (test-records  (make-hash-table))
+	 (test-names    (tests:get-valid-tests *toppath* '()))
+	 (sorted-testnames #f)
 	 (action        "-runtests")
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
 	 (update-keyvals (lambda (obj b c d)
-			   (print "obj: " obj ", b " b ", c " c ", d " d)
-			   (dashboard:update-target-selector key-listboxes))))
+			   ;; (print "obj: " obj ", b " b ", c " c ", d " d)
+			   (dashboard:update-target-selector key-listboxes)))
+	 (test-browse-xoffset 0)
+	 (test-browse-yoffset 0)
+	 (first-time    #t))
+    (tests:get-full-data test-names test-records '())
+    (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
+    
     ;; refer to *keys*, *dbkeys* for keys
     (iup:vbox
      (iup:hbox
        ;; Target and action
-      (iup:vbox
+      (iup:frame
+       #:title "Target"
+       (iup:vbox
         ;; Target selectors
         (apply iup:hbox
 	       (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
 		      (key-lb   (car dat))
 		      (combos   (cadr dat)))
 		 (set! key-listboxes key-lb)
-		 combos)))))))
+		 combos))))
+      (iup:frame
+       #:title "Tests and Tasks"
+       (iup:vbox
+	(iup:canvas #:action (make-canvas-action
+			      (lambda (cnv xadj yadj)
+				;; (print "cnv: " cnv " x: " x " y: " y)
+				(canvas-clear! cnv)
+				(canvas-font-set! cnv "Courier New, -8")
+				(let-values (((sizex   sizey sizexmm sizeymm) (canvas-size cnv)))
+	                           (if first-time
+				       (begin
+					 (set! first-time #f)
+					 (set! test-browse-xoffset (- 20 (* (/ sizex 2) (* 8 xadj))))
+					 (set! test-browse-yoffset (- 20 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+			           (let* ((xtorig (+ test-browse-xoffset (* (/ sizex 2) (* 8 xadj)))) ;;  (- xadj 1))))
+					  (ytorig (+ test-browse-yoffset (* (/ sizey 2) (* 8 (- 1 yadj))))))
+				     (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv))
+				     (for-each (lambda (testname)
+						 (canvas-text! cnv (+ xtorig 5)(+ ytorig 5) testname) ;; (conc testname " (" xtorig "," ytorig ")"))
+						 (canvas-rectangle! cnv xtorig (+ 60 xtorig) ytorig (+ ytorig 30))
+						 (set! ytorig (+ ytorig 50)))
+					       (reverse sorted-testnames))))))
+		    #:size "150x200"
+		    #:scrollbar "YES"
+		    #:posx "0.5"
+		    #:posy "0.5")))))))
+
 
 (trace dashboard:populate-target-dropdown
        common:list-is-sublist)
