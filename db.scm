@@ -1277,7 +1277,7 @@
   (cdb:client-call serverdat 'flush #f *default-numtries*))
 
 (define (cdb:kill-server serverdat)
-  (cdb:client-call serverdat 'killserver #f *default-numtries*))
+  (cdb:client-call serverdat 'killserver #t *default-numtries*))
 
 (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
@@ -1335,7 +1335,8 @@
 			       flush
 			       sync
 			       set-verbosity
-			       killserver))
+			       killserver
+			       ))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1470,7 +1471,7 @@
 	  (cond
 	   ((member stmt-key db:special-queries)
 	    (let ((starttime (current-milliseconds)))
-	      (debug:print-info 11 "Handling special statement " stmt-key)
+	      (debug:print-info 9 "Handling special statement " stmt-key)
 	      (case stmt-key
 		((immediate)
 		 ;; This is a read or mixed read-write query, must clear the cache
