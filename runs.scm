@@ -253,6 +253,9 @@
     ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
     ;; (sqlite3:finalize! db) 
     ;; now add non-directly referenced dependencies (i.e. waiton)
+    ;;======================================================================
+    ;; refactoring this block into tests:get-full-data
+    ;;======================================================================
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc

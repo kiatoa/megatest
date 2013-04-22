@@ -562,13 +562,29 @@ Misc
 					 (set! test-browse-xoffset (- 20 (* (/ sizex 2) (* 8 xadj))))
 					 (set! test-browse-yoffset (- 20 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
 			           (let* ((xtorig (+ test-browse-xoffset (* (/ sizex 2) (* 8 xadj)))) ;;  (- xadj 1))))
-					  (ytorig (+ test-browse-yoffset (* (/ sizey 2) (* 8 (- 1 yadj))))))
+					  (ytorig (+ test-browse-yoffset (* (/ sizey 2) (* 8 (- 1 yadj)))))
+					  (boxw   80)
+					  (boxh   30)
+					  (gapx   20)
+					  (gapy   30))
 				     (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv))
-				     (for-each (lambda (testname)
-						 (canvas-text! cnv (+ xtorig 5)(+ ytorig 5) testname) ;; (conc testname " (" xtorig "," ytorig ")"))
-						 (canvas-rectangle! cnv xtorig (+ 60 xtorig) ytorig (+ ytorig 30))
-						 (set! ytorig (+ ytorig 50)))
-					       (reverse sorted-testnames))))))
+				     (let loop ((hed (car (reverse sorted-testnames)))
+						(tal (cdr (reverse sorted-testnames)))
+						(llx xtorig)
+						(lly ytorig)
+						(urx (+ xtorig boxw))
+						(ury (+ ytorig boxh)))
+				       (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
+				       (canvas-rectangle! cnv llx urx lly ury)
+				       (if (not (null? tal))
+					   ;; leave a column of space to the right to list items
+					   (let ((have-room (< urx (- sizex boxw gapx boxw))))  ;; is there room for another column?
+					     (loop (car tal)
+						   (cdr tal)
+						   (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
+						   (if have-room lly (+ lly boxh gapy))
+						   (if have-room (+ urx boxw gapx) (+ xtorig boxw))
+						   (if have-room ury (+ ury boxh gapy))))))))))
 		    #:size "150x200"
 		    #:scrollbar "YES"
 		    #:posx "0.5"
