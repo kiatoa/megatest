@@ -512,7 +512,46 @@ Misc
 		  (+ indx 1)
 		  (append lbs (list lb))))))))
 
-;(define (dashboard:display-tests cnv x y)
+(define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
+  (canvas-clear! cnv)
+  (canvas-font-set! cnv "Courier New, -8")
+  (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
+	       ((originx originy)             (canvas-origin cnv)))
+      (if (hash-table-ref/default test-draw-state 'first-time #t)
+	  (begin
+	    (hash-table-set! test-draw-state 'first-time #f)
+	    (hash-table-set! test-draw-state 'scalef 8)
+	    ;; set these 
+	    (hash-table-set! test-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
+	    (hash-table-set! test-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+      (let* ((scalef (hash-table-ref/default test-draw-state 'scalef 8))
+	     (test-browse-xoffset (hash-table-ref test-draw-state 'test-browse-xoffset))
+	     (test-browse-yoffset (hash-table-ref test-draw-state 'test-browse-yoffset))
+	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
+	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
+	     (boxw   80)
+	     (boxh   30)
+	     (gapx   20)
+	     (gapy   30))
+	(print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
+	(let loop ((hed (car (reverse sorted-testnames)))
+		   (tal (cdr (reverse sorted-testnames)))
+		   (llx xtorig)
+		   (lly ytorig)
+		   (urx (+ xtorig boxw))
+		   (ury (+ ytorig boxh)))
+	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
+	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
+	  (canvas-rectangle! cnv llx urx lly ury)
+	  (if (not (null? tal))
+	      ;; leave a column of space to the right to list items
+	      (let ((have-room (< urx (- sizex boxw gapx boxw))))  ;; is there room for another column?
+		(loop (car tal)
+		      (cdr tal)
+		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
+		      (if have-room lly (+ lly boxh gapy))
+		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
+		      (if have-room ury (+ ury boxh gapy)))))))))
 
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
@@ -526,10 +565,11 @@ Misc
 	 (key-listboxes #f)
 	 (update-keyvals (lambda (obj b c d)
 			   ;; (print "obj: " obj ", b " b ", c " c ", d " d)
-			   (dashboard:update-target-selector key-listboxes)))
-	 (test-browse-xoffset 0)
-	 (test-browse-yoffset 0)
-	 (first-time    #t))
+			   (dashboard:update-target-selector key-listboxes)
+			   ))
+	 (tests-draw-state (make-hash-table))) ;; use for keeping state of the test canvas
+    (hash-table-set! tests-draw-state 'first-time #t)
+    (hash-table-set! tests-draw-state 'scalef 8)
     (tests:get-full-data test-names test-records '())
     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
     
@@ -553,38 +593,7 @@ Misc
 	(iup:canvas #:action (make-canvas-action
 			      (lambda (cnv xadj yadj)
 				;; (print "cnv: " cnv " x: " x " y: " y)
-				(canvas-clear! cnv)
-				(canvas-font-set! cnv "Courier New, -8")
-				(let-values (((sizex   sizey sizexmm sizeymm) (canvas-size cnv)))
-	                           (if first-time
-				       (begin
-					 (set! first-time #f)
-					 (set! test-browse-xoffset (- 20 (* (/ sizex 2) (* 8 xadj))))
-					 (set! test-browse-yoffset (- 20 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
-			           (let* ((xtorig (+ test-browse-xoffset (* (/ sizex 2) (* 8 xadj)))) ;;  (- xadj 1))))
-					  (ytorig (+ test-browse-yoffset (* (/ sizey 2) (* 8 (- 1 yadj)))))
-					  (boxw   80)
-					  (boxh   30)
-					  (gapx   20)
-					  (gapy   30))
-				     (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv))
-				     (let loop ((hed (car (reverse sorted-testnames)))
-						(tal (cdr (reverse sorted-testnames)))
-						(llx xtorig)
-						(lly ytorig)
-						(urx (+ xtorig boxw))
-						(ury (+ ytorig boxh)))
-				       (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
-				       (canvas-rectangle! cnv llx urx lly ury)
-				       (if (not (null? tal))
-					   ;; leave a column of space to the right to list items
-					   (let ((have-room (< urx (- sizex boxw gapx boxw))))  ;; is there room for another column?
-					     (loop (car tal)
-						   (cdr tal)
-						   (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
-						   (if have-room lly (+ lly boxh gapy))
-						   (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-						   (if have-room ury (+ ury boxh gapy))))))))))
+				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
 		    #:size "150x200"
 		    #:scrollbar "YES"
 		    #:posx "0.5"
