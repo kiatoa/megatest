@@ -487,13 +487,13 @@ Misc
 		   (if lb
 		       lb
 		       (iup:listbox 
-			#:size "x15" 
-				    #:fontsize "10"
-				    #:expand "YES"
-				    ;; #:dropdown "YES"
-				    #:editbox "YES"
-				    #:action action-proc
-				    ))))
+			#:size "x10" 
+			#:fontsize "10"
+			#:expand "VERTICAL"
+			;; #:dropdown "YES"
+			#:editbox "YES"
+			#:action action-proc
+			))))
 	     ;; loop though all the targets and build the list for this dropdown
 	     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
 	(if (null? remkeys)
@@ -514,7 +514,7 @@ Misc
 
 (define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
   (canvas-clear! cnv)
-  (canvas-font-set! cnv "Courier New, -8")
+  (canvas-font-set! cnv "Courier New, -10")
   (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 	       ((originx originy)             (canvas-origin cnv)))
       (if (hash-table-ref/default test-draw-state 'first-time #t)
@@ -529,8 +529,8 @@ Misc
 	     (test-browse-yoffset (hash-table-ref test-draw-state 'test-browse-yoffset))
 	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
 	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
-	     (boxw   80)
-	     (boxh   30)
+	     (boxw   90)
+	     (boxh   25)
 	     (gapx   20)
 	     (gapy   30))
 	(print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
@@ -545,7 +545,10 @@ Misc
 	  (canvas-rectangle! cnv llx urx lly ury)
 	  (if (not (null? tal))
 	      ;; leave a column of space to the right to list items
-	      (let ((have-room (< urx (- sizex boxw gapx boxw))))  ;; is there room for another column?
+	      (let ((have-room 
+		     (if #t ;; put "auto" here where some form of auto rearanging can be done
+			 (> (* 3 (+ boxw gapx)) (- urx xtorig))
+			 (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
 		(loop (car tal)
 		      (cdr tal)
 		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
@@ -594,7 +597,8 @@ Misc
 			      (lambda (cnv xadj yadj)
 				;; (print "cnv: " cnv " x: " x " y: " y)
 				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    #:size "150x200"
+		    #:size "150x150"
+		    #:expand "YES"
 		    #:scrollbar "YES"
 		    #:posx "0.5"
 		    #:posy "0.5")))))))

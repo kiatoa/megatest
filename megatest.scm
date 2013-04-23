@@ -25,6 +25,7 @@
 (declare (uses client))
 (declare (uses tests))
 (declare (uses genexample))
+(declare (uses daemon))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -315,17 +316,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-remove-runs" "-lock"        "-unlock"
 		       "-update-meta" "-extract-ods"))))
 	(if (setup-for-run)
-	    (let ((servers (open-run-close tasks:get-best-server tasks:open-db)))
+	    (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
+		       (trycount 0))
 	      (if (or (not servers)
 		      (null? servers))
 		  (begin
-		    (debug:print 0 "INFO: Starting server as none running ...")
-		    ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		    (system (conc (car (argv)) " -server - -daemonize -transport " (args:get-arg "-transport" "http")))
-		    (thread-sleep! 3)) ;; give the server a few seconds to start
-		  (debug:print 0 "INFO: Servers already running " servers)
+		    (if (eq? trycount 0) ;; just do the server start once
+			(begin
+			  (debug:print 0 "INFO: Starting server as none running ...")
+			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
+			  (process-fork (lambda ()
+					  (daemon:ize)
+					  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
+			  (thread-sleep! 3))
+			(debug:print-info 0 "Waiting for server to start"))
+		    (loop (open-run-close tasks:get-best-server tasks:open-db) 
+			  (+ trycount 1)))
+		  (debug:print 0 "INFO: Server(s) running " servers)
 		  )))))
-	
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -372,8 +381,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
 	    (set! *didsomething* #t)
-	    (exit) ;; must do, would have to add checks to many/all calls below
-	    )
+	    (exit)) ;; must do, would have to add checks to many/all calls below
 	  (exit)))
     ;; if not list or kill then start a client (if appropriate)
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")

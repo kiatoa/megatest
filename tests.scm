@@ -541,9 +541,8 @@
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
-					   (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-					   (if db (sqlite3:finalize! db))
-					   (exit 1)))))
+					   (debug:print 0 "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+					     ""))))
 			  (debug:print-info 8 "waitons string is " instr)
 			  (string-split (cond
 					 ((procedure? instr)
@@ -554,58 +553,64 @@
 					 (else 
 					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
 					  ""))))))
-	  (debug:print-info 8 "waitons: " waitons)
-	  ;; check for hed in waitons => this would be circular, remove it and issue an
-	  ;; error
-	  (if (member hed waitons)
+	  (if (not config) ;; this is a non-existant test called in a waiton. 
+	      (if (null? tal)
+		  test-records
+		  (loop (car tal)(cdr tal)))
 	      (begin
-		(debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
-		(set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
-	  
-	  ;; (items   (items:get-items-from-config config)))
-	  (if (not (hash-table-ref/default test-records hed #f))
-	      (hash-table-set! test-records
-			       hed (vector hed     ;; 0
-					   config  ;; 1
-					   waitons ;; 2
-					   (config-lookup config "requirements" "priority")     ;; priority 3
-					   (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
-						 (itemstable (hash-table-ref/default config "itemstable" #f))) 
-					     ;; if either items or items table is a proc return it so test running
-					     ;; process can know to call items:get-items-from-config
-					     ;; if either is a list and none is a proc go ahead and call get-items
-					     ;; otherwise return #f - this is not an iterated test
-					     (cond
-					      ((procedure? items)      
-					       (debug:print-info 4 "items is a procedure, will calc later")
-					       items)            ;; calc later
-					      ((procedure? itemstable)
-					       (debug:print-info 4 "itemstable is a procedure, will calc later")
-					       itemstable)       ;; calc later
-					      ((filter (lambda (x)
-							 (let ((val (car x)))
-							   (if (procedure? val) val #f)))
-						       (append (if (list? items) items '())
-							       (if (list? itemstable) itemstable '())))
-					       'have-procedure)
-					      ((or (list? items)(list? itemstable)) ;; calc now
-					       (debug:print-info 4 "items and itemstable are lists, calc now\n"
-								 "    items: " items " itemstable: " itemstable)
-					       (items:get-items-from-config config))
-					      (else #f)))                           ;; not iterated
-					   #f      ;; itemsdat 5
-					   #f      ;; spare - used for item-path
-					   )))
-	  (for-each 
-	   (lambda (waiton)
-	     (if (and waiton (not (member waiton test-names)))
-		 (begin
-		   (set! required-tests (cons waiton required-tests))
-		   (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
-	   waitons)
-	  (let ((remtests (delete-duplicates (append waitons tal))))
-	    (if (not (null? remtests))
-		(loop (car remtests)(cdr remtests))))))))
+		(debug:print-info 8 "waitons: " waitons)
+		;; check for hed in waitons => this would be circular, remove it and issue an
+		;; error
+		(if (member hed waitons)
+		    (begin
+		      (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		      (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+		
+		;; (items   (items:get-items-from-config config)))
+		(if (not (hash-table-ref/default test-records hed #f))
+		    (hash-table-set! test-records
+				     hed (vector hed     ;; 0
+						 config  ;; 1
+						 waitons ;; 2
+						 (config-lookup config "requirements" "priority")     ;; priority 3
+						 (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
+						       (itemstable (hash-table-ref/default config "itemstable" #f))) 
+						   ;; if either items or items table is a proc return it so test running
+						   ;; process can know to call items:get-items-from-config
+						   ;; if either is a list and none is a proc go ahead and call get-items
+						   ;; otherwise return #f - this is not an iterated test
+						   (cond
+						    ((procedure? items)      
+						     (debug:print-info 4 "items is a procedure, will calc later")
+						     items)            ;; calc later
+						    ((procedure? itemstable)
+						     (debug:print-info 4 "itemstable is a procedure, will calc later")
+						     itemstable)       ;; calc later
+						    ((filter (lambda (x)
+							       (let ((val (car x)))
+								 (if (procedure? val) val #f)))
+							     (append (if (list? items) items '())
+								     (if (list? itemstable) itemstable '())))
+						     'have-procedure)
+						    ((or (list? items)(list? itemstable)) ;; calc now
+						     (debug:print-info 4 "items and itemstable are lists, calc now\n"
+								       "    items: " items " itemstable: " itemstable)
+						     (items:get-items-from-config config))
+						    (else #f)))                           ;; not iterated
+						 #f      ;; itemsdat 5
+						 #f      ;; spare - used for item-path
+						 )))
+		(for-each 
+		 (lambda (waiton)
+		   (if (and waiton (not (member waiton test-names)))
+		       (begin
+			 (set! required-tests (cons waiton required-tests))
+			 (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+		 waitons)
+		(let ((remtests (delete-duplicates (append waitons tal))))
+		  (if (not (null? remtests))
+		      (loop (car remtests)(cdr remtests))
+		      test-records))))))))
 
 ;;======================================================================
 ;; test steps
