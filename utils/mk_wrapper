@@ -5,7 +5,10 @@ cmd=$2
 
 echo "#!/bin/bash"
 if [ "$LD_LIBRARY_PATH" != "" ];then
+  echo "INFO: Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >&2
   echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+else
+  echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
 fullcmd="$prefix/bin/$cmd"

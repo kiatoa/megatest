@@ -195,6 +195,7 @@
 	(begin
 	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
 	  (set! *runremote* #f)
+	  (set! *transport-type* 'fs)
 	  #f))))
 
 
