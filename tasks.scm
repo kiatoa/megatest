@@ -25,14 +25,6 @@
 (define (tasks:open-db)
   (let* ((dbpath  (conc *toppath* "/monitor.db"))
 	 (exists  (file-exists? dbpath))
-	 ;; 	      ;; BUGGISHNESS: Remove this code in six months. Today is 11/13/2012
-	 ;;              (if (< (file-change-time dbpath) 1352851396.0)
-	 ;;        	  (begin
-	 ;;        	    (debug:print 0 "NOTE: removing old db file " dbpath)
-	 ;;        	    (delete-file dbpath)
-	 ;;        	    #f)
-	 ;;        	  #t)
-	 ;;              #f))
 	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! mdb handler)
@@ -127,6 +119,10 @@
 
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
+
+;; need a simple call for robustly removing records given host and port
+(define (tasks:server-delete mdb hostname port)
+  (tasks:server-deregister mdb hostname port: port action: 'delete))
 
 (define (tasks:server-get-server-id mdb hostname iface port pid)
   (debug:print-info 12 "tasks:server-get-server-id " mdb " " hostname " " iface " " port " " pid)
@@ -231,13 +227,13 @@
 (define (tasks:remove-server-records mdb)
   (sqlite3:execute mdb "DELETE FROM servers;"))
 
-(define (tasks:mark-server hostname port pid state)
+(define (tasks:mark-server hostname port pid state transport)
   (if port
       (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
       (open-run-close tasks:server-deregister tasks:open-db hostname pid:  pid)))
 
 
-(define (tasks:kill-server status hostname port pid)
+(define (tasks:kill-server status hostname port pid transport)
   (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
   (if port
       (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
@@ -252,10 +248,16 @@
 	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
 	     (process-signal pid signal/term)
 	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
-	     (process-signal pid signal/kill)) ;; local machine, send sig term
+	     ;;(process-signal pid signal/kill)
+	     ) ;; local machine, send sig term
 	    (begin
-	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-	      (cdb:kill-server zmq-socket))))    ;; remote machine, try telling server to commit suicide
+		(debug:print-info 1 "Stopping remote servers not yet supported."))))
+	;;      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
+	;;      (let ((serverdat (list hostname port)))
+	;;	(case (string->symbol transport)
+	;;	  ((http)(http-transport:client-connect hostname port))
+	;;	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
+	;;	(cdb:kill-server serverdat)))))    ;; remote machine, try telling server to commit suicide
       (begin
 	(if status 
 	    (if (equal? hostname (get-host-name))
