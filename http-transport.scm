@@ -24,6 +24,7 @@
 (declare (uses tests))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses server))
+(declare (uses daemon))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -45,6 +46,18 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
+
 (define (http-transport:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
@@ -58,7 +71,8 @@
 	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
-					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname)))
 	 (start-port    (if (and (args:get-arg "-port")
@@ -120,7 +134,7 @@
      (print-error-message exn)
      (if (< portnum 9000)
 	 (begin 
-	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
+	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
 	   ;; (open-run-close tasks:remove-server-records tasks:open-db)
 	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
@@ -135,7 +149,8 @@
 		   ipaddrstr portnum 0 'live 'http)
    (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
-   (start-server port: portnum)
+   ;; NEED WAY TO SET IP TO #f TO BIND ALL
+   (start-server bind-address: ipaddrstr port: portnum)
    (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
    (print "INFO: server has been stopped")))
 
@@ -313,6 +328,21 @@
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
+
+;; (use trace)
+;; (trace http-transport:keep-running 
+;;        tasks:get-best-server
+;;        http-transport:run
+;;        http-transport:launch
+;;        http-transport:try-start-server
+;;        http-transport:client-send-receive
+;;        http-transport:make-server-url
+;;        tasks:server-register
+;;        tasks:server-delete
+;;        start-server
+;;        hostname->ip
+;;        with-input-from-request
+;;        tasks:server-deregister-self)
 
 (define (http-transport:server-signal-handler signum)
   (handle-exceptions
