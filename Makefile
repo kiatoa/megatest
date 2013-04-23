@@ -22,7 +22,7 @@ MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 CSIPATH=$(shell which csi)
 CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 
-all : mtest dboard newdashboard
+all : mtest dboard newdboard
 
 mtest: $(OFILES) megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
@@ -30,8 +30,8 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES) dashboard.scm
 	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
-newdashboard : newdashboard.scm $(OFILES)
-	csc $(OFILES) newdashboard.scm -o newdashboard
+newdboard : newdashboard.scm $(OFILES) $(GOFILES)
+	csc $(OFILES) $(GOFILES) newdashboard.scm -o newdboard
 
 deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 	for i in iup im cd av call sqlite; do \
@@ -72,8 +72,10 @@ $(PREFIX)/bin/mtest : mtest
 	utils/mk_wrapper $(PREFIX) mtest > $(PREFIX)/bin/megatest
 	chmod a+x $(PREFIX)/bin/megatest
 
-$(PREFIX)/bin/newdashboard : newdashboard
-	$(INSTALL) newdashboard $(PREFIX)/bin/newdashboard
+$(PREFIX)/bin/newdboard : newdboard
+	$(INSTALL) newdboard $(PREFIX)/bin/newdboard
+	utils/mk_wrapper $(PREFIX) newdboard > $(PREFIX)/bin/newdashboard
+	chmod a+x $(PREFIX)/bin/newdashboard
 
 $(HELPERS) : utils/mt_* 
 	$(INSTALL) $< $@
@@ -106,7 +108,7 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	utils/mk_wrapper $(PREFIX) dboard > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
-install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind $(PREFIX)/bin/newdashboard
+install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind $(PREFIX)/bin/newdboard
 
 deploytarg/apropos.so : Makefile
 	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common zmq check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \

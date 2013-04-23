@@ -3,7 +3,7 @@
 ;; to this run field1val/field2val/field3val ...
 ;;======================================================================
 
-(use format)
+(use format directory-utils)
 
 (declare (unit runconfig))
 (declare (uses common))
@@ -62,10 +62,12 @@
     finaldat))
 
 (define (set-run-config-vars db run-id keys keyvals)
+  (push-directory *toppath*)
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
 	(targ       (or (args:get-arg "-target")
 			(args:get-arg "-reqtarg")
 			(db:get-target db run-id))))
+    (pop-directory)
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id #t keys keyvals
 			    environ-patt: (conc "(default"

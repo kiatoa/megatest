@@ -46,7 +46,7 @@
 ;; if handed a string, process it, else look for MT_CMDINFO
 (define (launch:get-cmdinfo-assoc-list #!key (encoded-cmd #f))
   (let ((enccmd (if encoded-cmd encoded-cmd (getenv "MT_CMDINFO"))))
-    (if enccdm
+    (if enccmd
 	(read (open-input-string (base64:base64-decode enccmd)))
 	'())))
 

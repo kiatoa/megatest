@@ -320,24 +320,6 @@ Misc
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
-(define (get-color-for-state-status state status)
-  (case (string->symbol state)
-    ((COMPLETED)
-     (if (equal? status "PASS")
-	 "70 249 73"
-	 (if (or (equal? status "WARN")
-		 (equal? status "WAIVED"))
-	     "255 172 13"
-	     "223 33 49"))) ;; greenish orangeish redish
-    ((LAUNCHED)         "101 123 142")
-    ((CHECK)            "255 100 50")
-    ((REMOTEHOSTSTART)  "50 130 195")
-    ((RUNNING)          "9 131 232")
-    ((KILLREQ)          "39 82 206")
-    ((KILLED)           "234 101 17")
-    ((NOT_STARTED)      "240 240 240")
-    (else               "192 192 192")))
-
 (define (update-buttons uidat numruns numtests)
   (if *please-update-buttons*
       (let* ((runs        (if (> (length *allruns*) numruns)
@@ -416,7 +398,7 @@ Misc
 			       (runtime    (db:test-get-run_duration test))
 			       (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			       (button     (vector-ref columndat rown))
-			       (color      (get-color-for-state-status teststate teststatus))
+			       (color      (common:get-color-for-state-status teststate teststatus))
 			       (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
 			       (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
 			  (if (not (equal? curr-color color))
@@ -504,7 +486,7 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *status-ignore-hash* status #t)
 							  (hash-table-delete! *status-ignore-hash* status)))))
-	      '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a")))
+	      '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)

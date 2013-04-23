@@ -140,9 +140,9 @@
 					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (and (> (+ num-running num-running-in-jobgroup) 0)
-	     (< *runs:can-run-more-tests-delay* 10))
+	     (< *runs:can-run-more-tests-delay* 1))
 	(begin
-	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 1)) ;; 0.1))
+	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.009))
 	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
@@ -339,7 +339,7 @@
 	    (and (vector? test) ;; not (string? test))
 		 (equal? (db:test-get-state test) "COMPLETED")
 		 (not (member (db:test-get-status test)
-			      '("PASS" "WARN" "CHECK" "WAIVED")))))
+			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
 (define (runs:calc-not-completed prereqs-not-met)
@@ -434,7 +434,7 @@
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 ( ;; (and
@@ -443,12 +443,12 @@
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  (open-run-close db:tests-register-test #f run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 (runs:shrink-can-run-more-tests-delay)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
-		  (thread-sleep! (+ 2 *global-delta*))
+		  ;; (thread-sleep! (+ 2 *global-delta*))
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
@@ -457,7 +457,7 @@
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
 (runs:shrink-can-run-more-tests-delay)
-		  (thread-sleep! *global-delta*)
+		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
 		 (else ;; must be we have unmet prerequisites
@@ -468,7 +468,7 @@
 			(begin
 			  ;; couldn't run, take a breather
 			  (debug:print-info 4 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-			  (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
+			  ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 			  ;; we made new tal by sticking hed at the back of the list
 			  (loop (car newtal)(cdr newtal) reruns))
 			;; the waiton is FAIL so no point in trying to run hed ever again
@@ -477,12 +477,12 @@
 				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 						    " from the launch list as it has prerequistes that are FAIL")
 (runs:shrink-can-run-more-tests-delay)
-				       (thread-sleep! *global-delta*)
+				       ;; (thread-sleep! *global-delta*)
 				       (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 (runs:shrink-can-run-more-tests-delay)
-				  (thread-sleep! (+ 0.01 *global-delta*))
+				  ;; (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
 	     ;; case where an items came in as a list been processed
@@ -509,7 +509,7 @@
 	      (if (not (null? tal))
 		  (begin
 		    (debug:print-info 4 "End of items list, looping with next after short delay")
-		    (thread-sleep! (+ 0.01 *global-delta*))
+                    ;; (thread-sleep! (+ 0.01 *global-delta*))
 		    (loop (car tal)(cdr tal) reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
@@ -547,7 +547,7 @@
 			    (if (list? items-list)
 				(begin
 				  (tests:testqueue-set-items! test-record items-list)
-				  (thread-sleep! *global-delta*)
+				  ;; (thread-sleep! *global-delta*)
 				  (loop hed tal reruns))
 				(begin
 				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
@@ -571,7 +571,7 @@
 				     ", removing it from to-do list")
 			(if (not (null? tal))
 			    (begin
-			      (thread-sleep! *global-delta*)
+                              ;; (thread-sleep! *global-delta*)
 			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
@@ -581,7 +581,7 @@
 		    ;; if can't run more just loop with next possible test
 		    (begin
 		      (debug:print-info 4 "processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
-		      (thread-sleep! (+ 2 *global-delta*))
+		      ;; (thread-sleep! (+ 2 *global-delta*))
 		      (loop (car newtal)(cdr newtal) reruns))))) ;; END OF (or (procedure? items)(eq? items 'have-procedure))
 	     
 	     ;; this case should not happen, added to help catch any bugs
@@ -595,7 +595,7 @@
 		(if (< num-retries max-retries)
 		    (set! newlst (append reruns newlst)))
 		(set! num-retries (+ num-retries 1))
-		(thread-sleep! (+ 1 *global-delta*))
+		;; (thread-sleep! (+ 1 *global-delta*))
 		(if (not (null? newlst))
 		    ;; since reruns have been tacked on to newlst create new reruns from junked
 		    (loop (car newlst)(cdr newlst)(delete-duplicates junked)))))
@@ -693,7 +693,7 @@
 	    ((and (or (not rerun)
 		      keepgoing)
 		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
-		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK"))
+		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (debug:print-info 2 "running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
 	     (set! runflag #f))

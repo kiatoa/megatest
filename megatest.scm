@@ -33,16 +33,31 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-;; (use trace)
-;; (trace db:teststep-set-status!
-;;        tests:test-set-status!
-;;        cdb:test-set-status-state
-;;        cdb:client-call
-;;        tests:check-waiver-eligibility)
+;; (use trace dot-locking)
+;; (trace
+;;  cdb:client-call
+;;  cdb:remote-run
+;;  cdb:test-set-status-state
+;;  change-directory
+;;  db:process-queue-item
+;;  db:test-get-logfile-info
+;;  db:teststep-set-status!
+;;  nice-path
+;;  obtain-dot-lock
+;;  open-run-close
+;;  read-config
+;;  runs:can-run-more-tests
+;;  sqlite3:execute
+;;  sqlite3:for-each-row
+;;  tests:check-waiver-eligibility
+;;  tests:summarize-items
+;;  tests:test-set-status!
+;;  thread-sleep!
+;;)
        
 
 (define help (conc "
-Megatest, documentation at http://chiselapp.com/user/kiatoa/repository/megatest
+Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
   license GPL, Copyright Matt Welland 2006-2012
 
@@ -115,7 +130,9 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -transport http|zmq     : use http or zmq for transport (default is http) 
+  -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
+  -stop-server id         : stop server specified by id (see output of -list-servers)
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
 
@@ -139,7 +156,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;;  -gui                    : start a gui interface
 ;;  -config fname           : override the runconfig file with fname
-;;  -kill-server host:port|pid : kill server specified by host:port or pid
 
 ;; process args
 (define remargs (args:get-args 
@@ -179,7 +195,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; misc
 			"-server"
 			"-transport"
-			"-kill-server"
+			"-stop-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -203,6 +219,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-load-test-data"
 			"-summarize-items"
 		        "-gui"
+			"-daemonize"
 			;; misc
 			"-archive"
 			"-repl"
@@ -304,27 +321,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (begin
 		    (debug:print 0 "INFO: Starting server as none running ...")
 		    ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		    (system (conc (car (argv)) " -server - -transport " (args:get-arg "-transport" "http")))
+		    (system (conc (car (argv)) " -server - -daemonize -transport " (args:get-arg "-transport" "http")))
 		    (thread-sleep! 3)) ;; give the server a few seconds to start
 		  (debug:print 0 "INFO: Servers already running " servers)
 		  )))))
 	
 
-(if (args:get-arg "-list-servers")
-	;; (args:get-arg "-kill-server"))
+(if (or (args:get-arg "-list-servers")
+	(args:get-arg "-stop-server"))
     (let ((tl (setup-for-run)))
       (if tl 
-	  (let ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		(fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a~10a\n")
-		(servers-to-kill '()))
+	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+		 (fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a~10a\n")
+		 (servers-to-kill '())
+		 (killinfo   (args:get-arg "-stop-server"))
+		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
+		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
 	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State" "Transport")
 	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
-	       (let* (;; (killinfo   (args:get-arg "-kill-server"))
-		      ;; (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
-		      ;; (kpid       (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f))
-		      (id         (vector-ref server 0))
+	       (let* ((id         (vector-ref server 0))
 		      (pid        (vector-ref server 1))
 		      (hostname   (vector-ref server 2))
 		      (interface  (vector-ref server 3))
@@ -346,9 +363,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
-
 		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
-			 (if status "alive" "dead") transport)))
+			 (if status "alive" "dead") transport)
+		 (if (equal? id sid)
+		     (begin
+		       (debug:print-info 0 "Attempting to stop server with pid " pid)
+		       (tasks:kill-server status hostname pullport pid transport)))))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
 	    (set! *didsomething* #t)
@@ -395,7 +415,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-config")
-    (let ((data (read-config "megatest.config" #f #t)))
+    (let ((data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))

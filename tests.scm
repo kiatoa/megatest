@@ -354,14 +354,13 @@
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (set! logf (car logf-info))
     (if (directory? path)
 	(begin
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
 	(print "No such path: " path))
-    (debug:print 1 "summarize-items with logf " logf)
+    (debug:print 4 "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
@@ -512,7 +511,7 @@
 	     (begin
 	       ;; Look at the test state and status
 	       (if (or (member (db:test-get-status tdat) 
-			       '("PASS" "WARN" "WAIVED" "CHECK"))
+			       '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
 		       (member (db:test-get-state tdat)
 			       '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))

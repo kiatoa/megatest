@@ -123,8 +123,10 @@
 	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
 	   ;; (open-run-close tasks:remove-server-records tasks:open-db)
+	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1)))
 	 (print "ERROR: Tried and tried but could not start the server")))
+   ;; any error in following steps will result in a retry
    (set! *runremote* (list ipaddrstr portnum))
    ;; (open-run-close tasks:remove-server-records tasks:open-db)
    (open-run-close tasks:server-register 
@@ -134,6 +136,7 @@
    (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
    (start-server port: portnum)
+   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
    (print "INFO: server has been stopped")))
 
 ;;======================================================================
@@ -231,6 +234,18 @@
         (if (< count 1) ;; 3x3 = 9 secs aprox
             (loop (+ count 1)))
         
+	;; Check that iface and port have not changed (can happen if server port collides)
+	(mutex-lock! *heartbeat-mutex*)
+	(set! sdat *runremote*)
+	(mutex-unlock! *heartbeat-mutex*)
+
+	(if (not (equal? sdat (list iface port)))
+	    (begin 
+	      (debug:print-info 1 "interface changed, refreshing iface and port info")
+	      (set! iface (car sdat))
+	      (set! port  (cadr sdat))
+	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
+
         ;; NOTE: Get rid of this mechanism! It really is not needed...
         (tasks:server-update-heartbeat tdb spid)
       
@@ -276,7 +291,8 @@
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
   (debug:print-info 2 "Starting the standalone server")
-  (daemon:ize)
+  (if (args:get-arg "-daemonize")
+      (daemon:ize))
   (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print 11 "http-transport:launch hostinfo=" hostinfo)
     ;; #(1 "143.182.207.24" 5736 -1 "http" 22771 "hostname")

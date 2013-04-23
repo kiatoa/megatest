@@ -250,10 +250,16 @@
 	   (file-read-access? testpath))
       (let* ((dbpath    (conc testpath "/testdat.db"))
 	     (dbexists  (file-exists? dbpath))
-	     (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
 					       136000))))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 0 "ERROR: problem accessing test db " testpath ", you probably should clean and re-run this test"
+			((condition-property-accessor 'exn 'message) exn))
+	   #f)
+	 (set! db (sqlite3:open-database dbpath)))
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
 	    (begin
@@ -1271,7 +1277,7 @@
   (cdb:client-call serverdat 'flush #f *default-numtries*))
 
 (define (cdb:kill-server serverdat)
-  (cdb:client-call serverdat 'killserver #f *default-numtries*))
+  (cdb:client-call serverdat 'killserver #t *default-numtries*))
 
 (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
@@ -1329,7 +1335,8 @@
 			       flush
 			       sync
 			       set-verbosity
-			       killserver))
+			       killserver
+			       ))
 
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
@@ -1424,7 +1431,7 @@
     ;; periodic flushing of the queue is taken care of by 
     ;; db:flush-queue
     (let loop ()
-      (thread-sleep! 0.1)
+      (thread-sleep! 0.001)
       (mutex-lock! *completed-mutex*)
       (if (hash-table-ref/default *completed-writes* qry-sig #f)
 	  (begin
@@ -1433,7 +1440,9 @@
       (mutex-unlock! *completed-mutex*)
       (if (and (not got-it)
 	       (< (current-seconds) timeout))
-	  (loop)))
+	  (begin
+	    (thread-sleep! 0.01)
+	    (loop))))
     (set! *number-of-writes*   (+ *number-of-writes*   1))
     (set! *writes-total-delay* (+ *writes-total-delay* 1))
     got-it))
@@ -1462,7 +1471,7 @@
 	  (cond
 	   ((member stmt-key db:special-queries)
 	    (let ((starttime (current-milliseconds)))
-	      (debug:print-info 11 "Handling special statement " stmt-key)
+	      (debug:print-info 9 "Handling special statement " stmt-key)
 	      (case stmt-key
 		((immediate)
 		 ;; This is a read or mixed read-write query, must clear the cache
@@ -1525,13 +1534,13 @@
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK")))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (begin
 	(sqlite3:execute 
 	 db
 	 "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND (status='PASS' OR status='WARN' OR status='WAIVED'))
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
         ;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
@@ -1749,6 +1758,66 @@
 	 (let ((record (hash-table-ref/default 
 			res 
 			(db:step-get-stepname step) 
+			;;        stepname                start end status Duration  Logfile 
+			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))
+	   (case (string->symbol (db:step-get-state step))
+	     ((start)(vector-set! record 1 (db:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(db:step-get-status step)))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (db:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     (else
+	      (vector-set! record 2 (db:step-get-state step))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (db:step-get-event_time step))))
+	   (hash-table-set! res (db:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
+       (sort steps (lambda (a b)
+		     (cond
+		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
+		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
+		       (<   (db:step-get-id a)        (db:step-get-id b)))
+		      (else #f)))))
+      res)))
+
+;; get a pretty table to summarize steps
+;;
+(define (db:get-steps-table-list db test-id)
+  (let ((steps   (db:get-steps-for-test db test-id)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(db:step-get-stepname step) 
 			;;        stepname                start end status    
 			(vector (db:step-get-stepname step) ""   "" ""     "" ""))))
 	   (debug:print 6 "record(before) = " record 
@@ -1797,6 +1866,32 @@
 		      (else #f)))))
       res)))
 
+(define (db:get-compressed-steps test-id)
+  (let* ((comprsteps (open-run-close db:get-steps-table #f test-id)))
+    (map (lambda (x)
+	   ;; take advantage of the \n on time->string
+	   (vector
+	    (vector-ref x 0)
+	    (let ((s (vector-ref x 1)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (let ((s (vector-ref x 2)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (vector-ref x 3)    ;; status
+	    (vector-ref x 4)
+	    (vector-ref x 5)))  ;; time delta
+	 (sort (hash-table-values comprsteps)
+	       (lambda (a b)
+		 (let ((time-a (vector-ref a 1))
+		       (time-b (vector-ref b 1)))
+		   (if (and (number? time-a)(number? time-b))
+		       (if (< time-a time-b)
+			   #t
+			   (if (eq? time-a time-b)
+			       (string<? (conc (vector-ref a 2))
+					 (conc (vector-ref b 2)))
+			       #f))
+		       (string<? (conc time-a)(conc time-b)))))))))
+
 ;;======================================================================
 ;; M I S C   M A N A G E M E N T   I T E M S 
 ;;======================================================================
@@ -1807,7 +1902,7 @@
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
 ;; Note: do not convert to remote as it calls remote under the hood
-;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK or WAIVED)
+;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK, SKIP or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
@@ -1832,7 +1927,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
-		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED")))
+		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
