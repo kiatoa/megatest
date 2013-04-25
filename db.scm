@@ -1444,7 +1444,7 @@
 	    (thread-sleep! 0.01)
 	    (loop))))
     (set! *number-of-writes*   (+ *number-of-writes*   1))
-    (set! *writes-total-delay* (+ *writes-total-delay* 1))
+    (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
     got-it))
 	  
 (define (db:process-queue-item db item)
@@ -1539,7 +1539,7 @@
 	(sqlite3:execute 
 	 db
 	 "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status='FAIL'),
+             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';"
 	 run-id test-name run-id test-name run-id test-name)
@@ -1555,12 +1555,16 @@
                                                      AND item_path != '' 
                                                      AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
-                                      status=CASE 
-                                            WHEN fail_count > 0 THEN 'FAIL' 
-                                            WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
-                                            ELSE 'UNKNOWN' END
+                            status=CASE 
+                                  WHEN fail_count > 0 THEN 'FAIL' 
+                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE run_id=? AND testname=?
+                                              AND item_path != ''
+                                              AND status = 'SKIP') > 0 THEN 'SKIP'
+                                  ELSE 'UNKNOWN' END
                        WHERE run_id=? AND testname=? AND item_path='';"
-	     run-id test-name run-id test-name))
+	     run-id test-name run-id test-name run-id test-name))
 	#f)
       #f))
 
@@ -1701,7 +1705,11 @@
 	  (cdb:pass-fail-counts *runremote* test-id fail-count pass-count)
 	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
 	  ;;                     fail-count pass-count test-id)
-	  (cdb:flush-queue *runremote*)
+
+	  ;; The flush is not needed with the transaction based write agregation enabled. Remove these commented lines
+	  ;; next time you read this!
+	  ;;
+	  ;; (cdb:flush-queue *runremote*)
 	  ;; (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.

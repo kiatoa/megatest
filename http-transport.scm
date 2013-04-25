@@ -190,11 +190,11 @@
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
+	  (debug:print-info 0 "Logged in and connected to " iface ":" port)
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin
-	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
+	  (debug:print-info 0 "Failed to login or connect to " iface ":" port)
 	  (set! *runremote* #f)
 	  (set! *transport-type* 'fs)
 	  #f))))
