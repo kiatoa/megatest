@@ -10,7 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
