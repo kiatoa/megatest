@@ -502,8 +502,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
 			  (tests  (cdb:remote-run db:get-tests-for-run #f run-id testpatt '() '())))
-		     (debug:print 1 "Run: " targetstr " status: " (db:get-value-by-header run header "state")
-				  " run-id: " run-id ", number tests: " (length tests))
+		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
+			    " status: " (db:get-value-by-header run header "state")
+			    " run-id: " run-id ", number tests: " (length tests))
 		     (for-each 
 		      (lambda (test)
 			(format #t
