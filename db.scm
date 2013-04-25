@@ -21,7 +21,7 @@
 (import (prefix base64 base64:))
 
 ;; Note, try to remove this dependency 
-(use zmq)
+;; (use zmq)
 
 (declare (unit db))
 (declare (uses common))
@@ -1141,11 +1141,11 @@
 (define (db:obj->string obj)
   (case *transport-type*
     ((fs) obj)
-	((http)
+    ((http)
      (string-substitute
-       (regexp "=") "_"
-         (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
-        #t))
+      (regexp "=") "_"
+      (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+      #t))
     ((zmq)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
 
