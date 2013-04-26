@@ -14,7 +14,9 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest zmq)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+;; (use zmq)
+
 (import (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)

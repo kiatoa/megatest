@@ -14,7 +14,7 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
-(use zmq)
+;; (use zmq)
 
 (declare (uses common))
 (declare (uses megatest-version))
@@ -130,7 +130,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
+  -transport http|fs      : use http or direct access for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
   -stop-server id         : stop server specified by id (see output of -list-servers)
@@ -510,8 +510,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
 			  (tests  (cdb:remote-run db:get-tests-for-run #f run-id testpatt '() '())))
-		     (debug:print 1 "Run: " targetstr " status: " (db:get-value-by-header run header "state")
-				  " run-id: " run-id ", number tests: " (length tests))
+		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
+			    " status: " (db:get-value-by-header run header "state")
+			    " run-id: " run-id ", number tests: " (length tests))
 		     (for-each 
 		      (lambda (test)
 			(format #t

@@ -6,7 +6,7 @@ SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
-	   fs-transport.scm zmq-transport.scm http-transport.scm \
+	   fs-transport.scm http-transport.scm \
            client.scm gutils.scm synchash.scm daemon.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
@@ -111,7 +111,7 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind $(PREFIX)/bin/newdboard
 
 deploytarg/apropos.so : Makefile
-	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common zmq check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
+	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
 	chicken-install -prefix deploytarg -deploy $$i;done
 
 deploytarg/libsqlite3.so : 
