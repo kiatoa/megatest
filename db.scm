@@ -1531,6 +1531,7 @@
     res))
 
 ;; Rollup the pass/fail counts from itemized tests into fail_count and pass_count
+;; NOTE: Is this duplicating (db:test-data-rollup db test-id status) ????
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   ;; (cdb:flush-queue *runremote*)
   (if (and (not (equal? item-path ""))
