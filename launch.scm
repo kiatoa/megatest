@@ -135,7 +135,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (test-set-meta-info #f test-id run-id test-name itemdat 0)
+	  (tests:set-meta-info #f test-id run-id test-name itemdat 0)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")

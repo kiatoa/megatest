@@ -565,7 +565,7 @@
       (sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;"
 		       uname hostname test-id)))
 
-(define (test-set-meta-info db test-id run-id testname itemdat minutes)
+(define (tests:set-meta-info db test-id run-id testname itemdat minutes)
   ;; DOES cdb:remote-run under the hood!
   (let* ((tdb         (db:open-test-db-by-test-id db test-id))
 	 (num-records (test:tdb-get-rundat-count tdb))

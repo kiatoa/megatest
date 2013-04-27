@@ -909,6 +909,15 @@
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
+(define (cbd:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
+  (cbd:client-call serverdat 'update-cpuload-diskfree #t *default-numtries cpuload diskfree test-id))
+
+(define (cdb:tests-update-run-duration serverdat test-id minutes)
+  (cdb:client-call serverdat 'update-run-duration #t *default-numtries* minutes test-id))
+
+(define (cdb:tests-update-uname-host serverdat test-id uname hostname)
+  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname))
+
 ;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
@@ -1358,6 +1367,7 @@
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
+	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
 	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
     ))
