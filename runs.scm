@@ -377,13 +377,13 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let* ((run-limits-info         (open-run-close runs:can-run-more-tests test-record)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         (runs:can-run-more-tests test-record)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
 		     (max-concurrent-jobs     (list-ref run-limits-info 3))
 		     (job-group-limit         (list-ref run-limits-info 4))
-		     (prereqs-not-met         (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
+		     (prereqs-not-met         (cdb:remote-run db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
 		     (fails                   (runs:calc-fails prereqs-not-met))
 		     (non-completed           (runs:calc-not-completed prereqs-not-met)))
 		(debug:print-info 8 "have-resources: " have-resources " prereqs-not-met: " 
@@ -411,7 +411,7 @@
 		  (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
 		      ;; (and max-concurrent-jobs (> (- max-concurrent-jobs num-running) 5)))
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-		  (open-run-close db:tests-register-test #f run-id test-name item-path)
+		  (db:tests-register-test run-id test-name item-path)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) #t)
 		  ;; (thread-sleep! *global-delta*)
 (runs:shrink-can-run-more-tests-delay)
@@ -930,11 +930,11 @@
 
 ;; Update the test_meta table for this test
 (define (runs:update-test_meta db test-name test-conf)
-  (let ((currrecord (open-run-close db:testmeta-get-record db test-name)))
+  (let ((currrecord (cdb:remote-run db:testmeta-get-record db test-name)))
     (if (not currrecord)
 	(begin
 	  (set! currrecord (make-vector 10 #f))
-	  (open-run-close db:testmeta-add-record db test-name)))
+	  (cdb:remote-run db:testmeta-add-record db test-name)))
     (for-each 
      (lambda (key)
        (let* ((idx (cadr key))
@@ -944,7 +944,7 @@
 	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
-	       (open-run-close db:testmeta-update-field db test-name fld val)))))
+	       (cdb:remote-run db:testmeta-update-field db test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
 
 ;; Update test_meta for all tests
