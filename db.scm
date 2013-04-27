@@ -543,6 +543,39 @@
 				 patts))
 			comparator)))
 
+
+;; register a test run with the db
+(define (db:register-run db keys keyvallst runname state status user)
+  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
+  (let* ((keystr    (keys->keystr keys))
+	 (comma     (if (> (length keys) 0) "," ""))
+	 (andstr    (if (> (length keys) 0) " AND " ""))
+	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
+	 (keyvals   (map cadr keyvallst))
+	 (allvals   (append (list runname state status user) keyvals))
+	 (qryvals   (append (list runname) keyvals))
+	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
+    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
+    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
+    (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
+	(let ((res #f))
+	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
+		 allvals)
+	  (apply sqlite3:for-each-row 
+	   (lambda (id)
+	     (set! res id))
+	   db
+	   (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
+	     ;(debug:print 4 "qry: " qry) 
+	     qry)
+	   qryvals)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
+	  res) 
+	(begin
+	  (debug:print 0 "ERROR: Called without all necessary keys")
+	  #f))))
+
+
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;;
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
@@ -1325,6 +1358,8 @@
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
+	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
+	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
     ))
 
 ;; do not run these as part of the transaction
