@@ -33,11 +33,12 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-(use trace dot-locking)
-(trace
- cdb:tests-register-test
- cdb:client-call
-)
+;; (use trace dot-locking)
+;; (trace
+;;  cdb:tests-register-test
+;;  cdb:client-call
+;;  db:queue-write-and-wait
+;; )
 ;;  cdb:remote-run
 ;;  cdb:test-set-status-state
 ;;  change-directory
