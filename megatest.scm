@@ -36,10 +36,11 @@
 ;; (use trace dot-locking)
 ;; (trace
 ;;  cdb:tests-register-test
-;;  cdb:client-call
-;;  db:queue-write-and-wait
+;;  cdb:tests-update-uname-host
+;;  cdb:tests-update-run-duration
+;;  ;;  cdb:client-call
+;;  ;; cdb:remote-run
 ;; )
-;;  cdb:remote-run
 ;;  cdb:test-set-status-state
 ;;  change-directory
 ;;  db:process-queue-item

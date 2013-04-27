@@ -1,5 +1,7 @@
 #!/bin/bash
 
+(cd ../../..;make && make install) || exit 1
+
 for i in a b c d e f;do
   # g h i j k l m n o p q r s t u v w x y z;do
   megatest -runtests % -target a/b :runname $i &

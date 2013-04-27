@@ -173,36 +173,6 @@
 ;; based code.
 ;;======================================================================
 
-;; register a test run with the db
-(define (runs:register-run db keys keyvallst runname state status user)
-  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
-  (let* ((keystr    (keys->keystr keys))
-	 (comma     (if (> (length keys) 0) "," ""))
-	 (andstr    (if (> (length keys) 0) " AND " ""))
-	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvals   (map cadr keyvallst))
-	 (allvals   (append (list runname state status user) keyvals))
-	 (qryvals   (append (list runname) keyvals))
-	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
-    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
-    (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
-	(let ((res #f))
-	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
-		 allvals)
-	  (apply sqlite3:for-each-row 
-	   (lambda (id)
-	     (set! res id))
-	   db
-	   (let ((qry (conc "SELECT id FROM runs WHERE (runname=? " andstr key=?str ");")))
-	     ;(debug:print 4 "qry: " qry) 
-	     qry)
-	   qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
-	  res) 
-	(begin
-	  (debug:print 0 "ERROR: Called without all necessary keys")
-	  #f))))
 
 ;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
 ;; keyvals.
@@ -216,7 +186,7 @@
   (let* ((db          #f)
 	 (keys        (cdb:remote-run db:get-keys #f))
 	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (cdb:remote-run runs:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
 	 (keyvals     (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
@@ -1009,7 +979,7 @@
 (define (runs:rollup-run keys keyvallst runname user) ;; was target, now keyvallst
   (debug:print 4 "runs:rollup-run, keys: " keys " keyvallst: " keyvallst " :runname " runname " user: " user)
   (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
-	 (new-run-id      (open-run-close runs:register-run db keys keyvallst runname "new" "n/a" user))
+	 (new-run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))
 	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
 	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
