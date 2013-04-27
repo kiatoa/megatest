@@ -736,19 +736,21 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (db:tests-register-test db run-id test-name item-path)
-  (debug:print-info 11 "db:tests-register-test START db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+;; REFACTOR THIS ONE, IT DOESNT FOLLOW CURRENT PATTERNS
+(define (db:tests-register-test run-id test-name item-path)
+  (debug:print-info 11 "db:tests-register-test START run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
     (for-each 
      (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth))
+       (cdb:tests-register-test *runremote* run-id test-name pth))
+       ;; (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
+       ;;    run-id 
+       ;;    test-name
+       ;;    pth))
      item-paths)
-  (debug:print-info 11 "db:tests-register-test END db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
+  (debug:print-info 11 "db:tests-register-test END run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
     #f))
 
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
@@ -1310,10 +1312,7 @@
   (cdb:client-call serverdat 'pass-fail-counts #t *default-numtries* fail-count pass-count test-id))
 
 (define (cdb:tests-register-test serverdat run-id test-name item-path)
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path)))
+  (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path))
 
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
