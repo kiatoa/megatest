@@ -35,8 +35,12 @@
 
 ;; (use trace dot-locking)
 ;; (trace
-;;  cdb:client-call
-;;  cdb:remote-run
+;;  cdb:tests-update-cpuload-diskfree
+;;  cdb:tests-update-uname-host
+;;  cdb:tests-update-run-duration
+;;  ;;  cdb:client-call
+;;  ;; cdb:remote-run
+;; )
 ;;  cdb:test-set-status-state
 ;;  change-directory
 ;;  db:process-queue-item

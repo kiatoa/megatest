@@ -909,14 +909,14 @@
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
-(define (cbd:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
-  (cbd:client-call serverdat 'update-cpuload-diskfree #t *default-numtries cpuload diskfree test-id))
+(define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
+  (cdb:client-call serverdat 'update-cpuload-diskfree #t *default-numtries* cpuload diskfree test-id))
 
 (define (cdb:tests-update-run-duration serverdat test-id minutes)
   (cdb:client-call serverdat 'update-run-duration #t *default-numtries* minutes test-id))
 
 (define (cdb:tests-update-uname-host serverdat test-id uname hostname)
-  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname))
+  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* test-id uname hostname))
 
 ;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
