@@ -703,21 +703,6 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (db:tests-register-test db run-id test-name item-path)
-  (debug:print-info 11 "db:tests-register-test START db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-  (let ((item-paths (if (equal? item-path "")
-			(list item-path)
-			(list item-path ""))))
-    (for-each 
-     (lambda (pth)
-       (sqlite3:execute db "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');" 
-			run-id 
-			test-name
-			pth))
-     item-paths)
-  (debug:print-info 11 "db:tests-register-test END db=" db ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-    #f))
-
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
@@ -1271,7 +1256,9 @@
   (let ((item-paths (if (equal? item-path "")
 			(list item-path)
 			(list item-path ""))))
-    (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path)))
+    (for-each (lambda (pth)
+		(cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name pth))
+	      item-paths)))
 
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
@@ -1305,6 +1292,10 @@
      "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
      run-id test-name)
     res))
+
+;;======================================================================
+;; A G R E G A T E D   T R A N S A C T I O N   D B   W R I T E S 
+;;======================================================================
 
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
