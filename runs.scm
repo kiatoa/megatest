@@ -411,9 +411,9 @@
 		 ;; Registery has been started for this test but has not yet completed
 		 ;; this should be rare, the case where there are only a couple of tests and the db is slow
 		 ;; delay a short while and continue
-		 ((eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f) 'start)
-		  (thread-sleep! 0.01)
-		  (loop (car newtal)(cdr newtal) reruns))
+		 ;; ((eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f) 'start)
+		 ;;  (thread-sleep! 0.01)
+		 ;;  (loop (car newtal)(cdr newtal) reruns))
 		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  ;; NEED TO THREADIFY THIS
@@ -421,9 +421,12 @@
 		        		   (mutex-lock! registery-mutex)
 		        		   (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'start)
 		        		   (mutex-unlock! registery-mutex)
-		      		   (cdb:tests-register-test *runremote* run-id test-name item-path)
+					   ;; If haven't done it before register a top level test if this is an itemized test
+					   (if (not (eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name "") #f) 'done))
+					       (cdb:tests-register-test *runremote* run-id test-name ""))
+					   (cdb:tests-register-test *runremote* run-id test-name item-path)
 		        		   (mutex-lock! registery-mutex)
-		      		   (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'done)
+					   (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'done)
 		        		   (mutex-unlock! registery-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
