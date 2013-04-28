@@ -284,8 +284,10 @@
 	#f)))
 
 ;; find and open the testdat.db file for an existing test
-(define (db:open-test-db-by-test-id db test-id)
-  (let* ((test-path (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))
+(define (db:open-test-db-by-test-id db test-id #!key (testpath #f))
+  (let* ((test-path (if testpath
+			testpath
+			(cdb:remote-run db:test-get-rundir-from-test-id db test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -844,9 +846,9 @@
     res))
 
 ;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db test-id)
+(define (db:delete-test-step-records db test-id #!key (testpath #f))
   ;; Breaking it into two queries for better file access interleaving
-  (let* ((tdb (db:open-test-db-by-test-id db test-id)))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath)))
     ;; test db's can go away - must check every time
     (if tdb
 	(begin
@@ -983,8 +985,11 @@
 
 ;; given a test-info record, patch in the latest data from the testdat.db file
 ;; found in the test run directory
-(define (db:patch-tdb-data-into-test-info db test-id res)
-  (let ((tdb (db:open-test-db-by-test-id db test-id)))
+;;
+;; NOT USED
+;;
+(define (db:patch-tdb-data-into-test-info db test-id res #!key (testpath #f))
+  (let ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath)))
     ;; get state and status from megatest.db in real time
     ;; other fields that perhaps should be updated:
     ;;   fail_count
@@ -1225,6 +1230,7 @@
      (handle-exceptions
       exn
       (begin
+	(debug:print-info 0 "cdb:client-call timeout or error. Trying again in 5 seconds")
 	(thread-sleep! 5) 
 	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
       (let* ((push-socket (vector-ref serverdat 0))
@@ -1246,27 +1252,28 @@
 			       (let ((myres (db:string->obj (receive-message* sub-socket))))
 				 (if (equal? query-sig (vector-ref myres 1))
 				     (set! res (vector-ref myres 2))
-				     (loop))))))
-	     (timeout (lambda ()
-			(let loop ((n numretries))
-			  (thread-sleep! 15)
-			  (if (not res)
-			      (if (> numretries 0)
-				  (begin
-				    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-				    (debug:print-info 11 "re-sending message")
-				    (send-message push-socket zdat)
-				    (debug:print-info 11 "message re-sent")
-				    (loop (- n 1)))
-				  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
-				  (begin
-				    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-				    (exit 5))))))))
+				     (loop)))))))
+	    ;; (timeout (lambda ()
+	    ;;     	(let loop ((n numretries))
+	    ;;     	  (thread-sleep! 15)
+	    ;;     	  (if (not res)
+	    ;;     	      (if (> numretries 0)
+	    ;;     		  (begin
+	    ;;     		    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
+	    ;;     		    (debug:print-info 11 "re-sending message")
+	    ;;     		    (send-message push-socket zdat)
+	    ;;     		    (debug:print-info 11 "message re-sent")
+	    ;;     		    (loop (- n 1)))
+	    ;;     		  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
+	    ;;     		  (begin
+	    ;;     		    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+	    ;;     		    (exit 5))))))))
 	(debug:print-info 11 "Starting threads")
 	(let ((th1 (make-thread send-receive "send receive"))
-	      (th2 (make-thread timeout      "timeout")))
+	      ;; (th2 (make-thread timeout      "timeout"))
+	      )
 	  (thread-start! th1)
-	  (thread-start! th2)
+	  ;; (thread-start! th2)
 	  (thread-join!  th1)
 	  (debug:print-info 11 "cdb:client-call returning res=" res)
 	  res))))))
@@ -1626,9 +1633,9 @@
 ;; T E S T   D A T A 
 ;;======================================================================
 
-(define (db:csv->test-data db test-id csvdata)
+(define (db:csv->test-data db test-id csvdata #!key (testpath #f))
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((tdb     (db:open-test-db-by-test-id db test-id)))
+  (let ((tdb     (db:open-test-db-by-test-id db test-id testpath: testpath)))
     (if tdb
 	(let ((csvlist (csv->list (make-csv-reader
 				   (open-input-string csvdata)
@@ -1687,8 +1694,8 @@
 	   csvlist)))))
 
 ;; get a list of test_data records matching categorypatt
-(define (db:read-test-data db test-id categorypatt)
-  (let ((tdb  (db:open-test-db-by-test-id db test-id)))
+(define (db:read-test-data db test-id categorypatt #!key (testpath #f))
+  (let ((tdb  (db:open-test-db-by-test-id db test-id testpath: testpath)))
     (if tdb
 	(let ((res '()))
 	  (sqlite3:for-each-row 
@@ -1701,7 +1708,7 @@
 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (db:load-test-data db test-id)
+(define (db:load-test-data db test-id #!key (testpath #f))
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
@@ -1710,15 +1717,15 @@
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
-  (db:test-data-rollup db test-id #f))
+  (db:test-data-rollup db test-id #f testpath: testpath))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
 ;; look at the test_data status field, 
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id status)
-  (let ((tdb (db:open-test-db-by-test-id db test-id))
+(define (db:test-data-rollup db test-id status #!key (testpath #f))
+  (let ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath))
 	(fail-count 0)
 	(pass-count 0))
     (if tdb
@@ -1771,8 +1778,8 @@
   (seconds->time-string (db:step-get-event_time vec)))
 
 ;; db-get-test-steps-for-run
-(define (db:get-steps-for-test db test-id)
-  (let* ((tdb (db:open-test-db-by-test-id db test-id))
+(define (db:get-steps-for-test db test-id #!key (testpath #f))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath))
 	 (res '()))
     (if tdb
 	(begin
@@ -1788,8 +1795,8 @@
 
 ;; get a pretty table to summarize steps
 ;;
-(define (db:get-steps-table db test-id)
-  (let ((steps   (db:get-steps-for-test db test-id)))
+(define (db:get-steps-table db test-id #!key (testpath #f))
+  (let ((steps   (db:get-steps-for-test db test-id testpath: testpath)))
     ;; organise the steps for better readability
     (let ((res (make-hash-table)))
       (for-each 
@@ -1848,8 +1855,8 @@
 
 ;; get a pretty table to summarize steps
 ;;
-(define (db:get-steps-table-list db test-id)
-  (let ((steps   (db:get-steps-for-test db test-id)))
+(define (db:get-steps-table-list db test-id #!key (testpath #f))
+  (let ((steps   (db:get-steps-for-test db test-id testpath: testpath)))
     ;; organise the steps for better readability
     (let ((res (make-hash-table)))
       (for-each 
@@ -1990,10 +1997,10 @@
 	 waitons)
 	(delete-duplicates result))))
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile #!key (testpath #f))
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   ;;                 db:open-test-db-by-test-id does cdb:remote-run
-  (let* ((tdb       (db:open-test-db-by-test-id db test-id))
+  (let* ((tdb       (db:open-test-db-by-test-id db test-id testpath: testpath))
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))

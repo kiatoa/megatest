@@ -135,7 +135,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-meta-info #f test-id run-id test-name itemdat 0)
+	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 testpath)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -210,7 +210,7 @@
 
 						   (debug:print 4 "script: " script)
 						   ;; DO NOT remote
-						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f testpath: testpath)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -228,7 +228,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna testpath: testpath))
 						     (if logpro-used
 							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -278,7 +278,7 @@
 				     (begin
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes)
+				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes testpath)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

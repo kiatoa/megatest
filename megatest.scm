@@ -36,6 +36,9 @@
 
 ;; (use trace dot-locking)
 ;; (trace
+;;  db:teststep-set-status!
+;;  db:open-test-db-by-test-id
+;;  db:test-get-rundir-from-test-id
 ;;  cdb:tests-register-test
 ;;  cdb:tests-update-uname-host
 ;;  cdb:tests-update-run-duration
@@ -813,7 +816,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (exit 1)))
 	(if (and state status)
 	    ;; DO NOT remote run, makes calls to the testdat.db test db.
-	    (db:teststep-set-status! db test-id step state status msg logfile)
+	    (db:teststep-set-status! db test-id step state status msg logfile testpath: testpath)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -829,7 +832,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
     
-(if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+(if (or (and (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
@@ -900,7 +904,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
 		    ;; DO NOT run remote
-		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
+		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile testpath: testpath)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -920,7 +924,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      ;; DO NOT run remote
-		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
+		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile testpath: testpath))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))

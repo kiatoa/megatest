@@ -573,9 +573,9 @@
     ;;(sqlite3:finalize! db))
     )
   
-(define (tests:set-meta-info db test-id run-id testname itemdat minutes)
+(define (tests:set-meta-info db test-id run-id testname itemdat minutes testpath)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((tdb         (db:open-test-db-by-test-id db test-id))
+  (let* ((tdb         (db:open-test-db-by-test-id db test-id testpath: testpath))
 	 (num-records (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
@@ -584,7 +584,8 @@
 	      (hostname (get-host-name)))
 	  (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-		     cpuload diskfree minutes)))
+		     cpuload diskfree minutes)
+    (sqlite3:finalize! tdb)))
 	  
 ;;======================================================================
 ;; A R C H I V I N G

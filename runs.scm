@@ -446,7 +446,9 @@
 		  (loop hed tal reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
-		  ;; (thread-sleep! (+ 2 *global-delta*))
+		  ;; Have gone back and forth on this but db starvation is an issue.
+		  ;; wait one second before looking again to run jobs.
+		  (thread-sleep! 1) ;; (+ 2 *global-delta*))
 		  ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ((and have-resources
