@@ -24,6 +24,7 @@
 (declare (uses tests))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses server))
+(declare (uses daemon))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -120,7 +121,7 @@
      (print-error-message exn)
      (if (< portnum 9000)
 	 (begin 
-	   (print "WARNING: failed to start on portnum: " portnum ", trying next port")
+	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
 	   ;; (open-run-close tasks:remove-server-records tasks:open-db)
 	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
@@ -189,12 +190,13 @@
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
+	  (debug:print-info 0 "Logged in and connected to " iface ":" port)
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin
-	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
+	  (debug:print-info 0 "Failed to login or connect to " iface ":" port)
 	  (set! *runremote* #f)
+	  (set! *transport-type* 'fs)
 	  #f))))
 
 
@@ -218,13 +220,14 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdb         (tasks:open-db))
-	 (spid        (tasks:server-get-server-id tdb #f iface port #f))
+	 (spid        ;;(open-run-close tasks:server-get-server-id tasks:open-db #f iface port #f))
+	   (tasks:server-get-server-id tdb #f iface port #f))
 	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
 			       ;; default to three days
-			       (* 3 24 60)))))
+			       (* 3 24 60 60)))))
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
@@ -239,14 +242,16 @@
 	(set! sdat *runremote*)
 	(mutex-unlock! *heartbeat-mutex*)
 
-	(if (not (equal? sdat (list iface port)))
+	(if (or (not (equal? sdat (list iface port)))
+		(not spid))
 	    (begin 
-	      (debug:print-info 1 "interface changed, refreshing iface and port info")
+	      (debug:print-info 0 "interface changed, refreshing iface and port info")
 	      (set! iface (car sdat))
 	      (set! port  (cadr sdat))
 	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
 
         ;; NOTE: Get rid of this mechanism! It really is not needed...
+        ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
         (tasks:server-update-heartbeat tdb spid)
       
         ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
@@ -263,7 +268,7 @@
               (debug:print-info 0 "Starting to shutdown the server.")
               ;; need to delete only *my* server entry (future use)
               (set! *time-to-exit* #t)
-              (tasks:server-deregister-self tdb (get-host-name))
+              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
               (thread-sleep! 1)
               (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
 	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
@@ -313,6 +318,23 @@
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
+
+;; (use trace)
+;; (trace http-transport:keep-running 
+;;        tasks:server-update-heartbeat
+;;        tasks:server-get-server-id)
+;;        tasks:get-best-server
+;;        http-transport:run
+;;        http-transport:launch
+;;        http-transport:try-start-server
+;;        http-transport:client-send-receive
+;;        http-transport:make-server-url
+;;        tasks:server-register
+;;        tasks:server-delete
+;;        start-server
+;;        hostname->ip
+;;        with-input-from-request
+;;        tasks:server-deregister-self)
 
 (define (http-transport:server-signal-handler signum)
   (handle-exceptions
