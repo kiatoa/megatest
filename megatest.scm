@@ -804,7 +804,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
-	    ;; DO NOT remote run
+	    ;; DO NOT remote run, makes calls to the testdat.db test db.
 	    (db:teststep-set-status! db test-id step state status msg logfile)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
