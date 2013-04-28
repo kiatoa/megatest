@@ -414,7 +414,9 @@
 		 ;; ((eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f) 'start)
 		 ;;  (thread-sleep! 0.01)
 		 ;;  (loop (car newtal)(cdr newtal) reruns))
-		 ((not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f))
+		 ;; count number of 'done, if more than 100 then skip on through.
+		 (;; (and (< (length (filter (lambda (x)(eq? x 'done))(hash-table-values test-registery))) 100) ;; why get more than 200 ahead?
+		  (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
 		  ;; NEED TO THREADIFY THIS
 		  (let ((th (make-thread (lambda ()
@@ -434,10 +436,10 @@
 		  (runs:shrink-can-run-more-tests-delay)   ;; DELAY TWEAKER (still needed?)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ;; At this point *all* test registrations must be completed.
-		 ((not (null? (filter (lambda (x)(not (eq? 'done x))) (hash-table-values test-registery))))
+		 ((not (null? (filter (lambda (x)(eq? 'start x))(hash-table-values test-registery))))
 		  (debug:print-info 0 "Waiting on test registrations: " (string-intersperse 
 									 (filter (lambda (x)
-										   (not (eq? (hash-table-ref/default test-registery x #f) 'done)))
+										   (eq? (hash-table-ref/default test-registery x #f) 'start))
 										 (hash-table-keys test-registery))
 									 ", "))
 		  (thread-sleep! 0.1)
@@ -452,6 +454,7 @@
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
+		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'running)
 		  (runs:shrink-can-run-more-tests-delay)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
@@ -470,14 +473,16 @@
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
 			    (if (vector? hed)
-				(begin (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
-						    " from the launch list as it has prerequistes that are FAIL")
-(runs:shrink-can-run-more-tests-delay)
-				       ;; (thread-sleep! *global-delta*)
-				       (loop (car tal)(cdr tal) (cons hed reruns)))
+				(begin 
+				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+					       " from the launch list as it has prerequistes that are FAIL")
+				  (runs:shrink-can-run-more-tests-delay) ;; DELAY TWEAKER (still needed?)
+				  ;; (thread-sleep! *global-delta*)
+				  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'removed)
+				  (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-(runs:shrink-can-run-more-tests-delay)
+				  (runs:shrink-can-run-more-tests-delay) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
@@ -665,7 +670,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (cdb:tests-register-test *run-remote* run-id test-name item-path)
+		  (cdb:tests-register-test *runremote* run-id test-name item-path)
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
