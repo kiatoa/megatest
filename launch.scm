@@ -135,7 +135,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (test-set-meta-info #f test-id run-id test-name itemdat 0)
+	  (tests:set-meta-info #f test-id run-id test-name itemdat 0)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -278,7 +278,7 @@
 				     (begin
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (test-set-meta-info #f test-id run-id test-name itemdat minutes)
+				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -539,11 +539,12 @@
 			   (if cmd
 			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
 			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd))
+						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
 			       #f)))
 		 (cmd    (if ovrcmd 
 			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/")))
+			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+				   " >> " test-path "/mt_launch.log >>2 " test-path "/mt_launch.log")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
@@ -670,29 +671,32 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply cmd-run-with-stderr->list ;; cmd-run-proc-each-line
+	   (launch-results (apply (if (equal? (configf:lookup *configdat* "setup" "launchwait") "yes")
+				      cmd-run-with-stderr->list
+				      process-run)
 				  (if useshell
 				      (string-intersperse fullcmd " ")
 				      (car fullcmd))
-				  ;; conc
 				  (if useshell
 				      '()
-				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
-      (with-output-to-file "mt_launch.log"
-	(lambda ()
-	  (apply print launch-results)))
+				      (cdr fullcmd)))))
+      (if (list? launch-results)
+	  (with-output-to-file "mt_launch.log"
+	    (lambda ()
+	      (apply print launch-results))
+	    #:append))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
-	  (begin
-	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-	    ;; (sqlite3:finalize! db)
-	    ;; good ole "exit" seems not to work
-	    ;; (_exit 9)
-	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
-	    ;; NB// Is this still needed? Should be safe to go back to "exit" now?
-	    (process-signal (current-process-id) signal/kill)
-	    ))
+          (begin
+            (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
+            ;; (sqlite3:finalize! db)
+            ;; good ole "exit" seems not to work
+            ;; (_exit 9)
+            ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+            ;; NB// Is this still needed? Should be safe to go back to "exit" now?
+            (process-signal (current-process-id) signal/kill)
+            ))
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals)

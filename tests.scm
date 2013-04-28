@@ -555,17 +555,25 @@
 	res))
   0)
 
-(define (db:update-central-meta-info db test-id cpuload diskfree minutes num-records uname hostname)
-  (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;"
-		   cpuload
-		   diskfree
-		   test-id)
-  (if minutes (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
-  (if (eq? num-records 0)
-      (sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;"
-		       uname hostname test-id)))
-
-(define (test-set-meta-info db test-id run-id testname itemdat minutes)
+(define (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)
+  ;; This is a good candidate for threading the requests to enable
+  ;; transactionized write at the server
+  (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
+  ;; (let ((db (open-db)))
+    ;; (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;"
+    ;;     	     cpuload
+    ;;     	     diskfree
+    ;;     	     test-id)
+    (if minutes 
+	(cdb:tests-update-run-duration *runremote* test-id minutes))
+	;; (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
+    (if (eq? num-records 0)
+	(cdb:tests-update-uname-host *runremote* test-id uname hostname))
+	;;(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;" uname hostname test-id))
+    ;;(sqlite3:finalize! db))
+    )
+  
+(define (tests:set-meta-info db test-id run-id testname itemdat minutes)
   ;; DOES cdb:remote-run under the hood!
   (let* ((tdb         (db:open-test-db-by-test-id db test-id))
 	 (num-records (test:tdb-get-rundat-count tdb))
@@ -574,7 +582,7 @@
     (if (eq? (modulo num-records 10) 0) ;; every ten records update central
 	(let ((uname    (get-uname "-srvpio"))
 	      (hostname (get-host-name)))
-	  (cdb:remote-run db:update-central-meta-info db test-id cpuload diskfree minutes num-records uname hostname)))
+	  (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 		     cpuload diskfree minutes)))
 	  
