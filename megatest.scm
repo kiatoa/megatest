@@ -35,7 +35,7 @@
 
 ;; (use trace dot-locking)
 ;; (trace
-;;  cdb:tests-update-cpuload-diskfree
+;;  cdb:tests-register-test
 ;;  cdb:tests-update-uname-host
 ;;  cdb:tests-update-run-duration
 ;;  ;;  cdb:client-call

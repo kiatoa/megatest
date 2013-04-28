@@ -1347,6 +1347,10 @@
      run-id test-name)
     res))
 
+;;======================================================================
+;; A G R E G A T E D   T R A N S A C T I O N   D B   W R I T E S 
+;;======================================================================
+
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
