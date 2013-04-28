@@ -671,30 +671,32 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply cmd-run-with-stderr->list ;; cmd-run-proc-each-line
+	   (launch-results (apply (if (equal? (configf:lookup *configdat* "setup" "launchwait") "yes")
+				      cmd-run-with-stderr->list
+				      process-run)
 				  (if useshell
 				      (string-intersperse fullcmd " ")
 				      (car fullcmd))
-				  ;; conc
 				  (if useshell
 				      '()
-				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
-      (with-output-to-file "mt_launch.log"
-	(lambda ()
-	  (apply print launch-results))
-	#:append)
+				      (cdr fullcmd)))))
+      (if (list? launch-results)
+	  (with-output-to-file "mt_launch.log"
+	    (lambda ()
+	      (apply print launch-results))
+	    #:append))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
-	  (begin
-	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-	    ;; (sqlite3:finalize! db)
-	    ;; good ole "exit" seems not to work
-	    ;; (_exit 9)
-	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
-	    ;; NB// Is this still needed? Should be safe to go back to "exit" now?
-	    (process-signal (current-process-id) signal/kill)
-	    ))
+          (begin
+            (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
+            ;; (sqlite3:finalize! db)
+            ;; good ole "exit" seems not to work
+            ;; (_exit 9)
+            ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+            ;; NB// Is this still needed? Should be safe to go back to "exit" now?
+            (process-signal (current-process-id) signal/kill)
+            ))
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals)
