@@ -1689,9 +1689,9 @@
 	       (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
 			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
 	       (sqlite3:execute tdb "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
-				test-id category variable value expected tol units (if comment comment "") status type)
-	       (sqlite3:finalize! tdb)))
-	   csvlist)))))
+				test-id category variable value expected tol units (if comment comment "") status type)))
+	   csvlist)
+	  (sqlite3:finalize! tdb)))))
 
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt #!key (testpath #f))
@@ -1713,7 +1713,7 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (db:csv->test-data db test-id lin)
+	  (db:csv->test-data db test-id lin testpath: testpath)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 

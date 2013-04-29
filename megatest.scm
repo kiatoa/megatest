@@ -872,7 +872,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
-	      (db:load-test-data db test-id))
+	      (db:load-test-data db test-id testpath: testpath))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
 		(cdb:test-set-log! *runremote* test-id logfname)))
@@ -951,7 +951,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
-		  (tests:test-set-status! test-id state newstatus msg otherdata))))
+		  (tests:test-set-status! test-id state newstatus msg otherdata testpath: testpath))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 

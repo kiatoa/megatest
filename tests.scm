@@ -246,7 +246,7 @@
 
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat)
+(define (tests:test-set-status! test-id state status comment dat #!key (testpath #f))
   (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
@@ -292,7 +292,7 @@
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status))
+	(db:test-data-rollup #f test-id status testpath: testpath))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -326,7 +326,8 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (cdb:remote-run db:csv->test-data #f test-id
+	    ;; This was run remote, don't think that makes sense.
+	    (db:csv->test-data #f test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
