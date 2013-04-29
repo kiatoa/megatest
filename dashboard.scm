@@ -469,9 +469,10 @@ Misc
     (let ((val (iup:attribute lb "VALUE")))
       (if val
 	  val
-	  (let ((newval (car values)))
-	    (iup:attribute-set! lb "VALUE" newval)
-	    newval)))))
+	  (if (not (null? values))
+	      (let ((newval (car values)))
+		(iup:attribute-set! lb "VALUE" newval)
+		newval))))))
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((db-target-dat (open-run-close db:get-targets #f))

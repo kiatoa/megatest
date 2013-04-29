@@ -544,7 +544,7 @@
 		 (cmd    (if ovrcmd 
 			     ovrcmd
 			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log >>2 " test-path "/mt_launch.log")))
+				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
