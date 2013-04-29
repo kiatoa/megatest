@@ -246,7 +246,7 @@
 
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat)
+(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
   (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
@@ -292,7 +292,7 @@
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status))
+	(db:test-data-rollup #f test-id status work-area: work-area))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -326,7 +326,8 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    (cdb:remote-run db:csv->test-data #f test-id
+	    ;; This was run remote, don't think that makes sense.
+	    (db:csv->test-data #f test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
@@ -573,9 +574,9 @@
     ;;(sqlite3:finalize! db))
     )
   
-(define (tests:set-meta-info db test-id run-id testname itemdat minutes)
+(define (tests:set-meta-info db test-id run-id testname itemdat minutes work-area)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((tdb         (db:open-test-db-by-test-id db test-id))
+  (let* ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (num-records (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
@@ -584,7 +585,8 @@
 	      (hostname (get-host-name)))
 	  (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-		     cpuload diskfree minutes)))
+		     cpuload diskfree minutes)
+    (sqlite3:finalize! tdb)))
 	  
 ;;======================================================================
 ;; A R C H I V I N G

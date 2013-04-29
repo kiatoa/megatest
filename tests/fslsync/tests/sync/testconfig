@@ -1,0 +1,22 @@
+# Add additional steps here. Format is "stepname script"
+[ezsteps]
+rsync rsync.sh
+fsync fsync.sh
+
+# Test requirements are specified here
+[requirements]
+waiton setup
+priority 0
+
+# Iteration for your tests are controlled by the items section
+[items]
+AREANAME #{getenv AREANAMES}
+SITENAME #{getenv SITENAMES}
+
+# test_meta is a section for storing additional data on your test
+[test_meta]
+author matt
+owner  matt
+description Sync fossils to remote
+tags tagone,tagtwo
+reviewed never

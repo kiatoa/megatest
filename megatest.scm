@@ -25,6 +25,7 @@
 (declare (uses client))
 (declare (uses tests))
 (declare (uses genexample))
+(declare (uses daemon))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -35,6 +36,9 @@
 
 ;; (use trace dot-locking)
 ;; (trace
+;;  db:teststep-set-status!
+;;  db:open-test-db-by-test-id
+;;  db:test-get-rundir-from-test-id
 ;;  cdb:tests-register-test
 ;;  cdb:tests-update-uname-host
 ;;  cdb:tests-update-run-duration
@@ -124,6 +128,7 @@ Queries
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
   -dumpmode json          : dump in json format instead of sexpr
+  -show-cmdinfo           : dump the command info for a test (run in test environment)
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -236,6 +241,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-db-targets"
 			"-show-runconfig"
 			"-show-config"
+			"-show-cmdinfo"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -319,17 +325,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-remove-runs" "-lock"        "-unlock"
 		       "-update-meta" "-extract-ods"))))
 	(if (setup-for-run)
-	    (let ((servers (open-run-close tasks:get-best-server tasks:open-db)))
+	    (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
+		       (trycount 0))
 	      (if (or (not servers)
 		      (null? servers))
 		  (begin
-		    (debug:print 0 "INFO: Starting server as none running ...")
-		    ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		    (system (conc (car (argv)) " -server - -daemonize -transport " (args:get-arg "-transport" "http")))
-		    (thread-sleep! 3)) ;; give the server a few seconds to start
-		  (debug:print 0 "INFO: Servers already running " servers)
+		    (if (eq? trycount 0) ;; just do the server start once
+			(begin
+			  (debug:print 0 "INFO: Starting server as none running ...")
+			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
+			  (process-fork (lambda ()
+					  (daemon:ize)
+					  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
+			  (thread-sleep! 3))
+			(debug:print-info 0 "Waiting for server to start"))
+		    (loop (open-run-close tasks:get-best-server tasks:open-db) 
+			  (+ trycount 1)))
+		  (debug:print 0 "INFO: Server(s) running " servers)
 		  )))))
-	
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -376,8 +390,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     servers)
 	    (debug:print-info 1 "Done with listservers")
 	    (set! *didsomething* #t)
-	    (exit) ;; must do, would have to add checks to many/all calls below
-	    )
+	    (exit)) ;; must do, would have to add checks to many/all calls below
 	  (exit)))
     ;; if not list or kill then start a client (if appropriate)
     (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
@@ -428,6 +441,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(json-write data))
        (else
 	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-show-cmdinfo")
+    (let ((data (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO"))))))
+      (if (equal? (args:get-arg "-dumpmode") "json")
+	  (json-write data)
+	  (pp data))
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -795,6 +815,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (run-id    (assoc/default 'run-id    cmdinfo))
 	     (test-id   (assoc/default 'test-id   cmdinfo))
 	     (itemdat   (assoc/default 'itemdat   cmdinfo))
+	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
 	;; (set! *runremote* runremote)
@@ -805,7 +826,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (exit 1)))
 	(if (and state status)
 	    ;; DO NOT remote run, makes calls to the testdat.db test db.
-	    (db:teststep-set-status! db test-id step state status msg logfile)
+	    (db:teststep-set-status! db test-id step state status msg logfile work-area: work-area)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -821,7 +842,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
     
-(if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+(if (or (and (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
@@ -843,6 +865,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
+	       (work-area (assoc/default 'work-area cmdinfo))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
@@ -860,7 +883,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
-	      (db:load-test-data db test-id))
+	      (db:load-test-data db test-id work-area: work-area))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
 		(cdb:test-set-log! *runremote* test-id logfname)))
@@ -892,7 +915,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
 		    ;; DO NOT run remote
-		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
+		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -912,7 +935,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      ;; DO NOT run remote
-		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile))
+		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile work-area: work-area))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -939,7 +962,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
-		  (tests:test-set-status! test-id state newstatus msg otherdata))))
+		  (tests:test-set-status! test-id state newstatus msg otherdata work-area: work-area))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
