@@ -46,17 +46,19 @@ test2 : fullprep
 test3 : fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -debug 10
 
-test4 : fullprep
-	cd fullrun;$(MEGATEST) -debug $(DEBUG) -runall -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+test4 : cleanprep
+	@echo "WARNING: No longer running fullprep, test converage may be lessened"
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
-test5 : fullprep
-	cd fullrun;sleep  0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
-	cd fullrun;sleep 10;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-#	cd fullrun;sleep 10;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
+test5 : cleanprep
+	@echo "WARNING: No longer running fullprep, test converage may be lessened"
+	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
+	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
+	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
+	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
+#	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+#	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -65,7 +67,7 @@ test6: fullprep
 
 
 cleanprep : ../*.scm Makefile */*.config
-	mkdir -p /tmp/mt_runs /tmp/mt_links
+	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
 	cd ..;make;make install
 	rm -f */logging.db
 	touch cleanprep

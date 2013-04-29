@@ -1,3 +1,8 @@
 #!/bin/sh
-sleep 10
+if [ $NUMBER -lt 200 ];then 
+   sleep $NUMBER
+else
+   sleep 200
+fi
+
 exit 0

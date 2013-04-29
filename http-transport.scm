@@ -208,8 +208,9 @@
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin
-	  (debug:print-info 2 "Failed to login or connect to " iface ":" port)
+	  (debug:print-info 0 "Failed to login or connect to " iface ":" port)
 	  (set! *runremote* #f)
+	  (set! *transport-type* 'fs)
 	  #f))))
 
 
@@ -233,13 +234,14 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdb         (tasks:open-db))
-	 (spid        (tasks:server-get-server-id tdb #f iface port #f))
+	 (spid        ;;(open-run-close tasks:server-get-server-id tasks:open-db #f iface port #f))
+	   (tasks:server-get-server-id tdb #f iface port #f))
 	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
 			       ;; default to three days
-			       (* 3 24 60)))))
+			       (* 3 24 60 60)))))
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
@@ -254,14 +256,16 @@
 	(set! sdat *runremote*)
 	(mutex-unlock! *heartbeat-mutex*)
 
-	(if (not (equal? sdat (list iface port)))
+	(if (or (not (equal? sdat (list iface port)))
+		(not spid))
 	    (begin 
-	      (debug:print-info 1 "interface changed, refreshing iface and port info")
+	      (debug:print-info 0 "interface changed, refreshing iface and port info")
 	      (set! iface (car sdat))
 	      (set! port  (cadr sdat))
 	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
 
         ;; NOTE: Get rid of this mechanism! It really is not needed...
+        ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
         (tasks:server-update-heartbeat tdb spid)
       
         ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
@@ -278,7 +282,7 @@
               (debug:print-info 0 "Starting to shutdown the server.")
               ;; need to delete only *my* server entry (future use)
               (set! *time-to-exit* #t)
-              (tasks:server-deregister-self tdb (get-host-name))
+              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
               (thread-sleep! 1)
               (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
 	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
@@ -331,6 +335,8 @@
 
 ;; (use trace)
 ;; (trace http-transport:keep-running 
+;;        tasks:server-update-heartbeat
+;;        tasks:server-get-server-id)
 ;;        tasks:get-best-server
 ;;        http-transport:run
 ;;        http-transport:launch

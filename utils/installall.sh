@@ -166,133 +166,133 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks canvas-draw
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
-#======================================================================
-# Note uuid needed only for zmq 2.x series
-#======================================================================
-
-# http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
-# zpatchlev=-rc2
-# http://download.zeromq.org/zeromq-2.2.0.tar.gz
-
-if [[ -e /usr/lib/libzmq.so ]]; then
-  echo "Using system installed zmq library"
-  $CHICKEN_INSTALL zmq
-else
-ZEROMQ=zeromq-2.2.0
-# ZEROMQ=zeromq-3.2.2
-
-# wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-UTIL_LINUX=2.21
-# UTIL_LINUX=2.20.1
-if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-    # wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
-    wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
-fi
-
-if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-    tar xfz util-linux-${UTIL_LINUX}.tar.gz
-    cd util-linux-${UTIL_LINUX}
-    mkdir -p build
-    cd build
-    if [[ $UTIL_LINUX = "2.22" ]] ; then
-    ../configure --prefix=$PREFIX \
---enable-shared                   \
---disable-use-tty-group		  \
---disable-makeinstall-chown       \
---disable-makeinstall-setuid      \
---disable-libtool-lock		  \
---disable-login			  \
---disable-sulogin		  \
---disable-su			  \
---disable-schedutils		  \
---disable-libmount		  \
---disable-mount			  \
---disable-losetup		  \
---disable-fsck			  \
---disable-partx			  \
---disable-mountpoint		  \
---disable-fallocate		  \
---disable-unshare		  \
---disable-eject			  \
---disable-agetty		  \
---disable-cramfs		  \
---disable-switch_root		  \
---disable-pivot_root		  \
---disable-kill			  \
---disable-libblkid		  \
---disable-utmpdump		  \
---disable-rename		  \
---disable-chsh-only-listed	  \
---disable-wall			  \
---disable-pg-bell		  \
---disable-require-password	  \
---disable-libtool-lock		  \
---disable-nls			  \
---disable-dmesg                   \
---without-ncurses                 
-    else
-      ../configure --prefix=$PREFIX \
-  --enable-shared         \
-  --disable-mount         \
-  --disable-fsck          \
-  --disable-partx         \
-  --disable-largefile     \
-  --disable-tls           \
-  --disable-libmount      \
-  --disable-mountpoint    \
-  --disable-nls           \
-  --disable-rpath         \
-  --disable-agetty        \
-  --disable-cramfs        \
-  --disable-switch_root   \
-  --disable-pivot_root    \
-  --disable-fallocate     \
-  --disable-unshare       \
-  --disable-rename        \
-  --disable-schedutils    \
-  --disable-libblkid      \
-  --disable-wall CFLAGS='-fPIC'
-
-#  --disable-makeinstall-chown \
-#  --disable-makeinstall-setuid \
-
-#   --disable-chsh-only-listed
-#   --disable-pg-bell       let pg not ring the bell on invalid keys
-#   --disable-require-password
-#   --disable-use-tty-group do not install wall and write setgid tty
-#   --disable-makeinstall-chown
-#   --disable-makeinstall-setuid
-    fi
-    
-    (cd libuuid;make install)
-    # make
-    # make install
-    cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
-fi
-
-
-cd $BUILDHOME
-
-if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
-    wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
-fi
-
-if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
-    tar xfz ${ZEROMQ}.tar.gz
-    cd ${ZEROMQ}
-    ln -s $PREFIX/include/uuid src
-    # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
-    
-    ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
-    # --disable-shared CPPFLAGS="-fPIC 
-    # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
-    make
-    make install
-    CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX zmq
-    # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -deploy -prefix $DEPLOYTARG zmq
-fi
-fi # if zmq is in /usr/lib
-
+# disabled zmq # #======================================================================
+# disabled zmq # # Note uuid needed only for zmq 2.x series
+# disabled zmq # #======================================================================
+# disabled zmq # 
+# disabled zmq # # http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
+# disabled zmq # # zpatchlev=-rc2
+# disabled zmq # # http://download.zeromq.org/zeromq-2.2.0.tar.gz
+# disabled zmq # 
+# disabled zmq # if [[ -e /usr/lib/libzmq.so ]]; then
+# disabled zmq #   echo "Using system installed zmq library"
+# disabled zmq #   $CHICKEN_INSTALL zmq
+# disabled zmq # else
+# disabled zmq # ZEROMQ=zeromq-2.2.0
+# disabled zmq # # ZEROMQ=zeromq-3.2.2
+# disabled zmq # 
+# disabled zmq # # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
+# disabled zmq # UTIL_LINUX=2.21
+# disabled zmq # # UTIL_LINUX=2.20.1
+# disabled zmq # if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
+# disabled zmq #     # wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
+# disabled zmq #     wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
+# disabled zmq # fi
+# disabled zmq # 
+# disabled zmq # if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
+# disabled zmq #     tar xfz util-linux-${UTIL_LINUX}.tar.gz
+# disabled zmq #     cd util-linux-${UTIL_LINUX}
+# disabled zmq #     mkdir -p build
+# disabled zmq #     cd build
+# disabled zmq #     if [[ $UTIL_LINUX = "2.22" ]] ; then
+# disabled zmq #     ../configure --prefix=$PREFIX \
+# disabled zmq # --enable-shared                   \
+# disabled zmq # --disable-use-tty-group		  \
+# disabled zmq # --disable-makeinstall-chown       \
+# disabled zmq # --disable-makeinstall-setuid      \
+# disabled zmq # --disable-libtool-lock		  \
+# disabled zmq # --disable-login			  \
+# disabled zmq # --disable-sulogin		  \
+# disabled zmq # --disable-su			  \
+# disabled zmq # --disable-schedutils		  \
+# disabled zmq # --disable-libmount		  \
+# disabled zmq # --disable-mount			  \
+# disabled zmq # --disable-losetup		  \
+# disabled zmq # --disable-fsck			  \
+# disabled zmq # --disable-partx			  \
+# disabled zmq # --disable-mountpoint		  \
+# disabled zmq # --disable-fallocate		  \
+# disabled zmq # --disable-unshare		  \
+# disabled zmq # --disable-eject			  \
+# disabled zmq # --disable-agetty		  \
+# disabled zmq # --disable-cramfs		  \
+# disabled zmq # --disable-switch_root		  \
+# disabled zmq # --disable-pivot_root		  \
+# disabled zmq # --disable-kill			  \
+# disabled zmq # --disable-libblkid		  \
+# disabled zmq # --disable-utmpdump		  \
+# disabled zmq # --disable-rename		  \
+# disabled zmq # --disable-chsh-only-listed	  \
+# disabled zmq # --disable-wall			  \
+# disabled zmq # --disable-pg-bell		  \
+# disabled zmq # --disable-require-password	  \
+# disabled zmq # --disable-libtool-lock		  \
+# disabled zmq # --disable-nls			  \
+# disabled zmq # --disable-dmesg                   \
+# disabled zmq # --without-ncurses                 
+# disabled zmq #     else
+# disabled zmq #       ../configure --prefix=$PREFIX \
+# disabled zmq #   --enable-shared         \
+# disabled zmq #   --disable-mount         \
+# disabled zmq #   --disable-fsck          \
+# disabled zmq #   --disable-partx         \
+# disabled zmq #   --disable-largefile     \
+# disabled zmq #   --disable-tls           \
+# disabled zmq #   --disable-libmount      \
+# disabled zmq #   --disable-mountpoint    \
+# disabled zmq #   --disable-nls           \
+# disabled zmq #   --disable-rpath         \
+# disabled zmq #   --disable-agetty        \
+# disabled zmq #   --disable-cramfs        \
+# disabled zmq #   --disable-switch_root   \
+# disabled zmq #   --disable-pivot_root    \
+# disabled zmq #   --disable-fallocate     \
+# disabled zmq #   --disable-unshare       \
+# disabled zmq #   --disable-rename        \
+# disabled zmq #   --disable-schedutils    \
+# disabled zmq #   --disable-libblkid      \
+# disabled zmq #   --disable-wall CFLAGS='-fPIC'
+# disabled zmq # 
+# disabled zmq # #  --disable-makeinstall-chown \
+# disabled zmq # #  --disable-makeinstall-setuid \
+# disabled zmq # 
+# disabled zmq # #   --disable-chsh-only-listed
+# disabled zmq # #   --disable-pg-bell       let pg not ring the bell on invalid keys
+# disabled zmq # #   --disable-require-password
+# disabled zmq # #   --disable-use-tty-group do not install wall and write setgid tty
+# disabled zmq # #   --disable-makeinstall-chown
+# disabled zmq # #   --disable-makeinstall-setuid
+# disabled zmq #     fi
+# disabled zmq #     
+# disabled zmq #     (cd libuuid;make install)
+# disabled zmq #     # make
+# disabled zmq #     # make install
+# disabled zmq #     cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
+# disabled zmq # fi
+# disabled zmq # 
+# disabled zmq # 
+# disabled zmq # cd $BUILDHOME
+# disabled zmq # 
+# disabled zmq # if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
+# disabled zmq #     wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
+# disabled zmq # fi
+# disabled zmq # 
+# disabled zmq # if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
+# disabled zmq #     tar xfz ${ZEROMQ}.tar.gz
+# disabled zmq #     cd ${ZEROMQ}
+# disabled zmq #     ln -s $PREFIX/include/uuid src
+# disabled zmq #     # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
+# disabled zmq #     
+# disabled zmq #     ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
+# disabled zmq #     # --disable-shared CPPFLAGS="-fPIC 
+# disabled zmq #     # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
+# disabled zmq #     make
+# disabled zmq #     make install
+# disabled zmq #     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX zmq
+# disabled zmq #     # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -deploy -prefix $DEPLOYTARG zmq
+# disabled zmq # fi
+# disabled zmq # fi # if zmq is in /usr/lib
+# disabled zmq # 
 cd $BUILDHOME  
 
 ## WEBKIT=WebKit-r131972

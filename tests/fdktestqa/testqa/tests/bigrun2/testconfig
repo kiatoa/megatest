@@ -4,8 +4,10 @@ step1 step1.sh
 
 # Test requirements are specified here
 [requirements]
-# waiton setup
+waiton bigrun
 priority 0
+mode itemmatch
+
 
 # Iteration for your tests are controlled by the items section
 [items]
