@@ -55,9 +55,9 @@
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
-	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; How is testpath different from work-area ??
+	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
 	       (top-path  (assoc/default 'toppath   cmdinfo))
-	       (work-area (assoc/default 'work-area cmdinfo))
+	       (work-area (assoc/default 'work-area cmdinfo))  ;; work-area is the test run area
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
@@ -135,7 +135,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 testpath)
+	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 work-area)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -210,7 +210,7 @@
 
 						   (debug:print 4 "script: " script)
 						   ;; DO NOT remote
-						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f testpath: testpath)
+						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f work-area: work-area)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -228,7 +228,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna testpath: testpath))
+						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: work-area))
 						     (if logpro-used
 							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -278,7 +278,7 @@
 				     (begin
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes testpath)
+				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

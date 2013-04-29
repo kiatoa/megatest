@@ -246,7 +246,7 @@
 
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat #!key (testpath #f))
+(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
   (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
   (let* ((db          #f)
 	 (real-status status)
@@ -292,7 +292,7 @@
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status testpath: testpath))
+	(db:test-data-rollup #f test-id status work-area: work-area))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -574,9 +574,9 @@
     ;;(sqlite3:finalize! db))
     )
   
-(define (tests:set-meta-info db test-id run-id testname itemdat minutes testpath)
+(define (tests:set-meta-info db test-id run-id testname itemdat minutes work-area)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((tdb         (db:open-test-db-by-test-id db test-id testpath: testpath))
+  (let* ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (num-records (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))

@@ -128,6 +128,7 @@ Queries
   -show-config            : dump the internal representation of the megatest.config file
   -show-runconfig         : dump the internal representation of the runconfigs.config file
   -dumpmode json          : dump in json format instead of sexpr
+  -show-cmdinfo           : dump the command info for a test (run in test environment)
 
 Misc 
   -rebuild-db             : bring the database schema up to date
@@ -240,6 +241,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-list-db-targets"
 			"-show-runconfig"
 			"-show-config"
+			"-show-cmdinfo"
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -439,6 +441,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(json-write data))
        (else
 	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-show-cmdinfo")
+    (let ((data (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO"))))))
+      (if (equal? (args:get-arg "-dumpmode") "json")
+	  (json-write data)
+	  (pp data))
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -806,6 +815,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (run-id    (assoc/default 'run-id    cmdinfo))
 	     (test-id   (assoc/default 'test-id   cmdinfo))
 	     (itemdat   (assoc/default 'itemdat   cmdinfo))
+	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
 	;; (set! *runremote* runremote)
@@ -816,7 +826,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (exit 1)))
 	(if (and state status)
 	    ;; DO NOT remote run, makes calls to the testdat.db test db.
-	    (db:teststep-set-status! db test-id step state status msg logfile testpath: testpath)
+	    (db:teststep-set-status! db test-id step state status msg logfile work-area: work-area)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -855,6 +865,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
+	       (work-area (assoc/default 'work-area cmdinfo))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
@@ -872,7 +883,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
-	      (db:load-test-data db test-id testpath: testpath))
+	      (db:load-test-data db test-id work-area: work-area))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
 		(cdb:test-set-log! *runremote* test-id logfname)))
@@ -904,7 +915,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
 		    ;; DO NOT run remote
-		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile testpath: testpath)
+		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\"")
 		    (change-directory startingdir)
@@ -924,7 +935,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      ;; DO NOT run remote
-		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile testpath: testpath))
+		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile work-area: work-area))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -951,7 +962,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
-		  (tests:test-set-status! test-id state newstatus msg otherdata testpath: testpath))))
+		  (tests:test-set-status! test-id state newstatus msg otherdata work-area: work-area))))
 	  (if db (sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 

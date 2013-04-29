@@ -243,12 +243,12 @@
 ;;======================================================================
 
 ;; Create the sqlite db for the individual test(s)
-(define (open-test-db testpath) 
-  (debug:print-info 11 "open-test-db " testpath)
-  (if (and testpath 
-	   (directory? testpath)
-	   (file-read-access? testpath))
-      (let* ((dbpath    (conc testpath "/testdat.db"))
+(define (open-test-db work-area) 
+  (debug:print-info 11 "open-test-db " work-area)
+  (if (and work-area 
+	   (directory? work-area)
+	   (file-read-access? work-area))
+      (let* ((dbpath    (conc work-area "/testdat.db"))
 	     (dbexists  (file-exists? dbpath))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
@@ -256,7 +256,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR: problem accessing test db " testpath ", you probably should clean and re-run this test"
+	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
 	   #f)
 	 (set! db (sqlite3:open-database dbpath)))
@@ -267,12 +267,12 @@
 	      (debug:print-info 11 "Initialized test database " dbpath)
 	      (db:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	(debug:print-info 11 "open-test-db END (sucessful)" testpath)
+	(debug:print-info 11 "open-test-db END (sucessful)" work-area)
 	;; now let's test that everything is correct
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR: problem accessing test db " testpath ", you probably should clean and re-run this test"
+	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
 	   #f)
 	 ;; Is there a cheaper single line operation that will check for existance of a table
@@ -280,13 +280,13 @@
 	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
 	db)
       (begin
-	(debug:print-info 11 "open-test-db END (unsucessful)" testpath)
+	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
 	#f)))
 
 ;; find and open the testdat.db file for an existing test
-(define (db:open-test-db-by-test-id db test-id #!key (testpath #f))
-  (let* ((test-path (if testpath
-			testpath
+(define (db:open-test-db-by-test-id db test-id #!key (work-area #f))
+  (let* ((test-path (if work-area
+			work-area
 			(cdb:remote-run db:test-get-rundir-from-test-id db test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
@@ -846,9 +846,9 @@
     res))
 
 ;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db test-id #!key (testpath #f))
+(define (db:delete-test-step-records db test-id #!key (work-area #f))
   ;; Breaking it into two queries for better file access interleaving
-  (let* ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath)))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area)))
     ;; test db's can go away - must check every time
     (if tdb
 	(begin
@@ -988,8 +988,8 @@
 ;;
 ;; NOT USED
 ;;
-(define (db:patch-tdb-data-into-test-info db test-id res #!key (testpath #f))
-  (let ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath)))
+(define (db:patch-tdb-data-into-test-info db test-id res #!key (work-area #f))
+  (let ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area)))
     ;; get state and status from megatest.db in real time
     ;; other fields that perhaps should be updated:
     ;;   fail_count
@@ -1633,9 +1633,9 @@
 ;; T E S T   D A T A 
 ;;======================================================================
 
-(define (db:csv->test-data db test-id csvdata #!key (testpath #f))
+(define (db:csv->test-data db test-id csvdata #!key (work-area #f))
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((tdb     (db:open-test-db-by-test-id db test-id testpath: testpath)))
+  (let ((tdb     (db:open-test-db-by-test-id db test-id work-area: work-area)))
     (if tdb
 	(let ((csvlist (csv->list (make-csv-reader
 				   (open-input-string csvdata)
@@ -1694,8 +1694,8 @@
 	  (sqlite3:finalize! tdb)))))
 
 ;; get a list of test_data records matching categorypatt
-(define (db:read-test-data db test-id categorypatt #!key (testpath #f))
-  (let ((tdb  (db:open-test-db-by-test-id db test-id testpath: testpath)))
+(define (db:read-test-data db test-id categorypatt #!key (work-area #f))
+  (let ((tdb  (db:open-test-db-by-test-id db test-id work-area: work-area)))
     (if tdb
 	(let ((res '()))
 	  (sqlite3:for-each-row 
@@ -1708,24 +1708,24 @@
 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (db:load-test-data db test-id #!key (testpath #f))
+(define (db:load-test-data db test-id #!key (work-area #f))
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (db:csv->test-data db test-id lin testpath: testpath)
+	  (db:csv->test-data db test-id lin work-area: work-area)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
-  (db:test-data-rollup db test-id #f testpath: testpath))
+  (db:test-data-rollup db test-id #f work-area: work-area))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
 ;; look at the test_data status field, 
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id status #!key (testpath #f))
-  (let ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath))
+(define (db:test-data-rollup db test-id status #!key (work-area #f))
+  (let ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
 	(fail-count 0)
 	(pass-count 0))
     (if tdb
@@ -1778,8 +1778,8 @@
   (seconds->time-string (db:step-get-event_time vec)))
 
 ;; db-get-test-steps-for-run
-(define (db:get-steps-for-test db test-id #!key (testpath #f))
-  (let* ((tdb (db:open-test-db-by-test-id db test-id testpath: testpath))
+(define (db:get-steps-for-test db test-id #!key (work-area #f))
+  (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (res '()))
     (if tdb
 	(begin
@@ -1795,8 +1795,8 @@
 
 ;; get a pretty table to summarize steps
 ;;
-(define (db:get-steps-table db test-id #!key (testpath #f))
-  (let ((steps   (db:get-steps-for-test db test-id testpath: testpath)))
+(define (db:get-steps-table db test-id #!key (work-area #f))
+  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
     ;; organise the steps for better readability
     (let ((res (make-hash-table)))
       (for-each 
@@ -1855,8 +1855,8 @@
 
 ;; get a pretty table to summarize steps
 ;;
-(define (db:get-steps-table-list db test-id #!key (testpath #f))
-  (let ((steps   (db:get-steps-for-test db test-id testpath: testpath)))
+(define (db:get-steps-table-list db test-id #!key (work-area #f))
+  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
     ;; organise the steps for better readability
     (let ((res (make-hash-table)))
       (for-each 
@@ -1997,10 +1997,10 @@
 	 waitons)
 	(delete-duplicates result))))
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile #!key (testpath #f))
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile #!key (work-area #f))
   (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   ;;                 db:open-test-db-by-test-id does cdb:remote-run
-  (let* ((tdb       (db:open-test-db-by-test-id db test-id testpath: testpath))
+  (let* ((tdb       (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
