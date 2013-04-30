@@ -1951,12 +1951,11 @@
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
-;; Note: do not convert to remote as it calls remote under the hood
 ;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK, SKIP or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met db run-id waitons ref-item-path #!key (mode 'normal))
+(define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -1966,7 +1965,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name '() '()))
+	   (let ((tests             (cdb:remote-run db:get-tests-for-run #f run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))

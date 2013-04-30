@@ -120,30 +120,24 @@
 	    itemdat))
 
 (define *last-num-running-tests* 0)
-(define *runs:can-run-more-tests-delay* 0)
-(define (runs:shrink-can-run-more-tests-delay)
-  (set! *runs:can-run-more-tests-delay* 0)) ;; (/ *runs:can-run-more-tests-delay* 2)))
 
-(define (runs:can-run-more-tests test-record)
-  (thread-sleep! *runs:can-run-more-tests-delay*)
+;; Every time can-run-more-tests is called increment the delay
+;; if the cou
+(define *runs:can-run-more-tests-count* 0)
+(define (runs:shrink-can-run-more-tests-count)
+  (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
+
+(define (runs:can-run-more-tests test-record max-concurrent-jobs)
+  (thread-sleep! (cond
+		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
+		  (else 0)))
   (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
 	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
-	 ;; Heuristic fix. These are getting called too rapidly when jobs are running or stuck
-	 ;; so we are going to increment a global delay by 0.1 seconds up to 10 seconds
-	 ;; every time runs:can-run-more-tests is called.
-	 ;; when a test is launched or other activity occurs divide the delay by 2
 	 (num-running             (cdb:remote-run db:get-count-tests-running #f))
 	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
-	 (max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
-				    (if (and mcj (string->number mcj))
-					(string->number mcj)
-					1)))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
-    (if (and (> (+ num-running num-running-in-jobgroup) 0)
-	     (< *runs:can-run-more-tests-delay* 1))
-	(begin
-	  (set! *runs:can-run-more-tests-delay* (+ *runs:can-run-more-tests-delay* 0.009))
-	  (debug:print-info 14 "can-run-more-tests-delay: " *runs:can-run-more-tests-delay*)))
+    (if (> (+ num-running num-running-in-jobgroup) 0)
+	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
     (if (not (eq? *last-num-running-tests* num-running))
 	(begin
 	  (debug:print 2 "max-concurrent-jobs: " max-concurrent-jobs ", num-running: " num-running)
@@ -338,7 +332,11 @@
 	(test-registery    (make-hash-table))
 	(registery-mutex   (make-mutex))
 	(num-retries        0)
-	(max-retries       (config-lookup *configdat* "setup" "maxretries")))
+	(max-retries       (config-lookup *configdat* "setup" "maxretries"))
+	(max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
+				    (if (and mcj (string->number mcj))
+					(string->number mcj)
+					1))))
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
@@ -378,13 +376,13 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (let* ((run-limits-info         (runs:can-run-more-tests test-record)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         (runs:can-run-more-tests test-record max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
 		     (max-concurrent-jobs     (list-ref run-limits-info 3))
 		     (job-group-limit         (list-ref run-limits-info 4))
-		     (prereqs-not-met         (cdb:remote-run db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
+		     (prereqs-not-met         (db:get-prereqs-not-met run-id waitons item-path mode: testmode))
 		     (fails                   (runs:calc-fails prereqs-not-met))
 		     (non-completed           (runs:calc-not-completed prereqs-not-met)))
 		(debug:print-info 8 "have-resources: " have-resources " prereqs-not-met: " 
@@ -432,8 +430,8 @@
 		        		   (mutex-unlock! registery-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
-		  (thread-sleep! *global-delta*)
-		  (runs:shrink-can-run-more-tests-delay)   ;; DELAY TWEAKER (still needed?)
+		  ;; TRY (thread-sleep! *global-delta*)
+		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ;; At this point *all* test registrations must be completed.
 		 ((not (null? (filter (lambda (x)(eq? 'start x))(hash-table-values test-registery))))
@@ -457,7 +455,7 @@
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
 		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'running)
-		  (runs:shrink-can-run-more-tests-delay)  ;; DELAY TWEAKER (still needed?)
+		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (car tal)(cdr tal) reruns)))
@@ -478,13 +476,13 @@
 				(begin 
 				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 					       " from the launch list as it has prerequistes that are FAIL")
-				  (runs:shrink-can-run-more-tests-delay) ;; DELAY TWEAKER (still needed?)
+				  (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! *global-delta*)
 				  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'removed)
 				  (loop (car tal)(cdr tal) (cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-				  (runs:shrink-can-run-more-tests-delay) ;; DELAY TWEAKER (still needed?)
+				  (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! (+ 0.01 *global-delta*))
 				  (loop hed tal reruns))))))))) ;; END OF INNER COND
 	     
@@ -518,10 +516,10 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (runs:can-run-more-tests test-record)))
+	      (let ((can-run-more    (runs:can-run-more-tests test-record max-concurrent-jobs)))
 		(if (and (list? can-run-more)
 			 (car can-run-more))
-		    (let* ((prereqs-not-met (open-run-close db:get-prereqs-not-met #f run-id waitons item-path mode: testmode))
+		    (let* ((prereqs-not-met (db:get-prereqs-not-met run-id waitons item-path mode: testmode))
 			   (fails           (runs:calc-fails prereqs-not-met))
 			   (non-completed   (runs:calc-not-completed prereqs-not-met)))
 		      (debug:print-info 8 "can-run-more: " can-run-more
@@ -560,9 +558,9 @@
 			;; only increment num-retries when there are no tests runing
 			(if (eq? 0 (list-ref can-run-more 1))
 			    (begin
-			      (if (> num-retries 100) ;; first 100 retries are low time cost
-				  (thread-sleep! (+ 2 *global-delta*))
-				  (thread-sleep! (+ 0.01 *global-delta*)))
+			      ;; TRY (if (> num-retries 100) ;; first 100 retries are low time cost
+			      ;; TRY     (thread-sleep! (+ 2 *global-delta*))
+			      ;; TRY     (thread-sleep! (+ 0.01 *global-delta*)))
 			      (set! num-retries (+ num-retries 1))))
 			(if (> num-retries  max-retries)
 			    (if (not (null? tal))
@@ -578,7 +576,7 @@
 			      (loop (car tal)(cdr tal)(cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
-			(thread-sleep! (+ 1 *global-delta*))
+			;; TRY (thread-sleep! (+ 1 *global-delta*))
 			(loop (car newtal)(cdr newtal) reruns)))) ;; END OF IF CAN RUN MORE
 
 		    ;; if can't run more just loop with next possible test
