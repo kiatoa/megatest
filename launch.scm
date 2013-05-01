@@ -128,7 +128,7 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (open-run-close set-run-config-vars #f run-id keys keyvals)
+	  (set-run-config-vars run-id keys keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
@@ -338,7 +338,7 @@
 				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
+		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
