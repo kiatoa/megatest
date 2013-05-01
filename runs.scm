@@ -323,20 +323,47 @@
 (define (runs:make-full-test-name testname itempath)
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
+(define (runs:queue-next-hed tal reg n)
+  (if (> (length reg) n)
+      (car reg)
+      (if (null? tal)
+	  (car reg)
+	  (car tal))))
+
+(define (runs:queue-next-tal tal reg n)
+  (if (> (length reg) n)
+      ;; rotate
+      (let ((nexttal (if (null? tal)
+			 reg
+			 (cdr tal))))
+	(if (null? nexttal)
+	    reg
+	    nexttal))
+      (if (null? reg)
+	  '()
+	  (cdr reg))))
+
+(define (runs:queue-next-reg tal reg n)
+  (if (> (length reg) n)
+      (cdr reg)
+      reg))
+      
+
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
   (let ((sorted-test-names (tests:sort-by-priority-and-waiton test-records))
-	(test-registery    (make-hash-table))
-	(registery-mutex   (make-mutex))
+	(test-registry    (make-hash-table))
+	(registry-mutex   (make-mutex))
 	(num-retries        0)
 	(max-retries       (config-lookup *configdat* "setup" "maxretries"))
 	(max-concurrent-jobs     (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
 				    (if (and mcj (string->number mcj))
 					(string->number mcj)
-					1))))
+					1)))
+	(reglen             10)) ;; length of the register queue ahead
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
@@ -355,13 +382,13 @@
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 		 (items       (tests:testqueue-get-items      test-record))
 		 (item-path   (item-list->path itemdat))
-		 (newhed      (if (> (length reg) 100)
-				  (let ((newh (car reg)))
-				    (set! reg (cdr reg))
-				    (set! tal (cons hed tal))
-				    newh)
-				  hed))
 		 (newtal      (append tal (list hed))))
+	    ;; (if (> (length reg) 10)
+	    ;;     (begin
+	    ;;       (set! tal (cons hed tal))
+	    ;;       (set! hed (car reg))
+	    ;;       (set! reg (cdr reg))
+	    ;;       (set! newtal tal)))
 	    (debug:print 6
 			 "test-name: " test-name
 			 "\n  hed:         " hed
@@ -378,7 +405,7 @@
 	    (if (member test-name waitons)
 		(begin
 		  (debug:print 0 "ERROR: test " test-name " has listed itself as a waiton, please correct this!")
-		  (set! waiton (filter (lambda (x)(not (equal? x newhed))) waitons))))
+		  (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
@@ -398,7 +425,7 @@
 					 (conc (db:test-get-state t) "/" (db:test-get-status t))
 					 (conc " WARNING: t is not a vector=" t )))
 				   prereqs-not-met) ", ") " fails: " fails)
-		(debug:print-info 4 "newhed=" newhed "\n  test-record=" test-record "\n  test-name: " test-name "\n  item-path: " item-path "\n  test-patts: " test-patts)
+		(debug:print-info 4 "hed=" hed "\n  test-record=" test-record "\n  test-name: " test-name "\n  item-path: " item-path "\n  test-patts: " test-patts)
 
 		;; Don't know at this time if the test have been launched at some time in the past
 		;; i.e. is this a re-launch?
@@ -411,46 +438,47 @@
 		  (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
-		      (loop (car tal)(cdr tal) reg reruns)))
-		 ;; Registery has been started for this test but has not yet completed
+		      (loop (runs:queue-next-hed tal reg reglen)
+			    (runs:queue-next-tal tal reg reglen)
+			    (runs:queue-next-reg tal reg reglen)
+			    reruns)))
+		 ;; Registry has been started for this test but has not yet completed
 		 ;; this should be rare, the case where there are only a couple of tests and the db is slow
 		 ;; delay a short while and continue
-		 ;; ((eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f) 'start)
+		 ;; ((eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f) 'start)
 		 ;;  (thread-sleep! 0.01)
 		 ;;  (loop (car newtal)(cdr newtal) reruns))
 		 ;; count number of 'done, if more than 100 then skip on through.
-		 (;; (and (< (length (filter (lambda (x)(eq? x 'done))(hash-table-values test-registery))) 100) ;; why get more than 200 ahead?
-		  (not (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
+		 ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-		  ;; NEED TO THREADIFY THIS
 		  (let ((th (make-thread (lambda ()
-		        		   (mutex-lock! registery-mutex)
-		        		   (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'start)
-		        		   (mutex-unlock! registery-mutex)
+		        		   (mutex-lock! registry-mutex)
+		        		   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
+		        		   (mutex-unlock! registry-mutex)
 					   ;; If haven't done it before register a top level test if this is an itemized test
-					   (if (not (eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name "") #f) 'done))
+					   (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
 					       (cdb:tests-register-test *runremote* run-id test-name ""))
 					   (cdb:tests-register-test *runremote* run-id test-name item-path)
-		        		   (mutex-lock! registery-mutex)
-					   (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'done)
-		        		   (mutex-unlock! registery-mutex))
+		        		   (mutex-lock! registry-mutex)
+					   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+		        		   (mutex-unlock! registry-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
-		  ;; TRY (thread-sleep! *global-delta*)
 		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
-		  (loop (car newtal)(cdr newtal)(append reg (list newhed)) reruns))
-		 ;; At this point *all* test registrations must be completed.
-		 ;; NO! Only the registration for *this* test
-		 (;; (not (null? (filter (lambda (x)(eq? 'start x))(hash-table-values test-registery))))
-		  (eq? (hash-table-ref/default test-registery (runs:make-full-test-name test-name item-path) #f)
+		  (loop (car newtal)
+			(runs:queue-next-tal tal reg reglen)
+			(append reg (list hed))
+			reruns))
+		 ;; At this point hed test registration must be completed.
+		 ((eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)
 		       'start)
 		  (debug:print-info 0 "Waiting on test registration(s): " (string-intersperse 
 									   (filter (lambda (x)
-										     (eq? (hash-table-ref/default test-registery x #f) 'start))
-										   (hash-table-keys test-registery))
+										     (eq? (hash-table-ref/default test-registry x #f) 'start))
+										   (hash-table-keys test-registry))
 									   ", "))
 		  (thread-sleep! 0.1)
-		  (loop newhed tal reg reruns))
+		  (loop hed tal reg reruns))
 		 ((not have-resources) ;; simply try again after waiting a second
 		  (debug:print-info 1 "no resources to run new tests, waiting ...")
 		  ;; Have gone back and forth on this but db starvation is an issue.
@@ -463,11 +491,14 @@
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
 		  (run:test run-id runname keyvallst test-record flags #f)
-		  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'running)
+		  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
 		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
-		      (loop (car tal)(cdr tal) reg reruns)))
+		      (loop (runs:queue-next-hed tal reg reglen)
+			    (runs:queue-next-tal tal reg reglen)
+			    (runs:queue-next-reg tal reg reglen)
+			    reruns)))
 		 (else ;; must be we have unmet prerequisites
 		    (debug:print 4 "FAILS: " fails)
 		    ;; If one or more of the prereqs-not-met are FAIL then we can issue
@@ -481,19 +512,22 @@
 			  (loop (car newtal)(cdr newtal) reg reruns))
 			;; the waiton is FAIL so no point in trying to run hed ever again
 			(if (not (null? tal))
-			    (if (vector? newhed)
+			    (if (vector? hed)
 				(begin 
-				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname newhed) "/" (db:test-get-item-path newhed)
+				  (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 					       " from the launch list as it has prerequistes that are FAIL")
 				  (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! *global-delta*)
-				  (hash-table-set! test-registery (runs:make-full-test-name test-name item-path) 'removed)
-				  (loop (car tal)(cdr tal) reg (cons newhed reruns)))
+				  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
+				  (loop (runs:queue-next-hed tal reg reglen)
+					(runs:queue-next-tal tal reg reglen)
+					(runs:queue-next-reg tal reg reglen)
+					(cons hed reruns)))
 				(begin
-				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " newhed) ;;  " as it has prerequistes that are FAIL. (NOTE: newhed is not a vector)")
+				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 				  (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! (+ 0.01 *global-delta*))
-				  (loop newhed tal reg reruns))))))))) ;; END OF INNER COND
+				  (loop hed tal reg reruns))))))))) ;; END OF INNER COND
 	     
 	     ;; case where an items came in as a list been processed
 	     ((and (list? items)     ;; thus we know our items are already calculated
@@ -508,8 +542,8 @@
 					   (vector-copy! test-record newrec)
 					   newrec))
 			(my-item-path (item-list->path my-itemdat)))
-		   (if (tests:match test-patts newhed my-item-path) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		       (let ((newtestname (runs:make-full-test-name newhed my-item-path)))    ;; test names are unique on testname/item-path
+		   (if (tests:match test-patts hed my-item-path) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+		       (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
 			 (tests:testqueue-set-items!     new-test-record #f)
 			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
 			 (tests:testqueue-set-item_path! new-test-record my-item-path)
@@ -520,7 +554,10 @@
 		  (begin
 		    (debug:print-info 4 "End of items list, looping with next after short delay")
                     ;; (thread-sleep! (+ 0.01 *global-delta*))
-		    (loop (car tal)(cdr tal) reg reruns))))
+		    (loop (runs:queue-next-hed tal reg reglen)
+			  (runs:queue-next-tal tal reg reglen)
+			  (runs:queue-next-reg tal reg reglen)
+			  reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
@@ -532,7 +569,7 @@
 			   (fails           (runs:calc-fails prereqs-not-met))
 			   (non-completed   (runs:calc-not-completed prereqs-not-met)))
 		      (debug:print-info 8 "can-run-more: " can-run-more
-				   "\n testname:        " newhed
+				   "\n testname:        " hed
 				   "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
 				   "\n non-completed:   " (runs:pretty-string non-completed) 
 				   "\n fails:           " (runs:pretty-string fails)
@@ -558,12 +595,12 @@
 				(begin
 				  (tests:testqueue-set-items! test-record items-list)
 				  ;; (thread-sleep! *global-delta*)
-				  (loop newhed tal reg reruns))
+				  (loop hed tal reg reruns))
 				(begin
 				  (debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 				  (exit 1))))))
 		       ((null? fails)
-			(debug:print-info 4 "fails is null, moving on in the queue but keeping " newhed " for now")
+			(debug:print-info 4 "fails is null, moving on in the queue but keeping " hed " for now")
 			;; only increment num-retries when there are no tests runing
 			(if (eq? 0 (list-ref can-run-more 1))
 			    (begin
@@ -573,16 +610,22 @@
 			      (set! num-retries (+ num-retries 1))))
 			(if (> num-retries  max-retries)
 			    (if (not (null? tal))
-				(loop (car tal)(cdr tal) reg reruns))
+				(loop (runs:queue-next-hed tal reg reglen)
+				      (runs:queue-next-tal tal reg reglen)
+				      (runs:queue-next-reg tal reg reglen)
+				      reruns))
 			    (loop (car newtal)(cdr newtal) reg reruns))) ;; an issue with prereqs not yet met?
 		       ((and (not (null? fails))(eq? testmode 'normal))
-			(debug:print-info 1 "test "  newhed " (mode=" testmode ") has failed prerequisite(s); "
+			(debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 				     (string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 				     ", removing it from to-do list")
 			(if (not (null? tal))
 			    (begin
                               ;; (thread-sleep! *global-delta*)
-			      (loop (car tal)(cdr tal) reg (cons newhed reruns)))))
+			      (loop (runs:queue-next-hed tal reg reglen)
+				    (runs:queue-next-tal tal reg reglen)
+				    (runs:queue-next-reg tal reg reglen)
+				    (cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
 			;; TRY (thread-sleep! (+ 1 *global-delta*))
@@ -590,7 +633,7 @@
 
 		    ;; if can't run more just loop with next possible test
 		    (begin
-		      (debug:print-info 4 "processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " newhed)
+		      (debug:print-info 4 "processing the case with a lambda for items or 'have-procedure. Moving through the queue without dropping " hed)
 		      ;; (thread-sleep! (+ 2 *global-delta*))
 		      (loop (car newtal)(cdr newtal) reg reruns))))) ;; END OF (or (procedure? items)(eq? items 'have-procedure))
 	     
@@ -612,7 +655,7 @@
 	     ((not (null? tal))
 	      (debug:print-info 4 "I'm pretty sure I shouldn't get here."))
 	     (else
-	      (debug:print-info 4 "Exiting loop with...\n  newhed=" newhed "\n  tal=" tal "\n  reruns=" reruns))
+	      (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	     )))) ;; LET* ((test-record
 
     ;; we get here on "drop through" - loop for next test in queue
