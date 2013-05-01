@@ -414,7 +414,6 @@
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (key-vals (cdb:remote-run db:get-key-vals #f run-id))
 	 (target   (string-intersperse key-vals "/"))
 
 	 (not-iterated  (equal? "" item-path))
@@ -557,7 +556,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -596,7 +595,7 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())

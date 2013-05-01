@@ -457,7 +457,7 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat flags))
+	       (if (not (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 
