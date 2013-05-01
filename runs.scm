@@ -323,31 +323,28 @@
 (define (runs:make-full-test-name testname itempath)
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
-(define (runs:queue-next-hed tal reg n)
-  (if (> (length reg) n)
-      (car reg)
-      (if (null? tal)
-	  (car reg)
-	  (car tal))))
+(define (runs:queue-next-hed tal reg n regful)
+  (if regful
+      (if (null? reg) ;; doesn't make sense, this is probably NOT the problem of the car
+	  (car tal)
+	  (car reg))
+      (car tal)))
 
-(define (runs:queue-next-tal tal reg n)
-  (if (> (length reg) n)
-      ;; rotate
-      (let ((nexttal (if (null? tal)
-			 reg
-			 (cdr tal))))
-	(if (null? nexttal)
+(define (runs:queue-next-tal tal reg n regful)
+  (if regful
+      tal
+      (let ((newtal (cdr tal)))
+	(if (null? newtal)
 	    reg
-	    nexttal))
-      (if (null? reg)
-	  '()
-	  (cdr reg))))
+	    newtal
+	    ))))
 
-(define (runs:queue-next-reg tal reg n)
-  (if (> (length reg) n)
+(define (runs:queue-next-reg tal reg n regful)
+  (if regful
       (cdr reg)
-      reg))
-      
+      (if (eq? (length tal) 1)
+	  '()
+	  reg)))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
@@ -363,7 +360,7 @@
 				    (if (and mcj (string->number mcj))
 					(string->number mcj)
 					1)))
-	(reglen             10)) ;; length of the register queue ahead
+	(reglen             2)) ;; length of the register queue ahead
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
@@ -382,7 +379,8 @@
 		 (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 		 (items       (tests:testqueue-get-items      test-record))
 		 (item-path   (item-list->path itemdat))
-		 (newtal      (append tal (list hed))))
+		 (newtal      (append tal (list hed)))
+		 (regfull     (> (length reg) reglen)))
 	    ;; (if (> (length reg) 10)
 	    ;;     (begin
 	    ;;       (set! tal (cons hed tal))
@@ -438,9 +436,9 @@
 		  (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
-		      (loop (runs:queue-next-hed tal reg reglen)
-			    (runs:queue-next-tal tal reg reglen)
-			    (runs:queue-next-reg tal reg reglen)
+		      (loop (runs:queue-next-hed tal reg reglen regfull)
+			    (runs:queue-next-tal tal reg reglen regfull)
+			    (runs:queue-next-reg tal reg reglen regfull)
 			    reruns)))
 		 ;; Registry has been started for this test but has not yet completed
 		 ;; this should be rare, the case where there are only a couple of tests and the db is slow
@@ -465,9 +463,12 @@
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
 		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
-		  (loop (car newtal)
-			(runs:queue-next-tal tal reg reglen)
-			(append reg (list hed))
+		  (loop (runs:queue-next-hed tal reg reglen regfull)
+			(runs:queue-next-tal tal reg reglen regfull)
+			(let ((newl (append reg (list hed))))
+			  (if regfull 
+			      (cdr newl)
+			      newl))
 			reruns))
 		 ;; At this point hed test registration must be completed.
 		 ((eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)
@@ -495,9 +496,9 @@
 		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
-		      (loop (runs:queue-next-hed tal reg reglen)
-			    (runs:queue-next-tal tal reg reglen)
-			    (runs:queue-next-reg tal reg reglen)
+		      (loop (runs:queue-next-hed tal reg reglen regfull)
+			    (runs:queue-next-tal tal reg reglen regfull)
+			    (runs:queue-next-reg tal reg reglen regfull)
 			    reruns)))
 		 (else ;; must be we have unmet prerequisites
 		    (debug:print 4 "FAILS: " fails)
@@ -519,9 +520,9 @@
 				  (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				  ;; (thread-sleep! *global-delta*)
 				  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
-				  (loop (runs:queue-next-hed tal reg reglen)
-					(runs:queue-next-tal tal reg reglen)
-					(runs:queue-next-reg tal reg reglen)
+				  (loop (runs:queue-next-hed tal reg reglen regfull)
+					(runs:queue-next-tal tal reg reglen regfull)
+					(runs:queue-next-reg tal reg reglen regfull)
 					(cons hed reruns)))
 				(begin
 				  (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
@@ -554,9 +555,9 @@
 		  (begin
 		    (debug:print-info 4 "End of items list, looping with next after short delay")
                     ;; (thread-sleep! (+ 0.01 *global-delta*))
-		    (loop (runs:queue-next-hed tal reg reglen)
-			  (runs:queue-next-tal tal reg reglen)
-			  (runs:queue-next-reg tal reg reglen)
+		    (loop (runs:queue-next-hed tal reg reglen regfull)
+			  (runs:queue-next-tal tal reg reglen regfull)
+			  (runs:queue-next-reg tal reg reglen regfull)
 			  reruns))))
 
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
@@ -610,9 +611,9 @@
 			      (set! num-retries (+ num-retries 1))))
 			(if (> num-retries  max-retries)
 			    (if (not (null? tal))
-				(loop (runs:queue-next-hed tal reg reglen)
-				      (runs:queue-next-tal tal reg reglen)
-				      (runs:queue-next-reg tal reg reglen)
+				(loop (runs:queue-next-hed tal reg reglen regfull)
+				      (runs:queue-next-tal tal reg reglen regfull)
+				      (runs:queue-next-reg tal reg reglen regfull)
 				      reruns))
 			    (loop (car newtal)(cdr newtal) reg reruns))) ;; an issue with prereqs not yet met?
 		       ((and (not (null? fails))(eq? testmode 'normal))
@@ -622,9 +623,9 @@
 			(if (not (null? tal))
 			    (begin
                               ;; (thread-sleep! *global-delta*)
-			      (loop (runs:queue-next-hed tal reg reglen)
-				    (runs:queue-next-tal tal reg reglen)
-				    (runs:queue-next-reg tal reg reglen)
+			      (loop (runs:queue-next-hed tal reg reglen regfull)
+				    (runs:queue-next-tal tal reg reglen regfull)
+				    (runs:queue-next-reg tal reg reglen regfull)
 				    (cons hed reruns)))))
 		       (else
 			(debug:print 8 "ERROR: No handler for this condition.")
