@@ -383,7 +383,7 @@
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
 	   (hash-table-set! *test-meta-updated* test-name #t)
-           (open-run-close runs:update-test_meta db test-name test-conf)))
+           (runs:update-test_meta test-name test-conf)))
     
     ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
@@ -695,12 +695,12 @@
 ;;======================================================================
 
 ;; Update the test_meta table for this test
-(define (runs:update-test_meta db test-name test-conf)
-  (let ((currrecord (cdb:remote-run db:testmeta-get-record db test-name)))
+(define (runs:update-test_meta test-name test-conf)
+  (let ((currrecord (cdb:remote-run db:testmeta-get-record #f test-name)))
     (if (not currrecord)
 	(begin
 	  (set! currrecord (make-vector 10 #f))
-	  (cdb:remote-run db:testmeta-add-record db test-name)))
+	  (cdb:remote-run db:testmeta-add-record #f test-name)))
     (for-each 
      (lambda (key)
        (let* ((idx (cadr key))
@@ -710,7 +710,7 @@
 	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
-	       (cdb:remote-run db:testmeta-update-field db test-name fld val)))))
+	       (cdb:remote-run db:testmeta-update-field #f test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
 
 ;; Update test_meta for all tests
@@ -724,7 +724,7 @@
 	      ;; read configs with tricks turned off (i.e. no system)
 	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
 	 ;; use the open-run-close instead of passing in db
-	 (runs:update-test_meta #f test-name test-conf)))
+	 (runs:update-test_meta test-name test-conf)))
      test-names)))
 
 ;; This could probably be refactored into one complex query ...
