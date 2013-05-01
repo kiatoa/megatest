@@ -408,9 +408,8 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
-  (let* ((run-info (cdb:remote-run db:get-run-info #f run-id))
-	 (item-path (item-list->path itemdat))
+(define (create-work-area run-id run-info key-vals test-id test-src-path disk-path testname itemdat)
+  (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
@@ -558,7 +557,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -610,7 +609,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area run-id run-info key-vals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print-info 2 "Using work area " work-area))
