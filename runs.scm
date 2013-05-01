@@ -346,6 +346,13 @@
 	  '()
 	  reg)))
 
+;; (use trace)
+;; (trace
+;;  runs:queue-next-hed
+;;  runs:queue-next-tal
+;;  runs:queue-next-reg
+;;  )
+
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvallst flags test-patts)
     ;; At this point the list of parent tests is expanded 
@@ -360,7 +367,7 @@
 				    (if (and mcj (string->number mcj))
 					(string->number mcj)
 					1)))
-	(reglen             2)) ;; length of the register queue ahead
+	(reglen             10)) ;; length of the register queue ahead
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
     (if (not (null? sorted-test-names))
 	(let loop ((hed         (car sorted-test-names))
@@ -463,13 +470,15 @@
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
 		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
-		  (loop (runs:queue-next-hed tal reg reglen regfull)
-			(runs:queue-next-tal tal reg reglen regfull)
-			(let ((newl (append reg (list hed))))
-			  (if regfull 
-			      (cdr newl)
-			      newl))
-			reruns))
+		  (if (and (null? tal)(null? reg))
+		      (loop hed tal reg reruns)
+		      (loop (runs:queue-next-hed tal reg reglen regfull)
+			    (runs:queue-next-tal tal reg reglen regfull)
+			    (let ((newl (append reg (list hed))))
+			      (if regfull 
+				  (cdr newl)
+				  newl))
+			    reruns)))
 		 ;; At this point hed test registration must be completed.
 		 ((eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)
 		       'start)
@@ -655,6 +664,9 @@
 		    (loop (car newlst)(cdr newlst) reg (delete-duplicates junked)))))
 	     ((not (null? tal))
 	      (debug:print-info 4 "I'm pretty sure I shouldn't get here."))
+	     ((not (null? reg)) ;; could we get here with leftovers?
+	      (debug:print-info 0 "Have leftovers!")
+	      (loop (car reg)(cdr reg) '() reruns))
 	     (else
 	      (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	     )))) ;; LET* ((test-record
