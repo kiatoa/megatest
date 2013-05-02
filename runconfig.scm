@@ -61,12 +61,12 @@
 	  (set! *already-seen-runconfig-info* #t)))
     finaldat))
 
-(define (set-run-config-vars db run-id keys keyvals)
+(define (set-run-config-vars run-id keys keyvals targ-from-db)
   (push-directory *toppath*)
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
 	(targ       (or (args:get-arg "-target")
 			(args:get-arg "-reqtarg")
-			(db:get-target db run-id))))
+			targ-from-db)))
     (pop-directory)
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id #t keys keyvals
