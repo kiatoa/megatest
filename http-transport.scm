@@ -46,6 +46,18 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
+
 (define (http-transport:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
@@ -59,7 +71,8 @@
 	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
-					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname)))
 	 (start-port    (if (and (args:get-arg "-port")
@@ -136,7 +149,8 @@
 		   ipaddrstr portnum 0 'live 'http)
    (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
-   (start-server port: portnum)
+   ;; NEED WAY TO SET IP TO #f TO BIND ALL
+   (start-server bind-address: ipaddrstr port: portnum)
    (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
    (print "INFO: server has been stopped")))
 
@@ -190,7 +204,7 @@
     (if (and (not (null? login-res))
 	     (car login-res))
 	(begin
-	  (debug:print-info 0 "Logged in and connected to " iface ":" port)
+	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin

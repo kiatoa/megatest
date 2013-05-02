@@ -55,9 +55,9 @@
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
-	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; How is testpath different from work-area ??
+	(let* ((testpath  (assoc/default 'testpath  cmdinfo))  ;; testpath is the test spec area
 	       (top-path  (assoc/default 'toppath   cmdinfo))
-	       (work-area (assoc/default 'work-area cmdinfo))
+	       (work-area (assoc/default 'work-area cmdinfo))  ;; work-area is the test run area
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
@@ -128,14 +128,14 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (open-run-close set-run-config-vars #f run-id keys keyvals)
+	  (set-run-config-vars run-id keys keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (test-set-meta-info #f test-id run-id test-name itemdat 0)
+	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 work-area)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -210,7 +210,7 @@
 
 						   (debug:print 4 "script: " script)
 						   ;; DO NOT remote
-						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f work-area: work-area)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -228,7 +228,7 @@
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: work-area))
 						     (if logpro-used
 							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -278,7 +278,7 @@
 				     (begin
 				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (test-set-meta-info #f test-id run-id test-name itemdat minutes)
+				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -338,7 +338,7 @@
 				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
+		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
@@ -408,14 +408,12 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
-  (let* ((run-info (cdb:remote-run db:get-run-info #f run-id))
-	 (item-path (item-list->path itemdat))
+(define (create-work-area run-id run-info key-vals test-id test-src-path disk-path testname itemdat)
+  (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (key-vals (cdb:remote-run db:get-key-vals #f run-id))
 	 (target   (string-intersperse key-vals "/"))
 
 	 (not-iterated  (equal? "" item-path))
@@ -539,11 +537,12 @@
 			   (if cmd
 			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
 			       (string-substitute "TEST_TARG_PATH" test-path
-						  (string-substitute "TEST_SRC_PATH" test-src-path cmd))
+						  (string-substitute "TEST_SRC_PATH" test-src-path cmd #t) #t)
 			       #f)))
 		 (cmd    (if ovrcmd 
 			     ovrcmd
-			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/")))
+			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
+				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
@@ -557,7 +556,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -596,7 +595,7 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
@@ -609,7 +608,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area run-id run-info key-vals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print-info 2 "Using work area " work-area))
@@ -670,29 +669,32 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply cmd-run-with-stderr->list ;; cmd-run-proc-each-line
+	   (launch-results (apply (if (equal? (configf:lookup *configdat* "setup" "launchwait") "yes")
+				      cmd-run-with-stderr->list
+				      process-run)
 				  (if useshell
 				      (string-intersperse fullcmd " ")
 				      (car fullcmd))
-				  ;; conc
 				  (if useshell
 				      '()
-				      (cdr fullcmd))))) ;;  launcher fullcmd)));; (apply cmd-run-proc-each-line launcher print fullcmd))) ;; (cmd-run->list fullcmd))
-      (with-output-to-file "mt_launch.log"
-	(lambda ()
-	  (apply print launch-results)))
+				      (cdr fullcmd)))))
+      (if (list? launch-results)
+	  (with-output-to-file "mt_launch.log"
+	    (lambda ()
+	      (apply print launch-results))
+	    #:append))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
-	  (begin
-	    (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
-	    ;; (sqlite3:finalize! db)
-	    ;; good ole "exit" seems not to work
-	    ;; (_exit 9)
-	    ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
-	    ;; NB// Is this still needed? Should be safe to go back to "exit" now?
-	    (process-signal (current-process-id) signal/kill)
-	    ))
+          (begin
+            (print "ERROR: Failed to run " (string-intersperse fullcmd " ") ", exiting now")
+            ;; (sqlite3:finalize! db)
+            ;; good ole "exit" seems not to work
+            ;; (_exit 9)
+            ;; but this hack will work! Thanks go to Alan Post of the Chicken email list
+            ;; NB// Is this still needed? Should be safe to go back to "exit" now?
+            (process-signal (current-process-id) signal/kill)
+            ))
       (alist->env-vars miscprevvals)
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals)
