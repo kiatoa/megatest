@@ -882,7 +882,8 @@
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
-;; WARNING: SQL injection risk
+;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
+;;
 (define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
@@ -892,6 +893,27 @@
 		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
+
+
+(define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
+  ;; Convert #f to wildcard %
+  (if (null? testnames)
+      #t
+      (let ((currstate  (if currstate currstate "%"))
+	    (currstatus (if currstatus currstatus "%")))
+	(let loop ((hed (car testnames))
+		   (tal (cdr testnames))
+		   (thr '()))
+	  (let ((th1 (if newstate  (create-thread (cbd:client-call serverdat 'update-test-state  #t *default-numtries* newstate  currstate  run-id testname testname)) #f))
+		(th2 (if newstatus (create-thread (cbd:client-call serverdat 'update-test-status #t *default-numtries* newstatus currstatus run-id testname testname)) #f)))
+	    (thread-start! th1)
+	    (thread-start! th2)
+	    (if (null? tal)
+		(loop (car tal)(cdr tal)(cons th1 (cons th2 thr)))
+		(for-each
+		 (lambda (th)
+		   (if th (thread-join! th)))
+		 thr)))))))
 
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
@@ -1363,6 +1385,8 @@
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
 	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
+	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
+	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
     ))
 
 ;; do not run these as part of the transaction

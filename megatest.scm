@@ -623,7 +623,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
-		     (args:get-arg "-testpatt")
+		     (or (args:get-arg "-testpatt")
+			 (args:get-arg "-runtests"))
 		     user
 		     args:arg-hash))))
 
