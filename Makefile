@@ -57,6 +57,9 @@ tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
 megatest.o : megatest-fossil-hash.scm
 
+# Temporary while transitioning to new routine
+runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
+
 megatest-fossil-hash.scm : $(SRCFILES) megatest.scm *_records.scm
 	echo "(define megatest-fossil-hash \"$(MTESTHASH)\")" > megatest-fossil-hash.new
 	if ! diff -q megatest-fossil-hash.new megatest-fossil-hash.scm ; then echo copying .new to .scm;cp -f megatest-fossil-hash.new megatest-fossil-hash.scm;fi

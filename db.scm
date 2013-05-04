@@ -882,7 +882,8 @@
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
-;; WARNING: SQL injection risk
+;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
+;;
 (define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
@@ -892,6 +893,27 @@
 		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
+
+
+(define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
+  ;; Convert #f to wildcard %
+  (if (null? testnames)
+      #t
+      (let ((currstate  (if currstate currstate "%"))
+	    (currstatus (if currstatus currstatus "%")))
+	(let loop ((hed (car testnames))
+		   (tal (cdr testnames))
+		   (thr '()))
+	  (let ((th1 (if newstate  (create-thread (cbd:client-call serverdat 'update-test-state  #t *default-numtries* newstate  currstate  run-id testname testname)) #f))
+		(th2 (if newstatus (create-thread (cbd:client-call serverdat 'update-test-status #t *default-numtries* newstatus currstatus run-id testname testname)) #f)))
+	    (thread-start! th1)
+	    (thread-start! th2)
+	    (if (null? tal)
+		(loop (car tal)(cdr tal)(cons th1 (cons th2 thr)))
+		(for-each
+		 (lambda (th)
+		   (if th (thread-join! th)))
+		 thr)))))))
 
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
@@ -1363,6 +1385,8 @@
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
 	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
+	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
+	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
     ))
 
 ;; do not run these as part of the transaction
@@ -1913,31 +1937,34 @@
 		      (else #f)))))
       res)))
 
-(define (db:get-compressed-steps test-id)
-  (let* ((comprsteps (open-run-close db:get-steps-table #f test-id)))
-    (map (lambda (x)
-	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
-	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
-	 (sort (hash-table-values comprsteps)
-	       (lambda (a b)
-		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
-		   (if (and (number? time-a)(number? time-b))
-		       (if (< time-a time-b)
-			   #t
-			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
-			       #f))
-		       (string<? (conc time-a)(conc time-b)))))))))
+(define (db:get-compressed-steps test-id #!key (work-area #f))
+  (if (or (not work-area)
+	  (file-exists? (conc work-area "/testdat.db")))
+      (let* ((comprsteps (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+	(map (lambda (x)
+	       ;; take advantage of the \n on time->string
+	       (vector
+		(vector-ref x 0)
+		(let ((s (vector-ref x 1)))
+		  (if (number? s)(seconds->time-string s) s))
+		(let ((s (vector-ref x 2)))
+		  (if (number? s)(seconds->time-string s) s))
+		(vector-ref x 3)    ;; status
+		(vector-ref x 4)
+		(vector-ref x 5)))  ;; time delta
+	     (sort (hash-table-values comprsteps)
+		   (lambda (a b)
+		     (let ((time-a (vector-ref a 1))
+			   (time-b (vector-ref b 1)))
+		       (if (and (number? time-a)(number? time-b))
+			   (if (< time-a time-b)
+			       #t
+			       (if (eq? time-a time-b)
+				   (string<? (conc (vector-ref a 2))
+					     (conc (vector-ref b 2)))
+				   #f))
+			   (string<? (conc time-a)(conc time-b))))))))
+      '()))
 
 ;;======================================================================
 ;; M I S C   M A N A G E M E N T   I T E M S 
@@ -1948,12 +1975,11 @@
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
-;; Note: do not convert to remote as it calls remote under the hood
 ;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK, SKIP or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met db run-id waitons ref-item-path #!key (mode 'normal))
+(define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -1963,7 +1989,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (db:get-tests-for-run db run-id waitontest-name '() '()))
+	   (let ((tests             (cdb:remote-run db:get-tests-for-run #f run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))

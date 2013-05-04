@@ -128,7 +128,7 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (open-run-close set-run-config-vars #f run-id keys keyvals)
+	  (set-run-config-vars run-id keys keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
@@ -338,7 +338,7 @@
 				    (args:get-arg "-m") #f)))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (open-run-close tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
+		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
 	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
@@ -408,14 +408,12 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area db run-id test-id test-src-path disk-path testname itemdat)
-  (let* ((run-info (cdb:remote-run db:get-run-info #f run-id))
-	 (item-path (item-list->path itemdat))
+(define (create-work-area run-id run-info key-vals test-id test-src-path disk-path testname itemdat)
+  (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (key-vals (cdb:remote-run db:get-key-vals #f run-id))
 	 (target   (string-intersperse key-vals "/"))
 
 	 (not-iterated  (equal? "" item-path))
@@ -544,7 +542,7 @@
 		 (cmd    (if ovrcmd 
 			     ovrcmd
 			     (conc "rsync -av" (if (debug:debug-mode 1) "" "q") " " test-src-path "/ " test-path "/"
-				   " >> " test-path "/mt_launch.log >>2 " test-path "/mt_launch.log")))
+				   " >> " test-path "/mt_launch.log 2>> " test-path "/mt_launch.log")))
 		 (status (system cmd)))
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
@@ -558,7 +556,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test db run-id runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -597,7 +595,7 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
-	 (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
@@ -610,7 +608,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (open-run-close create-work-area db run-id test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area run-id run-info key-vals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print-info 2 "Using work area " work-area))

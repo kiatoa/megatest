@@ -272,9 +272,9 @@
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
-	       (teststeps     (if testdat (db:get-compressed-steps test-id) '()))
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
+	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
@@ -307,11 +307,15 @@
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
 						       request-update))
-				    (newtestdat (if need-update (open-run-close db:get-test-info-by-id #f test-id))))
+				    (newtestdat (if need-update 
+						    (handle-exceptions
+						     exn 
+						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (open-run-close db:get-test-info-by-id #f test-id )))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (db:get-compressed-steps test-id))
+				 (set! teststeps    (db:get-compressed-steps test-id work-area: rundir))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))

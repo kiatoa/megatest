@@ -14,3 +14,17 @@ INFO: (0) Average cached write time 15.0634544983915 ms
 INFO: (0) Number non-cached queries 71928
 INFO: (0) Average non-cached time   5.15547491936381 ms
 INFO: (0) Server shutdown complete. Exiting
+
+
+fdktestqa on Apr 29, 2013: 1812 tests
+
+INFO: (0) Max cached queries was    10
+INFO: (0) Number of cached writes   41335
+INFO: (0) Average cached write time 206.081553163179 ms
+INFO: (0) Number non-cached queries 74289
+INFO: (0) Average non-cached time   1055.09826488444 ms
+INFO: (0) Server shutdown complete. Exiting
+
+Start: 0 at Sun Apr 28 22:18:25 MST 2013
+Max:  52 at Sun Apr 28 23:06:59 MST 2013
+End:   6 at Sun Apr 28 23:47:51 MST 2013
