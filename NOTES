@@ -5,3 +5,12 @@
    if and only if the originating area can not be seen via file 
    system. NO LONGER TRUE. Rsync is used but file system must be visible.
 4. All db access is done via the home host. NOT IMPLEMENTED YET.
+
+REMOTE ACCESS DB LOADS
+
+INFO: (0) Max cached queries was    10
+INFO: (0) Number of cached writes   27043
+INFO: (0) Average cached write time 15.0634544983915 ms
+INFO: (0) Number non-cached queries 71928
+INFO: (0) Average non-cached time   5.15547491936381 ms
+INFO: (0) Server shutdown complete. Exiting
