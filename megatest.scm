@@ -36,6 +36,7 @@
 
 ;; (use trace dot-locking)
 ;; (trace
+;;  tests:match)
 ;;  db:teststep-set-status!
 ;;  db:open-test-db-by-test-id
 ;;  db:test-get-rundir-from-test-id
@@ -623,7 +624,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
-		     (args:get-arg "-testpatt")
+		     (or (args:get-arg "-testpatt")
+			 (args:get-arg "-runtests"))
 		     user
 		     args:arg-hash))))
 

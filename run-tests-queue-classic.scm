@@ -54,6 +54,9 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
+	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path))
+	               (not (null? tal)))
+	          (loop (car tal)(cdr tal) reruns))
 	      (let* ((run-limits-info         (runs:can-run-more-tests test-record max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
