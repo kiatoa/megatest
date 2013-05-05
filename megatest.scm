@@ -34,6 +34,10 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 ;; (use trace dot-locking)
 ;;  (trace
 ;;   tests:match
