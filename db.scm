@@ -524,6 +524,26 @@
 ;;  R U N S
 ;;======================================================================
 
+(define (db:get-run-name-from-id db run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (runname)
+       (set! res runname))
+     db
+     "SELECT runname FROM runs WHERE id=?;"
+     run-id)
+    res))
+
+(define (db:get-run-key-val db run-id key)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     db 
+     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
+     run-id)
+    res))
+
 ;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
   (let* ((header    (append (map key:get-fieldname keys)

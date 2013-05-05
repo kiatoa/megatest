@@ -224,7 +224,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+			  (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin

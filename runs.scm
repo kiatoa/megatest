@@ -69,28 +69,8 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
-(define (db:get-run-key-val db run-id key)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (val)
-       (set! res val))
-     db 
-     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
-     run-id)
-    res))
-
-(define (db:get-run-name-from-id db run-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (runname)
-       (set! res runname))
-     db
-     "SELECT runname FROM runs WHERE id=?;"
-     run-id)
-    res))
-
-(define (set-megatest-env-vars run-id)
-  (let ((keys (cdb:remote-run db:get-keys #f))
+(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f))
+  (let ((keys (if inkeys inkeys (cdb:remote-run db:get-keys #f)))
 	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
     (if (not vals)
@@ -109,7 +89,7 @@
        (setenv (key:get-fieldname key) val)))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (setenv "MT_RUNNAME" (cdb:remote-run db:get-run-name-from-id #f run-id))
+    (setenv "MT_RUNNAME" (if inrunname inrunname (cdb:remote-run db:get-run-name-from-id #f run-id)))
     (setenv "MT_RUN_AREA_HOME" *toppath*)
     ))
 
@@ -189,7 +169,7 @@
 	 (required-tests '())
 	 (test-records (make-hash-table)))
 
-    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
@@ -375,7 +355,7 @@
     (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "/") "/" item-path))
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated

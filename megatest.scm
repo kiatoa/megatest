@@ -415,13 +415,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-runconfig")
-    (let* ((target (if (args:get-arg "-reqtarg")
+    (let* ((keys   (cdb:remote-run get-keys #f))
+	   (target (if (args:get-arg "-reqtarg")
 		       (args:get-arg "-reqtarg")
 		       (if (args:get-arg "-target")
 			   (args:get-arg "-target")
 			   #f)))
+	   (key-vals (if target (keys:target->keyval keys target) #f))
 	   (sections (if target (list "default" target) #f))
-	   (data     (read-config "runconfigs.config" #f #t sections: sections)))
+	   (data     (begin
+		       (if key-vals
+			   (for-each (lambda (kt)
+				       (setenv (car kt) (cadr kt)))
+				     key-vals))
+		       (read-config "runconfigs.config" #f #t sections: sections))))
 
       ;; keep this one local
       (cond
