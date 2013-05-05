@@ -424,6 +424,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (key-vals (if target (keys:target->keyval keys target) #f))
 	   (sections (if target (list "default" target) #f))
 	   (data     (begin
+		       (setenv "MT_RUN_AREA_HOME" *toppath*)
 		       (if key-vals
 			   (for-each (lambda (kt)
 				       (setenv (car kt) (cadr kt)))
