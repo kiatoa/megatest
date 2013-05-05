@@ -1,4 +1,4 @@
-
+# make install CSCOPTS='-accumulate-profile -profile-name $(PWD)/profile-ww$(shell date +%V.%u)'
 PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
