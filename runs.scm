@@ -35,8 +35,7 @@
 ;;  to extract info from the structure returned
 ;;
 (define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
-  (let* ((keyvallst (keys->vallist keys))
-	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
@@ -85,13 +84,12 @@
     (hash-table-for-each
      vals
      (lambda (key val)
-       (debug:print 2 "setenv " (key:get-fieldname key) " " val)
-       (setenv (key:get-fieldname key) val)))
+       (debug:print 2 "setenv " key " " val)
+       (setenv key val)))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
     (setenv "MT_RUNNAME" (if inrunname inrunname (cdb:remote-run db:get-run-name-from-id #f run-id)))
-    (setenv "MT_RUN_AREA_HOME" *toppath*)
-    ))
+    (setenv "MT_RUN_AREA_HOME" *toppath*)))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -158,10 +156,9 @@
 (define (runs:run-tests target runname test-names test-patts user flags)
   (common:clear-caches) ;; clear all caches
   (let* ((db          #f)
-	 (keys        (cdb:remote-run db:get-keys #f))
-	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
-	 (keyvals     (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
+	 (keys        (keys:config-get-fields *configdat*))
+	 (keyvals     (keys:target->keyval keys target))
+	 (run-id      (cdb:remote-run db:register-run #f keys keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
@@ -277,8 +274,8 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
       (if reglen
-	  (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts)))
+	  (runs:run-tests-queue-new run-id runname test-records flags test-patts reglen)
+	  (runs:run-tests-queue-classic run-id runname test-records flags test-patts)))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -333,7 +330,7 @@
 (include "run-tests-queue-new.scm")
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test run-id run-info key-vals runname keyvallst test-record flags parent-test)
+(define (run:test run-id run-info key-vals runname test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
@@ -437,7 +434,7 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat flags))
+	       (if (not (launch-test test-id run-id run-info key-vals runname test-conf test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 
@@ -603,8 +600,8 @@
   (let ((runname (args:get-arg ":runname"))
 	(target  (if (args:get-arg "-target")
 		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg")))
-	(th1     #f))
+		     (args:get-arg "-reqtarg"))))
+	;; (th1     #f))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -614,24 +611,23 @@
       (exit 3))
      (else
       (let ((db   #f)
-	    (keys #f))
+	    (keys #f)
+	    (target (or (args:get-arg "-reqtarg")
+			(args:get-arg "-target"))))
 	(if (not (setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (args:get-arg "-server")
 	    (open-run-close server:start db (args:get-arg "-server")))
- 	    ;; (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
- 	    ;;     	 (args:get-arg "-runtests")))
-	    ;;     (client:setup) ;; This is a duplicate startup!!!??? BUG?
-	    ;;     ))
-	(set! keys (open-run-close db:get-keys db))
+	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
 		   (runconfig  (read-config runconfigf #f #t environ-patt: #f))) 
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
+		    
 		  (begin
 		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
 		    (if db (sqlite3:finalize! db))
@@ -644,10 +640,8 @@
 	      (exit 1))
 	    ;; Extract out stuff needed in most or many calls
 	    ;; here then call proc
-	    (let* ((keynames   (map key:get-fieldname keys))
-		   (keyvallst  (keys->vallist keys #t)))
-	      (proc target runname keys keynames keyvallst)))
-	(if th1 (thread-join! th1))
+	    (let* ((keyvals    (keys:target->keyval keys target)))
+	      (proc target runname keys keyvals)))
 	(if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
@@ -708,10 +702,10 @@
      test-names)))
 
 ;; This could probably be refactored into one complex query ...
-(define (runs:rollup-run keys keyvallst runname user) ;; was target, now keyvallst
-  (debug:print 4 "runs:rollup-run, keys: " keys " keyvallst: " keyvallst " :runname " runname " user: " user)
-  (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
-	 (new-run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))
+(define (runs:rollup-run keys runname user keyvals)
+  (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
+  (let* ((db              #f)
+	 (new-run-id      (cdb:remote-run db:register-run #f keys keyvals runname "new" "n/a" user))
 	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
 	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
@@ -733,7 +727,7 @@
 	      (item-path (db:test-get-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps      (open-run-close db:get-steps-for-test db (db:test-get-id testdat)))
+	      (test-steps    (open-run-close db:get-steps-for-test db (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 

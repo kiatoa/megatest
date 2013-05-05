@@ -16,7 +16,7 @@
 (define (setup-env-defaults fname run-id already-seen keys keyvals #!key (environ-patt #f)(change-env #t))
   (let* (;; (keys    (db:get-keys db))
 	 ;; (keyvals (if run-id (db:get-key-vals db run-id) #f))
-	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")
+	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) (map car keyvals)) "/")
 		      (if (args:get-arg "-reqtarg") 
 			  (args:get-arg "-reqtarg")
 			  (if (args:get-arg "-target")
@@ -34,9 +34,9 @@
     (debug:print 4 "Using key=\"" thekey "\"")
 
     (if change-env
-	(for-each
+	(for-each ;; NB// This can be simplified with new content of keyvals having all that is needed.
 	 (lambda (key val)
-	   (setenv (vector-ref key 0) val))
+	   (setenv key (cadr val)))
 	 keys keyvals))
 	
     (for-each 

@@ -135,12 +135,12 @@
 (define (db:initialize db)
   (debug:print-info 11 "db:initialize START")
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
-	 (keys     (config-get-fields configdat))
+	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys)))
     (for-each (lambda (key)
-		(let ((keyn (vector-ref key 0)))
+		(let ((keyn key))
 		  (if (member (string-downcase keyn)
 			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
 				    "pass_count"))
@@ -153,7 +153,7 @@
     (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
-		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
+		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 	      keys)
     (sqlite3:execute db (conc 
 			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
@@ -494,20 +494,22 @@
   (sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var)
   (debug:print-info 11 "db:del-var END " var))
 
-;; use a global for some primitive caching, it is just silly to re-read the db 
-;; over and over again for the keys since they never change
+;; use a global for some primitive caching, it is just silly to
+;; re-read the db over and over again for the keys since they never
+;; change
+
+;; why get the keys from the db? why not get from the *configdat*
+;; using keys:config-get-fields?
 
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
       (let ((res '()))
-	(debug:print-info 11 "db:get-keys START (cache miss)")
 	(sqlite3:for-each-row 
-	 (lambda (key keytype)
-	   (set! res (cons (vector key keytype) res)))
+	 (lambda (key)
+	   (set! res (cons key res)))
 	 db
-	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
+	 "SELECT fieldname FROM keys ORDER BY id DESC;")
 	(set! *db-keys* res)
-	(debug:print-info 11 "db:get-keys END (cache miss)")
 	res)))
 
 (define (db:get-value-by-header row header field)
@@ -540,14 +542,13 @@
      (lambda (val)
        (set! res val))
      db 
-     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
+     (conc "SELECT " key " FROM runs WHERE id=?;")
      run-id)
     res))
 
 ;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
-  (let* ((header    (append (map key:get-fieldname keys)
-			    remfields))
+  (let* ((header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (list keystr header)))
@@ -567,18 +568,17 @@
 
 
 ;; register a test run with the db
-(define (db:register-run db keys keyvallst runname state status user)
-  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
+(define (db:register-run db keys keyvals runname state status user)
+  (debug:print 3 "runs:register-run, keys: " keys ", runname: " runname " state: " state " status: " status " user: " user)
   (let* ((keystr    (keys->keystr keys))
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvals   (map cadr keyvallst))
-	 (allvals   (append (list runname state status user) keyvals))
-	 (qryvals   (append (list runname) keyvals))
-	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
+	 (allvals   (append (list runname state status user) (map car keyvals)))
+	 (qryvals   (append (list runname) (map car keyvals)))
+	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
     (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
-    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
+    (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
@@ -608,8 +608,7 @@
 	 (keys       (db:get-keys db))
 	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header     (append (map key:get-fieldname keys)
-		             remfields))
+	 (header     (append keys remfields))
 	 (keystr     (conc (keys->keystr keys) ","
 		           (string-intersperse remfields ",")))
 	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
@@ -659,8 +658,7 @@
       (let* ((res      #f)
 	     (keys      (db:get-keys db))
 	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	     (header    (append (map key:get-fieldname keys)
-				remfields))
+	     (header    (append keys remfields))
 	     (keystr    (conc (keys->keystr keys) ","
 			      (string-intersperse remfields ","))))
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
@@ -707,16 +705,16 @@
 ;; get key val pairs for a given run-id
 ;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
 (define (db:get-key-val-pairs db run-id)
-  (let* ((keys (get-keys db))
+  (let* ((keys (db:get-keys db))
 	 (res  '()))
     (debug:print-info 11 "db:get-key-val-pairs START keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+       (let ((qry (conc "SELECT " (car key) " FROM runs WHERE id=?;")))
 	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
-	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
+	    (set! res (cons (list (car key) key-val) res)))
 	  db qry run-id)))
      keys)
     (debug:print-info 11 "db:get-key-val-pairs END keys: " keys " run-id: " run-id)
@@ -727,12 +725,12 @@
   (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
     (if mykeyvals 
 	mykeyvals
-	(let* ((keys (get-keys db))
+	(let* ((keys (db:get-keys db))
 	       (res  '()))
 	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
 	  (for-each 
 	   (lambda (key)
-	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+	     (let ((qry (conc "SELECT " (car key) " FROM runs WHERE id=?;")))
 	       ;; (debug:print 0 "qry: " qry)
 	       (sqlite3:for-each-row 
 		(lambda (key-val)

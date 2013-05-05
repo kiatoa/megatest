@@ -38,37 +38,6 @@
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-;; (use trace dot-locking)
-;;  (trace
-;;   tests:match
-;;   runs:run-tests)
-;;  db:teststep-set-status!
-;;  db:open-test-db-by-test-id
-;;  db:test-get-rundir-from-test-id
-;;  cdb:tests-register-test
-;;  cdb:tests-update-uname-host
-;;  cdb:tests-update-run-duration
-;;  ;;  cdb:client-call
-;;  ;; cdb:remote-run
-;; )
-;;  cdb:test-set-status-state
-;;  change-directory
-;;  db:process-queue-item
-;;  db:test-get-logfile-info
-;;  db:teststep-set-status!
-;;  nice-path
-;;  obtain-dot-lock
-;;  open-run-close
-;;  read-config
-;;  runs:can-run-more-tests
-;;  sqlite3:execute
-;;  sqlite3:for-each-row
-;;  tests:check-waiver-eligibility
-;;  tests:summarize-items
-;;  tests:test-set-status!
-;;  thread-sleep!
-;;)
-       
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -496,14 +465,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-remove-runs"
      "remove runs"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (operate-on 'remove-runs))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (operate-on 'set-state-status))))
 
 ;;======================================================================
@@ -522,7 +491,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (keys     (cdb:remote-run db:get-keys #f))
-	       (keynames (map key:get-fieldname keys))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
@@ -530,7 +498,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (lambda (run)
 	     (let ((targetstr (string-intersperse (map (lambda (x)
 							 (db:get-value-by-header run header x))
-						       keynames) "/")))
+						       keys) "/")))
 	       (if db-targets
 		   (if (not (hash-table-ref/default seen targetstr #f))
 		       (begin
@@ -604,7 +572,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (runs:run-tests target
 		       runname
 		       "%"
@@ -633,7 +601,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (general-run-call 
    "-runtests" 
    "run a test" 
-   (lambda (target runname keys keynames keyvallst)
+   (lambda (target runname keys keyvals)
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
@@ -646,17 +614,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-rollup")
-    (begin
-      (debug:print 0 "ERROR: Rollup is currently not working. If you need it please submit a ticket at http://www.kiatoa.com/fossils/megatest")
-      (exit 4)))
-;;     (general-run-call 
-;;      "-rollup" 
-;;      "rollup tests" 
-;;      (lambda (target runname keys keynames keyvallst)
-;;        (runs:rollup-run keys
-;; 			(keys->alist keys "na")
-;; 			(args:get-arg ":runname") 
-;; 			user))))
+    (general-run-call 
+     "-rollup" 
+     "rollup tests" 
+     (lambda (target runname keys keyvals)
+       (runs:rollup-run keys
+			keyvals
+			(args:get-arg ":runname") 
+			user))))
 
 ;;======================================================================
 ;; Lock or unlock a run
@@ -666,7 +631,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      (if (args:get-arg "-lock") "-lock" "-unlock")
      "lock/unlock tests" 
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (runs:handle-locking 
 		  target
 		  keys
@@ -709,9 +674,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
 	  (let* ((keys     (cdb:remote-run db:get-keys db))
-		 (keynames (map key:get-fieldname keys))
 		 ;; db:test-get-paths must not be run remote
-		 (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		 (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -720,10 +684,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-files"
 	 "Get paths to test"
-	 (lambda (target runname keys keynames keyvallst)
+	 (lambda (target runname keys keyvals)
 	   (let* ((db       #f)
 		  ;; DO NOT run remote
-		  (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		  (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -761,9 +725,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
 	  (let* ((keys     (cdb:remote-run db:get-keys db))
-		 (keynames (map key:get-fieldname keys))
 		 ;; DO NOT run remote
-		 (paths    (db:test-get-paths-matching db keynames target)))
+		 (paths    (db:test-get-paths-matching db keys target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -772,10 +735,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
-	 (lambda (target runname keys keynames keyvallst)
+	 (lambda (target runname keys keyvals)
 	   (let* ((db       #f)
 		  ;; DO NOT run remote
-		  (paths    (db:test-get-paths-matching db keynames target)))
+		  (paths    (db:test-get-paths-matching db keys target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -788,13 +751,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (let ((db         #f)
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
-	     (pathmod    (args:get-arg "-pathmod"))
-	     (keyvalalist (keys->alist keys "%")))
-	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
+	     (pathmod    (args:get-arg "-pathmod")))
+	     ;; (keyvalalist (keys->alist keys "%")))
+	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvals)
 	 (cdb:remote-run db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
@@ -992,7 +955,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
       (set! keys (cbd:remote-run db:get-keys db))
-      (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
+      (debug:print 1 "Keys: " (string-intersperse keys ", "))
       (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 

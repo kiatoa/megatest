@@ -556,7 +556,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info key-vals runname test-conf test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -597,7 +597,7 @@
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
-	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
+	 (mt_target  (string-intersperse keyvals "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
     (if hosts (set! hosts (string-split hosts)))
@@ -636,7 +636,7 @@
 				     (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 				     (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 				     (list 'runname   runname)
-				     (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
+				     (list 'mt-bindir-path mt-bindir-path)))))))
     ;; clean out step records from previous run if they exist
     ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     ;; (open-run-close db:delete-test-step-records db test-id)

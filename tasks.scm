@@ -533,13 +533,13 @@
 (define (tasks:rollup-runs db mdb task)
   (let* ((flags (make-hash-table)) 
 	 (keys  (db:get-keys db))
-	 (keyvallst (keys:target->keyval keys (tasks:task-get-target task))))
+	 (keyvals (keys:target-keyval keys (tasks:task-get-target task))))
     ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
     (print "Starting rollup " task)
     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
     (runs:rollup-run db
 		     keys 
-		     keyvallst
+		     keyvals
 		     (tasks:task-get-name  task)
 		     (tasks:task-get-owner  task))
     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
