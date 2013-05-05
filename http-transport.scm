@@ -15,7 +15,9 @@
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
+;; Configurations for server
 (tcp-buffer-size 2048)
+(max-connections 2048) 
 
 (declare (unit http-transport))
 

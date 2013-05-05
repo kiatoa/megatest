@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -35,8 +35,9 @@
 (include "megatest-fossil-hash.scm")
 
 ;; (use trace dot-locking)
-;; (trace
-;;  tests:match)
+;;  (trace
+;;   tests:match
+;;   runs:run-tests)
 ;;  db:teststep-set-status!
 ;;  db:open-test-db-by-test-id
 ;;  db:test-get-rundir-from-test-id
@@ -624,8 +625,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
-		     (or (args:get-arg "-testpatt")
-			 (args:get-arg "-runtests"))
+		     (args:get-arg "-runtests")
 		     user
 		     args:arg-hash))))
 
@@ -1058,6 +1058,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
+
+(if *runremote* (close-all-connections!))
 
 ;; this is the socket if we are a client
 ;; (if (and *runremote*
