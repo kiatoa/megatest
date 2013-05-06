@@ -83,30 +83,34 @@
 (test "server-register, get-best-server" #t (let ((res #f))
 					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live 'http)
 					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
-					      (number? (cadddr res))))
+					      (number? (vector-ref res 3))))
 
-(test "de-register server" #t (let ((res #f))
-				(open-run-close tasks:server-deregister tasks:open-db "bob" pullport: 1234)
-				(list? (open-run-close tasks:get-best-server tasks:open-db))))
+(test "de-register server" #f (let ((res #f))
+				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
+				(open-run-close tasks:get-best-server tasks:open-db)))
 
-(define hostinfo #f)
+(define server-pid #f)
+(test "launch server" #t (let ((pid (process-fork (lambda ()
+						    ;; (daemon:ize)
+						    (server:launch 'http)))))
+			   (set! server-pid pid)
+			   (print "pid=" server-pid)
+			   (number? pid)))
+
+(thread-sleep! 3) ;; need to wait for server to start. Yes, a better way is needed.
 (test "get-best-server" #t (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
-			     (set! hostinfo dat) ;; host ip pullport pubport
-			     (and (string? (car dat))
-				  (number? (caddr dat)))))
-
-(test #f #t (let ((zmq-socket (server:client-connect
-			       (cadr hostinfo)
-			       (caddr hostinfo)
-			       ;; (cadddr hostinfo)
-			       )))
-	      (set! *runremote* zmq-socket)
-	      (string? (car *runremote*))))
-
-(test #f #t (let ((res (server:client-login *runremote*)))
-	      (car res)))
+			     (set! *runremote* (list (vector-ref dat 1)(vector-ref dat 2))) ;; host ip pullport pubport
+			     (and (string? (car  *runremote*))
+			     	  (number? (cadr *runremote*)))))
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
+(test #f #t (let ((res (client:login *runremote*)))
+	      (car res)))
+
+(test "server stop" #f (let ((hostname (car  *runremote*))
+			     (port     (cadr *runremote*)))
+			 (tasks:kill-server #t hostname port server-pid 'http)
+			 (open-run-close tasks:get-best-server tasks:open-db)))
 
 (exit 1)
 

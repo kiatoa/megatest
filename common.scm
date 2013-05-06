@@ -55,6 +55,8 @@
 (define *time-to-exit*      #f)
 (define *received-response* #f)
 (define *default-numtries*  10)
+(define *server-run*        #t)
+
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here

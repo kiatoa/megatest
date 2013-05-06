@@ -1347,8 +1347,8 @@
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
 
-(define (cdb:kill-server serverdat)
-  (cdb:client-call serverdat 'killserver #t *default-numtries*))
+(define (cdb:kill-server serverdat pid)
+  (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
 
 (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
@@ -1586,12 +1586,18 @@
 		 (set! *verbosity* (car params))
 		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
 		((killserver)
-		 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
-		 (open-run-close tasks:server-deregister tasks:open-db 
-				 (car *runremote*)
-				 pullport: (cadr *runremote*))
-		 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-		 (server:reply return-address qry-sig #t '(#t "exit process started")))
+		 (let ((hostname (car  *runremote*))
+		       (port     (cadr *runremote*))
+		       (pid      (car params)))
+		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+		   (debug:print-info 1 "current pid=" (current-process-id))
+		   (open-run-close tasks:server-deregister tasks:open-db 
+				   hostname
+				   port: port)
+		   (set! *server-run* #f)
+		   (thread-sleep! 3)
+		   (process-signal pid signal/kill)
+		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
 		(else ;; not a command, i.e. is a query
 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
 		 (server:reply return-address qry-sig #f 'failed)))))

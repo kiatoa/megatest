@@ -72,7 +72,7 @@
 ;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
 ;;
 (define (runs:create-run-record)
-  (let* ((mconfig      (if *configdat* 
+  (let* ((mconfig      (if *configdat*
 		           *configdat*
 		           (if (setup-for-run)
 		               *configdat*
