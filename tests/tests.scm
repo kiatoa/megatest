@@ -256,6 +256,9 @@
 
 (set! *verbosity* (list 0 1 2))
 
+(test #f #t (set-megatest-env-vars 1 inkeys: keys))
+(test #f #t (setup-env-defaults "runconfigs.config" 1 *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars"))
+
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
