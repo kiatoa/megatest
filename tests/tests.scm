@@ -237,6 +237,9 @@
 (test "Setup for a run"       #t (begin (setup-for-run) #t))
 
 (define *tdb* #f)
+(define keyvals #f)
+(test "target->keyval" #t (let ((kv (keys:target->keyval keys (args:get-arg "-target"))))
+			    (set! keyvals kv)(list? keyvals)))
 
 (define testdbpath (conc "/tmp/" (getenv "USER") "/megatest_testing"))
 (system (conc "rm -f " testdbpath "/testdat.db;mkdir -p " testdbpath))
@@ -254,10 +257,41 @@
 			      (hash-table? tconf)))
 (db:clean-all-caches)
 
-(set! *verbosity* (list 0 1 2))
+(test "set-megatest-env-vars"
+      "ubuntu"
+      (begin
+	(set-megatest-env-vars 1 inkeys: keys)
+	(get-environment-variable "SYSTEM")))
+(test "setup-env-defaults"
+      "see this variable"
+      (begin
+	(setup-env-defaults "runconfigs.config" 1 *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
+	(get-environment-variable "ALLTESTS")))
 
-(test #f #t (set-megatest-env-vars 1 inkeys: keys))
-(test #f #t (setup-env-defaults "runconfigs.config" 1 *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars"))
+(test #f "ubuntu" (car (keys:target-set-args keys (args:get-arg "-target") args:arg-hash)))
+
+(define rinfo #f)
+(test "get-run-info"  #f (vector? (vector-ref (let ((rinf (cdb:remote-run db:get-run-info #f 1)))
+						(set! rinfo rinf)
+						rinf) 0)))
+(test "get-key-vals"  "SYSTEM" (car (cdb:remote-run db:get-key-vals #f 1)))
+(test "tests:sort-by" '() (tests:sort-by-priority-and-waiton (make-hash-table)))
+
+(test "update-test_meta" "test1" (begin
+				   (runs:update-test_meta "test1" tconfig)
+				   (let ((dat (cdb:remote-run db:testmeta-get-record #f "test1")))
+				     (vector-ref dat 1))))
+
+(define test-path "tests/test1")
+(define disk-path #f)
+(test "get-best-disk"    #t (string? (file-exists? (let ((d (get-best-disk *configdat*)))
+						     (set! disk-path d)
+						     d))))
+(test "create-work-area" #t (symbolic-link? (car (create-work-area 1 rinfo keyvals 1 test-path disk-path "test1" '()))))
+(test #f "" (item-list->path '()))
+
+(test "launch-test" #t (string? (file-exists? (launch-test 1 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
+
 
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
@@ -266,21 +300,24 @@
 			 (let ((test-patts "test%"))
 			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
 			   ;; (run:test run-id run-info key-vals runname test-record flags parent-test)
+			   ;; (set! *verbosity* 22) ;; (list 0 1 2))
 			   (run:test 1 ;; run-id
 				     #f        ;; run-info is yet only a dream
 				     keyvallst ;; (keys:target->keyval keys target)
-				     (args:get-arg ":runname")
-				     (vector
+				     "run1"    ;; runname 
+				     (vector            ;; test_records.scm tests:testqueue
 				      "test1"           ;; testname
 				      tconfig           ;; testconfig
 				      '()               ;; waitons
 				      0                 ;; priority
 				      #f                ;; items
 				      #f                ;; itemsdat
-				      #f                ;; spare
+				      ""                ;; itempath
 				      )
 				     args:arg-hash      ;; flags (e.g. -itemspatt)
-				     #f)))))
+				     #f)
+			   ;; (set! *verbosity* 0)
+			   ))))
 
 
 

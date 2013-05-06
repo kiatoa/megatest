@@ -232,7 +232,8 @@
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
 	 (test-records (make-hash-table))
-	 (test-names '()))
+	 (test-names '())
+	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
@@ -265,7 +266,6 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
-	  (debug:print-info 4 "hed=" hed " at top of loop")
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
 		 (waitons (let ((instr (if config 
 					   (config-lookup config "requirements" "waiton")
@@ -274,15 +274,23 @@
 					     (if db (sqlite3:finalize! db))
 					     (exit 1)))))
 			    (debug:print-info 8 "waitons string is " instr)
-			    (string-split (cond
-					   ((procedure? instr)
-					    (let ((res (instr)))
-					      (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
-					      res))
-					   ((string? instr)     instr)
-					   (else 
-					    ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
-					    ""))))))
+			    (let ((newwaitons
+				   (string-split (cond
+						  ((procedure? instr)
+						   (let ((res (instr)))
+						     (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+						     res))
+						  ((string? instr)     instr)
+						  (else 
+						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+						   "")))))
+			      (filter (lambda (x)
+					(if (member x all-test-names)
+					    #t
+					    (begin
+					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
+					      #f)))
+				      newwaitons)))))
 	    (debug:print-info 8 "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -453,6 +461,8 @@
 		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
+      (if (not testdat) ;; should NOT happen
+	  (debug:print 0 "ERROR: failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
@@ -686,8 +696,8 @@
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
-	(if (args:get-arg "-server")
-	    (open-run-close server:start db (args:get-arg "-server")))
+	;; (if (args:get-arg "-server")
+	;;     (open-run-close server:start db (args:get-arg "-server")))
 	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
