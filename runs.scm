@@ -34,25 +34,26 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
+(define (runs:get-runs-by-patt db keys runnamepatt targpatt) ;; test-name)
   (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-	 (qry-str  #f))
+	 (qry-str  #f)
+	 (keyvals  (keys:target->keyval keys targpatt)))
     (for-each (lambda (keyval)
-		(let* ((key    (vector-ref keyval 0))
+		(let* ((key    (car keyval))
+		       (patt   (cadr keyval))
 		       (fulkey (conc ":" key))
-		       (patt   (args:get-arg fulkey))
 		       (wildtype (if (substring-index "%" patt) "like" "glob")))
 		  (if patt
 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
-	      keys)
+	      keyvals)
     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
@@ -68,6 +69,69 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
+;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
+;;
+(define (runs:create-run-record)
+  (let* ((mconfig      (if *configdat* 
+		           *configdat*
+		           (if (setup-for-run)
+		               *configdat*
+		               (begin
+		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
+		                 (exit 1)))))
+	  (runrec      (runs:runrec-make-record))
+	  (target      (or (args:get-arg "-reqtarg")
+		           (args:get-arg "-target")))
+	  (runname     (or (args:get-arg ":runname")
+		           (args:get-arg "-runname")))
+	  (testpatt    (or (args:get-arg "-testpatt")
+		           (args:get-arg "-runtests")))
+	  (keys        (keys:config-get-fields mconfig))
+	  (keyvals     (keys:target->keyval keys target))
+	  (toppath     *toppath*)
+	  (envdat      keyvals) ;; initial values start with keyvals
+	  (runconfig   #f)
+	  (serverdat   (if (args:get-arg "-server")
+			   *runremote*
+			   #f)) ;; to be used later
+	  (transport   (or (args:get-arg "-transport") 'http))
+	  (db          (if (and mconfig
+				(or (args:get-arg "-server")
+				    (eq? transport 'fs)))
+			   (open-db)
+			   #f))
+	  (run-id      #f))
+    ;; Set all the environment vars we know so far, start with keys
+    (for-each (lambda (keyval)
+		(setenv (car keyval)(cadr keyval)))
+	      keyvals)
+    ;; Set up various and sundry known vars here
+    (setenv "MT_RUN_AREA_HOME" toppath)
+    (setenv "MT_RUNNAME" runname)
+    (setenv "MT_TARGET"  target)
+    (set! envdat (append 
+		  envdat
+		  (list (list "MT_RUN_AREA_HOME" toppath)
+			(list "MT_RUNNAME"       runname)
+			(list "MT_TARGET"        target))))
+    ;; Now can read the runconfigs file
+    ;; 
+    (set! runconfig (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target)))
+    (if (not (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f))
+	(begin
+	  (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
+	  (if db (sqlite3:finalize! db))
+	  (exit 1)))
+    ;; Now have runconfigs data loaded, set environment vars
+    (for-each (lambda (section)
+		(for-each (lambda (varval)
+			    (set! envdat (append envdat (list varval)))
+			    (setenv (car varval)(cadr varval)))
+			  (configf:get-section runconfig section)))
+	      (list "default" target))
+    (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
+
+	 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f))
   (let ((keys (if inkeys inkeys (cdb:remote-run db:get-keys #f)))
 	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
@@ -153,7 +217,7 @@
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
-(define (runs:run-tests target runname test-names test-patts user flags)
+(define (runs:run-tests target runname test-patts user flags) ;; test-names
   (common:clear-caches) ;; clear all caches
   (let* ((db          #f)
 	 (keys        (keys:config-get-fields *configdat*))
@@ -164,7 +228,8 @@
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
-	 (test-records (make-hash-table)))
+	 (test-records (make-hash-table))
+	 (test-names '()))
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
@@ -175,7 +240,7 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (tests:get-valid-tests *toppath* test-names))
+    (set! test-names (tests:get-valid-tests *toppath* test-patts))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print-info 0 "test names " test-names)
@@ -469,11 +534,11 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (keys         (open-run-close db:get-keys db))
-	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))
+	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
@@ -487,7 +552,7 @@
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
-						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
+						(db:get-value-by-header run header k)) keys) "/"))
 	     (dirs-to-remove (make-hash-table)))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
@@ -651,7 +716,7 @@
 
 (define (runs:handle-locking target keys runname lock unlock user)
   (let* ((db       #f)
-	 (rundat   (open-run-close runs:get-runs-by-patt db keys runname))
+	 (rundat   (open-run-close runs:get-runs-by-patt db keys runname target))
 	 (header   (vector-ref rundat 0))
 	 (runs     (vector-ref rundat 1)))
     (for-each (lambda (run)

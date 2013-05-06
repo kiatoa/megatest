@@ -597,7 +597,7 @@
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
-	 (mt_target  (string-intersperse keyvals "/"))
+	 (mt_target  (string-intersperse key-vals "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
     (if hosts (set! hosts (string-split hosts)))

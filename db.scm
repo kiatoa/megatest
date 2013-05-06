@@ -710,11 +710,11 @@
     (debug:print-info 11 "db:get-key-val-pairs START keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
-       (let ((qry (conc "SELECT " (car key) " FROM runs WHERE id=?;")))
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
-	    (set! res (cons (list (car key) key-val) res)))
+	    (set! res (cons (list key key-val) res)))
 	  db qry run-id)))
      keys)
     (debug:print-info 11 "db:get-key-val-pairs END keys: " keys " run-id: " run-id)
@@ -730,7 +730,7 @@
 	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
 	  (for-each 
 	   (lambda (key)
-	     (let ((qry (conc "SELECT " (car key) " FROM runs WHERE id=?;")))
+	     (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	       ;; (debug:print 0 "qry: " qry)
 	       (sqlite3:for-each-row 
 		(lambda (key-val)

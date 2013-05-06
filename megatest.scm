@@ -440,26 +440,33 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; since several actions can be specified on the command line the removal
 ;; is done first
 (define (operate-on action)
-  (cond
-   ((not (args:get-arg ":runname"))
-    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
-    (exit 2))
-   ((not (args:get-arg "-testpatt"))
-    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
-    (exit 3))
-   (else
-    (if (not (car *configinfo*))
-	(begin
-	  (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
-	  (exit 1))
-	;; put test parameters into convenient variables
-	(runs:operate-on  action
-			  (args:get-arg ":runname")
-			  (args:get-arg "-testpatt")
-			  state: (args:get-arg ":state") 
-			  status: (args:get-arg ":status")
-			  new-state-status: (args:get-arg "-set-state-status")))
-    (set! *didsomething* #t))))
+  (let* ((runrec (runs:create-runrecord))
+	 (target (or (args:get-arg "-reqtarg")
+		     (args:get-arg "-target"))))
+    (cond
+     ((not target)
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
+      (exit 1))
+     ((not (args:get-arg ":runname"))
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
+      (exit 2))
+     ((not (args:get-arg "-testpatt"))
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
+      (exit 3))
+     (else
+      (if (not (car *configinfo*))
+	  (begin
+	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
+	    (exit 1))
+	  ;; put test parameters into convenient variables
+	  (runs:operate-on  action
+			    target
+			    (args:get-arg ":runname")
+			    (args:get-arg "-testpatt")
+			    state: (args:get-arg ":state") 
+			    status: (args:get-arg ":status")
+			    new-state-status: (args:get-arg "-set-state-status")))
+      (set! *didsomething* #t)))))
 	  
 (if (args:get-arg "-remove-runs")
     (general-run-call 
@@ -575,7 +582,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (runs:run-tests target
 		       runname
-		       "%"
 		       (args:get-arg "-testpatt")
 		       user
 		       args:arg-hash))))
@@ -604,7 +610,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    (lambda (target runname keys keyvals)
      (runs:run-tests target
 		     runname
-		     (args:get-arg "-runtests")
 		     (args:get-arg "-runtests")
 		     user
 		     args:arg-hash))))

@@ -81,7 +81,7 @@
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
 (test "server-register, get-best-server" #t (let ((res #f))
-					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live)
+					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live 'http)
 					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
 					      (number? (cadddr res))))
 
@@ -107,6 +107,8 @@
 	      (car res)))
 
 (test #f #t (car (cdb:login *runremote* *toppath* *my-client-signature*)))
+
+(exit 1)
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
