@@ -94,7 +94,6 @@
 						    ;; (daemon:ize)
 						    (server:launch 'http)))))
 			   (set! server-pid pid)
-			   (print "pid=" server-pid)
 			   (number? pid)))
 
 (thread-sleep! 3) ;; need to wait for server to start. Yes, a better way is needed.
@@ -107,12 +106,6 @@
 (test #f #t (let ((res (client:login *runremote*)))
 	      (car res)))
 
-(test "server stop" #f (let ((hostname (car  *runremote*))
-			     (port     (cadr *runremote*)))
-			 (tasks:kill-server #t hostname port server-pid 'http)
-			 (open-run-close tasks:get-best-server tasks:open-db)))
-
-(exit 1)
 
 ;;======================================================================
 ;; C O N F I G   F I L E S 
@@ -177,7 +170,7 @@
 (test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
 
 
-(test "get-keys" "SYSTEM" (vector-ref (car (db:get-keys *db*)) 0));; (key:get-fieldname (car (sort (db-get-keys *db*)(lambda (a b)(string>=? (vector-ref a 0)(vector-ref b 0)))))))
+(test "get-keys" "SYSTEM" (car (db:get-keys *db*)))
 
 (define remargs (args:get-args
 		 '("bar" "foo" ":runname" "bob" ":SYSTEM" "ubuntu" ":RELEASE" "v1.2" ":datapath" "blah/foo" "nada")
@@ -186,13 +179,13 @@
 		 args:arg-hash
 		 0))
 
-(test "register-run" #t (number? (runs:register-run *db*
-						    (db:get-keys *db*)
-						    '(("SYSTEM" "key1")("RELEASE" "key2"))
-						    "myrun" 
-						    "new"
-						    "n/a" 
-						    "bob")))
+(test "register-run" #t (number? (db:register-run *db*
+						  (db:get-keys *db*)
+						  '(("SYSTEM" "key1")("RELEASE" "key2"))
+						  "myrun" 
+						  "new"
+						  "n/a" 
+						  "bob")))
 
 (test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
 (test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
@@ -207,7 +200,7 @@
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
 (test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
-      (runs:get-runs-by-patt db keys "%"))
+      (runs:get-runs-by-patt db keys "%" "key1/key2"))
 (test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
 (test #f #t (runs:operate-on 'print "%" "%" "%"))
 
@@ -260,16 +253,20 @@
 			      (set! tconfig tconf)
 			      (hash-table? tconf)))
 (db:clean-all-caches)
-;; (set! *verbosity* 20)
+
+(set! *verbosity* (list 0 1 2))
+
 (test "Run a test" #t (general-run-call 
 		       "-runtests" 
 		       "run a test"
-		       (lambda (target runname keys keynames keyvallst)
+		       (lambda (target runname keys keyvallst)
 			 (let ((test-patts "test%"))
 			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
+			   ;; (run:test run-id run-info key-vals runname test-record flags parent-test)
 			   (run:test 1 ;; run-id
+				     #f        ;; run-info is yet only a dream
+				     keyvallst ;; (keys:target->keyval keys target)
 				     (args:get-arg ":runname")
-				     (keys:target->keyval keys target)
 				     (vector
 				      "test1"           ;; testname
 				      tconfig           ;; testconfig
@@ -282,11 +279,21 @@
 				     args:arg-hash      ;; flags (e.g. -itemspatt)
 				     #f)))))
 
-(test "cache is coherent" #t (let ((cached-info (db:get-test-info-cached-by-id db 2))
-				   (non-cached  (db:get-test-info-not-cached-by-id db 2)))
-			       (print "\nCached:    " cached-info)
-			       (print "Noncached: " non-cached)
-			       (equal? cached-info non-cached)))
+
+
+
+
+(test "server stop" #f (let ((hostname (car  *runremote*))
+			     (port     (cadr *runremote*)))
+			 (tasks:kill-server #t hostname port server-pid 'http)
+			 (open-run-close tasks:get-best-server tasks:open-db)))
+
+(exit 1)
+;; (test "cache is coherent" #t (let ((cached-info (db:get-test-info-cached-by-id db 2))
+;; 				   (non-cached  (db:get-test-info-not-cached-by-id db 2)))
+;; 			       (print "\nCached:    " cached-info)
+;; 			       (print "Noncached: " non-cached)
+;; 			       (equal? cached-info non-cached)))
 
 (change-directory test-work-dir)
 (test "Add a step"  #t
@@ -398,7 +405,12 @@
 (test "Remove the rollup run" #t (begin (operate-on 'remove-runs)))
 
 (print "Waiting for server to be done, should be about 20 seconds")
-(cdb:kill-server *runremote*)
+(test "server stop" #f (let ((hostname (car  *runremote*))
+			     (port     (cadr *runremote*)))
+			 (tasks:kill-server #t hostname port server-pid 'http)
+			 (open-run-close tasks:get-best-server tasks:open-db)))
+
+;; (cdb:kill-server *runremote*)
 
 ;; (thread-join! th1 th2 th3)
 

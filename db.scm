@@ -1584,7 +1584,7 @@
 		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
 		((set-verbosity)
 		 (set! *verbosity* (car params))
-		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
+		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
 		((killserver)
 		 (let ((hostname (car  *runremote*))
 		       (port     (cadr *runremote*))

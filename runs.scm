@@ -132,9 +132,12 @@
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
 	 
-(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f))
-  (let ((keys (if inkeys inkeys (cdb:remote-run db:get-keys #f)))
-	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
+(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
+  (let* ((target      (or (args:get-arg "-reqtarg")
+		           (args:get-arg "-target")))
+	 (keys    (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
+	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
+	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
     (if (not vals)
 	(let ((ht (make-hash-table)))
@@ -142,8 +145,8 @@
 	  (set! vals ht)
 	  (for-each
 	   (lambda (key)
-	     (hash-table-set! vals key (cdb:remote-run db:get-run-key-val #f run-id key)))
-	   keys)))
+	     (hash-table-set! vals (car key) (cadr key))) ;; (cdb:remote-run db:get-run-key-val #f run-id (car key))))
+	   keyvals)))
     ;; from the cached data set the vars
     (hash-table-for-each
      vals
