@@ -1,6 +1,6 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts reglen)
+(define (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts required-tests reglen)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))

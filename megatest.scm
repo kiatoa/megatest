@@ -34,37 +34,10 @@
 (include "db_records.scm")
 (include "megatest-fossil-hash.scm")
 
-;; (use trace dot-locking)
-;;  (trace
-;;   tests:match
-;;   runs:run-tests)
-;;  db:teststep-set-status!
-;;  db:open-test-db-by-test-id
-;;  db:test-get-rundir-from-test-id
-;;  cdb:tests-register-test
-;;  cdb:tests-update-uname-host
-;;  cdb:tests-update-run-duration
-;;  ;;  cdb:client-call
-;;  ;; cdb:remote-run
-;; )
-;;  cdb:test-set-status-state
-;;  change-directory
-;;  db:process-queue-item
-;;  db:test-get-logfile-info
-;;  db:teststep-set-status!
-;;  nice-path
-;;  obtain-dot-lock
-;;  open-run-close
-;;  read-config
-;;  runs:can-run-more-tests
-;;  sqlite3:execute
-;;  sqlite3:for-each-row
-;;  tests:check-waiver-eligibility
-;;  tests:summarize-items
-;;  tests:test-set-status!
-;;  thread-sleep!
-;;)
-       
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -414,23 +387,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		targets)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-show-runconfig")
-    (let* ((keys   (cdb:remote-run get-keys #f))
-	   (target (if (args:get-arg "-reqtarg")
-		       (args:get-arg "-reqtarg")
-		       (if (args:get-arg "-target")
-			   (args:get-arg "-target")
-			   #f)))
-	   (key-vals (if target (keys:target->keyval keys target) #f))
-	   (sections (if target (list "default" target) #f))
-	   (data     (begin
-		       (setenv "MT_RUN_AREA_HOME" *toppath*)
-		       (if key-vals
-			   (for-each (lambda (kt)
-				       (setenv (car kt) (cadr kt)))
-				     key-vals))
-		       (read-config "runconfigs.config" #f #t sections: sections))))
+(define (full-runconfigs-read)
+  (let* ((keys   (cdb:remote-run get-keys #f))
+	 (target (if (args:get-arg "-reqtarg")
+		     (args:get-arg "-reqtarg")
+		     (if (args:get-arg "-target")
+			 (args:get-arg "-target")
+			 #f)))
+	 (key-vals (if target (keys:target->keyval keys target) #f))
+	 (sections (if target (list "default" target) #f))
+	 (data     (begin
+		     (setenv "MT_RUN_AREA_HOME" *toppath*)
+		     (if key-vals
+			 (for-each (lambda (kt)
+				     (setenv (car kt) (cadr kt)))
+				   key-vals))
+		     (read-config "runconfigs.config" #f #t sections: sections))))
+    data))
 
+
+(if (args:get-arg "-show-runconfig")
+    (let ((data (full-runconfigs-read)))
       ;; keep this one local
       (cond
        ((not (args:get-arg "-dumpmode"))

@@ -167,7 +167,8 @@
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
-	 (test-records (make-hash-table)))
+	 (test-records (make-hash-table))
+     (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names)
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
@@ -209,15 +210,23 @@
 					     (if db (sqlite3:finalize! db))
 					     (exit 1)))))
 			    (debug:print-info 8 "waitons string is " instr)
-			    (string-split (cond
-					   ((procedure? instr)
-					    (let ((res (instr)))
-					      (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
-					      res))
-					   ((string? instr)     instr)
-					   (else 
-					    ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
-					    ""))))))
+			    (let ((newwaitons
+				   (string-split (cond
+						  ((procedure? instr)
+						   (let ((res (instr)))
+						     (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+						     res))
+						  ((string? instr)     instr)
+						  (else 
+						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+						   "")))))
+			      (filter (lambda (x)
+					(if (member x all-test-names)
+					    #t
+					    (begin
+					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
+					      #f)))
+				      newwaitons)))))
 	    (debug:print-info 8 "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
@@ -277,8 +286,8 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
       (if reglen
-	  (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts)))
+	  (runs:run-tests-queue-new     run-id runname test-records keyvallst flags test-patts required-tests reglen)
+	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts required-tests)))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -629,7 +638,7 @@
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
-		   (runconfig  (read-config runconfigf #f #t environ-patt: #f))) 
+		   (runconfig  (read-config runconfigf #f #t environ-patt: #f)))
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		  (begin
