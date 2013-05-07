@@ -232,7 +232,7 @@
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
 	 (test-records (make-hash-table))
-	 (test-names '())
+     (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names)
 	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
@@ -350,8 +350,8 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
       (if reglen
-	  (runs:run-tests-queue-new run-id runname test-records flags test-patts reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records flags test-patts)))
+	  (runs:run-tests-queue-new     run-id runname test-records keyvallst flags test-patts required-tests reglen)
+	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts required-tests)))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -702,7 +702,7 @@
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
-		   (runconfig  (read-config runconfigf #f #t environ-patt: #f))) 
+		   (runconfig  (read-config runconfigf #f #t environ-patt: #f)))
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		    

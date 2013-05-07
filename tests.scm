@@ -53,9 +53,9 @@
 
 ;; if itempath is #f then look only at the testname part
 ;;
-(define (tests:match patterns testname itempath)
+(define (tests:match patterns testname itempath #!key (required '()))
   (if (string? patterns)
-      (let ((patts (string-split patterns ",")))
+      (let ((patts (append (string-split patterns ",") required)))
 	(if (null? patts) ;;; no pattern(s) means no match
 	    #f
 	    (let loop ((patt (car patts))

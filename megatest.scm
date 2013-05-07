@@ -387,23 +387,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		targets)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-show-runconfig")
-    (let* ((keys   (cdb:remote-run get-keys #f))
-	   (target (if (args:get-arg "-reqtarg")
-		       (args:get-arg "-reqtarg")
-		       (if (args:get-arg "-target")
-			   (args:get-arg "-target")
-			   #f)))
-	   (key-vals (if target (keys:target->keyval keys target) #f))
-	   (sections (if target (list "default" target) #f))
-	   (data     (begin
-		       (setenv "MT_RUN_AREA_HOME" *toppath*)
-		       (if key-vals
-			   (for-each (lambda (kt)
-				       (setenv (car kt) (cadr kt)))
-				     key-vals))
-		       (read-config "runconfigs.config" #f #t sections: sections))))
+(define (full-runconfigs-read)
+  (let* ((keys   (cdb:remote-run get-keys #f))
+	 (target (if (args:get-arg "-reqtarg")
+		     (args:get-arg "-reqtarg")
+		     (if (args:get-arg "-target")
+			 (args:get-arg "-target")
+			 #f)))
+	 (key-vals (if target (keys:target->keyval keys target) #f))
+	 (sections (if target (list "default" target) #f))
+	 (data     (begin
+		     (setenv "MT_RUN_AREA_HOME" *toppath*)
+		     (if key-vals
+			 (for-each (lambda (kt)
+				     (setenv (car kt) (cadr kt)))
+				   key-vals))
+		     (read-config "runconfigs.config" #f #t sections: sections))))
+    data))
 
+
+(if (args:get-arg "-show-runconfig")
+    (let ((data (full-runconfigs-read)))
       ;; keep this one local
       (cond
        ((not (args:get-arg "-dumpmode"))
