@@ -53,9 +53,9 @@
 
 ;; if itempath is #f then look only at the testname part
 ;;
-(define (tests:match patterns testname itempath)
+(define (tests:match patterns testname itempath #!key (required '()))
   (if (string? patterns)
-      (let ((patts (string-split patterns ",")))
+      (let ((patts (append (string-split patterns ",") required)))
 	(if (null? patts) ;;; no pattern(s) means no match
 	    #f
 	    (let loop ((patt (car patts))
@@ -109,8 +109,8 @@
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
   (let* ((keys    (cdb:remote-run db:get-keys #f))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
     ;; first look up the key values from the run selected by run-id
     (sqlite3:for-each-row 

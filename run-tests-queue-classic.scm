@@ -1,11 +1,10 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts)
+(define (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
-  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
+  (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
-	(key-vals              (cdb:remote-run db:get-key-vals #f run-id))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
 	(registry-mutex        (make-mutex))
@@ -54,9 +53,9 @@
 
 	    (cond ;; OUTER COND
 	     ((not items) ;; when false the test is ok to be handed off to launch (but not before)
-	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path))
+	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 	               (not (null? tal)))
-	          (loop (car tal)(cdr tal) reruns))
+	          (loop (car newtal)(cdr newtal) reruns))
 	      (let* ((run-limits-info         (runs:can-run-more-tests test-record max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
@@ -80,7 +79,7 @@
 		(debug:print-info 4 "run-limits-info = " run-limits-info)
 		(cond ;; INNER COND #1 for a launchable test
 		 ;; Check item path against item-patts
-		 ((not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path)) ;; This test/itempath is not to be run
+		 ((not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests)) ;; This test/itempath is not to be run
 		  ;; else the run is stuck, temporarily or permanently
 		  ;; but should check if it is due to lack of resources vs. prerequisites
 		  (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
@@ -134,7 +133,7 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  (run:test run-id run-info key-vals runname keyvallst test-record flags #f)
+		  (run:test run-id run-info keyvals runname test-record flags #f)
 		  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
 		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
@@ -180,7 +179,7 @@
 					   (vector-copy! test-record newrec)
 					   newrec))
 			(my-item-path (item-list->path my-itemdat)))
-		   (if (tests:match test-patts hed my-item-path) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+		   (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
 		       (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
 			 (tests:testqueue-set-items!     new-test-record #f)
 			 (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
@@ -224,7 +223,7 @@
 			(let ((test-name (tests:testqueue-get-testname test-record)))
 			  (setenv "MT_TEST_NAME" test-name) ;; 
 			  (setenv "MT_RUNNAME"   runname)
-			  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+			  (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
 			  (let ((items-list (items:get-items-from-config tconfig)))
 			    (if (list? items-list)
 				(begin

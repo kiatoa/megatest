@@ -1,9 +1,9 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts reglen)
+(define (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts required-tests reglen)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
-  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
+  (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
 	(key-vals              (cdb:remote-run db:get-key-vals #f run-id))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
@@ -150,7 +150,7 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  (run:test run-id run-info key-vals runname keyvallst test-record flags #f)
+		  (run:test run-id run-info key-vals runname test-record flags #f)
 		  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
 		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)

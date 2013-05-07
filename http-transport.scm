@@ -15,7 +15,9 @@
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
 
+;; Configurations for server
 (tcp-buffer-size 2048)
+(max-connections 2048) 
 
 (declare (unit http-transport))
 
@@ -34,7 +36,7 @@
       #f
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
-(define  *server-loop-heart-beat* (current-seconds))
+(define *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
@@ -273,10 +275,11 @@
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
 	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (> (+ last-access server-timeout)
-               (current-seconds))
+        (if (and *server-run*
+		 (> (+ last-access server-timeout)
+		    (current-seconds)))
             (begin
-              (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
               (debug:print-info 0 "Starting to shutdown the server.")
