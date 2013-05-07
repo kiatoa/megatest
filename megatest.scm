@@ -32,6 +32,7 @@
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
+(include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
@@ -444,7 +445,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; since several actions can be specified on the command line the removal
 ;; is done first
 (define (operate-on action)
-  (let* ((runrec (runs:create-runrecord))
+  (let* ((runrec (runs:runrec-make-record))
 	 (target (or (args:get-arg "-reqtarg")
 		     (args:get-arg "-target"))))
     (cond

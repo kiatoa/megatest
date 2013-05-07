@@ -10,20 +10,15 @@
 
 (include "common_records.scm")
 
-
-
-;; (define (setup-env-defaults db fname run-id already-seen #!key (environ-patt #f)(change-env #t))
-(define (setup-env-defaults fname run-id already-seen keys keyvals #!key (environ-patt #f)(change-env #t))
-  (let* (;; (keys    (db:get-keys db))
-	 ;; (keyvals (if run-id (db:get-key-vals db run-id) #f))
-	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) (map car keyvals)) "/")
-		      (if (args:get-arg "-reqtarg") 
-			  (args:get-arg "-reqtarg")
-			  (if (args:get-arg "-target")
-			      (args:get-arg "-target")
-			      (begin
-				(debug:print 0 "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
-				"nothing matches this I hope")))))
+(define (setup-env-defaults fname run-id already-seen keyvals #!key (environ-patt #f)(change-env #t))
+  (let* ((keys    (map car keyvals))
+	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) (map cadr keyvals)) "/")
+		      (or (args:get-arg "-reqtarg") 
+			  (args:get-arg "-target")
+			  (get-environment-variable "MT_TARGET")
+			  (begin
+			    (debug:print 0 "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
+			    "nothing matches this I hope"))))
 	 ;; Why was system disallowed in the reading of the runconfigs file?
 	 ;; NOTE: Should be setting env vars based on (target|default)
 	 (confdat (read-config fname #f #t environ-patt: environ-patt sections: (list "default" thekey)))
@@ -35,9 +30,9 @@
 
     (if change-env
 	(for-each ;; NB// This can be simplified with new content of keyvals having all that is needed.
-	 (lambda (key val)
-	   (setenv key (cadr val)))
-	 keys keyvals))
+	 (lambda (keyval)
+	   (setenv (car keyval)(cadr keyval)))
+	 keyvals))
 	
     (for-each 
      (lambda (section)
@@ -61,15 +56,16 @@
 	  (set! *already-seen-runconfig-info* #t)))
     finaldat))
 
-(define (set-run-config-vars run-id keys keyvals targ-from-db)
-  (push-directory *toppath*)
+(define (set-run-config-vars run-id keyvals targ-from-db)
+  (push-directory *toppath*) ;; the push/pop doesn't appear to do anything ...
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
 	(targ       (or (args:get-arg "-target")
 			(args:get-arg "-reqtarg")
-			targ-from-db)))
+			targ-from-db
+			(get-environment-variable "MT_TARGET"))))
     (pop-directory)
     (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id #t keys keyvals
+	(setup-env-defaults runconfigf run-id #t keyvals
 			    environ-patt: (conc "(default"
 						(if targ
 						    (conc "|" targ ")")

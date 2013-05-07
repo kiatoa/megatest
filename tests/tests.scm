@@ -179,13 +179,13 @@
 		 args:arg-hash
 		 0))
 
-(test "register-run" #t (number? (db:register-run *db*
-						  (db:get-keys *db*)
-						  '(("SYSTEM" "key1")("RELEASE" "key2"))
-						  "myrun" 
-						  "new"
-						  "n/a" 
-						  "bob")))
+(test "register-run" #t (number?
+			 (db:register-run *db*
+					  '(("SYSTEM" "key1")("RELEASE" "key2"))
+					  "myrun" 
+					  "new"
+					  "n/a" 
+					  "bob")))
 
 (test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
 (test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
@@ -199,8 +199,8 @@
 ;;======================================================================
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
-(test #f (vector '("SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time") '())
-      (runs:get-runs-by-patt db keys "%" "key1/key2"))
+(test #f "key2" (vector-ref (car (vector-ref (runs:get-runs-by-patt *db* '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))
+
 (test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
 (test #f #t (runs:operate-on 'print "%" "%" "%"))
 
@@ -274,7 +274,7 @@
 (test "get-run-info"  #f (vector? (vector-ref (let ((rinf (cdb:remote-run db:get-run-info #f 1)))
 						(set! rinfo rinf)
 						rinf) 0)))
-(test "get-key-vals"  "SYSTEM" (car (cdb:remote-run db:get-key-vals #f 1)))
+(test "get-key-vals"  "key1" (car (cdb:remote-run db:get-key-vals #f 1)))
 (test "tests:sort-by" '() (tests:sort-by-priority-and-waiton (make-hash-table)))
 
 (test "update-test_meta" "test1" (begin

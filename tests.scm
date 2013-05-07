@@ -109,8 +109,8 @@
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
   (let* ((keys    (cdb:remote-run db:get-keys #f))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
     ;; first look up the key values from the run selected by run-id
     (sqlite3:for-each-row 

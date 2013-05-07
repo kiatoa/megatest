@@ -568,16 +568,17 @@
 
 
 ;; register a test run with the db
-(define (db:register-run db keys keyvals runname state status user)
-  (debug:print 3 "runs:register-run, keys: " keys ", runname: " runname " state: " state " status: " status " user: " user)
-  (let* ((keystr    (keys->keystr keys))
+(define (db:register-run db keyvals runname state status user)
+  (debug:print 3 "runs:register-run runname: " runname " state: " state " status: " status " user: " user)
+  (let* ((keys      (map car keyvals))
+	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (allvals   (append (list runname state status user) (map car keyvals)))
-	 (qryvals   (append (list runname) (map car keyvals)))
+	 (allvals   (append (list runname state status user) (map cadr keyvals)))
+	 (qryvals   (append (list runname) (map cadr keyvals)))
 	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
+    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
     (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))

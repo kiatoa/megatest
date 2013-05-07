@@ -93,7 +93,7 @@
 	  ;; (set! *runremote* runremote)
 	  (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
-	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
+	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -128,7 +128,7 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (set-run-config-vars run-id keys keyvals target) ;; (db:get-target db run-id))
+	  (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
@@ -408,13 +408,13 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info key-vals test-id test-src-path disk-path testname itemdat)
+(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat)
   (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (target   (string-intersperse (map cadr key-vals) "/"))
+	 (target   (string-intersperse (map cadr keyvals) "/"))
 
 	 (not-iterated  (equal? "" item-path))
 
@@ -556,7 +556,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info key-vals runname test-conf test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -597,7 +597,7 @@
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
-	 (mt_target  (string-intersperse (map cadr key-vals) "/"))
+	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
     (if hosts (set! hosts (string-split hosts)))
@@ -608,7 +608,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (create-work-area run-id run-info key-vals test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print-info 2 "Using work area " work-area))

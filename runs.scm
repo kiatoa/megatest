@@ -134,7 +134,8 @@
 	 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((target      (or (args:get-arg "-reqtarg")
-		           (args:get-arg "-target")))
+			  (args:get-arg "-target")
+			  (get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
 	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
@@ -225,20 +226,19 @@
   (let* ((db          #f)
 	 (keys        (keys:config-get-fields *configdat*))
 	 (keyvals     (keys:target->keyval keys target))
-	 (run-id      (cdb:remote-run db:register-run #f keys keyvals runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
 	 (test-records (make-hash-table))
-     (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names)
 	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
+	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
     
     ;; look up all tests matching the comma separated list of globs in
@@ -327,7 +327,7 @@
 						 'have-procedure)
 						((or (list? items)(list? itemstable)) ;; calc now
 						 (debug:print-info 4 "items and itemstable are lists, calc now\n"
-							      "    items: " items " itemstable: " itemstable)
+								   "    items: " items " itemstable: " itemstable)
 						 (items:get-items-from-config config))
 						(else #f)))                           ;; not iterated
 					     #f      ;; itemsdat 5
@@ -350,8 +350,8 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
       (if reglen
-	  (runs:run-tests-queue-new     run-id runname test-records keyvallst flags test-patts required-tests reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts required-tests)))
+	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests reglen)
+	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -406,7 +406,7 @@
 (include "run-tests-queue-new.scm")
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test run-id run-info key-vals runname test-record flags parent-test)
+(define (run:test run-id run-info keyvals runname test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
@@ -512,7 +512,7 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test test-id run-id run-info key-vals runname test-conf test-name test-path itemdat flags))
+	       (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 
@@ -783,7 +783,7 @@
 (define (runs:rollup-run keys runname user keyvals)
   (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
   (let* ((db              #f)
-	 (new-run-id      (cdb:remote-run db:register-run #f keys keyvals runname "new" "n/a" user))
+	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
 	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
 	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
