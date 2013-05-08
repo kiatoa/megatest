@@ -246,6 +246,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (define *didsomething* #f)
 
+(if (and (or (args:get-arg "-list-targets")
+	     (args:get-arg "-list-db-targets"))
+	 (not (args:get-arg "-transport")))
+    (hash-table-set! args:arg-hash "-transport" "fs"))
+
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
