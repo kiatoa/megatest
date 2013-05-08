@@ -28,7 +28,7 @@
 	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler (make-busy-timeout 36000)))
     (sqlite3:set-busy-handler! mdb handler)
-    (sqlite3:execute mdb (conc "PRAGMA synchronous = 1;"))
+    (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
     (if (not exists)
 	(begin
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
@@ -144,7 +144,13 @@
 
 (define (tasks:server-update-heartbeat mdb server-id)
   (debug:print-info 0 "Heart beat update of server id=" server-id)
-  (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: probable timeout on monitor.db access")
+     (thread-sleep! 1)
+     (tasks:server-update-heartbeat mdb server-id))
+   (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id)))
 
 ;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
 (define (tasks:server-alive? mdb server-id #!key (iface #f)(hostname #f)(port #f)(pid #f))
