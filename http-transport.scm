@@ -164,6 +164,8 @@
 ;; C L I E N T S
 ;;======================================================================
 
+(define *http-mutex* (make-mutex))
+
 ;; <html>
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
@@ -174,8 +176,10 @@
 	 (numretries 0))     
     (handle-exceptions
      exn
-     (if (< numretries 200)
-	 (http-transport:client-send-receive serverdat msg))
+     (begin 
+       (debug:print  0 "WARNING: possible communication error")
+       (if (< numretries 200)
+	   (http-transport:client-send-receive serverdat msg)))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
        ;; set up the http-client here
@@ -187,11 +191,14 @@
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.
+       (mutex-lock! *http-mutex*)
        (let* ((res   (with-input-from-request fullurl 
 					      ;; #f
 					      ;; msg 
 					      (list (cons 'dat msg)) 
 					      read-string)))
+	 (close-all-connections!) 
+	 (mutex-unlock! *http-mutex*)
 	 (debug:print-info 11 "got res=" res)
 	 (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
 	   (debug:print-info 11 "match=" match)
