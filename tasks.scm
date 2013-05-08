@@ -23,10 +23,14 @@
 ;;======================================================================
 
 (define (tasks:open-db)
-  (let* ((dbpath  (conc *toppath* "/monitor.db"))
-	 (exists  (file-exists? dbpath))
-	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler (make-busy-timeout 36000)))
+  (let* ((dbpath       (conc *toppath* "/monitor.db"))
+	 (exists       (file-exists? dbpath))
+	 (write-access (file-write-access? dbpath))
+	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (handler      (make-busy-timeout 36000)))
+    (if (and exists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (sqlite3:set-busy-handler! mdb handler)
     (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
     (if (not exists)
@@ -107,15 +111,16 @@
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
 (define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f)(action 'markdead))
   (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
-  (if pid
-      (case action
-	((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid))
-	(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
-      (if port
+  (if *db-write-access*
+      (if pid
 	  (case action
-	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
-	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)))
-	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid))
+	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
+	  (if port
+	      (case action
+		((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
+		(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)))
+	      (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified")))))
 
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))

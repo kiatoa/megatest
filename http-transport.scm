@@ -172,7 +172,7 @@
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
-(define (http-transport:client-send-receive serverdat msg #!key (numretries 10))
+(define (http-transport:client-send-receive serverdat msg #!key (numretries 30))
   (let* (;; (url        (http-transport:make-server-url serverdat))
 	 (fullurl    (caddr serverdat)) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
 	 (res        #f))
@@ -210,7 +210,7 @@
 				    (debug:print 0 "WARNING: communication with the server timed out.")
 				    (mutex-unlock! *http-mutex*)
 				    (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))
-				    (if (< numtries 3) ;; on last try just exit
+				    (if (< numretries 3) ;; on last try just exit
 					(begin
 					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
 					  (exit 1)))))))

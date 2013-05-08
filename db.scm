@@ -70,10 +70,14 @@
 	    (exit))))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
+	 (write-access (file-write-access? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+    (if (and dbexists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)

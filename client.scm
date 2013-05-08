@@ -79,11 +79,14 @@
     (case *transport-type* 
       ((fs) ;; (if (not *megatest-db*)(set! *megatest-db* (open-db))))
        ;; we are not doing fs any longer. let's cheat and start up a server
-       (set! *transport-type* #f)
-       (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 3")
-       (thread-sleep! 1)
-       (if (> numtries 0)
-	   (client:setup numtries: (- numtries 1))))
+       ;; if we are falling back on fs (not 100% supported) do an about face and start a server
+       (if (not (equal? (args:get-arg "-transport") "fs"))
+	   (begin
+	     (set! *transport-type* #f)
+	     (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 3")
+	     (thread-sleep! 1)
+	     (if (> numtries 0)
+		 (client:setup numtries: (- numtries 1))))))
       ((http)
        (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
 				      (tasks:hostinfo-get-port hostinfo)))
