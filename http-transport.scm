@@ -164,6 +164,10 @@
 ;; C L I E N T S
 ;;======================================================================
 
+(define *http-mutex* (make-mutex))
+
+;; (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 4")
+
 ;; <html>
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
@@ -193,13 +197,23 @@
        ;; extract the needed info from the http data and 
        ;; process and return it.
        (let* ((send-recieve (lambda ()
+			      (mutex-lock! *http-mutex*)
 			      (set! res (with-input-from-request 
 					 fullurl 
 					 (list (cons 'dat msg)) 
-					 read-string))))
-	      (th1 (make-thread send-recieve "with-input-from-request")))
+					 read-string))
+			      (close-all-connections!) 
+			      (mutex-unlock! *http-mutex*)))
+	      (time-out     (lambda ()
+			      (thread-sleep! 5)
+			      (if (not res)
+				  (debug:print 0 "ERROR: communication with the server timed out. Exiting."))))
+	      (th1 (make-thread send-recieve "with-input-from-request"))
+	      (th2 (make-thread time-out     "time out")))
 	 (thread-start! th1)
+	 (thread-start! th2)
 	 (thread-join! th1)
+	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
 	 (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
 	   (debug:print-info 11 "match=" match)

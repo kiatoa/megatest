@@ -1266,8 +1266,13 @@
 	      (rawdat      (http-transport:client-send-receive serverdat zdat))
 	      (tmp         #f))
 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
-	 (set! tmp (db:string->obj rawdat))
-	 (vector-ref tmp 2))))
+	 (if rawdat
+	     (begin
+	       (set! tmp (db:string->obj rawdat))
+	       (vector-ref tmp 2))
+	     (begin
+	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
+	       (exit 1))))))
     ((zmq)
      (handle-exceptions
       exn
