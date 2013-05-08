@@ -19,7 +19,7 @@
 
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars)
+(use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb)
 
 (declare (unit client))
 
