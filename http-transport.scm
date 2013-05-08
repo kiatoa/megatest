@@ -172,10 +172,9 @@
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
-(define (http-transport:client-send-receive serverdat msg)
+(define (http-transport:client-send-receive serverdat msg #!key (numretries 10))
   (let* (;; (url        (http-transport:make-server-url serverdat))
 	 (fullurl    (caddr serverdat)) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
-	 (numretries 10)
 	 (res        #f))
     (handle-exceptions
      exn
@@ -183,7 +182,7 @@
        (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
        (thread-sleep! 2)
        (if (> numretries 0)
-	   (http-transport:client-send-receive serverdat msg)))
+	   (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
        ;; set up the http-client here
@@ -191,7 +190,7 @@
        ;; consider all requests indempotent
        (retry-request? (lambda (request)
 			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
-       (set! numretries (- numretries 1))
+       ;; (set! numretries (- numretries 1))
        ;;  		 #t))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
@@ -207,7 +206,14 @@
 	      (time-out     (lambda ()
 			      (thread-sleep! 5)
 			      (if (not res)
-				  (debug:print 0 "ERROR: communication with the server timed out. Exiting."))))
+				  (begin
+				    (debug:print 0 "WARNING: communication with the server timed out.")
+				    (mutex-unlock! *http-mutex*)
+				    (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))
+				    (if (< numtries 3) ;; on last try just exit
+					(begin
+					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
+					  (exit 1)))))))
 	      (th1 (make-thread send-recieve "with-input-from-request"))
 	      (th2 (make-thread time-out     "time out")))
 	 (thread-start! th1)
