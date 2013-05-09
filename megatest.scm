@@ -26,6 +26,7 @@
 (declare (uses tests))
 (declare (uses genexample))
 (declare (uses daemon))
+(declare (uses db))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -843,8 +844,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
     
-(if (or (and (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
-	     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+(if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	;;     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+	;;     NEW POLICY - -setlog sets test overall log on every call.
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
