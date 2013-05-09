@@ -355,6 +355,13 @@
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
 									(let ((cmd (iup:attribute command-text-box "VALUE")))
 									  (system (conc cmd "  &"))))))
+	       (kill-jobs (lambda (x)
+			    (iup:attribute-set! 
+			     command-text-box "VALUE"
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname "  runname 
+				   " -set-state-status KILLREQ,n/a -testpatt %/% "
+				   ;; (conc testname "/" (if (equal? item-path "") "%" item-path))
+				   " :state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
@@ -362,7 +369,7 @@
 				   " -runtests " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
-				   ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   " ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
@@ -370,7 +377,7 @@
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -390,11 +397,12 @@
 			       (iup:frame #:title "Actions" 
 					  (iup:vbox
 					   (iup:hbox 
-					    (iup:button "View Log"    #:action viewlog     #:size "80x")
-					    (iup:button "Start Xterm" #:action xterm       #:size "80x")
-					    (iup:button "Run Test"    #:action run-test    #:size "80x")
-					    (iup:button "Clean Test"  #:action remove-test #:size "80x")
-					    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "80x"))
+					    (iup:button "View Log"      #:action viewlog     #:size "80x")
+					    (iup:button "Start Xterm"   #:action xterm       #:size "80x")
+					    (iup:button "Run Test"      #:action run-test    #:size "80x")
+					    (iup:button "Clean Test"    #:action remove-test #:size "80x")
+					    (iup:button "Kill All Jobs" #:action kill-jobs   #:size "80x")
+					    (iup:button "Close"         #:action (lambda (x)(exit)) #:size "80x"))
 					   (apply 
 					    iup:hbox
 					    (list command-text-box command-launch-button))))
