@@ -310,7 +310,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (or (not servers)
 		      (null? servers))
 		  (begin
-		    (if (eq? trycount 0) ;; just do the server start once
+		    (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 			(begin
 			  (debug:print 0 "INFO: Starting server as none running ...")
 			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
@@ -323,9 +323,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  )
 			(begin
 			  (debug:print-info 0 "Waiting for server to start")
-			  (thread-sleep! 1)))
-		    (loop (open-run-close tasks:get-best-server tasks:open-db) 
-			  (+ trycount 1)))
+			  (thread-sleep! 4)))
+		    (if (< trycount 10)
+			(loop (open-run-close tasks:get-best-server tasks:open-db) 
+			      (+ trycount 1))
+			(debug:print 0 "WARNING: Couldn't start or find a server.")))
 		  (debug:print 0 "INFO: Server(s) running " servers)
 		  )))))
 
