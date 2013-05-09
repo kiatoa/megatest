@@ -83,7 +83,7 @@
        (if (not (equal? (args:get-arg "-transport") "fs"))
 	   (begin
 	     (set! *transport-type* #f)
-	     (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 3")
+	     (system (conc "megatest -list-servers | grep " megatest-version " | grep alive || megatest -server - -daemonize && sleep 3"))
 	     (thread-sleep! 1)
 	     (if (> numtries 0)
 		 (client:setup numtries: (- numtries 1))))))
