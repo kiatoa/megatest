@@ -314,12 +314,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(begin
 			  (debug:print 0 "INFO: Starting server as none running ...")
 			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+			  ;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
+			  ;; if there is an existing server
+			  (system "megatest -server - -daemonize")
+			  (thread-sleep! 3)
 			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-			  (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 3")
+			  ;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))
 			  ;; (process-fork (lambda ()
 			  ;;       	  (daemon:ize)
 			  ;;       	  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
-			  ;; (thread-sleep! 3)
 			  )
 			(begin
 			  (debug:print-info 0 "Waiting for server to start")
