@@ -432,20 +432,26 @@
 	  )))
 
 (define (http-transport:stats-table)
-  (conc "<table>"
-	"<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
-	"<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
-	"<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
-							  "n/a (no writes)"
-							  (/ *writes-total-delay*
-							     *number-of-writes*))
-	" ms</td></tr>"
-	"<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
-	"<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
-							  "n/a (no queries)"
-							  (/ *total-non-write-delay* 
-							     *number-non-write-queries*))
-	" ms</td></tr></table>"))
+  (mutex-lock! *heartbeat-mutex*)
+  (let ((res 
+	 (conc "<table>"
+	       "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
+	       "<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
+	       "<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
+								 "n/a (no writes)"
+								 (/ *writes-total-delay*
+								    *number-of-writes*))
+	       " ms</td></tr>"
+	       "<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
+	       "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
+								 "n/a (no queries)"
+								 (/ *total-non-write-delay* 
+								    *number-non-write-queries*))
+	       " ms</td></tr>"
+	       "<tr><td>Last access</td><td>"              (seconds->time-string *last-db-access*) "</td></tr>"
+	       "</table>")))
+    (mutex-unlock! *heartbeat-mutex*)
+    res))
 
 (define (http-transport:runs linkpath)
   (conc "<h3>Runs</h3>"
