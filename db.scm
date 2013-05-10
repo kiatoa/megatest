@@ -70,10 +70,14 @@
 	    (exit))))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
+	 (write-access (file-write-access? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+    (if (and dbexists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
@@ -1265,8 +1269,13 @@
 	      (rawdat      (http-transport:client-send-receive serverdat zdat))
 	      (tmp         #f))
 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
-	 (set! tmp (db:string->obj rawdat))
-	 (vector-ref tmp 2))))
+	 (if rawdat
+	     (begin
+	       (set! tmp (db:string->obj rawdat))
+	       (vector-ref tmp 2))
+	     (begin
+	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
+	       (exit 1))))))
     ((zmq)
      (handle-exceptions
       exn

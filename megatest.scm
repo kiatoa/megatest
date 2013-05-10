@@ -26,6 +26,7 @@
 (declare (uses tests))
 (declare (uses genexample))
 (declare (uses daemon))
+(declare (uses db))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -247,6 +248,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (define *didsomething* #f)
 
+(if (and (or (args:get-arg "-list-targets")
+	     (args:get-arg "-list-db-targets"))
+	 (not (args:get-arg "-transport")))
+    (hash-table-set! args:arg-hash "-transport" "fs"))
+
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
@@ -306,18 +312,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (or (not servers)
 		      (null? servers))
 		  (begin
-		    (if (eq? trycount 0) ;; just do the server start once
+		    (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 			(begin
 			  (debug:print 0 "INFO: Starting server as none running ...")
 			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+			  ;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
+			  ;; if there is an existing server
+			  (system "megatest -server - -daemonize")
+			  (thread-sleep! 3)
 			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-			  (process-fork (lambda ()
-					  (daemon:ize)
-					  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
-			  (thread-sleep! 3))
-			(debug:print-info 0 "Waiting for server to start"))
-		    (loop (open-run-close tasks:get-best-server tasks:open-db) 
-			  (+ trycount 1)))
+			  ;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))
+			  ;; (process-fork (lambda ()
+			  ;;       	  (daemon:ize)
+			  ;;       	  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
+			  )
+			(begin
+			  (debug:print-info 0 "Waiting for server to start")
+			  (thread-sleep! 4)))
+		    (if (< trycount 10)
+			(loop (open-run-close tasks:get-best-server tasks:open-db) 
+			      (+ trycount 1))
+			(debug:print 0 "WARNING: Couldn't start or find a server.")))
 		  (debug:print 0 "INFO: Server(s) running " servers)
 		  )))))
 
@@ -829,8 +844,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
     
-(if (or (and (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
-	     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+(if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	;;     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+	;;     NEW POLICY - -setlog sets test overall log on every call.
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
