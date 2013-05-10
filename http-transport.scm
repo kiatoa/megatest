@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb)
+(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb spiffy-directory-listing)
 
 ;; Configurations for server
 (tcp-buffer-size 2048)
@@ -89,7 +89,8 @@
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
-
+    (handle-directory spiffy-directory-listing)
+    ;; http-transport:handle-directory) ;; simple-directory-handler)
     ;; Setup the web server and a /ctrl interface
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
@@ -99,10 +100,6 @@
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
-				  ((equal? (uri-path (request-uri (current-request))) 
-					   '(/ "hey"))
-				   (send-response body: "hey there!\n"
-						  headers: '((content-type text/plain))))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
@@ -124,6 +121,20 @@
 								res
 								"</body>")
 						    headers: '((content-type text/plain)))))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ ""))
+				   (send-response body: (http-transport:main-page)))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "runs"))
+				   (send-response body: (http-transport:main-page)))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ any))
+				   (send-response body: "hey there!\n"
+						  headers: '((content-type text/plain))))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "hey"))
+				   (send-response body: "hey there!\n"
+						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
@@ -401,3 +412,56 @@
      (thread-start! th2)
      (thread-start! th1)
      (thread-join! th2))))
+
+;;======================================================================
+;; web pages
+;;======================================================================
+
+(define (http-transport:main-page)
+  (let ((linkpath (root-path)))
+    (conc "<head><h1>" (pathname-strip-directory *toppath*) "</h1></head>"
+	  "<body>"
+	  "Run area: " *toppath*
+	  "<h2>Server Stats</h2>"
+	  (http-transport:stats-table) 
+	  "<hr>"
+	  (http-transport:runs linkpath)
+	  "<hr>"
+	  (http-transport:run-stats)
+	  "</body>"
+	  )))
+
+(define (http-transport:stats-table)
+  (conc "<table>"
+	"<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
+	"<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
+	"<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
+							  "n/a (no writes)"
+							  (/ *writes-total-delay*
+							     *number-of-writes*))
+	" ms</td></tr>"
+	"<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
+	"<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
+							  "n/a (no queries)"
+							  (/ *total-non-write-delay* 
+							     *number-non-write-queries*))
+	" ms</td></tr></table>"))
+
+(define (http-transport:runs linkpath)
+  (conc "<h3>Runs</h3>"
+	(string-intersperse
+	 (let ((files (map pathname-strip-directory (glob (conc linkpath "/*")))))
+	   (map (lambda (p)
+		  (conc "<a href=\"" p "\">" p "</a><br>"))
+		files))
+	 " ")))
+
+(define (http-transport:run-stats)
+  (let ((stats (open-run-close db:get-running-stats #f)))
+    (conc "<table>"
+	  (string-intersperse
+	   (map (lambda (stat)
+		  (conc "<tr><td>" (car stat) "</td><td>" (cadr stat) "</td></tr>"))
+		stats)
+	   " ")
+	  "</table>")))
