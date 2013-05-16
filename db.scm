@@ -658,26 +658,23 @@
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
-  ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
-  ;;    (hash-table-ref *run-info-cache* run-id)
-      (let* ((res      #f)
-	     (keys      (db:get-keys db))
-	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	     (header    (append (map key:get-fieldname keys)
-				remfields))
-	     (keystr    (conc (keys->keystr keys) ","
-			      (string-intersperse remfields ","))))
-	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-	(sqlite3:for-each-row
-	 (lambda (a . x)
-	   (set! res (apply vector a x)))
-	 db
-	 (conc "SELECT " keystr " FROM runs WHERE id=?;")
-	 run-id)
-	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-	(let ((finalres (vector header res)))
-	  ;; (hash-table-set! *run-info-cache* run-id finalres)
-	  finalres)))
+  (let* ((res      #f)
+	 (keys      (db:get-keys db))
+	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
+	 (header    (append (map key:get-fieldname keys)
+			    remfields))
+	 (keystr    (conc (keys->keystr keys) ","
+			  (string-intersperse remfields ","))))
+    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    (sqlite3:for-each-row
+     (lambda (a . x)
+       (set! res (apply vector a x)))
+     db
+     (conc "SELECT " keystr " FROM runs WHERE id=?;")
+     run-id)
+    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    (let ((finalres (vector header res)))
+      finalres)))
 
 (define (db:set-comment-for-run db run-id comment)
   (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
@@ -901,6 +898,7 @@
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
+  (common:clear-caches)
   (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
     (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
@@ -940,6 +938,7 @@
 		 thr)))))))
 
 (define (cdb:delete-tests-in-state serverdat run-id state)
+  (common:clear-caches)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
 (define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
