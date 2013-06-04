@@ -94,8 +94,8 @@ Test data capture
 
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
-  -showkeys               : show the keys used in this megatest setup
-  -test-files targpatt     : get the most recent test path/file matching targpatt e.g. %/%... 
+  -show-keys              : show the keys used in this megatest setup
+  -test-files targpatt    : get the most recent test path/file matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
   -test-paths             : get the test paths matching target, runname, item and test
                             patterns.
@@ -200,6 +200,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		        "-force"
 		        "-xterm"
 		        "-showkeys"
+		        "-show-keys"
 		        "-test-status"
 			"-set-values"
 			"-load-test-data"
@@ -973,14 +974,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Various helper commands can go below here
 ;;======================================================================
 
-(if (args:get-arg "-showkeys")
+(if (or (args:get-arg "-showkeys")
+        (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (cbd:remote-run db:get-keys db))
+      (set! keys (cdb:remote-run db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse keys ", "))
       (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
