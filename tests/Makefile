@@ -22,7 +22,7 @@ all : test1 test2 test3 test4 test5
 
 server :
 	(cd ..;make;make install) && \
-	(cd fullrun;../../bin/megatest -server - -debug 22) 
+	(cd fullrun;../../bin/megatest -server - -debug 22 &) 
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
@@ -67,8 +67,11 @@ test6: fullprep
 
 test7: 
 	@echo Only a/c testname c should remain. If there is a run a/b/c then there is a cache issue.
-	(cd simplerun;$(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
+	(cd simplerun; \
+	 $(MEGATEST) -server - -daemonize; \
+         $(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
          $(MEGATEST) -runtests % -target a/b :runname c; \
+	 $(MEGATEST) -remove-runs -target a/c :runname c; \
 	 $(MEGATEST) -runtests % -target a/c :runname c; \
 	 $(MEGATEST) -remove-runs -target a/b :runname c -testpatt % ; \
 	 $(MEGATEST) -runtests % -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
