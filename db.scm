@@ -900,6 +900,7 @@
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
+  (common:clear-caches)
   (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
     (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
@@ -939,6 +940,7 @@
 		 thr)))))))
 
 (define (cdb:delete-tests-in-state serverdat run-id state)
+  (common:clear-caches)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
 (define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
@@ -973,6 +975,15 @@
        (set! res count))
      db
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
+    res))
+
+(define (db:get-running-stats db)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (state count)
+       (set! res (cons (list state count) res)))
+     db
+     "SELECT state,count(id) FROM tests GROUP BY state ORDER BY id DESC;")
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
