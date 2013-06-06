@@ -566,16 +566,18 @@
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
 						(db:get-value-by-header run header k)) keys) "/"))
-	     (dirs-to-remove (make-hash-table)))
+	     (dirs-to-remove (make-hash-table))
+	     (proc-get-tests (lambda (run-id)
+			       (cdb:remote-run db:get-tests-for-run db run-id
+					       testpatt states statuses
+					       not-in:  #f
+					       sort-by: (case action
+							  ((remove-runs) 'rundir)
+							  (else          'event_time))))))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (cdb:remote-run db:get-tests-for-run db run-id
-						      testpatt states statuses
-						      not-in:  #f
-						      sort-by: (case action
-								 ((remove-runs) 'rundir)
-								 (else          'event_time)))
+			       (proc-get-tests run-id)
 			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
 	   (debug:print-info 4 "runs:operate-on run=" run ", header=" header)
@@ -589,6 +591,8 @@
 		   ((print-run)
 		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
 		    action)
+		   ((run-wait)
+		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
 		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
@@ -669,7 +673,14 @@
 					(loop (car tal)(cdr tal))))))
 			     ((set-state-status)
 			      (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
+			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f))
+			     ((run-wait)
+			      (debug:print-info 2 "still waiting, " (length tests) " tests still running")
+			      (thread-sleep! 10)
+			      (let ((new-tests (proc-get-tests run-id)))
+				(if (null? new-tests)
+				    (debug:print-info 1 "Run completed according to zero tests matching provided criteria.")
+				    (loop (car new-tests)(cdr new-tests))))))))
 		   )))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)

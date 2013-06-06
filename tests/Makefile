@@ -68,8 +68,10 @@ test6: fullprep
 test7: 
 	@echo Only a/c testname c should remain. If there is a run a/b/c then there is a cache issue.
 	(cd simplerun;$(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
-         $(MEGATEST) -runtests % -target a/b :runname c; \
-	 $(MEGATEST) -runtests % -target a/c :runname c; \
+         $(MEGATEST) -runtests % -target a/b :runname c ; \
+	 $(MEGATEST) -runtests % -target a/c :runname c ; \
+	 $(MEGATEST) -run-wait   -target a/c :runname c :state RUNNING ; \
+	 $(MEGATEST) -run-wait   -target a/b :runname c :state RUNNING ; \
 	 $(MEGATEST) -remove-runs -target a/b :runname c -testpatt % ; \
 	 $(MEGATEST) -runtests % -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
 	logpro test7.logpro test7.html < test7.log

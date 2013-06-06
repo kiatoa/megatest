@@ -62,6 +62,7 @@ Launching and managing runs
                             from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
+  -run-wait               : wait on run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -118,7 +119,8 @@ Misc
   -transport http|fs      : use http or direct access for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
-  -stop-server id         : stop server specified by id (see output of -list-servers)
+  -stop-server id         : stop server specified by id (see output of -list-servers), use
+                            0 to kill all
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
 
@@ -213,7 +215,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-lock"
 			"-unlock"
 			"-list-servers"
-			;; mist queries
+                        "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+
+			;; misc queries
 			"-list-disks"
 			"-list-targets"
 			"-list-db-targets"
@@ -375,7 +379,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
 		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
 			 (if status "alive" "dead") transport)
-		 (if (equal? id sid)
+		 (if (or (equal? id sid)
+			 (equal? sid 0)) ;; kill all/any
 		     (begin
 		       (debug:print-info 0 "Attempting to stop server with pid " pid)
 		       (tasks:kill-server status hostname pullport pid transport)))))
@@ -1018,44 +1023,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
-;; Update the tests meta data from the testconfig files
+;; Wait on a run to complete
 ;;======================================================================
 
-(if (args:get-arg "-update-meta")
+(if (args:get-arg "-run-wait")
     (begin
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
-      ;; now can find our db
-      ;; keep this one local
-      (open-run-close runs:update-all-test_meta db)
-      (set! *didsomething* #t)))
-
-;;======================================================================
-;; Start a repl
-;;======================================================================
-
-(if (or (args:get-arg "-repl")
-	(args:get-arg "-load"))
-    (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
-      (if db
-	  (begin
-	    (set! *db* db)
-	    (set! *client-non-blocking-mode* #t)
-	    ;; (client:setup)
-	    ;; (client:launch)
-	    (import readline)
-	    (import apropos)
-	    (gnu-history-install-file-manager
-	     (string-append
-	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
-	    (current-input-port (make-gnu-readline-port "megatest> "))
-	    (if (args:get-arg "-repl")
-		(repl)
-		(load (args:get-arg "-load"))))
-	  (exit))
+      (operate-on 'run-wait)
       (set! *didsomething* #t)))
 
 ;;======================================================================
