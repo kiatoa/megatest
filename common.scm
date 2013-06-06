@@ -72,7 +72,6 @@
 (define *current-run-name*   #f)
 
 (define (common:clear-caches)
-  (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
   (set! *keyvals*            (make-hash-table))
   (set! *toptest-paths*      (make-hash-table))

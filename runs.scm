@@ -550,8 +550,8 @@
 (define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (keys         (open-run-close db:get-keys db))
-	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt target))
+	 (keys         (cdb:remote-run db:get-keys db))
+	 (rundat       (cdb:remote-run runs:get-runs-by-patt db keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
@@ -570,7 +570,7 @@
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (open-run-close db:get-tests-for-run db run-id
+			       (cdb:remote-run db:get-tests-for-run db run-id
 						      testpatt states statuses
 						      not-in:  #f
 						      sort-by: (case action
@@ -591,73 +591,100 @@
 		    action)
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
-		 (for-each
-		  (lambda (test)
-		    (let* ((item-path (db:test-get-item-path test))
-			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test))    ;; run dir is from the link tree
-			   (real-dir  (if (file-exists? run-dir)
-					  (resolve-pathname run-dir)
-					  #f))
-			   (test-id   (db:test-get-id test)))
-		      ;;   (tdb       (db:open-test-db run-dir)))
-		      (debug:print-info 4 "test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
-		      (case action
-			((remove-runs) ;; the tdb is for future possible. 
-			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
-			 (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
-			 (if (and real-dir 
-				  (> (string-length real-dir) 5)
-				  (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-			     (begin ;; let* ((realpath (resolve-pathname run-dir)))
-			       (debug:print-info 1 "Recursively removing " real-dir)
-			       (if (file-exists? real-dir)
-				   (if (> (system (conc "rm -rf " real-dir)) 0)
-				       (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
-				   (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
-			     (if real-dir 
-				 (debug:print 0 "WARNING: directory " real-dir " does not exist")
-				 (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
-			 (if (symbolic-link? run-dir)
-			     (begin
-			       (debug:print-info 1 "Removing symlink " run-dir)
-			       (handle-exceptions
-				exn
-				(debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-				(delete-file run-dir)))
-			     (if (directory? run-dir)
-				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-				      (handle-exceptions
-				       exn
-				       (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-				       (delete-directory run-dir)))
-				 (if run-dir
-				     (debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
-				     (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
-				 )))
-			((set-state-status)
-			 (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-			 (open-run-close db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
-		  (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
-						 (dirb (db:test-get-rundir b)))
-					     (if (and (string? dira)(string? dirb))
-						 (> (string-length dira)(string-length dirb))
-						 #f)))))))
+		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
+									(dirb (db:test-get-rundir b)))
+								    (if (and (string? dira)(string? dirb))
+									(> (string-length dira)(string-length dirb))
+									#f)))))
+		       (test-retry-time  (make-hash-table))
+		       (allow-run-time   25)) ;; seconds to allow for killing tests before just brutally killing 'em
+		   (let loop ((test (car sorted-tests))
+			      (tal  (cdr sorted-tests)))
+		     (let* ((test-id       (db:test-get-id test))
+			    (new-test-dat  (cdb:remote-run db:get-test-info-by-id #f test-id))
+			    (item-path     (db:test-get-item-path new-test-dat))
+			    (test-name     (db:test-get-testname new-test-dat))
+			    (run-dir       (db:test-get-rundir new-test-dat))    ;; run dir is from the link tree
+			    (real-dir      (if (file-exists? run-dir)
+					       (resolve-pathname run-dir)
+					       #f))
+			    (test-state    (db:test-get-state new-test-dat))
+			    (test-fulln    (db:test-get-fullname new-test-dat)))
+			   (case action
+			     ((remove-runs)
+			      (debug:print-info 0 "test-state: " test-state)
+			      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
+				  (begin
+				    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
+					(hash-table-set! test-retry-time test-fulln (current-seconds)))
+				    (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
+				      ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
+				      ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
+				      ;; up and blow it away.
+				      (begin
+					(debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
+					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "FAILEDKILL" "n/a" #f)
+					(thread-sleep! 1))
+				      (begin
+					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "KILLREQ" "n/a" #f)
+					(thread-sleep! 1)))
+				    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
+				    (if (null? tal)
+					(loop new-test-dat tal)
+					(loop (car tal)(append tal (list new-test-dat)))))
+				  (begin
+				    (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
+				    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
+				    (if (and real-dir 
+					     (> (string-length real-dir) 5)
+					     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+					(begin ;; let* ((realpath (resolve-pathname run-dir)))
+					  (debug:print-info 1 "Recursively removing " real-dir)
+					  (if (file-exists? real-dir)
+					      (if (> (system (conc "rm -rf " real-dir)) 0)
+						  (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
+					      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
+					(if real-dir 
+					    (debug:print 0 "WARNING: directory " real-dir " does not exist")
+					    (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
+				    (if (symbolic-link? run-dir)
+					(begin
+					  (debug:print-info 1 "Removing symlink " run-dir)
+					  (handle-exceptions
+					   exn
+					   (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+					   (delete-file run-dir)))
+					(if (directory? run-dir)
+					    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+						(debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+						(handle-exceptions
+						 exn
+						 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+						 (delete-directory run-dir)))
+					    (if run-dir
+						(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
+						(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
+					    ))
+				    (if (not (null? tal))
+					(loop (car tal)(cdr tal))))))
+			     ((set-state-status)
+			      (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
+			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
+		   )))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (cdb:remote-run db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
 						(take dparts (- (length dparts) 1))
 						"/"))))
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
-		       (open-run-close db:delete-run db run-id)
+		       (cdb:remote-run db:delete-run db run-id)
 		       ;; This is a pretty good place to purge old DELETED tests
-		       (open-run-close db:delete-tests-for-run db run-id)
-		       (open-run-close db:delete-old-deleted-test-records db)
-		       (open-run-close db:set-var db "DELETED_TESTS" (current-seconds))
+		       (cdb:remote-run db:delete-tests-for-run db run-id)
+		       (cdb:remote-run db:delete-old-deleted-test-records db)
+		       (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -697,7 +724,7 @@
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	;; (if (args:get-arg "-server")
-	;;     (open-run-close server:start db (args:get-arg "-server")))
+	;;     (cdb:remote-run server:start db (args:get-arg "-server")))
 	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
@@ -729,7 +756,7 @@
 
 (define (runs:handle-locking target keys runname lock unlock user)
   (let* ((db       #f)
-	 (rundat   (open-run-close runs:get-runs-by-patt db keys runname target))
+	 (rundat   (cdb:remote-run runs:get-runs-by-patt db keys runname target))
 	 (header   (vector-ref rundat 0))
 	 (runs     (vector-ref rundat 1)))
     (for-each (lambda (run)
@@ -739,7 +766,7 @@
 			       (begin
 				 (print "Do you really wish to unlock run " run-id "?\n   y/n: ")
 				 (equal? "y" (read-line)))))
-		      (open-run-close db:lock/unlock-run db run-id lock unlock user)
+		      (cdb:remote-run db:lock/unlock-run db run-id lock unlock user)
 		      (debug:print-info 0 "Skipping lock/unlock on " run-id))))
 	      runs)))
 ;;======================================================================
@@ -775,7 +802,7 @@
 	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	      ;; read configs with tricks turned off (i.e. no system)
 	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
-	 ;; use the open-run-close instead of passing in db
+	 ;; use the cdb:remote-run instead of passing in db
 	 (runs:update-test_meta test-name test-conf)))
      test-names)))
 
@@ -784,10 +811,10 @@
   (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
   (let* ((db              #f)
 	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
-	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
+	 (prev-tests      (cdb:remote-run test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (curr-tests      (cdb:remote-run db:get-tests-for-run db new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
-    (open-run-close db:update-run-event_time db new-run-id)
+    (cdb:remote-run db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
@@ -805,7 +832,7 @@
 	      (item-path (db:test-get-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps    (open-run-close db:get-steps-for-test db (db:test-get-id testdat)))
+	      (test-steps    (cdb:remote-run db:get-steps-for-test db (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
@@ -813,11 +840,11 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
+	 (set! new-testdat (car (cdb:remote-run db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	 (open-run-close 
+	 (cdb:remote-run 
 	  (lambda ()
 	    (sqlite3:execute 
 	     db 

@@ -541,9 +541,9 @@
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* (;; (item-path (item-list->path itemdat))
-	 (testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
-    (equal? (test:get-state testdat) "KILLREQ")))
+  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+    (and testdat
+	 (equal? (test:get-state testdat) "KILLREQ"))))
 
 (define (test:tdb-get-rundat-count tdb)
   (if tdb

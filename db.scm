@@ -727,35 +727,26 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
-  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
-    (if mykeyvals 
-	mykeyvals
-	(let* ((keys (db:get-keys db))
-	       (res  '()))
-	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
-	  (for-each 
-	   (lambda (key)
-	     (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
-	       ;; (debug:print 0 "qry: " qry)
-	       (sqlite3:for-each-row 
-		(lambda (key-val)
-		  (set! res (cons key-val res)))
-		db qry run-id)))
-	   keys)
-	  (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
-	  (let ((final-res (reverse res)))
-	    (hash-table-set! *keyvals* run-id final-res)
-	    final-res)))))
+  (let* ((keys (db:get-keys db))
+	 (res  '()))
+    (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
+	 ;; (debug:print 0 "qry: " qry)
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons key-val res)))
+	  db qry run-id)))
+     keys)
+    (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
+    (reverse res)))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target db run-id)
-  (let ((mytarg (hash-table-ref/default *target* run-id #f)))
-    (if mytarg
-	mytarg
-	(let* ((keyvals (db:get-key-vals db run-id))
-	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
-	  (hash-table-set! *target* run-id thekey)
-	  thekey))))
+  (let* ((keyvals (db:get-key-vals db run-id))
+	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+    thekey))
 
 ;;======================================================================
 ;;  T E S T S
