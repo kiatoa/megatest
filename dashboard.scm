@@ -200,7 +200,6 @@ Misc
 		  (set! *tot-run-count* (length runs))))
 	    ;; 
 	    ;; trim runs to only those that are changing often here
-
 	    ;; 
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
