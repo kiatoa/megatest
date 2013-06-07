@@ -627,7 +627,7 @@
 					       (db:patt->like key patt)))
 					   keypatts)
 				      " AND ")))
-		           " ORDER BY event_time DESC "
+		           " AND state != 'DELETED' ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
 		               "")
@@ -652,7 +652,7 @@
      (lambda (count)
        (set! numruns count))
      db
-     "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
+     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'DELETED';" runpatt)
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
@@ -671,7 +671,7 @@
 	 (lambda (a . x)
 	   (set! res (apply vector a x)))
 	 db
-	 (conc "SELECT " keystr " FROM runs WHERE id=?;")
+	 (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'DELETED';")
 	 run-id)
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(let ((finalres (vector header res)))
@@ -686,7 +686,10 @@
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
-  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+  (sqlite3:execute db "UPDATE runs SET state='DELETED' WHERE id=?;" run-id))
+;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+
+
 
 (define (db:update-run-event_time db run-id)
   (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)

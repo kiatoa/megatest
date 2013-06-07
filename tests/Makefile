@@ -71,11 +71,11 @@ test7:
 	(cd simplerun; \
 	 $(MEGATEST) -server - -daemonize; \
          $(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
-         $(MEGATEST) -runtests % -target a/b :runname c; \
+         $(MEGATEST) -runtests %  -target a/b :runname c; sleep 5; \
 	 $(MEGATEST) -remove-runs -target a/c :runname c; \
-	 $(MEGATEST) -runtests % -target a/c :runname c; \
+	 $(MEGATEST) -runtests %  -target a/c :runname c; \
 	 $(MEGATEST) -remove-runs -target a/b :runname c -testpatt % ; \
-	 $(MEGATEST) -runtests % -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
+	 $(MEGATEST) -runtests %  -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
 	logpro test7.logpro test7.html < test7.log
 	@echo 
 	@echo Run \"firefox test7.html\" to see the results.
