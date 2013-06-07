@@ -453,12 +453,12 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))
+	    (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
 		  (cdb:tests-register-test *runremote* run-id test-name item-path)
-		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
+		  (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
       (if (not testdat) ;; should NOT happen
