@@ -215,7 +215,7 @@
 			      (close-all-connections!) 
 			      (mutex-unlock! *http-mutex*)))
 	      (time-out     (lambda ()
-			      (thread-sleep! 5)
+			      (thread-sleep! 45)
 			      (if (not res)
 				  (begin
 				    (debug:print 0 "WARNING: communication with the server timed out.")

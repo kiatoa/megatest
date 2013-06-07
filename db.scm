@@ -792,7 +792,7 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals
-				" FROM tests WHERE run_id=? "
+				" FROM tests WHERE run_id=? AND state != 'DELETED' "
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
@@ -847,7 +847,7 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals 
-				" FROM tests WHERE " 
+				" FROM tests WHERE state != 'DELETED' AND " 
 				(if run-ids
 				    (if (list? run-ids)
 					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")

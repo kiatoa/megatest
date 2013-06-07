@@ -93,10 +93,8 @@
 		 ;;  (thread-sleep! 0.01)
 		 ;;  (loop (car newtal)(cdr newtal) reruns))
 		 ;; count number of 'done, if more than 100 then skip on through.
-		 (;; (and (< (length (filter (lambda (x)(eq? x 'done))(hash-table-values test-registry))) 100) ;; why get more than 200 ahead?
-		  (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
+		 ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-		  ;; NEED TO THREADIFY THIS
 		  (let ((th (make-thread (lambda ()
 		        		   (mutex-lock! registry-mutex)
 		        		   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
@@ -110,7 +108,6 @@
 		        		   (mutex-unlock! registry-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
-		  ;; TRY (thread-sleep! *global-delta*)
 		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ;; At this point *all* test registrations must be completed.

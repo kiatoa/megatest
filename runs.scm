@@ -601,7 +601,7 @@
 									(> (string-length dira)(string-length dirb))
 									#f)))))
 		       (test-retry-time  (make-hash-table))
-		       (allow-run-time   25)) ;; seconds to allow for killing tests before just brutally killing 'em
+		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
 		   (let loop ((test (car sorted-tests))
 			      (tal  (cdr sorted-tests)))
 		     (let* ((test-id       (db:test-get-id test))
@@ -616,7 +616,7 @@
 			    (test-fulln    (db:test-get-fullname new-test-dat)))
 			   (case action
 			     ((remove-runs)
-			      (debug:print-info 0 "test-state: " test-state)
+			      (debug:print-info 0 "test: " test-name " item path: " item-path " test-state: " test-state)
 			      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
 				  (begin
 				    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
