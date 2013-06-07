@@ -1036,6 +1036,47 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
+;; Update the tests meta data from the testconfig files
+;;======================================================================
+
+(if (args:get-arg "-update-meta")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      ;; now can find our db
+      ;; keep this one local
+      (open-run-close runs:update-all-test_meta db)
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Start a repl
+;;======================================================================
+
+(if (or (args:get-arg "-repl")
+	(args:get-arg "-load"))
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (if db
+	  (begin
+	    (set! *db* db)
+	    (set! *client-non-blocking-mode* #t)
+	    ;; (client:setup)
+	    ;; (client:launch)
+	    (import readline)
+	    (import apropos)
+	    (gnu-history-install-file-manager
+	     (string-append
+	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
+	    (current-input-port (make-gnu-readline-port "megatest> "))
+	    (if (args:get-arg "-repl")
+		(repl)
+		(load (args:get-arg "-load"))))
+	  (exit))
+      (set! *didsomething* #t)))
+
+;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
 
