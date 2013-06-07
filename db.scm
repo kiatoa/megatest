@@ -627,7 +627,7 @@
 					       (db:patt->like key patt)))
 					   keypatts)
 				      " AND ")))
-		           " AND state != 'DELETED' ORDER BY event_time DESC "
+		           " AND state != 'deleted' ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
 		               "")
@@ -671,7 +671,7 @@
 	 (lambda (a . x)
 	   (set! res (apply vector a x)))
 	 db
-	 (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'DELETED';")
+	 (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
 	 run-id)
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(let ((finalres (vector header res)))
@@ -686,7 +686,7 @@
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
-  (sqlite3:execute db "UPDATE runs SET state='DELETED' WHERE id=?;" run-id))
+  (sqlite3:execute db "UPDATE runs SET state='deleted' WHERE id=?;" run-id))
 ;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
 
@@ -730,6 +730,9 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
+   (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
+    (if mykeyvals 
+	mykeyvals
   (let* ((keys (db:get-keys db))
 	 (res  '()))
     (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
@@ -743,13 +746,19 @@
 	  db qry run-id)))
      keys)
     (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
-    (reverse res)))
+	  (let ((final-res (reverse res)))
+	    (hash-table-set! *keyvals* run-id final-res)
+	    final-res)))))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target db run-id)
+  (let ((mytarg (hash-table-ref/default *target* run-id #f)))
+    (if mytarg
+	mytarg
   (let* ((keyvals (db:get-key-vals db run-id))
 	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
-    thekey))
+	  (hash-table-set! *target* run-id thekey)
+	  thekey))))
 
 ;;======================================================================
 ;;  T E S T S
