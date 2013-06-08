@@ -369,7 +369,7 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if Onot (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+	  (if (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
 	      (print "Failed to obtain lock for " outputfilename)
 	      (begin
 		(print "Obtained lock for " outputfilename)
@@ -434,7 +434,7 @@
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
 		  (tests:test-set-toplog! db run-id test-name outputfilename)
-		  ))))))
+		  )))))))
 
 (define (get-all-legal-tests)
   (let* ((tests  (glob (conc *toppath* "/tests/*")))
