@@ -24,6 +24,7 @@
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (test-name   (tests:testqueue-get-testname test-record))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
+		 (jobgroup    (config-lookup tconfig "requirements" "jobgroup"))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 				(if m (string->symbol m) 'normal)))
 		 (waitons     (tests:testqueue-get-waitons    test-record))
@@ -56,7 +57,8 @@
 	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 	               (not (null? tal)))
 	          (loop (car newtal)(cdr newtal) reruns))
-	      (let* ((run-limits-info         (runs:can-run-more-tests test-record max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         ;; (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+		      (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
@@ -193,7 +195,8 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (runs:can-run-more-tests test-record max-concurrent-jobs)))
+	      (let ((can-run-more    ;; (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
+		     (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
 		(if (and (list? can-run-more)
 			 (car can-run-more))
 		    (let* ((prereqs-not-met (db:get-prereqs-not-met run-id waitons item-path mode: testmode))

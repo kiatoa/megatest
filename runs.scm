@@ -165,22 +165,21 @@
 	      (setenv (car item) (cadr item)))
 	    itemdat))
 
-(define *last-num-running-tests* 0)
-
 ;; Every time can-run-more-tests is called increment the delay
-;; if the cou
+;;
+;; NOTE: We run this server-side!! Do not use this global except in the runs:can-run-more-tests routine
+;;
+(define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count)
+(define (runs:shrink-can-run-more-tests-count db) ;; the db is just so we can use cdb:remote-run
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
-(define (runs:can-run-more-tests test-record max-concurrent-jobs)
+(define (runs:can-run-more-tests db jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
 		  (else 0)))
-  (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
-	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
-	 (num-running             (cdb:remote-run db:get-count-tests-running #f))
-	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
+  (let* ((num-running             (db:get-count-tests-running db))
+	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
@@ -616,7 +615,7 @@
 			    (test-fulln    (db:test-get-fullname new-test-dat)))
 			   (case action
 			     ((remove-runs)
-			      (debug:print-info 0 "test: " test-name " item path: " item-path " test-state: " test-state)
+			      (debug:print-info 0 "test: " test-name " itest-state: " test-state)
 			      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
 				  (begin
 				    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
