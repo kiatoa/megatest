@@ -107,8 +107,11 @@
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
+;; 
+;; Run this server-side
+;;
 (define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (cdb:remote-run db:get-keys #f))
+  (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse  keys ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
@@ -132,7 +135,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path)'() '())))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '())))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -263,7 +266,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (open-run-close test:get-previous-test-run-record db run-id test-name item-path)
+			  (cdb:remote-run test:get-previous-test-run-record #f run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -366,71 +369,72 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if (obtain-dot-lock outputfilename 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-	      (print "Obtained lock for " outputfilename)
-	      (print "Failed to obtain lock for " outputfilename))
-	  (let ((oup    (open-output-file outputfilename))
-		(counts (make-hash-table))
-		(statecounts (make-hash-table))
-		(outtxt "")
-		(tot    0)
-		(testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
-	    (with-output-to-port
-		oup
-	      (lambda ()
-		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
-				   "</title><body><h2>Summary for " test-name "</h2>"))
-		(for-each
-		 (lambda (testrecord)
-		   (let ((id             (vector-ref testrecord 0))
-			 (itempath       (vector-ref testrecord 1))
-			 (state          (vector-ref testrecord 2))
-			 (status         (vector-ref testrecord 3))
-			 (run_duration   (vector-ref testrecord 4))
-			 (logf           (vector-ref testrecord 5))
-			 (comment        (vector-ref testrecord 6)))
-		     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-		     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-		     (set! outtxt (conc outtxt "<tr>"
-					"<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-					"<td>" state    "</td>" 
-					"<td><font color=" (common:get-color-from-status status)
-					">"   status   "</font></td>"
-					"<td>" (if (equal? comment "")
-						   "&nbsp;"
-						   comment) "</td>"
-						   "</tr>"))))
-		 testdat)
-		(print "<table><tr><td valign=\"top\">")
-		;; Print out stats for status
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
-		(for-each (lambda (state)
-			    (set! tot (+ tot (hash-table-ref statecounts state)))
-			    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
-			  (hash-table-keys statecounts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td><td valign=\"top\">")
-		;; Print out stats for state
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
-		(for-each (lambda (status)
-			    (set! tot (+ tot (hash-table-ref counts status)))
-			    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
-				   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
-			  (hash-table-keys counts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td></td></tr></table>")
-
-		(print "<table cellspacing=\"0\" border=\"1\">" 
-		       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
-		       outtxt "</table></body></html>")
-		(release-dot-lock outputfilename)))
-	    (close-output-port oup)
-	    (change-directory orig-dir)
-	    ;; NB// tests:test-set-toplog! is remote internal...
-	    (tests:test-set-toplog! db run-id test-name outputfilename)
-	    )))))
+	  (if Onot (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+	      (print "Failed to obtain lock for " outputfilename)
+	      (begin
+		(print "Obtained lock for " outputfilename)
+		(let ((oup    (open-output-file outputfilename))
+		      (counts (make-hash-table))
+		      (statecounts (make-hash-table))
+		      (outtxt "")
+		      (tot    0)
+		      (testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
+		  (with-output-to-port
+		      oup
+		    (lambda ()
+		      (set! outtxt (conc outtxt "<html><title>Summary: " test-name 
+					 "</title><body><h2>Summary for " test-name "</h2>"))
+		      (for-each
+		       (lambda (testrecord)
+			 (let ((id             (vector-ref testrecord 0))
+			       (itempath       (vector-ref testrecord 1))
+			       (state          (vector-ref testrecord 2))
+			       (status         (vector-ref testrecord 3))
+			       (run_duration   (vector-ref testrecord 4))
+			       (logf           (vector-ref testrecord 5))
+			       (comment        (vector-ref testrecord 6)))
+			   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+			   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+			   (set! outtxt (conc outtxt "<tr>"
+					      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+					      "<td>" state    "</td>" 
+					      "<td><font color=" (common:get-color-from-status status)
+					      ">"   status   "</font></td>"
+					      "<td>" (if (equal? comment "")
+							 "&nbsp;"
+							 comment) "</td>"
+							 "</tr>"))))
+		       testdat)
+		      (print "<table><tr><td valign=\"top\">")
+		      ;; Print out stats for status
+		      (set! tot 0)
+		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
+		      (for-each (lambda (state)
+				  (set! tot (+ tot (hash-table-ref statecounts state)))
+				  (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
+				(hash-table-keys statecounts))
+		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+		      (print "</td><td valign=\"top\">")
+		      ;; Print out stats for state
+		      (set! tot 0)
+		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
+		      (for-each (lambda (status)
+				  (set! tot (+ tot (hash-table-ref counts status)))
+				  (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
+					 "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
+				(hash-table-keys counts))
+		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+		      (print "</td></td></tr></table>")
+		      
+		      (print "<table cellspacing=\"0\" border=\"1\">" 
+			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
+			     outtxt "</table></body></html>")
+		      (release-dot-lock outputfilename)))
+		  (close-output-port oup)
+		  (change-directory orig-dir)
+		  ;; NB// tests:test-set-toplog! is remote internal...
+		  (tests:test-set-toplog! db run-id test-name outputfilename)
+		  ))))))
 
 (define (get-all-legal-tests)
   (let* ((tests  (glob (conc *toppath* "/tests/*")))
