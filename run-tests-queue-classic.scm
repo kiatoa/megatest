@@ -1,11 +1,10 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts required-tests)
+(define (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)
     ;; At this point the list of parent tests is expanded 
     ;; NB// Should expand items here and then insert into the run queue.
-  (debug:print 5 "test-records: " test-records ", keyvallst: " keyvallst " flags: " (hash-table->alist flags))
+  (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
-	(key-vals              (cdb:remote-run db:get-key-vals #f run-id))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
 	(registry-mutex        (make-mutex))
@@ -25,6 +24,7 @@
 	  (let* ((test-record (hash-table-ref test-records hed))
 		 (test-name   (tests:testqueue-get-testname test-record))
 		 (tconfig     (tests:testqueue-get-testconfig test-record))
+		 (jobgroup    (config-lookup tconfig "requirements" "jobgroup"))
 		 (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 				(if m (string->symbol m) 'normal)))
 		 (waitons     (tests:testqueue-get-waitons    test-record))
@@ -57,7 +57,8 @@
 	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 	               (not (null? tal)))
 	          (loop (car newtal)(cdr newtal) reruns))
-	      (let* ((run-limits-info         (runs:can-run-more-tests test-record max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         ;; (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+		      (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
@@ -94,10 +95,8 @@
 		 ;;  (thread-sleep! 0.01)
 		 ;;  (loop (car newtal)(cdr newtal) reruns))
 		 ;; count number of 'done, if more than 100 then skip on through.
-		 (;; (and (< (length (filter (lambda (x)(eq? x 'done))(hash-table-values test-registry))) 100) ;; why get more than 200 ahead?
-		  (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
+		 ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)) ;; ) ;; too many changes required. Implement later.
 		  (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-		  ;; NEED TO THREADIFY THIS
 		  (let ((th (make-thread (lambda ()
 		        		   (mutex-lock! registry-mutex)
 		        		   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
@@ -111,7 +110,6 @@
 		        		   (mutex-unlock! registry-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
-		  ;; TRY (thread-sleep! *global-delta*)
 		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
 		  (loop (car newtal)(cdr newtal) reruns))
 		 ;; At this point *all* test registrations must be completed.
@@ -134,7 +132,7 @@
 		       (or (null? prereqs-not-met)
 			   (and (eq? testmode 'toplevel)
 				(null? non-completed))))
-		  (run:test run-id run-info key-vals runname keyvallst test-record flags #f)
+		  (run:test run-id run-info keyvals runname test-record flags #f)
 		  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
 		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
@@ -197,7 +195,8 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (runs:can-run-more-tests test-record max-concurrent-jobs)))
+	      (let ((can-run-more    ;; (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
+		     (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
 		(if (and (list? can-run-more)
 			 (car can-run-more))
 		    (let* ((prereqs-not-met (db:get-prereqs-not-met run-id waitons item-path mode: testmode))

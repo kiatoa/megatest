@@ -109,8 +109,8 @@
 ;; returns #f if no such test found, returns a single test record if found
 (define (test:get-previous-test-run-record db run-id test-name item-path)
   (let* ((keys    (cdb:remote-run db:get-keys #f))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
     ;; first look up the key values from the run selected by run-id
     (sqlite3:for-each-row 
@@ -541,9 +541,9 @@
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* (;; (item-path (item-list->path itemdat))
-	 (testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
-    (equal? (test:get-state testdat) "KILLREQ")))
+  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+    (and testdat
+	 (equal? (test:get-state testdat) "KILLREQ"))))
 
 (define (test:tdb-get-rundat-count tdb)
   (if tdb

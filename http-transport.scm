@@ -36,7 +36,7 @@
       #f
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
-(define  *server-loop-heart-beat* (current-seconds))
+(define *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
@@ -215,7 +215,7 @@
 			      (close-all-connections!) 
 			      (mutex-unlock! *http-mutex*)))
 	      (time-out     (lambda ()
-			      (thread-sleep! 5)
+			      (thread-sleep! 45)
 			      (if (not res)
 				  (begin
 				    (debug:print 0 "WARNING: communication with the server timed out.")
@@ -317,10 +317,11 @@
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
 	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (> (+ last-access server-timeout)
-               (current-seconds))
+        (if (and *server-run*
+		 (> (+ last-access server-timeout)
+		    (current-seconds)))
             (begin
-              (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
               (debug:print-info 0 "Starting to shutdown the server.")

@@ -55,7 +55,9 @@
 (define *time-to-exit*      #f)
 (define *received-response* #f)
 (define *default-numtries*  10)
+(define *server-run*        #t)
 (define *db-write-access*   #t)
+
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -70,7 +72,6 @@
 (define *current-run-name*   #f)
 
 (define (common:clear-caches)
-  (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
   (set! *keyvals*            (make-hash-table))
   (set! *toptest-paths*      (make-hash-table))

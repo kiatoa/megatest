@@ -22,7 +22,7 @@ all : test1 test2 test3 test4 test5
 
 server :
 	(cd ..;make;make install) && \
-	(cd fullrun;../../bin/megatest -server - -debug 22) 
+	(cd fullrun;../../bin/megatest -server - -debug 22 &) 
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
@@ -59,12 +59,26 @@ test5 : cleanprep
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
+	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED;echo ALL DONE
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
 	cd fullrun;$(MEGATEST) -rollup :runname newrun -target ubuntu/nfs/none -debug 10
 
+test7: 
+	@echo Only a/c testname c should remain. If there is a run a/b/c then there is a cache issue.
+	(cd simplerun; \
+	 $(MEGATEST) -server - -daemonize; \
+         $(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
+         $(MEGATEST) -runtests %  -target a/b :runname c; sleep 5; \
+	 $(MEGATEST) -remove-runs -target a/c :runname c; \
+	 $(MEGATEST) -runtests %  -target a/c :runname c; \
+	 $(MEGATEST) -remove-runs -target a/b :runname c -testpatt % ; \
+	 $(MEGATEST) -runtests %  -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
+	logpro test7.logpro test7.html < test7.log
+	@echo 
+	@echo Run \"firefox test7.html\" to see the results.
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links

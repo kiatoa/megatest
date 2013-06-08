@@ -139,12 +139,12 @@
 (define (db:initialize db)
   (debug:print-info 11 "db:initialize START")
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
-	 (keys     (config-get-fields configdat))
+	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys)))
     (for-each (lambda (key)
-		(let ((keyn (vector-ref key 0)))
+		(let ((keyn key))
 		  (if (member (string-downcase keyn)
 			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
 				    "pass_count"))
@@ -157,7 +157,7 @@
     (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
-		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
+		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 	      keys)
     (sqlite3:execute db (conc 
 			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
@@ -498,20 +498,22 @@
   (sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var)
   (debug:print-info 11 "db:del-var END " var))
 
-;; use a global for some primitive caching, it is just silly to re-read the db 
-;; over and over again for the keys since they never change
+;; use a global for some primitive caching, it is just silly to
+;; re-read the db over and over again for the keys since they never
+;; change
+
+;; why get the keys from the db? why not get from the *configdat*
+;; using keys:config-get-fields?
 
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
       (let ((res '()))
-	(debug:print-info 11 "db:get-keys START (cache miss)")
 	(sqlite3:for-each-row 
-	 (lambda (key keytype)
-	   (set! res (cons (vector key keytype) res)))
+	 (lambda (key)
+	   (set! res (cons key res)))
 	 db
-	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
+	 "SELECT fieldname FROM keys ORDER BY id DESC;")
 	(set! *db-keys* res)
-	(debug:print-info 11 "db:get-keys END (cache miss)")
 	res)))
 
 (define (db:get-value-by-header row header field)
@@ -544,14 +546,13 @@
      (lambda (val)
        (set! res val))
      db 
-     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
+     (conc "SELECT " key " FROM runs WHERE id=?;")
      run-id)
     res))
 
 ;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
-  (let* ((header    (append (map key:get-fieldname keys)
-			    remfields))
+  (let* ((header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (list keystr header)))
@@ -571,18 +572,18 @@
 
 
 ;; register a test run with the db
-(define (db:register-run db keys keyvallst runname state status user)
-  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
-  (let* ((keystr    (keys->keystr keys))
+(define (db:register-run db keyvals runname state status user)
+  (debug:print 3 "runs:register-run runname: " runname " state: " state " status: " status " user: " user)
+  (let* ((keys      (map car keyvals))
+	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvals   (map cadr keyvallst))
-	 (allvals   (append (list runname state status user) keyvals))
-	 (qryvals   (append (list runname) keyvals))
-	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
-    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
+	 (allvals   (append (list runname state status user) (map cadr keyvals)))
+	 (qryvals   (append (list runname) (map cadr keyvals)))
+	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
+    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
+    (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
@@ -612,8 +613,7 @@
 	 (keys       (db:get-keys db))
 	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header     (append (map key:get-fieldname keys)
-		             remfields))
+	 (header     (append keys remfields))
 	 (keystr     (conc (keys->keystr keys) ","
 		           (string-intersperse remfields ",")))
 	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
@@ -627,7 +627,7 @@
 					       (db:patt->like key patt)))
 					   keypatts)
 				      " AND ")))
-		           " ORDER BY event_time DESC "
+		           " AND state != 'deleted' ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
 		               "")
@@ -652,29 +652,31 @@
      (lambda (count)
        (set! numruns count))
      db
-     "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
+     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'DELETED';" runpatt)
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
-  (let* ((res      #f)
-	 (keys      (db:get-keys db))
-	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header    (append (map key:get-fieldname keys)
-			    remfields))
-	 (keystr    (conc (keys->keystr keys) ","
-			  (string-intersperse remfields ","))))
-    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-    (sqlite3:for-each-row
-     (lambda (a . x)
-       (set! res (apply vector a x)))
-     db
-     (conc "SELECT " keystr " FROM runs WHERE id=?;")
-     run-id)
-    (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-    (let ((finalres (vector header res)))
-      finalres)))
+  ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
+  ;;    (hash-table-ref *run-info-cache* run-id)
+      (let* ((res      #f)
+	     (keys      (db:get-keys db))
+	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
+	     (header    (append keys remfields))
+	     (keystr    (conc (keys->keystr keys) ","
+			      (string-intersperse remfields ","))))
+	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+	(sqlite3:for-each-row
+	 (lambda (a . x)
+	   (set! res (apply vector a x)))
+	 db
+	 (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
+	 run-id)
+	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+	(let ((finalres (vector header res)))
+	  ;; (hash-table-set! *run-info-cache* run-id finalres)
+	  finalres)))
 
 (define (db:set-comment-for-run db run-id comment)
   (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
@@ -684,7 +686,10 @@
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
-  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+  (sqlite3:execute db "UPDATE runs SET state='deleted' WHERE id=?;" run-id))
+;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+
+
 
 (define (db:update-run-event_time db run-id)
   (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
@@ -708,16 +713,16 @@
 ;; get key val pairs for a given run-id
 ;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
 (define (db:get-key-val-pairs db run-id)
-  (let* ((keys (get-keys db))
+  (let* ((keys (db:get-keys db))
 	 (res  '()))
     (debug:print-info 11 "db:get-key-val-pairs START keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
-	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
+	    (set! res (cons (list key key-val) res)))
 	  db qry run-id)))
      keys)
     (debug:print-info 11 "db:get-key-val-pairs END keys: " keys " run-id: " run-id)
@@ -725,22 +730,22 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
-  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
+   (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
     (if mykeyvals 
 	mykeyvals
-	(let* ((keys (get-keys db))
-	       (res  '()))
-	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
-	  (for-each 
-	   (lambda (key)
-	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	       ;; (debug:print 0 "qry: " qry)
-	       (sqlite3:for-each-row 
-		(lambda (key-val)
-		  (set! res (cons key-val res)))
-		db qry run-id)))
-	   keys)
-	  (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
+  (let* ((keys (db:get-keys db))
+	 (res  '()))
+    (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
+	 ;; (debug:print 0 "qry: " qry)
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons key-val res)))
+	  db qry run-id)))
+     keys)
+    (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
 	  (let ((final-res (reverse res)))
 	    (hash-table-set! *keyvals* run-id final-res)
 	    final-res)))))
@@ -750,8 +755,8 @@
   (let ((mytarg (hash-table-ref/default *target* run-id #f)))
     (if mytarg
 	mytarg
-	(let* ((keyvals (db:get-key-vals db run-id))
-	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+  (let* ((keyvals (db:get-key-vals db run-id))
+	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
 	  (hash-table-set! *target* run-id thekey)
 	  thekey))))
 
@@ -787,7 +792,7 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals
-				" FROM tests WHERE run_id=? "
+				" FROM tests WHERE run_id=? AND state != 'DELETED' "
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
@@ -842,7 +847,7 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals 
-				" FROM tests WHERE " 
+				" FROM tests WHERE state != 'DELETED' AND " 
 				(if run-ids
 				    (if (list? run-ids)
 					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")
@@ -1366,8 +1371,8 @@
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
 
-(define (cdb:kill-server serverdat)
-  (cdb:client-call serverdat 'killserver #t *default-numtries*))
+(define (cdb:kill-server serverdat pid)
+  (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
 
 (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
@@ -1603,14 +1608,20 @@
 		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
 		((set-verbosity)
 		 (set! *verbosity* (car params))
-		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
+		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
 		((killserver)
-		 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
-		 (open-run-close tasks:server-deregister tasks:open-db 
-				 (car *runremote*)
-				 pullport: (cadr *runremote*))
-		 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-		 (server:reply return-address qry-sig #t '(#t "exit process started")))
+		 (let ((hostname (car  *runremote*))
+		       (port     (cadr *runremote*))
+		       (pid      (car params)))
+		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+		   (debug:print-info 1 "current pid=" (current-process-id))
+		   (open-run-close tasks:server-deregister tasks:open-db 
+				   hostname
+				   port: port)
+		   (set! *server-run* #f)
+		   (thread-sleep! 3)
+		   (process-signal pid signal/kill)
+		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
 		(else ;; not a command, i.e. is a query
 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
 		 (server:reply return-address qry-sig #f 'failed)))))

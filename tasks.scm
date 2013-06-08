@@ -109,7 +109,7 @@
    ))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
-(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f)(action 'markdead))
+(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f)(action 'delete))
   (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
   (if *db-write-access*
       (if pid
@@ -118,8 +118,8 @@
 	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
 	  (if port
 	      (case action
-		((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
-		(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)))
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE (interface=? or hostname=?) AND port=?;" hostname hostname port))
+	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE (interface=? or hostname=?) AND port=?;" hostname hostname port)))
 	      (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified")))))
 
 (define (tasks:server-deregister-self mdb hostname)
@@ -148,7 +148,7 @@
     res))
 
 (define (tasks:server-update-heartbeat mdb server-id)
-  (debug:print-info 0 "Heart beat update of server id=" server-id)
+  (debug:print-info 1 "Heart beat update of server id=" server-id)
   (handle-exceptions
    exn
    (begin
@@ -263,13 +263,13 @@
 	     ;;(process-signal pid signal/kill)
 	     ) ;; local machine, send sig term
 	    (begin
-		(debug:print-info 1 "Stopping remote servers not yet supported."))))
-	;;      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-	;;      (let ((serverdat (list hostname port)))
-	;;	(case (string->symbol transport)
-	;;	  ((http)(http-transport:client-connect hostname port))
-	;;	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
-	;;	(cdb:kill-server serverdat)))))    ;; remote machine, try telling server to commit suicide
+	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
+	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
+	      (let ((serverdat (list hostname port)))
+	      	(case (if (string? transport) (string->symbol transport) transport)
+	      	  ((http)(http-transport:client-connect hostname port))
+	      	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
+	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
       (begin
 	(if status 
 	    (if (equal? hostname (get-host-name))
@@ -544,13 +544,13 @@
 (define (tasks:rollup-runs db mdb task)
   (let* ((flags (make-hash-table)) 
 	 (keys  (db:get-keys db))
-	 (keyvallst (keys:target->keyval keys (tasks:task-get-target task))))
+	 (keyvals (keys:target-keyval keys (tasks:task-get-target task))))
     ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
     (print "Starting rollup " task)
     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
     (runs:rollup-run db
 		     keys 
-		     keyvallst
+		     keyvals
 		     (tasks:task-get-name  task)
 		     (tasks:task-get-owner  task))
     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))

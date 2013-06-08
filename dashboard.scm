@@ -100,8 +100,9 @@ Misc
 ;; (define *keys*   (open-run-close db:get-keys #f))
 (define *keys*   (cdb:remote-run db:get-keys #f))
 ;; (define *keys*   (db:get-keys   *db*))
-(define *dbkeys*  (map (lambda (x)(vector-ref x 0))
-		      (append *keys* (list (vector "runname" "blah")))))
+
+(define *dbkeys*  (append *keys* (list "runname")))
+
 (define *header*       #f)
 (define *allruns*     '())
 (define *allruns-by-id* (make-hash-table)) ;; 
@@ -199,7 +200,6 @@ Misc
 		  (set! *tot-run-count* (length runs))))
 	    ;; 
 	    ;; trim runs to only those that are changing often here
-
 	    ;; 
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
