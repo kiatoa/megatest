@@ -135,7 +135,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '())))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -146,8 +146,11 @@
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
 ;; can use wildcards. Also can likely be factored in with get test paths?
+;;
+;; Run this remotely!!
+;;
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (cdb:remote-run db:get-keys #f))
+  (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -173,7 +176,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path) '() '())))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
