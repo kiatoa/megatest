@@ -30,7 +30,7 @@
 ;; here.
 
 
-(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #f) (sort-by #f))
+(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by #f))
   (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by))
 	     (res      '())
 	     (offset   0)

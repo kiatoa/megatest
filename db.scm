@@ -779,22 +779,32 @@
 	 (states-qry      (if (null? states) 
 			      #f
 			      (conc " state "  
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse states   "','")
 				    "')")))
 	 (statuses-qry    (if (null? statuses)
 			      #f
 			      (conc " status "
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in 
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse statuses "','")
 				    "')")))
+	 (states-statuses-qry 
+	                  (cond 
+			   ((and states-qry statuses-qry)
+			    (conc " AND ( " states-qry " AND " statuses-qry " ) "))
+			   (states-qry  
+			    (conc " AND " states-qry))
+			   (statuses-qry 
+			    (conc " AND " statuses-qry))
+			   (else "")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals
 				" FROM tests WHERE run_id=? AND state != 'DELETED' "
-				(if states-qry   (conc " AND " states-qry)   "")
-				(if statuses-qry (conc " AND " statuses-qry) "")
+				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
 				  ((rundir)     " ORDER BY length(rundir) DESC ")
