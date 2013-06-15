@@ -348,10 +348,10 @@
 	(debug:print-info 1 "Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
-    (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
-      (if reglen
-	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)))
+    (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
+      (if (equal? reglen "classic")
+	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)
+	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests (any->number reglen))))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)

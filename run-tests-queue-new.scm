@@ -1,6 +1,6 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-new run-id runname test-records keyvals flags test-patts required-tests reglen)
+(define (runs:run-tests-queue-new run-id runname test-records keyvals flags test-patts required-tests reglen-in)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
@@ -14,7 +14,8 @@
 	(max-concurrent-jobs   (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
 				 (if (and mcj (string->number mcj))
 				     (string->number mcj)
-				     1)))) ;; length of the register queue ahead
+				     1))) ;; length of the register queue ahead
+	(reglen                (if (number? reglen-in) reglen-in 1)))
     ;; Initialize the test-registery hash with tests that already have a record
     (for-each (lambda (trec)
 		(let ((id (db:test-get-id        trec))
