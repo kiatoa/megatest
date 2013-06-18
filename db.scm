@@ -652,7 +652,7 @@
      (lambda (count)
        (set! numruns count))
      db
-     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'DELETED';" runpatt)
+     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
@@ -733,7 +733,7 @@
    (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
     (if mykeyvals 
 	mykeyvals
-  (let* ((keys (db:get-keys db))
+    (let* ((keys (db:get-keys db))
 	 (res  '()))
     (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
     (for-each 

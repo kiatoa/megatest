@@ -59,7 +59,7 @@ test5 : cleanprep
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
-	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED;echo ALL DONE
+	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
