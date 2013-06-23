@@ -1,6 +1,6 @@
 # run some tests
 
-BINPATH=$(PWD)/../bin
+BINPATH=$(shell readlink -m $(PWD)/../bin)
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)
@@ -80,6 +80,13 @@ test7:
 	@echo 
 	@echo Run \"firefox test7.html\" to see the results.
 
+# This one failed with v1.55
+test8 : 
+	cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target ubuntu/nfs/none :runname $(RUNNAME)_waiton_single
+	cd fullrun;$(MEGATEST) -runtests lineitem_fail 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singletest
+	cd fullrun;$(MEGATEST) -runtests runfirst/fall 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem
+	cd fullrun;$(MEGATEST) -runtests test_mt_vars/2 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem_waiton
+
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
 	cd ..;make;make install
@@ -108,7 +115,7 @@ hardkill : kill
 	sleep 5;killall -v mtest main.sh dboard -9
 
 listservers :
-	cd fullrun;$(MEGATEST) -listservers
+	cd fullrun;$(MEGATEST) -list-servers
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done
