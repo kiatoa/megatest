@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -29,6 +29,7 @@
 (declare (uses ods))
 (declare (uses fs-transport))
 (declare (uses client))
+(declare (uses mt))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -768,9 +769,8 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses 
-			      #!key (not-in #t)
-			      (sort-by #f) ;; 'rundir 'event_time
+(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by
+			      #!key
 			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
 			      )
   (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
@@ -779,27 +779,42 @@
 	 (states-qry      (if (null? states) 
 			      #f
 			      (conc " state "  
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse states   "','")
 				    "')")))
 	 (statuses-qry    (if (null? statuses)
 			      #f
 			      (conc " status "
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in 
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse statuses "','")
 				    "')")))
+	 (states-statuses-qry 
+	                  (cond 
+			   ((and states-qry statuses-qry)
+			    (conc " AND ( " states-qry " AND " statuses-qry " ) "))
+			   (states-qry  
+			    (conc " AND " states-qry))
+			   (statuses-qry 
+			    (conc " AND " statuses-qry))
+			   (else "")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals
 				" FROM tests WHERE run_id=? AND state != 'DELETED' "
-				(if states-qry   (conc " AND " states-qry)   "")
-				(if statuses-qry (conc " AND " statuses-qry) "")
+				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
-				  ((rundir)     " ORDER BY length(rundir) DESC;")
-				  ((event_time) " ORDER BY event_time ASC;")
-				  (else         ";"))
+				  ((rundir)     " ORDER BY length(rundir) DESC ")
+				  ((event_time) " ORDER BY event_time ASC ")
+				  (else         (if (string? sort-by)
+						    (conc " ORDER BY " sort-by) 
+						    "")))
+				(if limit  (conc " LIMIT " limit)   "")
+				(if offset (conc " OFFSET " offset) "")
+				";"
 			 )))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
@@ -2037,7 +2052,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (cdb:remote-run db:get-tests-for-run #f run-id waitontest-name '() '()))
+	   (let ((tests             (mt:get-tests-for-run run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
