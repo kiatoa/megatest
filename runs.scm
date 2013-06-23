@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -20,6 +20,7 @@
 (declare (uses runconfig))
 (declare (uses tests))
 (declare (uses server))
+(declare (uses mt))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -347,10 +348,10 @@
 	(debug:print-info 1 "Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
-    (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
-      (if reglen
-	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)))
+    (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
+      (if (equal? reglen "classic")
+	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)
+	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests (any->number reglen))))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -567,12 +568,12 @@
 						(db:get-value-by-header run header k)) keys) "/"))
 	     (dirs-to-remove (make-hash-table))
 	     (proc-get-tests (lambda (run-id)
-			       (cdb:remote-run db:get-tests-for-run db run-id
-					       testpatt states statuses
-					       not-in:  #f
-					       sort-by: (case action
-							  ((remove-runs) 'rundir)
-							  (else          'event_time))))))
+			      (mt:get-tests-for-run run-id
+						    testpatt states statuses
+						    not-in:  #f
+						    sort-by: (case action
+							       ((remove-runs) 'rundir)
+							       (else          'event_time))))))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
@@ -672,7 +673,9 @@
 					(loop (car tal)(cdr tal))))))
 			     ((set-state-status)
 			      (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f))
+			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)
+			      (if (not (null? tal))
+				  (loop (car tal)(cdr tal))))
 			     ((run-wait)
 			      (debug:print-info 2 "still waiting, " (length tests) " tests still running")
 			      (thread-sleep! 10)
@@ -683,7 +686,7 @@
 		   )))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (cdb:remote-run db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -822,7 +825,7 @@
   (let* ((db              #f)
 	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
 	 (prev-tests      (cdb:remote-run test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (cdb:remote-run db:get-tests-for-run db new-run-id "%/%" '() '()))
+	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
     (cdb:remote-run db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
@@ -850,7 +853,7 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (cdb:remote-run db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
+	 (set! new-testdat (car (mt:get-tests-for-run new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))

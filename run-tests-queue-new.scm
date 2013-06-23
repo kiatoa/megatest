@@ -1,11 +1,11 @@
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue-new run-id runname test-records keyvals flags test-patts required-tests reglen)
+(define (runs:run-tests-queue-new run-id runname test-records keyvals flags test-patts required-tests reglen-in)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
-	(tests-info            (cdb:remote-run db:get-tests-for-run #f run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
+	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
 	(registry-mutex        (make-mutex))
@@ -14,7 +14,8 @@
 	(max-concurrent-jobs   (let ((mcj (config-lookup *configdat* "setup"     "max_concurrent_jobs")))
 				 (if (and mcj (string->number mcj))
 				     (string->number mcj)
-				     1)))) ;; length of the register queue ahead
+				     1))) ;; length of the register queue ahead
+	(reglen                (if (number? reglen-in) reglen-in 1)))
     ;; Initialize the test-registery hash with tests that already have a record
     (for-each (lambda (trec)
 		(let ((id (db:test-get-id        trec))
@@ -88,7 +89,7 @@
 		     (num-running-in-jobgroup (list-ref run-limits-info 2))
 		     (max-concurrent-jobs     (list-ref run-limits-info 3))
 		     (job-group-limit         (list-ref run-limits-info 4))
-		     (prereqs-not-met         (db:get-prereqs-not-met run-id waitons item-path mode: testmode))
+		     (prereqs-not-met         (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 		     (fails                   (runs:calc-fails prereqs-not-met))
 		     (non-completed           (runs:calc-not-completed prereqs-not-met)))
 		(debug:print-info 8 "have-resources: " have-resources " prereqs-not-met: " 
@@ -243,7 +244,7 @@
 	      (let ((can-run-more    (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
 		(if (and (list? can-run-more)
 			 (car can-run-more))
-		    (let* ((prereqs-not-met (db:get-prereqs-not-met run-id waitons item-path mode: testmode))
+		    (let* ((prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 			   (fails           (runs:calc-fails prereqs-not-met))
 			   (non-completed   (runs:calc-not-completed prereqs-not-met)))
 		      (debug:print-info 8 "can-run-more: " can-run-more

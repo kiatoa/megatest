@@ -21,8 +21,12 @@ TARGET     = "ubuntu/nfs/none"
 all : test1 test2 test3 test4 test5
 
 server :
-	(cd ..;make;make install) && \
-	(cd fullrun;../../bin/megatest -server - -debug 22 &) 
+	cd ..;make;make install
+	cd fullrun;../../bin/megatest -server - -debug 22 &
+
+stopserver :
+	cd ..;make && make install
+	cd fullrun;$(MEGATEST) -stop-server 0
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)

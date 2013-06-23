@@ -31,6 +31,7 @@
 (declare (uses dashboard-guimonitor))
 ;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
+(declare (uses mt))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -203,7 +204,7 @@ Misc
 	    ;; 
 	    (for-each (lambda (run)
 			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (cdb:remote-run db:get-tests-for-run #f run-id testnamepatt states statuses)))
+			       (tests    (let ((tsts (mt:get-tests-for-run run-id testnamepatt states statuses)))
 					   (if *tests-sort-reverse* (reverse tsts) tsts)))
 			       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
 			  ;; Not sure this is needed?
