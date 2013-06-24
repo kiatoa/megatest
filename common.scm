@@ -146,6 +146,32 @@
    "disks" '("none" "")))
 
 ;;======================================================================
+;; M I S C   L I S T S
+;;======================================================================
+
+;; items in lista are matched value and position in listb
+;; return the remaining items in listb or #f
+;;
+(define (common:list-is-sublist lista listb)
+  (if (null? lista)
+      listb ;; all items in listb are "remaining"
+      (if (> (length lista)(length listb)) 
+	  #f
+	  (let loop ((heda (car lista))
+		     (tala (cdr lista))
+		     (hedb (car listb))
+		     (talb (cdr listb)))
+	    (if (equal? heda hedb)
+		(if (null? tala) ;; we are done
+		    talb
+		    (loop (car tala)
+			  (cdr tala)
+			  (car talb)
+			  (cdr talb)))
+		#f)))))
+      
+
+;;======================================================================
 ;; System stuff
 ;;======================================================================
 
