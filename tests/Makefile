@@ -85,8 +85,10 @@ test7:
 	@echo Run \"firefox test7.html\" to see the results.
 
 # This one failed with v1.55
-test8 : 
+test8a : 
 	cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target ubuntu/nfs/none :runname $(RUNNAME)_waiton_single
+
+test8 : test8a
 	cd fullrun;$(MEGATEST) -runtests lineitem_fail 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singletest
 	cd fullrun;$(MEGATEST) -runtests runfirst/fall 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem
 	cd fullrun;$(MEGATEST) -runtests test_mt_vars/2 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem_waiton

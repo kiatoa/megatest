@@ -134,15 +134,15 @@
 ;;
 (define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count db) ;; the db is a dummy var so we can use cdb:remote-run
+(define (runs:shrink-can-run-more-tests-count) ;; the db is a dummy var so we can use cdb:remote-run
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
-(define (runs:can-run-more-tests db jobgroup max-concurrent-jobs)
+(define (runs:can-run-more-tests jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
 		  (else 0)))
-  (let* ((num-running             (db:get-count-tests-running db))
-	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
+  (let* ((num-running             (cdb:remote-run db:get-count-tests-running #f))
+	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
@@ -383,7 +383,7 @@
 	      (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 	               (not (null? tal)))
 	          (loop (car tal)(cdr tal) reg reruns))
-	      (let* ((run-limits-info         (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	      (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		      ;; (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 		     (have-resources          (car run-limits-info))
 		     (num-running             (list-ref run-limits-info 1))
@@ -439,7 +439,7 @@
 		        		   (mutex-unlock! registry-mutex))
 		        		 (conc test-name "/" item-path))))
 		    (thread-start! th))
-		  (cdb:remote-run runs:shrink-can-run-more-tests-count #f)   ;; DELAY TWEAKER (still needed?)
+		  (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
 		  (if (and (null? tal)(null? reg))
 		      (loop hed tal reg reruns)
 		      (loop (runs:queue-next-hed tal reg reglen regfull)
@@ -472,7 +472,7 @@
 				(null? non-completed))))
 		  (run:test run-id run-info keyvals runname test-record flags #f)
 		  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
-		  (cdb:remote-run runs:shrink-can-run-more-tests-count #f)  ;; DELAY TWEAKER (still needed?)
+		  (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
 		  ;; (thread-sleep! *global-delta*)
 		  (if (not (null? tal))
 		      (loop (runs:queue-next-hed tal reg reglen regfull)
@@ -496,7 +496,7 @@
 			      (begin 
 				(debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 					     " from the launch list as it has prerequistes that are FAIL")
-				(cdb:remote-run runs:shrink-can-run-more-tests-count #f) ;; DELAY TWEAKER (still needed?)
+				(runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				;; (thread-sleep! *global-delta*)
 				(hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
 				(loop (runs:queue-next-hed tal reg reglen regfull)
@@ -505,7 +505,7 @@
 				      (cons hed reruns)))
 			      (begin
 				(debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-				(cdb:remote-run runs:shrink-can-run-more-tests-count #f) ;; DELAY TWEAKER (still needed?)
+				(runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 				;; (thread-sleep! (+ 0.01 *global-delta*))
 				(loop hed tal reg reruns))))))))) ;; END OF INNER COND
 	     
@@ -542,7 +542,7 @@
 	     ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	     ;;    - but only do that if resources exist to kick off the job
 	     ((or (procedure? items)(eq? items 'have-procedure))
-	      (let ((can-run-more    (cdb:remote-run runs:can-run-more-tests #f jobgroup max-concurrent-jobs)))
+	      (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
 		(if (and (list? can-run-more)
 			 (car can-run-more))
 		    (let* ((prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
