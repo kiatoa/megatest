@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -20,6 +20,7 @@
 (declare (uses runconfig))
 (declare (uses tests))
 (declare (uses server))
+(declare (uses mt))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -34,26 +35,26 @@
 ;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (runs:get-runs-by-patt db keys runnamepatt) ;; test-name)
-  (let* ((keyvallst (keys->vallist keys))
-	 (tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+(define (runs:get-runs-by-patt db keys runnamepatt targpatt) ;; test-name)
+  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-	 (qry-str  #f))
+	 (qry-str  #f)
+	 (keyvals  (keys:target->keyval keys targpatt)))
     (for-each (lambda (keyval)
-		(let* ((key    (vector-ref keyval 0))
+		(let* ((key    (car keyval))
+		       (patt   (cadr keyval))
 		       (fulkey (conc ":" key))
-		       (patt   (args:get-arg fulkey))
 		       (wildtype (if (substring-index "%" patt) "like" "glob")))
 		  (if patt
 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
 		      (begin
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
-	      keys)
+	      keyvals)
     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
@@ -69,29 +70,76 @@
 	 (itempath (db:test-get-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
-(define (db:get-run-key-val db run-id key)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (val)
-       (set! res val))
-     db 
-     (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")
-     run-id)
-    res))
+;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
+;;
+(define (runs:create-run-record)
+  (let* ((mconfig      (if *configdat*
+		           *configdat*
+		           (if (setup-for-run)
+		               *configdat*
+		               (begin
+		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
+		                 (exit 1)))))
+	  (runrec      (runs:runrec-make-record))
+	  (target      (or (args:get-arg "-reqtarg")
+		           (args:get-arg "-target")))
+	  (runname     (or (args:get-arg ":runname")
+		           (args:get-arg "-runname")))
+	  (testpatt    (or (args:get-arg "-testpatt")
+		           (args:get-arg "-runtests")))
+	  (keys        (keys:config-get-fields mconfig))
+	  (keyvals     (keys:target->keyval keys target))
+	  (toppath     *toppath*)
+	  (envdat      keyvals) ;; initial values start with keyvals
+	  (runconfig   #f)
+	  (serverdat   (if (args:get-arg "-server")
+			   *runremote*
+			   #f)) ;; to be used later
+	  (transport   (or (args:get-arg "-transport") 'http))
+	  (db          (if (and mconfig
+				(or (args:get-arg "-server")
+				    (eq? transport 'fs)))
+			   (open-db)
+			   #f))
+	  (run-id      #f))
+    ;; Set all the environment vars we know so far, start with keys
+    (for-each (lambda (keyval)
+		(setenv (car keyval)(cadr keyval)))
+	      keyvals)
+    ;; Set up various and sundry known vars here
+    (setenv "MT_RUN_AREA_HOME" toppath)
+    (setenv "MT_RUNNAME" runname)
+    (setenv "MT_TARGET"  target)
+    (set! envdat (append 
+		  envdat
+		  (list (list "MT_RUN_AREA_HOME" toppath)
+			(list "MT_RUNNAME"       runname)
+			(list "MT_TARGET"        target))))
+    ;; Now can read the runconfigs file
+    ;; 
+    (set! runconfig (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target)))
+    (if (not (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f))
+	(begin
+	  (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
+	  (if db (sqlite3:finalize! db))
+	  (exit 1)))
+    ;; Now have runconfigs data loaded, set environment vars
+    (for-each (lambda (section)
+		(for-each (lambda (varval)
+			    (set! envdat (append envdat (list varval)))
+			    (setenv (car varval)(cadr varval)))
+			  (configf:get-section runconfig section)))
+	      (list "default" target))
+    (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (db:get-run-name-from-id db run-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (runname)
-       (set! res runname))
-     db
-     "SELECT runname FROM runs WHERE id=?;"
-     run-id)
-    res))
-
-(define (set-megatest-env-vars run-id)
-  (let ((keys (cdb:remote-run db:get-keys #f))
-	(vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
+	 
+(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
+  (let* ((target      (or (args:get-arg "-reqtarg")
+			  (args:get-arg "-target")
+			  (get-environment-variable "MT_TARGET")))
+	 (keys    (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
+	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
+	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
     (if (not vals)
 	(let ((ht (make-hash-table)))
@@ -99,19 +147,18 @@
 	  (set! vals ht)
 	  (for-each
 	   (lambda (key)
-	     (hash-table-set! vals key (cdb:remote-run db:get-run-key-val #f run-id key)))
-	   keys)))
+	     (hash-table-set! vals (car key) (cadr key))) ;; (cdb:remote-run db:get-run-key-val #f run-id (car key))))
+	   keyvals)))
     ;; from the cached data set the vars
     (hash-table-for-each
      vals
      (lambda (key val)
-       (debug:print 2 "setenv " (key:get-fieldname key) " " val)
-       (setenv (key:get-fieldname key) val)))
+       (debug:print 2 "setenv " key " " val)
+       (setenv key val)))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (setenv "MT_RUNNAME" (cdb:remote-run db:get-run-name-from-id #f run-id))
-    (setenv "MT_RUN_AREA_HOME" *toppath*)
-    ))
+    (setenv "MT_RUNNAME" (if inrunname inrunname (cdb:remote-run db:get-run-name-from-id #f run-id)))
+    (setenv "MT_RUN_AREA_HOME" *toppath*)))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -119,22 +166,21 @@
 	      (setenv (car item) (cadr item)))
 	    itemdat))
 
-(define *last-num-running-tests* 0)
-
 ;; Every time can-run-more-tests is called increment the delay
-;; if the cou
+;;
+;; NOTE: We run this server-side!! Do not use this global except in the runs:can-run-more-tests routine
+;;
+(define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count)
+(define (runs:shrink-can-run-more-tests-count db) ;; the db is just so we can use cdb:remote-run
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
-(define (runs:can-run-more-tests test-record max-concurrent-jobs)
+(define (runs:can-run-more-tests db jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
 		  (else 0)))
-  (let* ((tconfig                 (tests:testqueue-get-testconfig test-record))
-	 (jobgroup                (config-lookup tconfig "requirements" "jobgroup"))
-	 (num-running             (cdb:remote-run db:get-count-tests-running #f))
-	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
+  (let* ((num-running             (db:get-count-tests-running db))
+	 (num-running-in-jobgroup (db:get-count-tests-running-in-jobgroup db jobgroup))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
@@ -175,30 +221,30 @@
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
-(define (runs:run-tests target runname test-names test-patts user flags)
+(define (runs:run-tests target runname test-patts user flags) ;; test-names
   (common:clear-caches) ;; clear all caches
   (let* ((db          #f)
-	 (keys        (cdb:remote-run db:get-keys #f))
-	 (keyvallst   (keys:target->keyval keys target))
-	 (run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))  ;;  test-name)))
-	 (keyvals     (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
+	 (keys        (keys:config-get-fields *configdat*))
+	 (keyvals     (keys:target->keyval keys target))
+	 (run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
 	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
 	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
-	 (test-records (make-hash-table)))
+	 (test-records (make-hash-table))
+	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
 
-    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
 
     (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
+	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (tests:get-valid-tests *toppath* test-names))
+    (set! test-names (tests:get-valid-tests *toppath* test-patts))
     (set! test-names (delete-duplicates test-names))
 
     (debug:print-info 0 "test names " test-names)
@@ -220,16 +266,95 @@
     ;;======================================================================
     ;; refactoring this block into tests:get-full-data
     ;;======================================================================
-    (tests:get-full-data test-names test-records required-tests)
+    (if (not (null? test-names))
+	(let loop ((hed (car test-names))
+		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	  (let* ((config  (tests:get-testconfig hed 'return-procs))
+		 (waitons (let ((instr (if config 
+					   (config-lookup config "requirements" "waiton")
+					   (begin ;; No config means this is a non-existant test
+					     (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
+					     (if db (sqlite3:finalize! db))
+					     (exit 1)))))
+			    (debug:print-info 8 "waitons string is " instr)
+			    (let ((newwaitons
+				   (string-split (cond
+						  ((procedure? instr)
+						   (let ((res (instr)))
+						     (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+						     res))
+						  ((string? instr)     instr)
+						  (else 
+						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+						   "")))))
+			      (filter (lambda (x)
+					(if (member x all-test-names)
+					    #t
+					    (begin
+					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
+					      #f)))
+				      newwaitons)))))
+	    (debug:print-info 8 "waitons: " waitons)
+	    ;; check for hed in waitons => this would be circular, remove it and issue an
+	    ;; error
+	    (if (member hed waitons)
+		(begin
+		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+	    
+	    ;; (items   (items:get-items-from-config config)))
+	    (if (not (hash-table-ref/default test-records hed #f))
+		(hash-table-set! test-records
+				 hed (vector hed     ;; 0
+					     config  ;; 1
+					     waitons ;; 2
+					     (config-lookup config "requirements" "priority")     ;; priority 3
+					     (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
+						   (itemstable (hash-table-ref/default config "itemstable" #f))) 
+					       ;; if either items or items table is a proc return it so test running
+					       ;; process can know to call items:get-items-from-config
+					       ;; if either is a list and none is a proc go ahead and call get-items
+					       ;; otherwise return #f - this is not an iterated test
+					       (cond
+						((procedure? items)      
+						 (debug:print-info 4 "items is a procedure, will calc later")
+						 items)            ;; calc later
+						((procedure? itemstable)
+						 (debug:print-info 4 "itemstable is a procedure, will calc later")
+						 itemstable)       ;; calc later
+						((filter (lambda (x)
+							   (let ((val (car x)))
+							     (if (procedure? val) val #f)))
+							 (append (if (list? items) items '())
+								 (if (list? itemstable) itemstable '())))
+						 'have-procedure)
+						((or (list? items)(list? itemstable)) ;; calc now
+						 (debug:print-info 4 "items and itemstable are lists, calc now\n"
+								   "    items: " items " itemstable: " itemstable)
+						 (items:get-items-from-config config))
+						(else #f)))                           ;; not iterated
+					     #f      ;; itemsdat 5
+					     #f      ;; spare - used for item-path
+					     )))
+	    (for-each 
+	     (lambda (waiton)
+	       (if (and waiton (not (member waiton test-names)))
+		   (begin
+		     (set! required-tests (cons waiton required-tests))
+		     (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+	     waitons)
+	    (let ((remtests (delete-duplicates (append waitons tal))))
+	      (if (not (null? remtests))
+		  (loop (car remtests)(cdr remtests)))))))
 
     (if (not (null? required-tests))
 	(debug:print-info 1 "Adding " required-tests " to the run queue"))
     ;; NOTE: these are all parent tests, items are not expanded yet.
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
-    (let ((reglen (any->number  (configf:lookup *configdat* "setup" "runqueue"))))
-      (if reglen
-	  (runs:run-tests-queue-new run-id runname test-records keyvallst flags test-patts reglen)
-	  (runs:run-tests-queue-classic run-id runname test-records keyvallst flags test-patts)))
+    (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
+      (if (equal? reglen "classic")
+	  (runs:run-tests-queue-classic run-id runname test-records keyvals flags test-patts required-tests)
+	  (runs:run-tests-queue-new     run-id runname test-records keyvals flags test-patts required-tests (any->number reglen))))
     (debug:print-info 4 "All done by here")))
 
 (define (runs:calc-fails prereqs-not-met)
@@ -284,7 +409,7 @@
 (include "run-tests-queue-new.scm")
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test run-id run-info key-vals runname keyvallst test-record flags parent-test)
+(define (run:test run-id run-info keyvals runname test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
@@ -306,7 +431,7 @@
     (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "/") "/" item-path))
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
-    (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
@@ -331,14 +456,16 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))
+	    (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
 		  (cdb:tests-register-test *runremote* run-id test-name item-path)
-		  (set! test-id (open-run-close db:get-test-id db run-id test-name item-path))))
+		  (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
+      (if (not testdat) ;; should NOT happen
+	  (debug:print 0 "ERROR: failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
       (change-directory test-path)
       (case (if force ;; (args:get-arg "-force")
@@ -388,7 +515,7 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat flags))
+	       (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
 		   (begin
 		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
 		     (set! *globalexitstatus* 1) ;; 
@@ -423,11 +550,11 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (keys         (open-run-close db:get-keys db))
-	 (rundat       (open-run-close runs:get-runs-by-patt db keys runnamepatt))
+	 (keys         (cdb:remote-run db:get-keys db))
+	 (rundat       (cdb:remote-run runs:get-runs-by-patt db keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
@@ -441,17 +568,19 @@
     (for-each
      (lambda (run)
        (let ((runkey (string-intersperse (map (lambda (k)
-						(db:get-value-by-header run header (vector-ref k 0))) keys) "/"))
-	     (dirs-to-remove (make-hash-table)))
+						(db:get-value-by-header run header k)) keys) "/"))
+	     (dirs-to-remove (make-hash-table))
+	     (proc-get-tests (lambda (run-id)
+			      (mt:get-tests-for-run run-id
+						    testpatt states statuses
+						    not-in:  #f
+						    sort-by: (case action
+							       ((remove-runs) 'rundir)
+							       (else          'event_time))))))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
 		(tests     (if (not (equal? run-state "locked"))
-			       (open-run-close db:get-tests-for-run db run-id
-						      testpatt states statuses
-						      not-in:  #f
-						      sort-by: (case action
-								 ((remove-runs) 'rundir)
-								 (else          'event_time)))
+			       (proc-get-tests run-id)
 			       '()))
 		(lasttpath "/does/not/exist/I/hope"))
 	   (debug:print-info 4 "runs:operate-on run=" run ", header=" header)
@@ -465,75 +594,113 @@
 		   ((print-run)
 		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
 		    action)
+		   ((run-wait)
+		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
-		 (for-each
-		  (lambda (test)
-		    (let* ((item-path (db:test-get-item-path test))
-			   (test-name (db:test-get-testname test))
-			   (run-dir   (db:test-get-rundir test))    ;; run dir is from the link tree
-			   (real-dir  (if (file-exists? run-dir)
-					  (resolve-pathname run-dir)
-					  #f))
-			   (test-id   (db:test-get-id test)))
-		      ;;   (tdb       (db:open-test-db run-dir)))
-		      (debug:print-info 4 "test=" test) ;;   " (db:test-get-testname test) " id: " (db:test-get-id test) " " item-path " action: " action)
-		      (case action
-			((remove-runs) ;; the tdb is for future possible. 
-			 (open-run-close db:delete-test-records db #f (db:test-get-id test))
-			 (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
-			 (if (and real-dir 
-				  (> (string-length real-dir) 5)
-				  (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-			     (begin ;; let* ((realpath (resolve-pathname run-dir)))
-			       (debug:print-info 1 "Recursively removing " real-dir)
-			       (if (file-exists? real-dir)
-				   (if (> (system (conc "rm -rf " real-dir)) 0)
-				       (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
-				   (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
-			     (if real-dir 
-				 (debug:print 0 "WARNING: directory " real-dir " does not exist")
-				 (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
-			 (if (symbolic-link? run-dir)
-			     (begin
-			       (debug:print-info 1 "Removing symlink " run-dir)
-			       (handle-exceptions
-				exn
-				(debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-				(delete-file run-dir)))
-			     (if (directory? run-dir)
-				 (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-				     (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-				      (handle-exceptions
-				       exn
-				       (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-				       (delete-directory run-dir)))
-				 (if run-dir
-				     (debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
-				     (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
-				 )))
-			((set-state-status)
-			 (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-			 (open-run-close db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)))))
-		  (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
-						 (dirb (db:test-get-rundir b)))
-					     (if (and (string? dira)(string? dirb))
-						 (> (string-length dira)(string-length dirb))
-						 #f)))))))
+		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira (db:test-get-rundir a))
+									(dirb (db:test-get-rundir b)))
+								    (if (and (string? dira)(string? dirb))
+									(> (string-length dira)(string-length dirb))
+									#f)))))
+		       (test-retry-time  (make-hash-table))
+		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
+		   (let loop ((test (car sorted-tests))
+			      (tal  (cdr sorted-tests)))
+		     (let* ((test-id       (db:test-get-id test))
+			    (new-test-dat  (cdb:remote-run db:get-test-info-by-id #f test-id))
+			    (item-path     (db:test-get-item-path new-test-dat))
+			    (test-name     (db:test-get-testname new-test-dat))
+			    (run-dir       (db:test-get-rundir new-test-dat))    ;; run dir is from the link tree
+			    (real-dir      (if (file-exists? run-dir)
+					       (resolve-pathname run-dir)
+					       #f))
+			    (test-state    (db:test-get-state new-test-dat))
+			    (test-fulln    (db:test-get-fullname new-test-dat)))
+			   (case action
+			     ((remove-runs)
+			      (debug:print-info 0 "test: " test-name " itest-state: " test-state)
+			      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
+				  (begin
+				    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
+					(hash-table-set! test-retry-time test-fulln (current-seconds)))
+				    (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
+				      ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
+				      ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
+				      ;; up and blow it away.
+				      (begin
+					(debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
+					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "FAILEDKILL" "n/a" #f)
+					(thread-sleep! 1))
+				      (begin
+					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "KILLREQ" "n/a" #f)
+					(thread-sleep! 1)))
+				    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
+				    (if (null? tal)
+					(loop new-test-dat tal)
+					(loop (car tal)(append tal (list new-test-dat)))))
+				  (begin
+				    (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
+				    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
+				    (if (and real-dir 
+					     (> (string-length real-dir) 5)
+					     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+					(begin ;; let* ((realpath (resolve-pathname run-dir)))
+					  (debug:print-info 1 "Recursively removing " real-dir)
+					  (if (file-exists? real-dir)
+					      (if (> (system (conc "rm -rf " real-dir)) 0)
+						  (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
+					      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
+					(if real-dir 
+					    (debug:print 0 "WARNING: directory " real-dir " does not exist")
+					    (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
+				    (if (symbolic-link? run-dir)
+					(begin
+					  (debug:print-info 1 "Removing symlink " run-dir)
+					  (handle-exceptions
+					   exn
+					   (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+					   (delete-file run-dir)))
+					(if (directory? run-dir)
+					    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+						(debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+						(handle-exceptions
+						 exn
+						 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+						 (delete-directory run-dir)))
+					    (if run-dir
+						(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
+						(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
+					    ))
+				    (if (not (null? tal))
+					(loop (car tal)(cdr tal))))))
+			     ((set-state-status)
+			      (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
+			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)
+			      (if (not (null? tal))
+				  (loop (car tal)(cdr tal))))
+			     ((run-wait)
+			      (debug:print-info 2 "still waiting, " (length tests) " tests still running")
+			      (thread-sleep! 10)
+			      (let ((new-tests (proc-get-tests run-id)))
+				(if (null? new-tests)
+				    (debug:print-info 1 "Run completed according to zero tests matching provided criteria.")
+				    (loop (car new-tests)(cdr new-tests))))))))
+		   )))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (open-run-close db:get-tests-for-run db (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
 						(take dparts (- (length dparts) 1))
 						"/"))))
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
-		       (open-run-close db:delete-run db run-id)
+		       (cdb:remote-run db:delete-run db run-id)
 		       ;; This is a pretty good place to purge old DELETED tests
-		       (open-run-close db:delete-tests-for-run db run-id)
-		       (open-run-close db:delete-old-deleted-test-records db)
-		       (open-run-close db:set-var db "DELETED_TESTS" (current-seconds))
+		       (cdb:remote-run db:delete-tests-for-run db run-id)
+		       (cdb:remote-run db:delete-old-deleted-test-records db)
+		       (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -554,8 +721,8 @@
   (let ((runname (args:get-arg ":runname"))
 	(target  (if (args:get-arg "-target")
 		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg")))
-	(th1     #f))
+		     (args:get-arg "-reqtarg"))))
+	;; (th1     #f))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -565,24 +732,23 @@
       (exit 3))
      (else
       (let ((db   #f)
-	    (keys #f))
+	    (keys #f)
+	    (target (or (args:get-arg "-reqtarg")
+			(args:get-arg "-target"))))
 	(if (not (setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
-	(if (args:get-arg "-server")
-	    (open-run-close server:start db (args:get-arg "-server")))
- 	    ;; (if (not (or (args:get-arg "-runall")     ;; runall and runtests are allowed to be servers
- 	    ;;     	 (args:get-arg "-runtests")))
-	    ;;     (client:setup) ;; This is a duplicate startup!!!??? BUG?
-	    ;;     ))
-	(set! keys (open-run-close db:get-keys db))
+	;; (if (args:get-arg "-server")
+	;;     (cdb:remote-run server:start db (args:get-arg "-server")))
+	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
 	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
-		   (runconfig  (read-config runconfigf #f #t environ-patt: #f))) 
+		   (runconfig  (read-config runconfigf #f #t environ-patt: #f)))
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
+		    
 		  (begin
 		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
 		    (if db (sqlite3:finalize! db))
@@ -595,10 +761,8 @@
 	      (exit 1))
 	    ;; Extract out stuff needed in most or many calls
 	    ;; here then call proc
-	    (let* ((keynames   (map key:get-fieldname keys))
-		   (keyvallst  (keys->vallist keys #t)))
-	      (proc target runname keys keynames keyvallst)))
-	(if th1 (thread-join! th1))
+	    (let* ((keyvals    (keys:target->keyval keys target)))
+	      (proc target runname keys keyvals)))
 	(if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
@@ -608,7 +772,7 @@
 
 (define (runs:handle-locking target keys runname lock unlock user)
   (let* ((db       #f)
-	 (rundat   (open-run-close runs:get-runs-by-patt db keys runname))
+	 (rundat   (cdb:remote-run runs:get-runs-by-patt db keys runname target))
 	 (header   (vector-ref rundat 0))
 	 (runs     (vector-ref rundat 1)))
     (for-each (lambda (run)
@@ -618,7 +782,7 @@
 			       (begin
 				 (print "Do you really wish to unlock run " run-id "?\n   y/n: ")
 				 (equal? "y" (read-line)))))
-		      (open-run-close db:lock/unlock-run db run-id lock unlock user)
+		      (cdb:remote-run db:lock/unlock-run db run-id lock unlock user)
 		      (debug:print-info 0 "Skipping lock/unlock on " run-id))))
 	      runs)))
 ;;======================================================================
@@ -654,19 +818,19 @@
 	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	      ;; read configs with tricks turned off (i.e. no system)
 	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
-	 ;; use the open-run-close instead of passing in db
+	 ;; use the cdb:remote-run instead of passing in db
 	 (runs:update-test_meta test-name test-conf)))
      test-names)))
 
 ;; This could probably be refactored into one complex query ...
-(define (runs:rollup-run keys keyvallst runname user) ;; was target, now keyvallst
-  (debug:print 4 "runs:rollup-run, keys: " keys " keyvallst: " keyvallst " :runname " runname " user: " user)
-  (let* ((db              #f) ;; (keyvalllst      (keys:target->keyval keys target))
-	 (new-run-id      (cdb:remote-run db:register-run #f keys keyvallst runname "new" "n/a" user))
-	 (prev-tests      (open-run-close test:get-matching-previous-test-run-records db new-run-id "%" "%"))
-	 (curr-tests      (open-run-close db:get-tests-for-run db new-run-id "%/%" '() '()))
+(define (runs:rollup-run keys runname user keyvals)
+  (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
+  (let* ((db              #f)
+	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
+	 (prev-tests      (cdb:remote-run test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
-    (open-run-close db:update-run-event_time db new-run-id)
+    (cdb:remote-run db:update-run-event_time db new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
@@ -684,7 +848,7 @@
 	      (item-path (db:test-get-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps      (open-run-close db:get-steps-for-test db (db:test-get-id testdat)))
+	      (test-steps    (cdb:remote-run db:get-steps-for-test db (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
@@ -692,11 +856,11 @@
 		(conc "INSERT OR REPLACE INTO tests (run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment) "
 		      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);")
 		new-run-id (cddr (vector->list testdat)))
-	 (set! new-testdat (car (open-run-close db:get-tests-for-run db new-run-id (conc testname "/" item-path) '() '())))
+	 (set! new-testdat (car (mt:get-tests-for-run new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	 (open-run-close 
+	 (cdb:remote-run 
 	  (lambda ()
 	    (sqlite3:execute 
 	     db 

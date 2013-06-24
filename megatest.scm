@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -26,43 +26,20 @@
 (declare (uses tests))
 (declare (uses genexample))
 (declare (uses daemon))
+(declare (uses db))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
 (include "common_records.scm")
 (include "key_records.scm")
 (include "db_records.scm")
+(include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
-;; (use trace dot-locking)
-;; (trace
-;;  db:teststep-set-status!
-;;  db:open-test-db-by-test-id
-;;  db:test-get-rundir-from-test-id
-;;  cdb:tests-register-test
-;;  cdb:tests-update-uname-host
-;;  cdb:tests-update-run-duration
-;;  ;;  cdb:client-call
-;;  ;; cdb:remote-run
-;; )
-;;  cdb:test-set-status-state
-;;  change-directory
-;;  db:process-queue-item
-;;  db:test-get-logfile-info
-;;  db:teststep-set-status!
-;;  nice-path
-;;  obtain-dot-lock
-;;  open-run-close
-;;  read-config
-;;  runs:can-run-more-tests
-;;  sqlite3:execute
-;;  sqlite3:for-each-row
-;;  tests:check-waiver-eligibility
-;;  tests:summarize-items
-;;  tests:test-set-status!
-;;  thread-sleep!
-;;)
-       
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -85,6 +62,7 @@ Launching and managing runs
                             from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
+  -run-wait               : wait on run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -117,8 +95,8 @@ Test data capture
 
 Queries
   -list-runs patt         : list runs matching pattern \"patt\", % is the wildcard
-  -showkeys               : show the keys used in this megatest setup
-  -test-files targpatt     : get the most recent test path/file matching targpatt e.g. %/%... 
+  -show-keys              : show the keys used in this megatest setup
+  -test-files targpatt    : get the most recent test path/file matching targpatt e.g. %/%... 
                             returns list sorted by age ascending, see examples below
   -test-paths             : get the test paths matching target, runname, item and test
                             patterns.
@@ -141,7 +119,8 @@ Misc
   -transport http|fs      : use http or direct access for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
-  -stop-server id         : stop server specified by id (see output of -list-servers)
+  -stop-server id         : stop server specified by id (see output of -list-servers), use
+                            0 to kill all
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
 
@@ -223,6 +202,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		        "-force"
 		        "-xterm"
 		        "-showkeys"
+		        "-show-keys"
 		        "-test-status"
 			"-set-values"
 			"-load-test-data"
@@ -235,7 +215,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-lock"
 			"-unlock"
 			"-list-servers"
-			;; mist queries
+                        "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+
+			;; misc queries
 			"-list-disks"
 			"-list-targets"
 			"-list-db-targets"
@@ -270,6 +252,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (exit)))
 
 (define *didsomething* #f)
+
+(if (and (or (args:get-arg "-list-targets")
+	     (args:get-arg "-list-db-targets"))
+	 (not (args:get-arg "-transport")))
+    (hash-table-set! args:arg-hash "-transport" "fs"))
 
 ;;======================================================================
 ;; Misc setup stuff
@@ -330,18 +317,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (or (not servers)
 		      (null? servers))
 		  (begin
-		    (if (eq? trycount 0) ;; just do the server start once
+		    (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 			(begin
 			  (debug:print 0 "INFO: Starting server as none running ...")
 			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+			  ;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
+			  ;; if there is an existing server
+			  (system "megatest -server - -daemonize")
+			  (thread-sleep! 3)
 			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-			  (process-fork (lambda ()
-					  (daemon:ize)
-					  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
-			  (thread-sleep! 3))
-			(debug:print-info 0 "Waiting for server to start"))
-		    (loop (open-run-close tasks:get-best-server tasks:open-db) 
-			  (+ trycount 1)))
+			  ;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))
+			  ;; (process-fork (lambda ()
+			  ;;       	  (daemon:ize)
+			  ;;       	  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
+			  )
+			(begin
+			  (debug:print-info 0 "Waiting for server to start")
+			  (thread-sleep! 4)))
+		    (if (< trycount 10)
+			(loop (open-run-close tasks:get-best-server tasks:open-db) 
+			      (+ trycount 1))
+			(debug:print 0 "WARNING: Couldn't start or find a server.")))
 		  (debug:print 0 "INFO: Server(s) running " servers)
 		  )))))
 
@@ -383,7 +379,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
 		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
 			 (if status "alive" "dead") transport)
-		 (if (equal? id sid)
+		 (if (or (equal? id sid)
+			 (equal? sid 0)) ;; kill all/any
 		     (begin
 		       (debug:print-info 0 "Attempting to stop server with pid " pid)
 		       (tasks:kill-server status hostname pullport pid transport)))))
@@ -412,15 +409,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		targets)
       (set! *didsomething* #t)))
 
-(if (args:get-arg "-show-runconfig")
-    (let* ((target (if (args:get-arg "-reqtarg")
-		       (args:get-arg "-reqtarg")
-		       (if (args:get-arg "-target")
-			   (args:get-arg "-target")
-			   #f)))
-	   (sections (if target (list "default" target) #f))
-	   (data     (read-config "runconfigs.config" #f #t sections: sections)))
+(define (full-runconfigs-read)
+  (let* ((keys   (cdb:remote-run get-keys #f))
+	 (target (if (args:get-arg "-reqtarg")
+		     (args:get-arg "-reqtarg")
+		     (if (args:get-arg "-target")
+			 (args:get-arg "-target")
+			 #f)))
+	 (key-vals (if target (keys:target->keyval keys target) #f))
+	 (sections (if target (list "default" target) #f))
+	 (data     (begin
+		     (setenv "MT_RUN_AREA_HOME" *toppath*)
+		     (if key-vals
+			 (for-each (lambda (kt)
+				     (setenv (car kt) (cadr kt)))
+				   key-vals))
+		     (read-config "runconfigs.config" #f #t sections: sections))))
+    data))
 
+
+(if (args:get-arg "-show-runconfig")
+    (let ((data (full-runconfigs-read)))
       ;; keep this one local
       (cond
        ((not (args:get-arg "-dumpmode"))
@@ -457,39 +466,46 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; since several actions can be specified on the command line the removal
 ;; is done first
 (define (operate-on action)
-  (cond
-   ((not (args:get-arg ":runname"))
-    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
-    (exit 2))
-   ((not (args:get-arg "-testpatt"))
-    (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
-    (exit 3))
-   (else
-    (if (not (car *configinfo*))
-	(begin
-	  (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
-	  (exit 1))
-	;; put test parameters into convenient variables
-	(runs:operate-on  action
-			  (args:get-arg ":runname")
-			  (args:get-arg "-testpatt")
-			  state: (args:get-arg ":state") 
-			  status: (args:get-arg ":status")
-			  new-state-status: (args:get-arg "-set-state-status")))
-    (set! *didsomething* #t))))
+  (let* ((runrec (runs:runrec-make-record))
+	 (target (or (args:get-arg "-reqtarg")
+		     (args:get-arg "-target"))))
+    (cond
+     ((not target)
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
+      (exit 1))
+     ((not (args:get-arg ":runname"))
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
+      (exit 2))
+     ((not (args:get-arg "-testpatt"))
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
+      (exit 3))
+     (else
+      (if (not (car *configinfo*))
+	  (begin
+	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
+	    (exit 1))
+	  ;; put test parameters into convenient variables
+	  (runs:operate-on  action
+			    target
+			    (args:get-arg ":runname")
+			    (args:get-arg "-testpatt")
+			    state: (args:get-arg ":state") 
+			    status: (args:get-arg ":status")
+			    new-state-status: (args:get-arg "-set-state-status")))
+      (set! *didsomething* #t)))))
 	  
 (if (args:get-arg "-remove-runs")
     (general-run-call 
      "-remove-runs"
      "remove runs"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (operate-on 'remove-runs))))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (operate-on 'set-state-status))))
 
 ;;======================================================================
@@ -508,7 +524,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (keys     (cdb:remote-run db:get-keys #f))
-	       (keynames (map key:get-fieldname keys))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
@@ -516,7 +531,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (lambda (run)
 	     (let ((targetstr (string-intersperse (map (lambda (x)
 							 (db:get-value-by-header run header x))
-						       keynames) "/")))
+						       keys) "/")))
 	       (if db-targets
 		   (if (not (hash-table-ref/default seen targetstr #f))
 		       (begin
@@ -525,7 +540,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (print targetstr))))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
-			  (tests  (cdb:remote-run db:get-tests-for-run #f run-id testpatt '() '())))
+			  (tests  (mt:get-tests-for-run run-id testpatt '() '())))
 		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
 			    " status: " (db:get-value-by-header run header "state")
 			    " run-id: " run-id ", number tests: " (length tests))
@@ -590,10 +605,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      "-runall"
      "run all tests"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (runs:run-tests target
 		       runname
-		       "%"
 		       (args:get-arg "-testpatt")
 		       user
 		       args:arg-hash))))
@@ -619,11 +633,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (general-run-call 
    "-runtests" 
    "run a test" 
-   (lambda (target runname keys keynames keyvallst)
+   (lambda (target runname keys keyvals)
      (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
-		     (args:get-arg "-testpatt")
 		     user
 		     args:arg-hash))))
 
@@ -632,17 +645,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-rollup")
-    (begin
-      (debug:print 0 "ERROR: Rollup is currently not working. If you need it please submit a ticket at http://www.kiatoa.com/fossils/megatest")
-      (exit 4)))
-;;     (general-run-call 
-;;      "-rollup" 
-;;      "rollup tests" 
-;;      (lambda (target runname keys keynames keyvallst)
-;;        (runs:rollup-run keys
-;; 			(keys->alist keys "na")
-;; 			(args:get-arg ":runname") 
-;; 			user))))
+    (general-run-call 
+     "-rollup" 
+     "rollup tests" 
+     (lambda (target runname keys keyvals)
+       (runs:rollup-run keys
+			keyvals
+			(args:get-arg ":runname") 
+			user))))
 
 ;;======================================================================
 ;; Lock or unlock a run
@@ -652,7 +662,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call 
      (if (args:get-arg "-lock") "-lock" "-unlock")
      "lock/unlock tests" 
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (runs:handle-locking 
 		  target
 		  keys
@@ -695,9 +705,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
 	  (let* ((keys     (cdb:remote-run db:get-keys db))
-		 (keynames (map key:get-fieldname keys))
 		 ;; db:test-get-paths must not be run remote
-		 (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		 (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -706,10 +715,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-files"
 	 "Get paths to test"
-	 (lambda (target runname keys keynames keyvallst)
+	 (lambda (target runname keys keyvals)
 	   (let* ((db       #f)
 		  ;; DO NOT run remote
-		  (paths    (db:test-get-paths-matching db keynames target (args:get-arg "-test-files"))))
+		  (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -747,9 +756,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
 	  (let* ((keys     (cdb:remote-run db:get-keys db))
-		 (keynames (map key:get-fieldname keys))
 		 ;; DO NOT run remote
-		 (paths    (db:test-get-paths-matching db keynames target)))
+		 (paths    (db:test-get-paths-matching db keys target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
@@ -758,10 +766,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
-	 (lambda (target runname keys keynames keyvallst)
+	 (lambda (target runname keys keyvals)
 	   (let* ((db       #f)
 		  ;; DO NOT run remote
-		  (paths    (db:test-get-paths-matching db keynames target)))
+		  (paths    (db:test-get-paths-matching db keys target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths))))))
@@ -774,13 +782,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (general-run-call
      "-extract-ods"
      "Make ods spreadsheet"
-     (lambda (target runname keys keynames keyvallst)
+     (lambda (target runname keys keyvals)
        (let ((db         #f)
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
-	     (pathmod    (args:get-arg "-pathmod"))
-	     (keyvalalist (keys->alist keys "%")))
-	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvalalist)
+	     (pathmod    (args:get-arg "-pathmod")))
+	     ;; (keyvalalist (keys->alist keys "%")))
+	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvals)
 	 (cdb:remote-run db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
@@ -842,8 +850,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
     
-(if (or (and (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
-	     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+(if (or (args:get-arg "-setlog")       ;; since setting up is so costly lets piggyback on -test-status
+	;;     (not (args:get-arg "-step")))  ;; -setlog may have been processed already in the "-step" previous
+	;;     NEW POLICY - -setlog sets test overall log on every call.
 	(args:get-arg "-set-toplog")
 	(args:get-arg "-test-status")
 	(args:get-arg "-set-values")
@@ -970,15 +979,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Various helper commands can go below here
 ;;======================================================================
 
-(if (args:get-arg "-showkeys")
+(if (or (args:get-arg "-showkeys")
+        (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (cbd:remote-run db:get-keys db))
-      (debug:print 1 "Keys: " (string-intersperse (map key:get-fieldname keys) ", "))
+      (set! keys (cdb:remote-run db:get-keys db))
+      (debug:print 1 "Keys: " (string-intersperse keys ", "))
       (if db (sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
@@ -1010,6 +1020,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       ;; keep this one local
       (open-run-close patch-db #f)
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Wait on a run to complete
+;;======================================================================
+
+(if (args:get-arg "-run-wait")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      (operate-on 'run-wait)
       (set! *didsomething* #t)))
 
 ;;======================================================================
@@ -1056,6 +1079,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
+
+(if *runremote* (close-all-connections!))
 
 ;; this is the socket if we are a client
 ;; (if (and *runremote*
