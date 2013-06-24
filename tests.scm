@@ -28,16 +28,6 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
-
 ;; tests:glob-like-match
 (define (tests:glob-like-match patt str) 
   (let ((like (substring-index "%" patt)))
@@ -432,15 +422,19 @@
 	    (tests:test-set-toplog! db run-id test-name outputfilename)
 	    )))))
 
-(define (get-all-legal-tests)
-  (let* ((tests  (glob (conc *toppath* "/tests/*")))
-	 (res    '()))
-    (debug:print-info 4 "Looking at tests " (string-intersperse tests ","))
-    (for-each (lambda (testpath)
-		(if (file-exists? (conc testpath "/testconfig"))
-		    (set! res (cons (last (string-split testpath "/")) res))))
-	      tests)
-    res))
+;;======================================================================
+;; Gather data from test/task specifications
+;;======================================================================
+
+(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+    (delete-duplicates
+     (filter (lambda (testname)
+	       (tests:match test-patts testname #f))
+	     (map (lambda (testp)
+		    (last (string-split testp "/")))
+		  tests)))))
 
 (define (tests:get-testconfig test-name system-allowed)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
@@ -533,6 +527,91 @@
 	 (if keep-test (set! runnables (cons testkeyname runnables)))))
      testkeynames)
     runnables))
+
+;;======================================================================
+;; refactoring this block into tests:get-full-data from line 263 of runs.scm
+;;======================================================================
+;; hed is the test name
+;; test-records is a hash of test-name => test record
+(define (tests:get-full-data test-names test-records required-tests)
+  (if (not (null? test-names))
+      (let loop ((hed (car test-names))
+		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	(debug:print-info 4 "hed=" hed " at top of loop")
+	(let* ((config  (tests:get-testconfig hed 'return-procs))
+	       (waitons (let ((instr (if config 
+					 (config-lookup config "requirements" "waiton")
+					 (begin ;; No config means this is a non-existant test
+					   (debug:print 0 "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+					     ""))))
+			  (debug:print-info 8 "waitons string is " instr)
+			  (string-split (cond
+					 ((procedure? instr)
+					  (let ((res (instr)))
+					    (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+					    res))
+					 ((string? instr)     instr)
+					 (else 
+					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+					  ""))))))
+	  (if (not config) ;; this is a non-existant test called in a waiton. 
+	      (if (null? tal)
+		  test-records
+		  (loop (car tal)(cdr tal)))
+	      (begin
+		(debug:print-info 8 "waitons: " waitons)
+		;; check for hed in waitons => this would be circular, remove it and issue an
+		;; error
+		(if (member hed waitons)
+		    (begin
+		      (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		      (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+		
+		;; (items   (items:get-items-from-config config)))
+		(if (not (hash-table-ref/default test-records hed #f))
+		    (hash-table-set! test-records
+				     hed (vector hed     ;; 0
+						 config  ;; 1
+						 waitons ;; 2
+						 (config-lookup config "requirements" "priority")     ;; priority 3
+						 (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
+						       (itemstable (hash-table-ref/default config "itemstable" #f))) 
+						   ;; if either items or items table is a proc return it so test running
+						   ;; process can know to call items:get-items-from-config
+						   ;; if either is a list and none is a proc go ahead and call get-items
+						   ;; otherwise return #f - this is not an iterated test
+						   (cond
+						    ((procedure? items)      
+						     (debug:print-info 4 "items is a procedure, will calc later")
+						     items)            ;; calc later
+						    ((procedure? itemstable)
+						     (debug:print-info 4 "itemstable is a procedure, will calc later")
+						     itemstable)       ;; calc later
+						    ((filter (lambda (x)
+							       (let ((val (car x)))
+								 (if (procedure? val) val #f)))
+							     (append (if (list? items) items '())
+								     (if (list? itemstable) itemstable '())))
+						     'have-procedure)
+						    ((or (list? items)(list? itemstable)) ;; calc now
+						     (debug:print-info 4 "items and itemstable are lists, calc now\n"
+								       "    items: " items " itemstable: " itemstable)
+						     (items:get-items-from-config config))
+						    (else #f)))                           ;; not iterated
+						 #f      ;; itemsdat 5
+						 #f      ;; spare - used for item-path
+						 )))
+		(for-each 
+		 (lambda (waiton)
+		   (if (and waiton (not (member waiton test-names)))
+		       (begin
+			 (set! required-tests (cons waiton required-tests))
+			 (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+		 waitons)
+		(let ((remtests (delete-duplicates (append waitons tal))))
+		  (if (not (null? remtests))
+		      (loop (car remtests)(cdr remtests))
+		      test-records))))))))
 
 ;;======================================================================
 ;; test steps
