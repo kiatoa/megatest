@@ -657,6 +657,43 @@
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
+;; db:get-runs-by-patt
+;; get runs by list of criteria
+;; register a test run with the db
+;;
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;;  to extract info from the structure returned
+;;
+(define (db:get-runs-by-patt db keys runnamepatt targpatt) ;; test-name)
+  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+	 (keystr   (car tmp))
+	 (header   (cadr tmp))
+	 (res     '())
+	 (key-patt "")
+	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
+	 (qry-str  #f)
+	 (keyvals  (keys:target->keyval keys targpatt)))
+    (for-each (lambda (keyval)
+		(let* ((key    (car keyval))
+		       (patt   (cadr keyval))
+		       (fulkey (conc ":" key))
+		       (wildtype (if (substring-index "%" patt) "like" "glob")))
+		  (if patt
+		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
+		      (begin
+			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
+			(exit 6)))))
+	      keyvals)
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
+    (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
+    (sqlite3:for-each-row 
+     (lambda (a . r)
+       (set! res (cons (list->vector (cons a r)) res)))
+     db 
+     qry-str
+     runnamepatt)
+    (vector header res)))
+
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
   ;;(if (hash-table-ref/default *run-info-cache* run-id #f)

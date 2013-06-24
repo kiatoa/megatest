@@ -29,6 +29,23 @@
 ;; This is the Megatest API. All generally "useful" routines will be wrapped or extended
 ;; here.
 
+;;======================================================================
+;;  R U N S
+;;======================================================================
+
+;; runs:get-runs-by-patt
+;; get runs by list of criteria
+;; register a test run with the db
+;;
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;;  to extract info from the structure returned
+;;
+(define (mt:get-runs-by-patt keys runnamepatt targpatt)
+  (cdb:remote-run db:get-runs-by-patt #f keys runnamepatt targpatt))
+
+;;======================================================================
+;;  T E S T S
+;;======================================================================
 
 (define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by #f))
   (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by))

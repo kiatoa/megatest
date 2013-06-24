@@ -28,43 +28,6 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-;; runs:get-runs-by-patt
-;; get runs by list of criteria
-;; register a test run with the db
-;;
-;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
-;;  to extract info from the structure returned
-;;
-(define (runs:get-runs-by-patt db keys runnamepatt targpatt) ;; test-name)
-  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
-	 (keystr   (car tmp))
-	 (header   (cadr tmp))
-	 (res     '())
-	 (key-patt "")
-	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-	 (qry-str  #f)
-	 (keyvals  (keys:target->keyval keys targpatt)))
-    (for-each (lambda (keyval)
-		(let* ((key    (car keyval))
-		       (patt   (cadr keyval))
-		       (fulkey (conc ":" key))
-		       (wildtype (if (substring-index "%" patt) "like" "glob")))
-		  (if patt
-		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
-		      (begin
-			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
-			(exit 6)))))
-	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
-    (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (sqlite3:for-each-row 
-     (lambda (a . r)
-       (set! res (cons (list->vector (cons a r)) res)))
-     db 
-     qry-str
-     runnamepatt)
-    (vector header res)))
-
 (define (runs:test-get-full-path test)
   (let* ((testname (db:test-get-testname   test))
 	 (itempath (db:test-get-item-path test)))
@@ -132,7 +95,6 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-	 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((target      (or (args:get-arg "-reqtarg")
 			  (args:get-arg "-target")
@@ -172,7 +134,7 @@
 ;;
 (define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count db) ;; the db is just so we can use cdb:remote-run
+(define (runs:shrink-can-run-more-tests-count db) ;; the db is a dummy var so we can use cdb:remote-run
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
 (define (runs:can-run-more-tests db jobgroup max-concurrent-jobs)
@@ -207,29 +169,16 @@
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
-;;======================================================================
-;; New methodology. These routines will replace the above in time. For
-;; now the code is duplicated. This stuff is initially used in the monitor
-;; based code.
-;;======================================================================
-
-
-;; This is a duplicate of run-tests (which has been deprecated). Use this one instead of run tests.
-;; keyvals.
-;;
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
 (define (runs:run-tests target runname test-patts user flags) ;; test-names
   (common:clear-caches) ;; clear all caches
-  (let* ((db          #f)
-	 (keys        (keys:config-get-fields *configdat*))
+  (let* ((keys        (keys:config-get-fields *configdat*))
 	 (keyvals     (keys:target->keyval keys target))
 	 (run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 ;; keepgoing is the defacto modality now, will add hit-n-run a bit later
-	 ;; (keepgoing   (hash-table-ref/default flags "-keepgoing" #f))
 	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
 	 (required-tests '())
 	 (test-records (make-hash-table))
@@ -244,9 +193,7 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (tests:get-valid-tests *toppath* test-patts))
-    (set! test-names (delete-duplicates test-names))
-
+    (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
     (debug:print-info 0 "test names " test-names)
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
@@ -260,8 +207,6 @@
 	  (cdb:delete-tests-in-state *runremote* run-id "NOT_STARTED")
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
-    ;; from here on out the db will be opened and closed on every call runs:run-tests-queue
-    ;; (sqlite3:finalize! db) 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
@@ -271,7 +216,6 @@
 					   (config-lookup config "requirements" "waiton")
 					   (begin ;; No config means this is a non-existant test
 					     (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-					     (if db (sqlite3:finalize! db))
 					     (exit 1)))))
 			    (debug:print-info 8 "waitons string is " instr)
 			    (let ((newwaitons
@@ -753,9 +697,6 @@
 	  '()
 	  reg)))
 
-(include "run-tests-queue-classic.scm")
-(include "run-tests-queue-new.scm")
-
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test run-id run-info keyvals runname test-record flags parent-test)
   ;; All these vars might be referenced by the testconfig file reader
@@ -902,7 +843,7 @@
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (keys         (cdb:remote-run db:get-keys db))
-	 (rundat       (cdb:remote-run runs:get-runs-by-patt db keys runnamepatt target))
+	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
@@ -1120,7 +1061,7 @@
 
 (define (runs:handle-locking target keys runname lock unlock user)
   (let* ((db       #f)
-	 (rundat   (cdb:remote-run runs:get-runs-by-patt db keys runname target))
+	 (rundat   (mt:get-runs-by-patt keys runname target))
 	 (header   (vector-ref rundat 0))
 	 (runs     (vector-ref rundat 1)))
     (for-each (lambda (run)
