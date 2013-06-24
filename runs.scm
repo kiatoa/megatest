@@ -208,6 +208,9 @@
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
+    ;;======================================================================
+    ;; refactoring this block into tests:get-full-data
+    ;;======================================================================
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
@@ -1099,7 +1102,7 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (get-all-legal-tests)))
+  (let ((test-names (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-path    (conc *toppath* "/tests/" test-name))

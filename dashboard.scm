@@ -14,9 +14,11 @@
 (import (prefix iup iup:))
 
 (use canvas-draw)
+(import canvas-draw-iup)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
+(use trace)
 
 (declare (uses common))
 (declare (uses margs))
@@ -425,8 +427,213 @@ Misc
 
 (define (mark-for-update)
   (set! *last-db-update-time* 0)
-  (set! *delayed-update* 1)
-  )
+  (set! *delayed-update* 1))
+
+;;======================================================================
+;; R U N C O N T R O L
+;;======================================================================
+
+;; target populating logic
+;;  
+;; lb            = <vector curr-label-object next-label-object>
+;; field         = target field name for this dropdown
+;; referent-vals = selected value in the left dropdown
+;; targets       = list of targets to use to build the dropdown
+;; 
+;; each node is chained: key1 -> key2 -> key3
+;;
+;; must select values from only apropriate targets
+;;   a b c
+;;   a d e
+;;   a b f
+;;        a/b => c f
+;;
+(define (dashboard:populate-target-dropdown lb referent-vals targets)
+  ;; is the current value in the new list? choose new default if not
+  (let* ((remvalues  (map (lambda (row)
+			    (common:list-is-sublist referent-vals (vector->list row)))
+			  targets))
+	 (values     (delete-duplicates (map car (filter list? remvalues))))
+	 (sel-valnum (iup:attribute lb "VALUE"))
+	 (sel-val    (iup:attribute lb sel-valnum))
+	 (val-num    1))
+    ;; first check if the current value is in the new list, otherwise replace with 
+    ;; first value from values
+    (iup:attribute-set! lb "REMOVEITEM" "ALL")
+    (for-each (lambda (val)
+		;; (iup:attribute-set! lb "APPENDITEM" val)
+		(iup:attribute-set! lb (conc val-num) val)
+		(if (equal? sel-val val)
+		    (iup:attribute-set! lb "VALUE" val-num))
+		(set! val-num (+ val-num 1)))
+	      values)
+    (let ((val (iup:attribute lb "VALUE")))
+      (if val
+	  val
+	  (if (not (null? values))
+	      (let ((newval (car values)))
+		(iup:attribute-set! lb "VALUE" newval)
+		newval))))))
+
+(define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
+  (let* ((db-target-dat (open-run-close db:get-targets #f))
+	 (header        (vector-ref db-target-dat 0))
+	 (db-targets    (vector-ref db-target-dat 1))
+	 (key-listboxes (if key-lbs key-lbs (make-list (length header) #f))))
+    (let loop ((key     (car header))
+	       (remkeys (cdr header))
+	       (refvals '())
+	       (indx    0)
+	       (lbs     '()))
+      (let* ((lb (let ((lb (list-ref key-listboxes indx)))
+		   (if lb
+		       lb
+		       (iup:listbox 
+			#:size "x10" 
+			#:fontsize "10"
+			#:expand "VERTICAL"
+			;; #:dropdown "YES"
+			#:editbox "YES"
+			#:action action-proc
+			))))
+	     ;; loop though all the targets and build the list for this dropdown
+	     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
+	(if (null? remkeys)
+	    ;; return a list of the listbox items and an iup:hbox with the labels and listboxes
+	    (let ((listboxes (append lbs (list lb))))
+	      (list listboxes
+		    (map (lambda (htxt lb)
+			   (iup:vbox
+			    (iup:label htxt)
+			    lb))
+			 header
+			 listboxes)))
+	    (loop (car remkeys)
+		  (cdr remkeys)
+		  (append refvals (list selected-value))
+		  (+ indx 1)
+		  (append lbs (list lb))))))))
+
+(define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
+  (canvas-clear! cnv)
+  (canvas-font-set! cnv "Courier New, -10")
+  (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
+	       ((originx originy)             (canvas-origin cnv)))
+      (if (hash-table-ref/default test-draw-state 'first-time #t)
+	  (begin
+	    (hash-table-set! test-draw-state 'first-time #f)
+	    (hash-table-set! test-draw-state 'scalef 8)
+	    ;; set these 
+	    (hash-table-set! test-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
+	    (hash-table-set! test-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+      (let* ((scalef (hash-table-ref/default test-draw-state 'scalef 8))
+	     (test-browse-xoffset (hash-table-ref test-draw-state 'test-browse-xoffset))
+	     (test-browse-yoffset (hash-table-ref test-draw-state 'test-browse-yoffset))
+	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
+	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
+	     (boxw   90)
+	     (boxh   25)
+	     (gapx   20)
+	     (gapy   30))
+	(print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
+	(let loop ((hed (car (reverse sorted-testnames)))
+		   (tal (cdr (reverse sorted-testnames)))
+		   (llx xtorig)
+		   (lly ytorig)
+		   (urx (+ xtorig boxw))
+		   (ury (+ ytorig boxh)))
+	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
+	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
+	  (canvas-rectangle! cnv llx urx lly ury)
+	  (if (not (null? tal))
+	      ;; leave a column of space to the right to list items
+	      (let ((have-room 
+		     (if #t ;; put "auto" here where some form of auto rearanging can be done
+			 (> (* 3 (+ boxw gapx)) (- urx xtorig))
+			 (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
+		(loop (car tal)
+		      (cdr tal)
+		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
+		      (if have-room lly (+ lly boxh gapy))
+		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
+		      (if have-room ury (+ ury boxh gapy)))))))))
+
+(define (dashboard:run-controls)
+  (let* ((targets       (make-hash-table))
+	 (runconf-targs (common:get-runconfig-targets))
+	 (test-records  (make-hash-table))
+	 (test-names    (tests:get-valid-tests *toppath* '()))
+	 (sorted-testnames #f)
+	 (action        "-runtests")
+	 (cmdln         "")
+	 (runlogs       (make-hash-table))
+	 (key-listboxes #f)
+	 (update-keyvals (lambda (obj b c d)
+			   ;; (print "obj: " obj ", b " b ", c " c ", d " d)
+			   (dashboard:update-target-selector key-listboxes)
+			   ))
+	 (tests-draw-state (make-hash-table))) ;; use for keeping state of the test canvas
+    (hash-table-set! tests-draw-state 'first-time #t)
+    (hash-table-set! tests-draw-state 'scalef 8)
+    (tests:get-full-data test-names test-records '())
+    (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
+    
+    ;; refer to *keys*, *dbkeys* for keys
+    (iup:vbox
+     (iup:hbox
+       ;; Target and action
+      (iup:frame
+       #:title "Target"
+       (iup:vbox
+        ;; Target selectors
+        (apply iup:hbox
+	       (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+		      (key-lb   (car dat))
+		      (combos   (cadr dat)))
+		 (set! key-listboxes key-lb)
+		 combos))))
+      (iup:frame
+       #:title "Tests and Tasks"
+       (iup:vbox
+	(iup:canvas #:action (make-canvas-action
+			      (lambda (cnv xadj yadj)
+				;; (print "cnv: " cnv " x: " x " y: " y)
+				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
+		    #:size "150x150"
+		    #:expand "YES"
+		    #:scrollbar "YES"
+		    #:posx "0.5"
+		    #:posy "0.5")))))))
+
+
+(trace dashboard:populate-target-dropdown
+       common:list-is-sublist)
+
+;;       ;; key1 key2 key3 ...
+;;       ;; target entry (wild cards allowed)
+;;       
+;;       ;; The action
+;;       (iup:hbox
+;;        ;; label Action | action selector
+;;        ))
+;;      ;; Test/items selector
+;;      (iup:hbox
+;;       ;; tests
+;;       ;; items
+;;       ))
+;;     ;; The command line
+;;     (iup:hbox
+;;      ;; commandline entry
+;;      ;; GO button
+;;      )
+;;     ;; The command log monitor
+;;     (iup:tabs
+;;      ;; log monitor
+;;      )))
+   
+;;======================================================================
+;; R U N S 
+;;======================================================================
 
 (define (make-dashboard-buttons nruns ntests keynames)
   (let* ((nkeys   (length keynames))
@@ -605,16 +812,22 @@ Misc
     (iup:show
      (iup:dialog 
       #:title "Megatest dashboard"
-      (iup:vbox
-	(apply iup:hbox 
-	       (cons (apply iup:vbox lftlst)
-		     (list 
-		      (iup:vbox
-		       ;; the header
-		       (apply iup:hbox (reverse hdrlst))
-		       (apply iup:hbox (reverse bdylst))))))
-       controls)))
-    (vector keycol lftcol header runsvec)))
+      (let ((tabs (iup:tabs
+		   (iup:vbox
+		    (apply iup:hbox 
+			   (cons (apply iup:vbox lftlst)
+				 (list 
+				  (iup:vbox
+				   ;; the header
+				   (apply iup:hbox (reverse hdrlst))
+				   (apply iup:hbox (reverse bdylst))))))
+		    controls)
+		   (dashboard:run-controls)
+		   )))
+	(iup:attribute-set! tabs "TABTITLE0" "Runs")
+	(iup:attribute-set! tabs "TABTITLE1" "Run Control")
+	tabs)))
+     (vector keycol lftcol header runsvec)))
 
 (if (or (args:get-arg "-rows")
 	(get-environment-variable "DASHBOARDROWS" ))
