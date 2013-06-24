@@ -1,15 +1,4 @@
-1.  Run all tests
-2.  create run areas, copy in conf and scripts                   DONE
-3.  Add a host chooser for ssh to launch-tests
-4.  Run creation timestamp not happening                         DONE
-5 . Check for test already in progress, give meaningful message  DONE
-6.  Debug xterm creation for test generation                     DONE
-7.  Capture run info, host, load, freemem at test launch         DONE
-8.  Rename to testalot?                                          Nah! I like Megatest
-10. Run, test and step comment field                             
-11. At end of test scan all tests for this run, if all done 
-    update run status to COMPLETED                               NOT gonna happen. It is up to the test to mark as PASS/FAIL
-12. state and status lists need to be regexes                    
-13. Test on Chicken 4.                                           DONE
-14. Try making static executable
-15. Log processor script                                         DONE
+
+1. Confirm that branch transaction-for-sequential-writes content was added to trunk/development
+2. Add a host chooser for ssh to launch-tests
+3. Try making static executable
