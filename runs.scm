@@ -387,8 +387,12 @@
 	(if (equal? (hash-table-ref/default test-registry tfullname #f) 'COMPLETED)
 	    (begin
 	      (debug:print-info 0 "Skipping COMPLETED test " tfullname)
-	      (if (not (null? tal))
-		  (loop (car tal)(cdr tal) reg reruns))))
+	      (if (or (not (null? tal))(not (null? reg)))
+		  (loop (runs:queue-next-hed tal reg reglen regfull)
+			(runs:queue-next-tal tal reg reglen regfull)
+			(runs:queue-next-reg tal reg reglen regfull)
+			reruns))))
+		  ;; (loop (car tal)(cdr tal) reg reruns))))
 
 	(debug:print 4 "TOP OF LOOP => "
 		     "test-name: " test-name
@@ -736,15 +740,19 @@
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
 	 (item-path     "")
-	 (db           #f))
-    (debug:print 4
-		 "test-config: " (hash-table->alist test-conf)
-		 "\n   itemdat: " itemdat
-		 )
+	 (db           #f)
+	 (full-test-name #f))
+
     ;; setting itemdat to a list if it is #f
     (if (not itemdat)(set! itemdat '()))
     (set! item-path (item-list->path itemdat))
-    (debug:print 2 "Attempting to launch test " test-name (if (equal? item-path "")""(conc "/" item-path)))
+    (set! full-test-name (runs:make-full-test-name test-name item-path))
+    (debug:print-info 4
+		      "\nTESTNAME: " full-test-name 
+		      "\n   test-config: " (hash-table->alist test-conf)
+		      "\n   itemdat: " itemdat
+		      )
+    (debug:print 2 "Attempting to launch test " full-test-name)
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_RUNNAME"   runname)
     (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
@@ -757,9 +765,8 @@
 	   (hash-table-set! *test-meta-updated* test-name #t)
            (runs:update-test_meta test-name test-conf)))
     
-    ;; (lambda (itemdat) ;;; ((ripeness "overripe") (temperature "cool") (season "summer"))
+    ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-	   (new-test-name (if (equal? item-path "") test-name (conc test-name "/" item-path))) ;; just need it to be unique
 	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
 	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
       (if (not testdat)
@@ -805,7 +812,7 @@
 		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (debug:print-info 2 "running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
-	     (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'COMPLETED)
+	     (hash-table-set! test-registry full-test-name 'COMPLETED)
 	     (set! runflag #f))
 	    ;; -rerun and status is one of the specifed, run it
 	    ((and rerun
@@ -826,7 +833,7 @@
 	   (debug:print 4 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
 	   (if (not runflag)
 	       (if (not parent-test)
-		   (debug:print 1 "NOTE: Not starting test " new-test-name " as it is state \"" (test:get-state testdat) 
+		   (debug:print 1 "NOTE: Not starting test " full-test-name " as it is state \"" (test:get-state testdat) 
 				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
                                 "\" or -force to override"))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
@@ -838,7 +845,7 @@
 		     (set! *globalexitstatus* 1) ;; 
 		     (process-signal (current-process-id) signal/kill))))))
 	((KILLED) 
-	 (debug:print 1 "NOTE: " new-test-name " is already running or was explictly killed, use -force to launch it."))
+	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it."))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
 				       (db:test-get-run_duration testdat)))
@@ -847,7 +854,7 @@
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
 	       (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
-	(else       (debug:print 0 "ERROR: Failed to launch test " new-test-name ". Unrecognised state " (test:get-state testdat)))))))
+	(else       (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat)))))))
 
 ;;======================================================================
 ;; END OF NEW STUFF
