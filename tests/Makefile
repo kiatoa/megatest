@@ -1,6 +1,6 @@
 # run some tests
 
-BINPATH=$(PWD)/../bin
+BINPATH=$(shell readlink -m $(PWD)/../bin)
 MEGATEST=$(BINPATH)/megatest
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)
@@ -63,7 +63,7 @@ test5 : cleanprep
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
-	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED;echo ALL DONE
+	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -83,6 +83,40 @@ test7:
 	logpro test7.logpro test7.html < test7.log
 	@echo 
 	@echo Run \"firefox test7.html\" to see the results.
+
+# This one failed with v1.55
+test8a : 
+	cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target ubuntu/nfs/none :runname $(RUNNAME)_waiton_single
+
+test8 : test8a
+	cd fullrun;$(MEGATEST) -runtests lineitem_fail 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singletest
+	cd fullrun;$(MEGATEST) -runtests runfirst/fall 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem
+	cd fullrun;$(MEGATEST) -runtests test_mt_vars/2 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem_waiton
+
+# Some simple checks for bootstrapping and run loop logic 
+
+test9 : minsetup test9a test9b test9c
+
+test9a :
+	@echo Run super-simple mintest e, no waitons.
+	cd mintest;megatest -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+
+test9b :
+	@echo Run simple mintest d with one waiton c
+	cd mintest;megatest -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+
+test9c :
+	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
+	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+
+
+minsetup : 
+	cd ..;make && make install
+	mkdir -p mintest/{runs,links}
+	cd mintest;megatest -stop-server 0
+	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
+	sleep 3
+	cd mintest;dashboard -rows 20 &
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
@@ -112,7 +146,7 @@ hardkill : kill
 	sleep 5;killall -v mtest main.sh dboard -9
 
 listservers :
-	cd fullrun;$(MEGATEST) -listservers
+	cd fullrun;$(MEGATEST) -list-servers
 
 runforever :
 	while(ls); do runname=`date +%F-%R:%S`;(cd fullrun;$(MEGATEST) -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname;/home/matt/data/megatest/megatest -runall -target ubuntu/nfs/none :runname $$runname);done

@@ -85,9 +85,9 @@
 					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
 					      (number? (vector-ref res 3))))
 
-(test "de-register server" #f (let ((res #f))
+(test "de-register server" #t (let ((res #f))
 				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
-				(open-run-close tasks:get-best-server tasks:open-db)))
+				(vector? (open-run-close tasks:get-best-server tasks:open-db))))
 
 (define server-pid #f)
 (test "launch server" #t (let ((pid (process-fork (lambda ()

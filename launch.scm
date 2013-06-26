@@ -669,7 +669,9 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply (if (equal? (configf:lookup *configdat* "setup" "launchwait") "yes")
+	   ;; Launchwait defaults to true, must override it to turn off wait
+	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
+	   (launch-results (apply (if launchwait
 				      cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
@@ -678,11 +680,14 @@
 				  (if useshell
 				      '()
 				      (cdr fullcmd)))))
-      (if (list? launch-results)
-	  (with-output-to-file "mt_launch.log"
-	    (lambda ()
-	      (apply print launch-results))
-	    #:append))
+      (if (not launchwait) ;; give the OS a little time to allow the process to start
+	  (thread-sleep! 0.01))
+      (with-output-to-file "mt_launch.log"
+	(lambda ()
+	  (if (list? launch-results)
+	      (apply print launch-results)
+	      (print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
+	  #:append))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)
