@@ -606,9 +606,9 @@ Misc
 		    #:posy "0.5")))))))
 
 
-(trace dashboard:populate-target-dropdown
-       common:list-is-sublist)
-
+;; (trace dashboard:populate-target-dropdown
+;;        common:list-is-sublist)
+;; 
 ;;       ;; key1 key2 key3 ...
 ;;       ;; target entry (wild cards allowed)
 ;;       
