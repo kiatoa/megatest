@@ -311,22 +311,31 @@
 ;;   but have items in reg; loop with (car reg)(cdr reg) '() reruns
 ;;   If reg is empty => all done
 
-(define (runs:queue-next-hed tal reg n regful)
-  (if regful
+(define (runs:queue-next-hed tal reg n regfull)
+  (if regfull
       (car reg)
       (if (null? tal) ;; tal is used up, pop from reg
 	  (car reg)
 	  (car tal))))
 
-(define (runs:queue-next-tal tal reg n regful)
-  (if regful
+;;   (cond
+;;    ((and regfull (null? reg)(not (null? tal)))      (car tal))
+;;    ((and regfull (not (null? reg)))                 (car reg))
+;;    ((and (not regfull)(null? tal)(not (null? reg))) (car reg))
+;;    ((and (not regfull)(not (null? tal)))            (car tal))
+;;    (else
+;;     (debug:print 0 "ERROR: runs:queue-next-hed, tal=" tal ", reg=" reg ", n=" n ", regfull=" regfull)
+;;     #f)))
+
+(define (runs:queue-next-tal tal reg n regfull)
+  (if regfull
       tal
       (if (null? tal) ;; must transfer from reg
 	  (cdr reg)
 	  (cdr tal))))
 
-(define (runs:queue-next-reg tal reg n regful)
-  (if regful
+(define (runs:queue-next-reg tal reg n regfull)
+  (if regfull
       (cdr reg)
       (if (null? tal) ;; if tal is null and reg not full then '() as reg contents moved to tal
 	  '()
@@ -355,7 +364,7 @@
      ((or (null? prereqs-not-met)
 	  (and (eq? testmode 'toplevel)
 	       (null? non-completed)))
-      (debug:print-info 4 "INNER COND #2: (or (null? prereqs-not-met) (and (eq? testmode 'toplevel)(null? non-completed)))")
+      (debug:print-info 4 "runs:expand-items: (or (null? prereqs-not-met) (and (eq? testmode 'toplevel)(null? non-completed)))")
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
@@ -372,7 +381,9 @@
      ((null? fails)
       (debug:print-info 4 "fails is null, moving on in the queue but keeping " hed " for now")
       ;; num-retries code was here
-      (list (car newtal)(cdr newtal) reg reruns)) ;; an issue with prereqs not yet met?
+      ;; we use this opportunity to move contents of reg to tal
+      (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
+
      ((and (not (null? fails))(eq? testmode 'normal))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
@@ -383,6 +394,7 @@
 		(runs:queue-next-reg tal reg reglen regfull)
 		(cons hed reruns))
 	  #f)) ;; #f flags do not loop
+
      (else
       (debug:print 4 "ERROR: No handler for this condition.")
       (list (car newtal)(cdr newtal) reg reruns)))))
@@ -444,7 +456,7 @@
 	(thread-start! th))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
-	  (list hed tal (append reg (list hed)) reruns))
+	  (list hed tal (append reg (list hed)) reruns)
 	  (list (runs:queue-next-hed tal reg reglen regfull)
 		(runs:queue-next-tal tal reg reglen regfull)
 		;; NB// Here we are building reg as we register tests
@@ -452,7 +464,7 @@
 		(if regfull
 		    (append (cdr reg) (list hed))
 		    (append reg (list hed)))
-		reruns))
+		reruns)))
      
      ;; At this point hed test registration must be completed.
      ;;
@@ -610,7 +622,7 @@
 	      (debug:print 0 "ERROR: test " test-name " has listed itself as a waiton, please correct this!")
 	      (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
-	(cond ;; OUTER COND
+	(cond 
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
@@ -622,10 +634,11 @@
 	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)))
 	    (if loop-list (apply loop loop-list))))
 
-	 ;; case where an items came in as a list been processed
+	 ;; items processed into a list but not came in as a list been processed
+	 ;;
 	 ((and (list? items)     ;; thus we know our items are already calculated
 	       (not   itemdat))  ;; and not yet expanded into the list of things to be done
-	  (debug:print-info 4 "INNER COND: (and (list? items)(not itemdat))")
+	  (debug:print-info 4 "OUTER COND: (and (list? items)(not itemdat))")
 	  (if (and (debug:debug-mode 1) ;; (>= *verbosity* 1)
 		   (> (length items) 0)
 		   (> (length (car items)) 0))
@@ -647,8 +660,8 @@
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
 	  ;; (loop hed tal reg reruns))
-	  ;; (let ((newtal (append tal (list hed))))  ;; We should discard hed as it has been expanded into it's items?
-	  ;;   (loop (car newtal)(cdr newtal) reg reruns)) ;; )
+	  ;; (let ((newtal (append tal (list hed))))  ;; We should discard hed as it has been expanded into it's items? Yes, but only if this *is* an itemized test
+	  ;; (loop (car newtal)(cdr newtal) reg reruns)
 	  (loop (car tal)(cdr tal) reg reruns))
 	    
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
