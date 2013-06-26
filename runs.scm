@@ -389,7 +389,6 @@
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
-	 ;; (open-run-close runs:can-run-more-tests #f jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2))
@@ -406,13 +405,12 @@
 				  (conc (db:test-get-state t) "/" (db:test-get-status t))
 				  (conc " WARNING: t is not a vector=" t )))
 			    prereqs-not-met) ", ") ") fails: " fails)
-    (debug:print-info 4 "hed=" hed "\n  test-record=" test-record "\n  test-name: " test-name "\n  item-path: " item-path "\n  test-patts: " test-patts)
     
     ;; Don't know at this time if the test have been launched at some time in the past
     ;; i.e. is this a re-launch?
     (debug:print-info 4 "run-limits-info = " run-limits-info)
     
-    (cond ;; INNER COND #1 for a launchable test
+    (cond
      
      ;; Check item path against item-patts, 
      ;;
@@ -420,13 +418,12 @@
       ;; else the run is stuck, temporarily or permanently
       ;; but should check if it is due to lack of resources vs. prerequisites
       (debug:print-info 1 "Skipping " (tests:testqueue-get-testname test-record) " " item-path " as it doesn't match " test-patts)
-      ;; (thread-sleep! *global-delta*)
       (if (or (not (null? tal))(not (null? reg)))
-	  (set! loop-list
-		(list (runs:queue-next-hed tal reg reglen regfull)
-		      (runs:queue-next-tal tal reg reglen regfull)
-		      (runs:queue-next-reg tal reg reglen regfull)
-		      reruns))))
+	  (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		(runs:queue-next-reg tal reg reglen regfull)
+		reruns)
+	  #f))
      
      ;; Register tests 
      ;;
@@ -447,15 +444,15 @@
 	(thread-start! th))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
-	  (set! loop-list (list hed tal (append reg (list hed)) reruns))
-	  (set! loop-list (list (runs:queue-next-hed tal reg reglen regfull)
-				(runs:queue-next-tal tal reg reglen regfull)
-				;; NB// Here we are building reg as we register tests
-				;; if regfull we must pop the front item off reg
-				(if regfull
-				    (append (cdr reg) (list hed))
-				    (append reg (list hed)))
-				reruns))))
+	  (list hed tal (append reg (list hed)) reruns))
+	  (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		;; NB// Here we are building reg as we register tests
+		;; if regfull we must pop the front item off reg
+		(if regfull
+		    (append (cdr reg) (list hed))
+		    (append reg (list hed)))
+		reruns))
      
      ;; At this point hed test registration must be completed.
      ;;
@@ -468,7 +465,7 @@
 				 (hash-table-keys test-registry))
 			 ", "))
       (thread-sleep! 0.1)
-      (set! loop-list (list hed tal reg reruns)))
+      (list hed tal reg reruns))
      
      ;; If no resources are available just kill time and loop again
      ;;
@@ -476,10 +473,9 @@
       (debug:print-info 1 "no resources to run new tests, waiting ...")
       ;; Have gone back and forth on this but db starvation is an issue.
       ;; wait one second before looking again to run jobs.
-      (thread-sleep! 1) ;; (+ 2 *global-delta*))
+      (thread-sleep! 1)
       ;; could have done hed tal here but doing car/cdr of newtal to rotate tests
-      (set! loop-list (list (car newtal)(cdr newtal) reg reruns)))
-     ;; (loop hed tal reg reruns))
+      (list (car newtal)(cdr newtal) reg reruns))
      
      ;; This is the final stage, everything is in place so launch the test
      ;;
@@ -492,10 +488,11 @@
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
       (if (or (not (null? tal))(not (null? reg)))
-	  (set! loop-list (list (runs:queue-next-hed tal reg reglen regfull)
-				(runs:queue-next-tal tal reg reglen regfull)
-				(runs:queue-next-reg tal reg reglen regfull)
-				reruns))))
+	  (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		(runs:queue-next-reg tal reg reglen regfull)
+		reruns)
+	  #f))
      
      ;; must be we have unmet prerequisites
      ;;
@@ -509,7 +506,7 @@
 	    (debug:print-info 4 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
 	    ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 	    ;; we made new tal by sticking hed at the back of the list
-	    (set! loop-list (list (car newtal)(cdr newtal) reg reruns)))
+	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))
 	      (if (vector? hed)
@@ -519,19 +516,14 @@
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
-		    (set! loop (list (runs:queue-next-hed tal reg reglen regfull)
-				     (runs:queue-next-tal tal reg reglen regfull)
-				     (runs:queue-next-reg tal reg reglen regfull)
-				     (cons hed reruns))))
+		    (list (runs:queue-next-hed tal reg reglen regfull)
+			  (runs:queue-next-tal tal reg reglen regfull)
+			  (runs:queue-next-reg tal reg reglen regfull)
+			  (cons hed reruns)))
 		  (begin
 		    (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
-		    (set! loop-list (list hed tal reg reruns))))))))
-    (debug:print-info 4 "runs:process-expanded-tests, loop-list=" loop-list)
-    loop-list)) ;; END OF INNER COND
-
-;; End of INNER COND for launchable test.
-
+		    (list hed tal reg reruns)))))))))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in)
@@ -628,7 +620,7 @@
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
 	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)))
-	    (apply loop loop-list)))
+	    (if loop-list (apply loop loop-list))))
 
 	 ;; case where an items came in as a list been processed
 	 ((and (list? items)     ;; thus we know our items are already calculated
