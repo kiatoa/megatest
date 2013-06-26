@@ -332,27 +332,7 @@
 	  '()
 	  reg)))
 
-(define (runs:expand-items
-	 hed         
-	 tal 
-	 reg
-	 reruns
-	 regfull
-	 newtal
-	 jobgroup
-	 max-concurrent-jobs
-	 run-id
-	 waitons
-	 item-path
-	 testmode
-	 test-record
-	 can-run-more 
-	 items
-	 runname
-	 tconfig
-	 )
-
-  (debug:print-info 4 "INNER COND: (or (procedure? items)(eq? items 'have-procedure))")
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
@@ -369,10 +349,10 @@
 		      "\n reruns:          " reruns
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
-    ;; (thread-sleep! (+ 0.01 *global-delta*))
-    (cond ;; INNER COND #2
-     ((or (null? prereqs-not-met) ;; all prereqs met, fire off the test
-	  ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
+    (cond
+     ;; all prereqs met, fire off the test
+     ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
+     ((or (null? prereqs-not-met)
 	  (and (eq? testmode 'toplevel)
 	       (null? non-completed)))
       (debug:print-info 4 "INNER COND #2: (or (null? prereqs-not-met) (and (eq? testmode 'toplevel)(null? non-completed)))")
@@ -384,31 +364,28 @@
 	  (if (list? items-list)
 	      (begin
 		(tests:testqueue-set-items! test-record items-list)
-		;; (thread-sleep! *global-delta*)
-		(set! loop-list (list hed tal reg reruns)))
+		(list hed tal reg reruns))
 	      (begin
 		(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 		(exit 1))))))
+
      ((null? fails)
       (debug:print-info 4 "fails is null, moving on in the queue but keeping " hed " for now")
       ;; num-retries code was here
-      (set! loop-list (list (car newtal)(cdr newtal) reg reruns))) ;; an issue with prereqs not yet met?
+      (list (car newtal)(cdr newtal) reg reruns)) ;; an issue with prereqs not yet met?
      ((and (not (null? fails))(eq? testmode 'normal))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
       (if (or (not (null? reg))(not (null? tal)))
-	  (begin
-	    ;; (thread-sleep! *global-delta*)
-	    (set! loop-list (list (runs:queue-next-hed tal reg reglen regfull)
-				  (runs:queue-next-tal tal reg reglen regfull)
-				  (runs:queue-next-reg tal reg reglen regfull)
-				  (cons hed reruns))))))
+	  (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		(runs:queue-next-reg tal reg reglen regfull)
+		(cons hed reruns))
+	  #f)) ;; #f flags do not loop
      (else
       (debug:print 4 "ERROR: No handler for this condition.")
-      ;; TRY (thread-sleep! (+ 1 *global-delta*))
-      (set! loop-list (list (car newtal)(cdr newtal) reg reruns)))) ;; END OF IF CAN RUN MORE
-    loop-list))
+      (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
@@ -550,6 +527,7 @@
 		    (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    (set! loop-list (list hed tal reg reruns))))))))
+    (debug:print-info 4 "runs:process-expanded-tests, loop-list=" loop-list)
     loop-list)) ;; END OF INNER COND
 
 ;; End of INNER COND for launchable test.
@@ -689,7 +667,8 @@
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
 		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig)))
-		  (apply loop loop-list))
+		  (if loop-list
+		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
 		(loop (car newtal)(cdr newtal) reg reruns))))
 	    
