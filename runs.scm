@@ -483,7 +483,7 @@
 		(thread-start! th))
 	      (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
 	      (if (and (null? tal)(null? reg))
-		  (loop hed tal (append reg (list head)) reruns)
+		  (loop hed tal (append reg (list hed)) reruns)
 		  (loop (runs:queue-next-hed tal reg reglen regfull)
 			(runs:queue-next-tal tal reg reglen regfull)
 			;; NB// Here we are building reg as we register tests
@@ -592,8 +592,9 @@
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
 	  ;; (loop hed tal reg reruns))
-	  (let ((newtal (append tal (list hed))))
-	    (loop (car newtal)(cdr newtal) reg reruns)))
+	  ;; (let ((newtal (append tal (list hed))))  ;; We should discard hed as it has been expanded into it's items?
+	  ;;   (loop (car newtal)(cdr newtal) reg reruns)) ;; )
+	  (loop (car tal)(cdr tal) reg reruns))
 	    
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
@@ -648,11 +649,13 @@
 			  ;; TRY     (thread-sleep! (+ 0.01 *global-delta*)))
 			  (set! num-retries (+ num-retries 1))))
 		    (if (> num-retries  max-retries)
-			(if (not (null? tal))
-			    (loop (runs:queue-next-hed tal reg reglen regfull)
-				  (runs:queue-next-tal tal reg reglen regfull)
-				  (runs:queue-next-reg tal reg reglen regfull)
-				  reruns))
+			(begin
+			  (debug:print 0 "WARNING: retries exceed " max-retries ", this may not be handled correctly. Please consider reporting this scenario.")
+			  (if (not (null? tal))
+			      (loop (runs:queue-next-hed tal reg reglen regfull)
+				    (runs:queue-next-tal tal reg reglen regfull)
+				    (runs:queue-next-reg tal reg reglen regfull)
+				    reruns)))
 			(loop (car newtal)(cdr newtal) reg reruns))) ;; an issue with prereqs not yet met?
 		   ((and (not (null? fails))(eq? testmode 'normal))
 		    (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
