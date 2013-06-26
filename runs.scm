@@ -587,7 +587,7 @@
 		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
 		     (tests:testqueue-set-item_path! new-test-record my-item-path)
 		     (hash-table-set! test-records newtestname new-test-record)
-		     (set! tal (cons newtestname tal)))))) ;; since these are itemized create new test names testname/itempath
+		     (set! tal (append tal (list newtestname))))))) ;; since these are itemized create new test names testname/itempath
 	   items)
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
