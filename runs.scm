@@ -341,7 +341,7 @@
 	  '()
 	  reg)))
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
@@ -399,7 +399,7 @@
       (debug:print 4 "ERROR: No handler for this condition.")
       (list (car newtal)(cdr newtal) reg reruns)))))
 
-(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)
+(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
@@ -631,7 +631,7 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info)))
+	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal)))
 	    (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
@@ -641,7 +641,8 @@
 	  (debug:print-info 4 "OUTER COND: (and (list? items)(not itemdat))")
 	  (if (and (debug:debug-mode 1) ;; (>= *verbosity* 1)
 		   (> (length items) 0)
-		   (> (length (car items)) 0))
+		   (and (list? (car items))
+			(> (length (car items)) 0)))
 	      (pp items))
 	  (for-each
 	   (lambda (my-itemdat)
@@ -671,7 +672,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
