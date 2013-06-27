@@ -3,4 +3,4 @@
 step1 echo SUCCESS
 
 [requirements]
-waiton b
+waiton 

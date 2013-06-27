@@ -1,6 +1,7 @@
-BINDIR=$(PWD)/../../../bin
-MEGATEST=$(BINDIR)/megatest
-DASHBOARD=$(BINDIR)/dashboard
+BINDIR    = $(PWD)/../../../bin
+PATH     := $(BINDIR):$(PATH)
+MEGATEST  = $(BINDIR)/megatest
+DASHBOARD = $(BINDIR)/dashboard
 all :
 	$(MEGATEST) -runtests % -target a/b :runname c
 

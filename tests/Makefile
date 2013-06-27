@@ -97,7 +97,7 @@ test8 : test8a
 
 # Some simple checks for bootstrapping and run loop logic 
 
-test9 : minsetup test9a test9b test9c
+test9 : minsetup test9a test9b test9c test9d
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
@@ -111,6 +111,9 @@ test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
 	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
+test9d :
+	@echo Run mintest f with an empty waiton spec
+	cd mintest;megatest -runtests f -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 minsetup : 
 	cd ..;make && make install

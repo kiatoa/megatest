@@ -639,31 +639,36 @@
 	 ((and (list? items)     ;; thus we know our items are already calculated
 	       (not   itemdat))  ;; and not yet expanded into the list of things to be done
 	  (debug:print-info 4 "OUTER COND: (and (list? items)(not itemdat))")
-	  (if (and (debug:debug-mode 1) ;; (>= *verbosity* 1)
+	  ;; Must determine if the items list is valid. Discard the test if it is not.
+	  (if (and (list? items)
 		   (> (length items) 0)
 		   (and (list? (car items))
 			(> (length (car items)) 0)))
-	      (pp items))
-	  (for-each
-	   (lambda (my-itemdat)
-	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
-				       (vector-copy! test-record newrec)
-				       newrec))
-		    (my-item-path (item-list->path my-itemdat)))
-	       (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		   (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
-		     (tests:testqueue-set-items!     new-test-record #f)
-		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
-		     (tests:testqueue-set-item_path! new-test-record my-item-path)
-		     (hash-table-set! test-records newtestname new-test-record)
-		     (set! tal (append tal (list newtestname))))))) ;; since these are itemized create new test names testname/itempath
-	   items)
+	      (begin
+		(if (debug:debug-mode 1)(pp items))
+		(for-each
+		 (lambda (my-itemdat)
+		   (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
+					     (vector-copy! test-record newrec)
+					     newrec))
+			  (my-item-path (item-list->path my-itemdat)))
+		     (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+			 (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
+			   (tests:testqueue-set-items!     new-test-record #f)
+			   (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
+			   (tests:testqueue-set-item_path! new-test-record my-item-path)
+			   (hash-table-set! test-records newtestname new-test-record)
+			   (set! tal (append tal (list newtestname))))))) ;; since these are itemized create new test names testname/itempath
+		 items))
+	      (debug:print-info 0 "Test " (tests:testqueue-get-testname test-record) " is itemized but has no items"))
 	  ;; At this point we have possibly added items to tal but all must be handed off to 
 	  ;; INNER COND logic. I think loop without rotating the queue 
 	  ;; (loop hed tal reg reruns))
 	  ;; (let ((newtal (append tal (list hed))))  ;; We should discard hed as it has been expanded into it's items? Yes, but only if this *is* an itemized test
 	  ;; (loop (car newtal)(cdr newtal) reg reruns)
-	  (loop (car tal)(cdr tal) reg reruns))
+	  (if (null? tal)
+	      #f
+	      (loop (car tal)(cdr tal) reg reruns)))
 	    
 	 ;; if items is a proc then need to run items:get-items-from-config, get the list and loop 
 	 ;;    - but only do that if resources exist to kick off the job
