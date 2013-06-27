@@ -109,10 +109,13 @@ test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
 	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
+test9d :
+	@echo Run an itemized test with no items
+	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 minsetup : 
 	cd ..;make && make install
-	mkdir -p mintest/{runs,links}
+	mkdir -p mintest/runs mintest/links
 	cd mintest;megatest -stop-server 0
 	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3
