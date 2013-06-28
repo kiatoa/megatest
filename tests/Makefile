@@ -18,7 +18,7 @@ VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
 NEWTARGET  = "$(OS)/$(FS)/$(VER)"
 TARGET     = "ubuntu/nfs/none"
 
-all : test1 test2 test3 test4 test5
+all : test1 test2 test3 test4 test5 test6 test7 test8 test9
 
 server :
 	cd ..;make;make install
@@ -62,8 +62,10 @@ test5 : cleanprep
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
 #	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-#	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	
-	cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
+#	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &	a
+
+# MUST ADD THIS BACK IN ASAP!!!!
+	# cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
 
 test6: fullprep
 	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
@@ -95,7 +97,7 @@ test8 : test8a
 
 # Some simple checks for bootstrapping and run loop logic 
 
-test9 : minsetup test9a test9b test9c
+test9 : minsetup test9a test9b test9c test9d
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.

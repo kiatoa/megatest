@@ -410,7 +410,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (define (full-runconfigs-read)
-  (let* ((keys   (cdb:remote-run get-keys #f))
+  (let* ((keys   (cdb:remote-run db:get-keys #f))
 	 (target (if (args:get-arg "-reqtarg")
 		     (args:get-arg "-reqtarg")
 		     (if (args:get-arg "-target")
