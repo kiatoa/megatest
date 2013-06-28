@@ -27,3 +27,5 @@ fullrun/envfile.txt
 *.bak
 simplerun/*.scm
 simplerun/simpleruns
+tests/mintest/runs/*
+tests/mintest/linktree/*
