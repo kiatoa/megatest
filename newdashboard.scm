@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -24,6 +24,7 @@
 (declare (uses db))
 (declare (uses server))
 (declare (uses synchash))
+(declare (uses dcommon))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -171,21 +172,8 @@ Misc
 (define (mtest window-id)
   (let* ((curr-row-num     0)
 	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
-	 (keys-matrix      (iup:matrix
-		            #:expand "VERTICAL"
-		            ;; #:scrollbar "YES"
-		            #:numcol 1
-		            #:numlin 20
-		            #:numcol-visible 1
-		            #:numlin-visible 5
-		            #:click-cb (lambda (obj lin col status)
-					 (print "obj: " obj " lin: " lin " col: " col " status: " status))))
-	 (setup-matrix     (iup:matrix
-		            #:expand "YES"
-		            #:numcol 1
-		            #:numlin 5
-		            #:numcol-visible 1
-		            #:numlin-visible 3))
+	 (keys-matrix      (dcommon:keys-matrix rawconfig))
+	 (setup-matrix     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))
 	 (jobtools-matrix  (iup:matrix
 			    #:expand "YES"
 			    #:numcol 1
@@ -211,9 +199,6 @@ Misc
 			    #:numcol-visible 1
 			    #:numlin-visible 8))
 	 )
-    (iup:attribute-set! keys-matrix "0:0" "Field Num")
-    (iup:attribute-set! keys-matrix "0:1" "Field Name")
-    (iup:attribute-set! keys-matrix "WIDTH1" "100")
     (iup:attribute-set! disks-matrix "0:0" "Disk Name")
     (iup:attribute-set! disks-matrix "0:1" "Disk Path")
     (iup:attribute-set! disks-matrix "WIDTH1" "120")
@@ -221,14 +206,6 @@ Misc
     (iup:attribute-set! disks-matrix "ALIGNMENT1" "ALEFT")
     (iup:attribute-set! disks-matrix "FIXTOTEXT" "C1")
     (iup:attribute-set! disks-matrix "RESIZEMATRIX" "YES")
-    ;; fill in keys
-    (set! curr-row-num 1)
-    (for-each 
-     (lambda (var)
-       (iup:attribute-set! keys-matrix (conc curr-row-num ":0") curr-row-num)
-       (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
-       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
-     (configf:section-vars rawconfig "fields"))
 
     ;; fill in existing info
     (for-each 
@@ -899,7 +876,7 @@ Misc
 	 (keys     (cdb:remote-run db:get-keys #f))
 	 (runname  "%")
 	 (testpatt "%")
-	 (keypatts (map (lambda (k)(list (vector-ref k 0) "%")) keys))
+	 (keypatts (map (lambda (k)(list k "%")) keys))
 	 (states   '())
 	 (statuses '())
 	 (nextmintime (current-milliseconds))

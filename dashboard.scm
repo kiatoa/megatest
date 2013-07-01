@@ -31,6 +31,8 @@
 (declare (uses runs))
 (declare (uses dashboard-tests))
 (declare (uses dashboard-guimonitor))
+(declare (uses dcommon))
+
 ;; (declare (uses dashboard-main))
 (declare (uses megatest-version))
 (declare (uses mt))
@@ -558,6 +560,12 @@ Misc
 		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
 		      (if have-room ury (+ ury boxh gapy)))))))))
 
+;;======================================================================
+;; R U N   C O N T R O L S
+;;======================================================================
+;;
+;; A gui for launching tests
+;;
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (runconf-targs (common:get-runconfig-targets))
@@ -630,6 +638,19 @@ Misc
 ;;     (iup:tabs
 ;;      ;; log monitor
 ;;      )))
+
+;;======================================================================
+;; S U M M A R Y 
+;;======================================================================
+;;
+;; General info about the run(s) and megatest area
+(define (dashboard:summary)
+  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
+    (iup:vbox
+     (iup:hbox 
+      (dcommon:general-info)
+      (dcommon:keys-matrix rawconfig))
+     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))))
    
 ;;======================================================================
 ;; R U N S 
@@ -811,21 +832,25 @@ Misc
     ;; now assemble the hdrlst and bdylst and kick off the dialog
     (iup:show
      (iup:dialog 
-      #:title "Megatest dashboard"
-      (let ((tabs (iup:tabs
-		   (iup:vbox
-		    (apply iup:hbox 
-			   (cons (apply iup:vbox lftlst)
-				 (list 
-				  (iup:vbox
-				   ;; the header
-				   (apply iup:hbox (reverse hdrlst))
-				   (apply iup:hbox (reverse bdylst))))))
-		    controls)
-		   (dashboard:run-controls)
-		   )))
-	(iup:attribute-set! tabs "TABTITLE0" "Runs")
-	(iup:attribute-set! tabs "TABTITLE1" "Run Control")
+      #:title (conc "Megatest dashboard " *toppath*)
+      #:menu (dcommon:main-menu)
+      (let* ((runs-view (iup:vbox
+			 (apply iup:hbox 
+				(cons (apply iup:vbox lftlst)
+				      (list 
+				       (iup:vbox
+					;; the header
+					(apply iup:hbox (reverse hdrlst))
+					(apply iup:hbox (reverse bdylst))))))
+			 controls))
+	     (tabs (iup:tabs
+		    (dashboard:summary)
+		    runs-view
+		    (dashboard:run-controls)
+		    )))
+	(iup:attribute-set! tabs "TABTITLE0" "Summary")
+	(iup:attribute-set! tabs "TABTITLE1" "Runs")
+	(iup:attribute-set! tabs "TABTITLE2" "Run Control")
 	tabs)))
      (vector keycol lftcol header runsvec)))
 
@@ -842,17 +867,19 @@ Misc
 (iup:attribute-set! *tim* "TIME" 300)
 (iup:attribute-set! *tim* "RUN" "YES")
 
-;; Move this stuff to db.scm FIXME
+;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
 (define *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db")))
-(define (db:been-changed)
+
+(define (dashboard:been-changed)
   (> (file-modification-time (conc *toppath* "/megatest.db")) *last-db-update-time*))
-(define (db:set-db-update-time)
+
+(define (dashboard:set-db-update-time)
   (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
 
-(define (run-update x)
+(define (dashboard:run-update x)
   (update-buttons uidat *num-runs* *num-tests*)
-  ;; (if (db:been-changed)
+  ;; (if (dashboard:been-changed)
   (begin
     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 		   (hash-table-ref/default *searchpatts* "test-name" "%/%")
@@ -864,7 +891,7 @@ Misc
 				       (if val (set! res (cons (list key val) res))))))
 			       *dbkeys*)
 		     res))
-    ; (db:set-db-update-time)
+    ; (dashboard:set-db-update-time)
     ))
 
 (cond 
@@ -893,7 +920,7 @@ Misc
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
-		       (run-update x)))))
+		       (dashboard:run-update x)))))
 		       ;(print x)))))
 
 (iup:main-loop)
