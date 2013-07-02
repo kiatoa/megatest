@@ -650,7 +650,8 @@ Misc
      (iup:hbox 
       (dcommon:general-info)
       (dcommon:keys-matrix rawconfig))
-     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))))
+     (dcommon:section-matrix rawconfig "setup" "Varname" "Value")
+     (dcommon:run-stats))))
    
 ;;======================================================================
 ;; R U N S 

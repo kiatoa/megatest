@@ -65,3 +65,6 @@
 
 (define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode))
+
+(define (mt:get-run-stats)
+  (cdb:remote-run db:get-run-stats #f))

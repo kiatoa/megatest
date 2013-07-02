@@ -172,7 +172,49 @@
 			  (car talb)
 			  (cdr talb)))
 		#f)))))
-      
+
+;;======================================================================
+;; Munge data into nice forms
+;;======================================================================
+
+;; Generate an index for a sparse list of key values
+;;   ( (rowname1 colname1 val1)(rowname2 colname2 val2) )
+;;
+;; => 
+;;
+;;   ( (rowname1 0)(rowname2 1))    ;; rownames -> num
+;;     (colname1 0)(colname2 1)) )  ;; colnames -> num
+;; 
+;; optional apply proc to rownum colnum value
+(define (common:sparse-list-generate-index data #!key (proc #f))
+  (if (null? data)
+      (list '() '())
+      (let loop ((hed (car data))
+		 (tal (cdr data))
+		 (rownames '())
+		 (colnames '())
+		 (rownum   0)
+		 (colnum   0))
+	(let* ((rowkey          (car   hed))
+	       (colkey          (cadr  hed))
+	       (value           (caddr hed))
+	       (existing-rowdat (assoc rowkey rownames))
+	       (existing-coldat (assoc colkey colnames))
+	       (curr-rownum     (if existing-rowdat rownum (+ rownum 1)))
+	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
+	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
+	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
+	  (debug:print-info 0 "Processing record: " hed )
+	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
+	  (if (null? tal)
+	      (list new-rownames new-colnames)
+	      (loop (car tal)
+		    (cdr tal)
+		    new-rownames
+		    new-colnames
+		    (if (> curr-rownum rownum) curr-rownum rownum)
+		    (if (> curr-colnum colnum) curr-colnum colnum)
+		    ))))))
 
 ;;======================================================================
 ;; System stuff

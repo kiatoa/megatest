@@ -148,25 +148,6 @@ Misc
 (define (update-search x val)
   (hash-table-set! *searchpatts* x val))
 
-(define (main-menu)
-  (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
-   (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
-		       (iup:menu-item "Open"  action: (lambda (obj)
-							(iup:show (iup:file-dialog))
-							(print "File->open " obj)))
-		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
-		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
-   (iup:menu-item "Tools" (iup:menu
-		       (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
-		       ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
-		       ;;  					   (show message-window
-		       ;;  					     #:modal? #t
-		       ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
-		       ;;  					     ;; #:x 'mouse
-		       ;;  					     ;; #:y 'mouse
-		       ;;  )					     
-		       ))))
-
 ;; mtest is actually the megatest.config file
 ;;
 (define (mtest window-id)
@@ -854,7 +835,7 @@ Misc
 (define (main-panel window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
-   #:menu (main-menu)
+   #:menu (dcommon:main-menu)
    (let ((tabtop (iup:tabs 
 		  (runs window-id)
 		  (tests window-id)

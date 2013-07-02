@@ -679,6 +679,19 @@
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
+;; get some basic run stats
+;;
+;; ( (runname (( state  count ) ... ))
+;;   (   ...  
+(define (db:get-run-stats db)
+  (let ((res          '()))
+    (sqlite3:for-each-row
+     (lambda (runname state count)
+       (set! res (cons (list runname state count) res)))
+     db
+     "SELECT runname,t.state,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY t.state,runname;" )
+    res))
+
 ;; db:get-runs-by-patt
 ;; get runs by list of criteria
 ;; register a test run with the db
