@@ -688,8 +688,10 @@
 	(res          '()))
     (sqlite3:for-each-row
      (lambda (runname state count)
-       (hash-table-set! totals state (+ (hash-table-ref/default totals state 0) count))
-       (set! res (cons (list runname state count) res)))
+       (let* ((stateparts (string-split state "/"))
+	      (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
+	 (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
+	 (set! res (cons (list runname newstate count) res))))
      db
     "SELECT runname,t.state||'/'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname;" )
     (for-each (lambda (state)

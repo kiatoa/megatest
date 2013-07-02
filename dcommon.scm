@@ -45,7 +45,7 @@
 				     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
     (iup:attribute-set! keys-matrix "0:0" "Run Keys")
     (iup:attribute-set! keys-matrix "0:1" "Key Name")
-    (iup:attribute-set! keys-matrix "WIDTH1" "100")
+    ;; (iup:attribute-set! keys-matrix "WIDTH1" "100")
     ;; fill in keys
     (for-each 
      (lambda (var)
@@ -70,7 +70,7 @@
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
-    (iup:attribute-set! section-matrix "WIDTH1" "300")
+    (iup:attribute-set! section-matrix "WIDTH1" "200")
     ;; fill in keys
     (for-each 
      (lambda (var)
@@ -96,7 +96,7 @@
 			 #:numlin 3
 			 #:numcol-visible 1
 			 #:numlin-visible 3)))
-    (iup:attribute-set! general-matrix "WIDTH1" "300")
+    (iup:attribute-set! general-matrix "WIDTH1" "200")
     (iup:attribute-set! general-matrix "0:1" "About this Megatest area") 
     ;; User (this is not always obvious - it is common to run as a different user
     (iup:attribute-set! general-matrix "1:0" "User")
@@ -116,7 +116,7 @@
 	 (max-col      (apply max (map cadr (cadr indices))))
 	 (max-visible  (max (- *num-tests* 15) 3))
 	 (stats-matrix (iup:matrix
-			#:alignment1 "ALEFT"
+			;; #:alignment1 "ALEFT"
 			#:expand "YES" ;; "HORIZONTAL"
 			#:numcol max-col 
 			#:numlin (if (< max-row max-visible) max-visible max-row) ;; min of 20
@@ -142,6 +142,7 @@
 			 (iup:attribute-set! stats-matrix (conc rnum ":" cnum) v)))
 	 (row-indices  (car indices))
 	 (col-indices  (cadr indices)))
+    (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     ;; Row labels
     (for-each (lambda (ind)
 		(let ((name (car ind))
@@ -164,7 +165,7 @@
 		  (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
 	      run-stats)
     (iup:vbox
-     (iup:label "Run statistics" #:expand "HORIZONTAL")
+     (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))
 
 ;; The main menu
