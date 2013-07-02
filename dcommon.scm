@@ -35,12 +35,12 @@
 	 (key-vals     (configf:section-vars rawconfig "fields"))
 	 (keys-matrix  (iup:matrix
 			#:alignment1 "ALEFT"
-			#:expand "HORIZONTAL" ;; "VERTICAL"
+			#:expand "YES" ;; "HORIZONTAL" ;; "VERTICAL"
 			;; #:scrollbar "YES"
 			#:numcol 1
 			#:numlin (length key-vals)
 			#:numcol-visible 1
-			#:numlin-visible 5
+			#:numlin-visible (length key-vals)
 			#:click-cb (lambda (obj lin col status)
 				     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
     (iup:attribute-set! keys-matrix "0:0" "Run Keys")
@@ -62,11 +62,11 @@
 	 (key-vals        (configf:section-vars rawconfig sectionname))
 	 (section-matrix  (iup:matrix
 			   #:alignment1 "ALEFT"
-			   #:expand "HORIZONTAL" ;; "YES"
+			   #:expand "YES" ;; "HORIZONTAL"
 			   #:numcol 1
 			   #:numlin (length key-vals)
 			   #:numcol-visible 1
-			   #:numlin-visible 5
+			   #:numlin-visible (length key-vals)
 			   #:scrollbar "YES")))
     (iup:attribute-set! section-matrix "0:0" varcolname)
     (iup:attribute-set! section-matrix "0:1" valcolname)
@@ -82,7 +82,8 @@
     (iup:vbox
      (iup:label (if title title (conc "Settings from [" sectionname "]"))  
 		#:size   "5x"
-		#:expand "HORIZONTAL")
+		#:expand "HORIZONTAL"
+		)
      section-matrix)))
     
 ;; General data
@@ -90,7 +91,7 @@
 (define (dcommon:general-info)
   (let ((general-matrix (iup:matrix
 			 #:alignment1 "ALEFT"
-			 #:expand "HORIZONTAL" ;; "YES"
+			 #:expand "YES" ;; "HORIZONTAL"
 			 #:numcol 1
 			 #:numlin 3
 			 #:numcol-visible 1
@@ -113,13 +114,14 @@
 	 (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 	 (max-row      (apply max (map cadr (car indices))))
 	 (max-col      (apply max (map cadr (cadr indices))))
+	 (max-visible  (max (- *num-tests* 15) 3))
 	 (stats-matrix (iup:matrix
 			#:alignment1 "ALEFT"
-			#:expand "HORIZONTAL"
+			#:expand "YES" ;; "HORIZONTAL"
 			#:numcol max-col 
-			#:numlin (if (< max-row 20) 20 max-row) ;; min of 20
+			#:numlin (if (< max-row max-visible) max-visible max-row) ;; min of 20
 			#:numcol-visible max-col
-			#:numlin-visible (if (> max-row 20) 20 max-row)))
+			#:numlin-visible (if (> max-row max-visible) max-visible max-row)))
 	 (numrows      1)
 	 (numcols      1)
 	 (set-cell     (lambda (rnum cnum rname cname v) ;; rownum colnum value

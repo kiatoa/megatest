@@ -647,11 +647,23 @@ Misc
 (define (dashboard:summary)
   (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
     (iup:vbox
-     (iup:hbox 
-      (dcommon:general-info)
-      (dcommon:keys-matrix rawconfig))
-     (dcommon:section-matrix rawconfig "setup" "Varname" "Value")
-     (dcommon:run-stats))))
+     (iup:frame 
+      #:title "General Info"
+      (iup:hbox 
+       (dcommon:general-info)
+       (dcommon:keys-matrix rawconfig)))
+     (iup:frame 
+      #:title "Megatest config settings"
+      (iup:hbox
+       (dcommon:section-matrix rawconfig "setup" "Varname" "Value")
+       (iup:vbox
+	(dcommon:section-matrix rawconfig "server" "Varname" "Value")
+	;; (iup:frame
+	;; #:title "Disks Areas"
+	(dcommon:section-matrix rawconfig "disks" "Disk area" "Path"))))
+     (iup:frame
+      #:title "Run statistics"
+      (dcommon:run-stats)))))
    
 ;;======================================================================
 ;; R U N S 

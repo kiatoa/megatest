@@ -684,12 +684,17 @@
 ;; ( (runname (( state  count ) ... ))
 ;;   (   ...  
 (define (db:get-run-stats db)
-  (let ((res          '()))
+  (let ((totals       (make-hash-table))
+	(res          '()))
     (sqlite3:for-each-row
      (lambda (runname state count)
+       (hash-table-set! totals state (+ (hash-table-ref/default totals state 0) count))
        (set! res (cons (list runname state count) res)))
      db
-     "SELECT runname,t.state,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY t.state,runname;" )
+    "SELECT runname,t.state||'/'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname;" )
+    (for-each (lambda (state)
+		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
+	      (hash-table-keys totals))
     res))
 
 ;; db:get-runs-by-patt
