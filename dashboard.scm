@@ -897,6 +897,7 @@ Misc
 
 (define (dashboard:run-update x)
   (case *current-tab-number* 
+    ((0) (dashboard:update-summary-tab))
     ((1) ;; The runs table is active
      (update-buttons uidat *num-runs* *num-tests*)
      (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*

@@ -25,6 +25,9 @@
 (include "db_records.scm")
 (include "key_records.scm")
 
+;; yes, this is non-ideal 
+(define dashboard:update-summary-tab #f)
+
 ;;======================================================================
 ;; D A T A   T A B L E S
 ;;======================================================================
@@ -166,6 +169,7 @@
 					 (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
 				     run-stats)))))
     (updater)
+    (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     (iup:vbox
      (iup:label "Run statistics"  #:expand "HORIZONTAL")
