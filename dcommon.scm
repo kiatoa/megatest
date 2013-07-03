@@ -110,60 +110,63 @@
     general-matrix))
 
 (define (dcommon:run-stats)
-  (let* ((run-stats    (mt:get-run-stats))
-	 (indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
-	 (max-row      (apply max (map cadr (car indices))))
-	 (max-col      (apply max (map cadr (cadr indices))))
-	 (max-visible  (max (- *num-tests* 15) 3))
-	 (stats-matrix (iup:matrix
-			;; #:alignment1 "ALEFT"
-			#:expand "YES" ;; "HORIZONTAL"
-			#:numcol max-col 
-			#:numlin (if (< max-row max-visible) max-visible max-row) ;; min of 20
-			#:numcol-visible max-col
-			#:numlin-visible (if (> max-row max-visible) max-visible max-row)))
-	 (numrows      1)
-	 (numcols      1)
-	 (set-cell     (lambda (rnum cnum rname cname v) ;; rownum colnum value
-			 (print "proc called: " rnum " " cnum " " rname " " cname " " v)
-			 (if (> rnum numrows)
-			     (begin 
-			       ;; add rows numrows to r
-			       (debug:print 0 "Extending matrix from " numrows " to " rnum)
-			       (iup:attribute-set! stats-matrix  "ADDLIN" (conc numrows "-" (- rnum numrows)))
-			       (set! numrows rnum)))
-			 (if (> cnum numcols)
-			     (begin 
-			       ;; add rows numrows to r
-			       (debug:print 0 "Extending matrix from " numcols " to " cnum)
-			       (iup:attribute-set! stats-matrix  "ADDLIN" (conc numcols "-" (- rnum numcols)))
-			       (set! numcols cnum)))
-			 (debug:print 0 "Setting row " rnum ", col " cnum " to " v)
-			 (iup:attribute-set! stats-matrix (conc rnum ":" cnum) v)))
-	 (row-indices  (car indices))
-	 (col-indices  (cadr indices)))
+  (let* ((stats-matrix (iup:matrix expand: "YES"))
+	 (updater      (lambda ()
+			 (let* ((run-stats    (mt:get-run-stats))
+				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
+				(max-row      (apply max (map cadr (car indices))))
+				(max-col      (apply max (map cadr (cadr indices))))
+				(max-visible  (max (- *num-tests* 15) 3))
+				(numrows      1)
+				(numcols      1)
+				(set-cell     (lambda (rnum cnum rname cname v) ;; rownum colnum value
+						(print "proc called: " rnum " " cnum " " rname " " cname " " v)
+						(if (> rnum numrows)
+						    (begin 
+						      ;; add rows numrows to r
+						      (debug:print 0 "Extending matrix from " numrows " to " rnum)
+						      (iup:attribute-set! stats-matrix  "ADDLIN" (conc numrows "-" (- rnum numrows)))
+						      (set! numrows rnum)))
+						(if (> cnum numcols)
+						    (begin 
+						      ;; add rows numrows to r
+						      (debug:print 0 "Extending matrix from " numcols " to " cnum)
+						      (iup:attribute-set! stats-matrix  "ADDLIN" (conc numcols "-" (- rnum numcols)))
+						      (set! numcols cnum)))
+						(debug:print 0 "Setting row " rnum ", col " cnum " to " v)
+						(iup:attribute-set! stats-matrix (conc rnum ":" cnum) v)))
+				(row-indices  (car indices))
+				(col-indices  (cadr indices)))
+			   (iup:attribute-set! stats-matrix "NUMCOL" max-col )
+			   (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col)
+			   (iup:attribute-set! stats-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+
+			   ;; Row labels
+			   (for-each (lambda (ind)
+				       (let ((name (car ind))
+					     (num  (cadr ind)))
+					 (iup:attribute-set! stats-matrix (conc num ":0") name)))
+				     row-indices)
+
+			   ;; Col labels
+			   (for-each (lambda (ind)
+				       (let ((name (car ind))
+					     (num  (cadr ind)))
+					 (iup:attribute-set! stats-matrix (conc "0:" num) name)))
+				     col-indices)
+
+			   ;; Cell contents
+			   (for-each (lambda (entry)
+				       (let* ((row-name (car entry))
+					      (col-name (cadr entry))
+					      (value    (caddr entry))
+					      (row-num  (cadr (assoc row-name row-indices)))
+					      (col-num  (cadr (assoc col-name col-indices))))
+					 (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
+				     run-stats)))))
+    (updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
-    ;; Row labels
-    (for-each (lambda (ind)
-		(let ((name (car ind))
-		      (num  (cadr ind)))
-		  (iup:attribute-set! stats-matrix (conc num ":0") name)))
-	      row-indices)
-    ;; Col labels
-    (for-each (lambda (ind)
-		(let ((name (car ind))
-		      (num  (cadr ind)))
-		  (iup:attribute-set! stats-matrix (conc "0:" num) name)))
-	      col-indices)
-    ;; Cell contents
-    (for-each (lambda (entry)
-		(let* ((row-name (car entry))
-		       (col-name (cadr entry))
-		       (value    (caddr entry))
-		       (row-num  (cadr (assoc row-name row-indices)))
-		       (col-num  (cadr (assoc col-name col-indices))))
-		  (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
-	      run-stats)
     (iup:vbox
      (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))

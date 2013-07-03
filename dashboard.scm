@@ -137,6 +137,8 @@ Misc
 (define *tests-sort-reverse* #f)
 (define *hide-empty-runs* #f)
 
+(define *current-tab-number* 0)
+
 (debug:setup)
 
 (define uidat #f)
@@ -845,7 +847,7 @@ Misc
     ;; now assemble the hdrlst and bdylst and kick off the dialog
     (iup:show
      (iup:dialog 
-      #:title (conc "Megatest dashboard " *toppath*)
+      #:title (conc "Megatest dashboard " (current-user-name) ":" *toppath*)
       #:menu (dcommon:main-menu)
       (let* ((runs-view (iup:vbox
 			 (apply iup:hbox 
@@ -857,10 +859,13 @@ Misc
 					(apply iup:hbox (reverse bdylst))))))
 			 controls))
 	     (tabs (iup:tabs
+		    #:tabchangepos-cb (lambda (obj curr prev)
+					(set! *current-tab-number* curr))
 		    (dashboard:summary)
 		    runs-view
 		    (dashboard:run-controls)
 		    )))
+	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
 	(iup:attribute-set! tabs "TABTITLE2" "Run Control")
@@ -891,21 +896,20 @@ Misc
   (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
 
 (define (dashboard:run-update x)
-  (update-buttons uidat *num-runs* *num-tests*)
-  ;; (if (dashboard:been-changed)
-  (begin
-    (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		   (hash-table-ref/default *searchpatts* "test-name" "%/%")
-		   ;; (hash-table-ref/default *searchpatts* "item-name" "%")
-		   (let ((res '()))
-		     (for-each (lambda (key)
-				 (if (not (equal? key "runname"))
-				     (let ((val (hash-table-ref/default *searchpatts* key #f)))
-				       (if val (set! res (cons (list key val) res))))))
-			       *dbkeys*)
-		     res))
-    ; (dashboard:set-db-update-time)
-    ))
+  (case *current-tab-number* 
+    ((1) ;; The runs table is active
+     (update-buttons uidat *num-runs* *num-tests*)
+     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		    (hash-table-ref/default *searchpatts* "test-name" "%/%")
+		    ;; (hash-table-ref/default *searchpatts* "item-name" "%")
+		    (let ((res '()))
+		      (for-each (lambda (key)
+				  (if (not (equal? key "runname"))
+				      (let ((val (hash-table-ref/default *searchpatts* key #f)))
+					(if val (set! res (cons (list key val) res))))))
+				*dbkeys*)
+		      res)) ;; (dashboard:set-db-update-time)
+     )))
 
 (cond 
  ((args:get-arg "-run")
