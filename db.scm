@@ -598,7 +598,7 @@
 	     ;(debug:print 4 "qry: " qry) 
 	     qry)
 	   qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=?;" state status res)
 	  res) 
 	(begin
 	  (debug:print 0 "ERROR: Called without all necessary keys")
@@ -688,12 +688,13 @@
 	(res          '()))
     (sqlite3:for-each-row
      (lambda (runname state count)
-       (let* ((stateparts (string-split state "/"))
+       (let* ((stateparts (string-split state "|"))
 	      (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
 	 (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
 	 (set! res (cons (list runname newstate count) res))))
      db
-    "SELECT runname,t.state||'/'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname;" )
+    "SELECT runname,t.state||'|'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname ORDER BY r.event_time DESC;" )
+    (set! res (reverse res))
     (for-each (lambda (state)
 		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
 	      (hash-table-keys totals))
@@ -726,7 +727,7 @@
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt " ORDER BY event_time;"))
     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
      (lambda (a . r)
