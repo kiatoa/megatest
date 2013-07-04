@@ -114,6 +114,7 @@
 
 (define (dcommon:run-stats)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
+	 (changed      #f)
 	 (updater      (lambda ()
 			 (let* ((run-stats    (mt:get-run-stats))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
@@ -140,6 +141,7 @@
 						(iup:attribute-set! stats-matrix (conc rnum ":" cnum) v)))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices)))
+			   (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
 			   (iup:attribute-set! stats-matrix "NUMCOL" max-col )
 			   (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
 			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col)
@@ -147,16 +149,24 @@
 
 			   ;; Row labels
 			   (for-each (lambda (ind)
-				       (let ((name (car ind))
-					     (num  (cadr ind)))
-					 (iup:attribute-set! stats-matrix (conc num ":0") name)))
+				       (let* ((name (car ind))
+					      (num  (cadr ind))
+					      (key  (conc num ":0")))
+					 (if (not (equal? (iup:attribute stats-matrix key) name))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key name)))))
 				     row-indices)
 
 			   ;; Col labels
 			   (for-each (lambda (ind)
-				       (let ((name (car ind))
-					     (num  (cadr ind)))
-					 (iup:attribute-set! stats-matrix (conc "0:" num) name)))
+				       (let* ((name (car ind))
+					      (num  (cadr ind))
+					      (key  (conc "0:" num)))
+					 (if (not (equal? (iup:attribute stats-matrix key) name))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key name)))))
 				     col-indices)
 
 			   ;; Cell contents
@@ -165,10 +175,14 @@
 					      (col-name (cadr entry))
 					      (value    (caddr entry))
 					      (row-num  (cadr (assoc row-name row-indices)))
-					      (col-num  (cadr (assoc col-name col-indices))))
-					 (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
+					      (col-num  (cadr (assoc col-name col-indices)))
+					      (key      (conc row-num ":" col-num)))
+					 (if (not (equal? (iup:attribute stats-matrix key) value))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key value)))))
 				     run-stats)
-			   (iup:attribute-set! stats-matrix "REDRAW" "ALL")))))
+			   (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL"))))))
     (updater)
     (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
