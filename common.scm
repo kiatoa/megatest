@@ -204,7 +204,7 @@
 	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
 	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
 	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
-	  (debug:print-info 0 "Processing record: " hed )
+	  ;; (debug:print-info 0 "Processing record: " hed )
 	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
 	  (if (null? tal)
 	      (list new-rownames new-colnames)

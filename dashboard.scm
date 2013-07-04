@@ -177,22 +177,17 @@ Misc
     (null? (filter (lambda (x)(> x 3)) delta))))
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat runnamepatt numruns testnamepatt keypatts)
-  (let ((modtime             (file-modification-time *db-file-path*))
-	(referenced-run-ids '()))
-    (if (or (and (> modtime *last-db-update-time*)
-		 (> (current-seconds)(+ *last-db-update-time* 5)))
-	    (> *delayed-update* 0))
+(define (update-rundat runnamepatt numruns testnamepatt keypatts recalc)
+  (let ((referenced-run-ids '()))
+    (if recalc
 	;;
 	;; Run this stuff only when the megatest.db file has changed
 	;;
 	(let ((full-run (> (random 100) 75))) ;; 25% of the time do a full refresh
 	  (debug:print-info 4 "update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
 	  (set! *please-update-buttons* #t)
-	  (set! *last-db-update-time* modtime)
-	  (set! *delayed-update* (- *delayed-update* 1))
 	  (let* ((allruns     (cdb:remote-run db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-					   *start-run-offset* keypatts))
+					      *start-run-offset* keypatts))
 		 (header      (db:get-header allruns))
 		 (runs        (db:get-rows   allruns))
 		 (result      '())
@@ -231,7 +226,7 @@ Misc
 	    ;;
 	    ;; if full-run use referenced-run-ids to delete data in *all-runs-by-id* and *runchangerate*
 	    ;;
-
+	    
 	    (set! *header*  header)
 	    (set! *allruns* result)
 	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
@@ -241,7 +236,6 @@ Misc
 	;; Run this if the megatest.db file did not get touched
 	;;
 	(begin
-	  
 	  *num-tests*)))) ;; FIXME, naughty coding eh?
 
 (define *collapsed* (make-hash-table))
@@ -877,8 +871,8 @@ Misc
     (begin
         (set! *num-tests* (string->number (or (args:get-arg "-rows")
 					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%/%" '()))
-    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20)))
+	(update-rundat "%" *num-runs* "%/%" '() #t))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20 #t)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -896,21 +890,32 @@ Misc
   (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
 
 (define (dashboard:run-update x)
-  (case *current-tab-number* 
-    ((0) (dashboard:update-summary-tab))
-    ((1) ;; The runs table is active
-     (update-buttons uidat *num-runs* *num-tests*)
-     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		    (hash-table-ref/default *searchpatts* "test-name" "%/%")
-		    ;; (hash-table-ref/default *searchpatts* "item-name" "%")
-		    (let ((res '()))
-		      (for-each (lambda (key)
-				  (if (not (equal? key "runname"))
-				      (let ((val (hash-table-ref/default *searchpatts* key #f)))
-					(if val (set! res (cons (list key val) res))))))
-				*dbkeys*)
-		      res)) ;; (dashboard:set-db-update-time)
-     )))
+  (let* ((modtime   (file-modification-time *db-file-path*))
+	 (recalc    (or (and (> modtime *last-db-update-time*)
+			     (> (current-seconds)(+ *last-db-update-time* 5)))
+			(> *delayed-update* 0))))
+    (case *current-tab-number* 
+      ((0) (if *please-update-buttons* (dashboard:update-summary-tab)))
+      ((1) ;; The runs table is active
+       (update-buttons uidat *num-runs* *num-tests*)
+       (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+		      (hash-table-ref/default *searchpatts* "test-name" "%/%")
+		      ;; (hash-table-ref/default *searchpatts* "item-name" "%")
+		      (let ((res '()))
+			(for-each (lambda (key)
+				    (if (not (equal? key "runname"))
+					(let ((val (hash-table-ref/default *searchpatts* key #f)))
+					  (if val (set! res (cons (list key val) res))))))
+				  *dbkeys*)
+			res)
+		      recalc) ;; (dashboard:set-db-update-time)
+       ))
+    (if recalc
+	(begin
+	  (set! *last-db-update-time* modtime)
+	  (set! *delayed-update* (- *delayed-update* 1))))
+	  ;; (set! *last-update* (current-seconds))))
+    ))
 
 (cond 
  ((args:get-arg "-run")

@@ -693,11 +693,11 @@
 	 (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
 	 (set! res (cons (list runname newstate count) res))))
      db
-    "SELECT runname,t.state||'|'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname ORDER BY r.event_time DESC;" )
-    (set! res (reverse res))
+    "SELECT runname,t.state||'|'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname ORDER BY r.event_time,s DESC;" )
+    ;; (set! res (reverse res))
     (for-each (lambda (state)
 		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
-	      (hash-table-keys totals))
+	      (sort (hash-table-keys totals) string>=))
     res))
 
 ;; db:get-runs-by-patt
