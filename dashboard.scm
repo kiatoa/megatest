@@ -120,6 +120,10 @@ Misc
 (define *tot-run-count* (cdb:remote-run db:get-num-runs #f "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 (define *last-update*   (current-seconds))
+(define *last-db-update-time* 0)
+(define *please-update-buttons* #t)
+(define *delayed-update* 0)
+
 (define *num-tests*     15)
 (define *start-run-offset*  0)
 (define *start-test-offset* 0)
@@ -127,10 +131,6 @@ Misc
 (define *exit-started* #f)
 (define *status-ignore-hash* (make-hash-table))
 (define *state-ignore-hash*  (make-hash-table))
-
-(define *last-db-update-time* 0)
-(define *please-update-buttons* #t)
-(define *delayed-update* 0)
 
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
@@ -177,66 +177,43 @@ Misc
     (null? (filter (lambda (x)(> x 3)) delta))))
 
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
-(define (update-rundat runnamepatt numruns testnamepatt keypatts recalc)
-  (let ((referenced-run-ids '()))
-    (if recalc
-	;;
-	;; Run this stuff only when the megatest.db file has changed
-	;;
-	(let ((full-run (> (random 100) 75))) ;; 25% of the time do a full refresh
-	  (debug:print-info 4 "update-rundat runnamepatt: " runnamepatt " numruns: " numruns " testnamepatt: " testnamepatt " keypatts: " keypatts)
-	  (set! *please-update-buttons* #t)
-	  (let* ((allruns     (cdb:remote-run db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-					      *start-run-offset* keypatts))
-		 (header      (db:get-header allruns))
-		 (runs        (db:get-rows   allruns))
-		 (result      '())
-		 (maxtests    0)
-		 (states      (hash-table-keys *state-ignore-hash*))
-		 (statuses    (hash-table-keys *status-ignore-hash*)))
-	    ;; (thread-sleep! 0.1) ;; give some time to other threads
-	    (debug:print 6 "update-rundat, got " (length runs) " runs")
-	    (if (> (+ *last-update* 300) (current-seconds)) ;; every five minutes
-		(begin
-		  (set! *last-update* (current-seconds))
-		  (set! *tot-run-count* (length runs))))
-	    ;; 
-	    ;; trim runs to only those that are changing often here
-	    ;; 
-	    (for-each (lambda (run)
-			(let* ((run-id   (db:get-value-by-header run header "id"))
-			       (tests    (let ((tsts (mt:get-tests-for-run run-id testnamepatt states statuses)))
-					   (if *tests-sort-reverse* (reverse tsts) tsts)))
-			       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
-			  ;; Not sure this is needed?
-			  (set! referenced-run-ids (cons run-id referenced-run-ids))
-			  (if (> (length tests) maxtests)
-			      (set! maxtests (length tests)))
-			  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
-				  (not (null? tests)))
-			      (let ((dstruct (vector run tests key-vals)))
-				;;
-				;; compare the tests with the tests in *allruns-by-id* same run-id 
-				;; if different then increment value in *runchangerate*
-				;;
-				(hash-table-set! *allruns-by-id* run-id dstruct)
-				(set! result (cons dstruct result))))))
-		      runs)
-	    
-	    ;;
-	    ;; if full-run use referenced-run-ids to delete data in *all-runs-by-id* and *runchangerate*
-	    ;;
-	    
-	    (set! *header*  header)
-	    (set! *allruns* result)
-	    (debug:print 6 "*allruns* has " (length *allruns*) " runs")
-	    ;; (set! *tot-run-count* (+ 1 (length *allruns*)))
-	    maxtests))
-	;; 
-	;; Run this if the megatest.db file did not get touched
-	;;
-	(begin
-	  *num-tests*)))) ;; FIXME, naughty coding eh?
+(define (update-rundat runnamepatt numruns testnamepatt keypatts)
+  (let* ((referenced-run-ids '())
+	 (allruns     (cdb:remote-run db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+				      *start-run-offset* keypatts))
+	 (header      (db:get-header allruns))
+	 (runs        (db:get-rows   allruns))
+	 (result      '())
+	 (maxtests    0)
+	 (states      (hash-table-keys *state-ignore-hash*))
+	 (statuses    (hash-table-keys *status-ignore-hash*)))
+    ;; 
+    ;; trim runs to only those that are changing often here
+    ;; 
+    (for-each (lambda (run)
+		(let* ((run-id   (db:get-value-by-header run header "id"))
+		       (tests    (let ((tsts (mt:get-tests-for-run run-id testnamepatt states statuses)))
+				   (if *tests-sort-reverse* (reverse tsts) tsts)))
+		       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
+		  ;; Not sure this is needed?
+		  (set! referenced-run-ids (cons run-id referenced-run-ids))
+		  (if (> (length tests) maxtests)
+		      (set! maxtests (length tests)))
+		  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
+			  (not (null? tests)))
+		      (let ((dstruct (vector run tests key-vals)))
+			;;
+			;; compare the tests with the tests in *allruns-by-id* same run-id 
+			;; if different then increment value in *runchangerate*
+			;;
+			(hash-table-set! *allruns-by-id* run-id dstruct)
+			(set! result (cons dstruct result))))))
+	      runs)
+
+    (set! *header*  header)
+    (set! *allruns* result)
+    (debug:print-info 6 "*allruns* has " (length *allruns*) " runs")
+    maxtests))
 
 (define *collapsed* (make-hash-table))
 ; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
@@ -322,99 +299,97 @@ Misc
 	    (loop (+ i 1)))))))
 
 (define (update-buttons uidat numruns numtests)
-  (if *please-update-buttons*
-      (let* ((runs        (if (> (length *allruns*) numruns)
-			      (take-right *allruns* numruns)
-			      (pad-list *allruns* numruns)))
-	     (lftcol      (dboard:uidat-get-lftcol uidat))
-	     (tableheader (dboard:uidat-get-header uidat))
-	     (table       (dboard:uidat-get-runsvec uidat))
-	     (coln        0))
-	(set! *please-update-buttons* #f)
-	(set! *alltestnamelst* '())
-	;; create a concise list of test names
-	(for-each
-	 (lambda (rundat)
-	   (if (vector? rundat)
-	       (let* ((testdat   (vector-ref rundat 1))
-		      (testnames (map test:test-get-fullname testdat)))
-		 (if (not (and *hide-empty-runs*
-			       (null? testnames)))
-		     (for-each (lambda (testname)
-				 (if (not (member testname *alltestnamelst*))
-				     (begin
-				       (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
-			       testnames)))))
-	 runs)
+  (let* ((runs        (if (> (length *allruns*) numruns)
+			  (take-right *allruns* numruns)
+			  (pad-list *allruns* numruns)))
+	 (lftcol      (dboard:uidat-get-lftcol uidat))
+	 (tableheader (dboard:uidat-get-header uidat))
+	 (table       (dboard:uidat-get-runsvec uidat))
+	 (coln        0))
+    (set! *alltestnamelst* '())
+    ;; create a concise list of test names
+    (for-each
+     (lambda (rundat)
+       (if (vector? rundat)
+	   (let* ((testdat   (vector-ref rundat 1))
+		  (testnames (map test:test-get-fullname testdat)))
+	     (if (not (and *hide-empty-runs*
+			   (null? testnames)))
+		 (for-each (lambda (testname)
+			     (if (not (member testname *alltestnamelst*))
+				 (begin
+				   (set! *alltestnamelst* (append *alltestnamelst* (list testname))))))
+			   testnames)))))
+     runs)
 
-	(set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
-	(set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) *start-test-offset*)
-					     (drop *alltestnamelst* *start-test-offset*)
-					     '())))
-				 (append xl (make-list (- *num-tests* (length xl)) ""))))
-	(update-labels uidat)
-	(for-each
-	 (lambda (rundat)
-	   (if (not rundat) ;; handle padded runs
-	       ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
-	       (set! rundat (vector (make-vector 20 #f) '() (map (lambda (x) "") *keys*))));; 3)))
-	   (let* ((run      (vector-ref rundat 0))
-		  (testsdat (vector-ref rundat 1))
-		  (key-val-dat (vector-ref rundat 2))
-		  (run-id   (db:get-value-by-header run *header* "id"))
-		  (key-vals (append key-val-dat
-				    (list (let ((x (db:get-value-by-header run *header* "runname")))
-					    (if x x "")))))
-		  (run-key  (string-intersperse key-vals "\n")))
-
-	     ;; fill in the run header key values
-	     (let ((rown      0)
-		   (headercol (vector-ref tableheader coln)))
-	       (for-each (lambda (kval)
-			   (let* ((labl      (vector-ref headercol rown)))
-			     (if (not (equal? kval (iup:attribute labl "TITLE")))
-				 (iup:attribute-set! (vector-ref headercol rown) "TITLE" kval))
-			     (set! rown (+ rown 1))))
-			 key-vals))
-
-	     ;; For this run now fill in the buttons for each test
-	     (let ((rown 0)
-		   (columndat  (vector-ref table coln)))
-	       (for-each
-		(lambda (testname)
-		  (let ((buttondat  (hash-table-ref/default *buttondat* (mkstr coln rown) #f)))
-		    (if buttondat
-			(let* ((test       (let ((matching (filter 
-							    (lambda (x)(equal? (test:test-get-fullname x) testname))
-							    testsdat)))
-					     (if (null? matching)
-						 (vector -1 -1 "" "" "" 0 "" "" 0 "" "" "" 0 "" "")
-						 (car matching))))
-			       (testname   (db:test-get-testname  test))
-			       (itempath   (db:test-get-item-path test))
-			       (testfullname (test:test-get-fullname test))
-			       (teststatus (db:test-get-status   test))
-			       (teststate  (db:test-get-state    test))
-			       (teststart  (db:test-get-event_time test))
-			       (runtime    (db:test-get-run_duration test))
-			       (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
-			       (button     (vector-ref columndat rown))
-			       (color      (common:get-color-for-state-status teststate teststatus))
-			       (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
-			       (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
-			  (if (not (equal? curr-color color))
-			      (iup:attribute-set! button "BGCOLOR" color))
-			  (if (not (equal? curr-title buttontxt))
-			      (iup:attribute-set! button "TITLE"   buttontxt))
-			  (vector-set! buttondat 0 run-id)
-			  (vector-set! buttondat 1 color)
-			  (vector-set! buttondat 2 buttontxt)
-			  (vector-set! buttondat 3 test)
-			  (vector-set! buttondat 4 run-key)))
-		    (set! rown (+ rown 1))))
-		*alltestnamelst*))
-	     (set! coln (+ coln 1))))
-	 runs))))
+    (set! *alltestnamelst* (collapse-rows *alltestnamelst*)) ;;; argh. please clean up this sillyness
+    (set! *alltestnamelst* (let ((xl (if (> (length *alltestnamelst*) *start-test-offset*)
+					 (drop *alltestnamelst* *start-test-offset*)
+					 '())))
+			     (append xl (make-list (- *num-tests* (length xl)) ""))))
+    (update-labels uidat)
+    (for-each
+     (lambda (rundat)
+       (if (not rundat) ;; handle padded runs
+	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
+	   (set! rundat (vector (make-vector 20 #f) '() (map (lambda (x) "") *keys*))));; 3)))
+       (let* ((run      (vector-ref rundat 0))
+	      (testsdat (vector-ref rundat 1))
+	      (key-val-dat (vector-ref rundat 2))
+	      (run-id   (db:get-value-by-header run *header* "id"))
+	      (key-vals (append key-val-dat
+				(list (let ((x (db:get-value-by-header run *header* "runname")))
+					(if x x "")))))
+	      (run-key  (string-intersperse key-vals "\n")))
+	 
+	 ;; fill in the run header key values
+	 (let ((rown      0)
+	       (headercol (vector-ref tableheader coln)))
+	   (for-each (lambda (kval)
+		       (let* ((labl      (vector-ref headercol rown)))
+			 (if (not (equal? kval (iup:attribute labl "TITLE")))
+			     (iup:attribute-set! (vector-ref headercol rown) "TITLE" kval))
+			 (set! rown (+ rown 1))))
+		     key-vals))
+	 
+	 ;; For this run now fill in the buttons for each test
+	 (let ((rown 0)
+	       (columndat  (vector-ref table coln)))
+	   (for-each
+	    (lambda (testname)
+	      (let ((buttondat  (hash-table-ref/default *buttondat* (mkstr coln rown) #f)))
+		(if buttondat
+		    (let* ((test       (let ((matching (filter 
+							(lambda (x)(equal? (test:test-get-fullname x) testname))
+							testsdat)))
+					 (if (null? matching)
+					     (vector -1 -1 "" "" "" 0 "" "" 0 "" "" "" 0 "" "")
+					     (car matching))))
+			   (testname   (db:test-get-testname  test))
+			   (itempath   (db:test-get-item-path test))
+			   (testfullname (test:test-get-fullname test))
+			   (teststatus (db:test-get-status   test))
+			   (teststate  (db:test-get-state    test))
+			   (teststart  (db:test-get-event_time test))
+			   (runtime    (db:test-get-run_duration test))
+			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
+			   (button     (vector-ref columndat rown))
+			   (color      (common:get-color-for-state-status teststate teststatus))
+			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
+			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
+		      (if (not (equal? curr-color color))
+			  (iup:attribute-set! button "BGCOLOR" color))
+		      (if (not (equal? curr-title buttontxt))
+			  (iup:attribute-set! button "TITLE"   buttontxt))
+		      (vector-set! buttondat 0 run-id)
+		      (vector-set! buttondat 1 color)
+		      (vector-set! buttondat 2 buttontxt)
+		      (vector-set! buttondat 3 test)
+		      (vector-set! buttondat 4 run-key)))
+		(set! rown (+ rown 1))))
+	    *alltestnamelst*))
+	 (set! coln (+ coln 1))))
+     runs)))
 
 (define (mkstr . x)
   (string-intersperse (map conc x) ","))
@@ -854,6 +829,7 @@ Misc
 			 controls))
 	     (tabs (iup:tabs
 		    #:tabchangepos-cb (lambda (obj curr prev)
+					(set! *please-update-buttons* #t)
 					(set! *current-tab-number* curr))
 		    (dashboard:summary)
 		    runs-view
@@ -871,8 +847,8 @@ Misc
     (begin
         (set! *num-tests* (string->number (or (args:get-arg "-rows")
 					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%/%" '() #t))
-    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20 #t)))
+	(update-rundat "%" *num-runs* "%/%" '()))
+    (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
 (define *ord* #f)
@@ -889,33 +865,45 @@ Misc
 (define (dashboard:set-db-update-time)
   (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
 
+(define (dashboard:recalc modtime please-update-buttons last-db-update-time)
+  (or please-update-buttons
+      (and (> modtime last-db-update-time)
+	   (> (current-seconds)(+ last-db-update-time 1)))))
+
 (define (dashboard:run-update x)
-  (let* ((modtime   (file-modification-time *db-file-path*))
-	 (recalc    (or (and (> modtime *last-db-update-time*)
-			     (> (current-seconds)(+ *last-db-update-time* 5)))
-			(> *delayed-update* 0))))
-    (case *current-tab-number* 
-      ((0) (if *please-update-buttons* (dashboard:update-summary-tab)))
-      ((1) ;; The runs table is active
-       (update-buttons uidat *num-runs* *num-tests*)
-       (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
-		      (hash-table-ref/default *searchpatts* "test-name" "%/%")
-		      ;; (hash-table-ref/default *searchpatts* "item-name" "%")
-		      (let ((res '()))
-			(for-each (lambda (key)
-				    (if (not (equal? key "runname"))
-					(let ((val (hash-table-ref/default *searchpatts* key #f)))
-					  (if val (set! res (cons (list key val) res))))))
-				  *dbkeys*)
-			res)
-		      recalc) ;; (dashboard:set-db-update-time)
-       ))
+  (let* ((modtime         (file-modification-time *db-file-path*))
+	 (run-update-time (current-seconds))
+	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
     (if recalc
 	(begin
+	  (case *current-tab-number* 
+	    ((0) 
+	     ;; (thread-sleep! 0.25) ;; 
+	     (dashboard:update-summary-tab))
+	    ((1) ;; The runs table is active
+	     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
+			    (hash-table-ref/default *searchpatts* "test-name" "%/%")
+			    ;; (hash-table-ref/default *searchpatts* "item-name" "%")
+			    (let ((res '()))
+			      (for-each (lambda (key)
+					  (if (not (equal? key "runname"))
+					      (let ((val (hash-table-ref/default *searchpatts* key #f)))
+						(if val (set! res (cons (list key val) res))))))
+					*dbkeys*)
+			      res))
+	     (update-buttons uidat *num-runs* *num-tests*)))
+	  (set! *please-update-buttons* #f)
 	  (set! *last-db-update-time* modtime)
-	  (set! *delayed-update* (- *delayed-update* 1))))
-	  ;; (set! *last-update* (current-seconds))))
-    ))
+	  (set! *last-update* run-update-time)))))
+
+;;======================================================================
+;; The heavy lifting starts here
+;;======================================================================
+
+;; ease debugging by loading ~/.megatestrc
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
 
 (cond 
  ((args:get-arg "-run")
@@ -943,7 +931,7 @@ Misc
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
-		       (dashboard:run-update x)))))
-		       ;(print x)))))
+		       (dashboard:run-update x)
+		       1))))
 
 (iup:main-loop)
