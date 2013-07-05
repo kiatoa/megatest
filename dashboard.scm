@@ -376,7 +376,7 @@ Misc
 			   (runtime    (db:test-get-run_duration test))
 			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			   (button     (vector-ref columndat rown))
-			   (color      (common:get-color-for-state-status teststate teststatus))
+			   (color      (car (gutils:get-color-for-state-status teststate teststatus)))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
 			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
 		      (if (not (equal? curr-color color))
@@ -656,13 +656,16 @@ Misc
   (let* ((tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
+		   #:expand "YES"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
 			    (run-id   (tree-path->run-id (cdr run-path))))
 		       (if run-id
-			   (dboard:data-set-curr-run-id *data*))
+			   (begin
+			     (dboard:data-set-curr-run-id! *data* run-id)
+			     (dashboard:update-run-summary-tab)))
 		       (print "path: " (tree:node->path obj id) " run-id: " run-id)))))
 	 (run-matrix (iup:matrix
 		      #:expand "YES"))
@@ -670,12 +673,14 @@ Misc
 		     (let* ((runs-dat     (mt:get-runs-by-patt *keys* "%" #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
-			    (tests-dat    (mt:get-tests-for-run run-id "%" '() '()
-								qryval: "id,testname,item_path,state,status")) ;; get 'em all
+			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id "%" '() '()
+									    qryvals: "id,testname,item_path,state,status"))) ;; get 'em all
+					    (sort tdat (lambda (a b)
+							 (string<= (vector-ref a 2)(vector-ref b 2))))))
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
 			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
-			    (row-indices  (car indices))
-			    (col-indices  (cadr indices))
+			    (row-indices  (cadr indices))
+			    (col-indices  (car indices))
 			    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
 			    (max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
 			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
@@ -693,7 +698,7 @@ Misc
 							 (record-b (hash-table-ref runs-hash b))
 							 (time-a   (db:get-value-by-header record-a runs-header "event_time"))
 							 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
-						    (> time-a time-b))))))
+						    (< time-a time-b))))))
 		       
 		       ;; (iup:attribute-set! tb "VALUE" "0")
 		       ;; (iup:attribute-set! tb "NAME" "Runs")
@@ -712,6 +717,9 @@ Misc
 				     ;; Here we update the tests treebox and tree keys
 				     (tree:add-node tb "Runs" (append key-vals (list run-name))
 						    userdata: (conc "run-id: " run-id))
+				     (let ((path ;;(string-intersperse "/" 
+					    (append key-vals (list run-name))))
+				       (hash-table-set! (dboard:data-get-path-run-ids *data*) path run-id))
 				     ;; (set! colnum (+ colnum 1))
 				     ))
 				 run-ids)
@@ -745,21 +753,24 @@ Misc
 		       
 		       ;; Cell contents
 		       (for-each (lambda (entry)
-				   (let* ((row-name  (car entry))
-					  (col-name  (cadr entry))
+				   (debug:print-info 0 "entry=" entry)
+				   (let* ((row-name  (cadr entry))
+					  (col-name  (car entry))
 					  (valuedat  (caddr entry))
 					  (test-id   (list-ref valuedat 0))
-					  (test-name (list-ref valuedat 1))
-					  (item-path (list-ref valuedat 2))
-					  (state     (list-ref valuedat 3))
-					  (status    (list-ref valuedat 4))
+					  (test-name row-name) ;; (list-ref valuedat 1))
+					  (item-path col-name) ;; (list-ref valuedat 2))
+					  (state     (list-ref valuedat 1))
+					  (status    (list-ref valuedat 2))
+					  (value     (gutils:get-color-for-state-status state status))
 					  (row-num   (cadr (assoc row-name row-indices)))
 					  (col-num   (cadr (assoc col-name col-indices)))
 					  (key       (conc row-num ":" col-num)))
-				     (if (not (equal? (iup:attribute run-matrix key) value))
+				     (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
 					 (begin
 					   (set! changed #t)
-					   (iup:attribute-set! run-matrix key value)))))
+					   (iup:attribute-set! run-matrix key (cadr value))
+					   (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
 				 tests-mindat)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     (set! dashboard:update-run-summary-tab updater)

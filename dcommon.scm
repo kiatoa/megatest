@@ -214,7 +214,7 @@
 							state))
 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 						    (conc "BGCOLOR" rownum ":" colnum)
-						    (gutils:get-color-for-state-status state status))
+						    (car (gutils:get-color-for-state-status state status)))
 				))
 			    tests)))
 	      run-ids)
