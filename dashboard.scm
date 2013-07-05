@@ -138,6 +138,7 @@ Misc
 (define *hide-empty-runs* #f)
 
 (define *current-tab-number* 0)
+(define *updaters* (make-hash-table))
 
 (debug:setup)
 
@@ -635,7 +636,103 @@ Misc
      (iup:frame
       #:title "Run statistics"
       (dcommon:run-stats)))))
-   
+
+;;======================================================================
+;; R U N
+;;======================================================================
+;;
+;; display and manage a single run at a time
+
+(define (tree-path->run-id path)
+  (if (not (null? path))
+      (hash-table-ref/default (dboard:data-get-path-run-ids *data*) path #f)
+      #f))
+
+(define dashboard:update-run-summary-tab #f)
+
+;; (define (tests window-id)
+(define (dashboard:one-run)
+  (let* ((tb      (iup:treebox
+		   #:selection-cb
+		   (lambda (obj id state)
+		     ;; (print "obj: " obj ", id: " id ", state: " state)
+		     (let* ((run-path (tree:node->path obj id))
+			    (run-id   (tree-path->run-id (cdr run-path))))
+		       (if run-id
+			   (dboard:data-set-curr-run-id *data*))
+		       (print "path: " (tree:node->path obj id) " run-id: " run-id)))))
+	 (run-matrix (iup:matrix
+		      #:expand "YES"))
+	 (updater  (lambda ()
+		     (let* ((run-id       (dboard:data-get-curr-run-id *data*))
+			    (tests-dat    (mt:get-tests-for-run run-id "%" '() '()
+								qryval: "id,testname,item_path,state,status")) ;; get 'em all
+			    (tests-mindat (dcommon:minimize-test-data tests-dat))
+			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
+			    (row-indices  (car indices))
+			    (col-indices  (cadr indices))
+			    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
+			    (max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
+			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
+			    (numrows      1)
+			    (numcols      1)
+			    (changed      #f))
+		       (iup:attribute-set! run-matrix "CLEARVALUE" "CONTENTS")
+		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
+		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
+		       (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
+		       (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+		       
+		       ;; Row labels
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc num ":0")))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)))))
+				 row-indices)
+		       
+		       ;; Col labels
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc "0:" num)))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)))))
+				 col-indices)
+		       
+		       ;; Cell contents
+		       (for-each (lambda (entry)
+				   (let* ((row-name  (car entry))
+					  (col-name  (cadr entry))
+					  (valuedat  (caddr entry))
+					  (test-id   (list-ref valuedat 0))
+					  (test-name (list-ref valuedat 1))
+					  (item-path (list-ref valuedat 2))
+					  (state     (list-ref valuedat 3))
+					  (status    (list-ref valuedat 4))
+					  (row-num   (cadr (assoc row-name row-indices)))
+					  (col-num   (cadr (assoc col-name col-indices)))
+					  (key       (conc row-num ":" col-num)))
+				     (if (not (equal? (iup:attribute run-matrix key) value))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key value)))))
+				 tests-mindat)
+		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
+    (set! dashboard:update-run-summary-tab updater)
+    (iup:attribute-set! tb "VALUE" "0")
+    (iup:attribute-set! tb "NAME" "Runs")
+    ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
+    (dboard:data-set-runs-tree! *data* tb)
+    (iup:hbox 
+     tb
+     run-matrix)))
+
 ;;======================================================================
 ;; R U N S 
 ;;======================================================================
@@ -833,12 +930,14 @@ Misc
 					(set! *current-tab-number* curr))
 		    (dashboard:summary)
 		    runs-view
+		    (dashboard:one-run)
 		    (dashboard:run-controls)
 		    )))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
 	(iup:attribute-set! tabs "TABTITLE0" "Summary")
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
-	(iup:attribute-set! tabs "TABTITLE2" "Run Control")
+	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
+	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
 	tabs)))
      (vector keycol lftcol header runsvec)))
 
@@ -891,7 +990,12 @@ Misc
 						(if val (set! res (cons (list key val) res))))))
 					*dbkeys*)
 			      res))
-	     (update-buttons uidat *num-runs* *num-tests*)))
+	     (update-buttons uidat *num-runs* *num-tests*))
+	    ((2)
+	     (dashboard:update-run-summary-tab))
+	    (else
+	     (let ((updater (hash-table-ref/default *updaters* *current-tab-number* #f)))
+	       (if updater (updater)))))
 	  (set! *please-update-buttons* #f)
 	  (set! *last-db-update-time* modtime)
 	  (set! *last-update* run-update-time)))))

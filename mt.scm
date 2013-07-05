@@ -56,7 +56,7 @@
 	   (have-more (eq? (length testsdat) limit)))
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
-	    (debug:print-info 0 "More than " limit " tests, have " (length full-list) " tests so far.")
+	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
 	    (loop (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status new-offset limit not-in sort-by)
 		  full-list
 		  new-offset
