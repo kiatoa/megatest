@@ -666,7 +666,8 @@ Misc
 			   (begin
 			     (dboard:data-set-curr-run-id! *data* run-id)
 			     (dashboard:update-run-summary-tab)))
-		       (print "path: " (tree:node->path obj id) " run-id: " run-id)))))
+		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+		       ))))
 	 (run-matrix (iup:matrix
 		      #:expand "YES"))
 	 (updater  (lambda ()
@@ -724,10 +725,11 @@ Misc
 				     ))
 				 run-ids)
 		       (iup:attribute-set! run-matrix "CLEARVALUE" "CONTENTS")
+		       (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
 		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
 		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
-		       (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
-		       (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
+		       ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
+		       ;; (iup:attribute-set! run-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
 		       
 		       ;; Row labels
 		       (for-each (lambda (ind)
@@ -748,12 +750,12 @@ Misc
 				     (if (not (equal? (iup:attribute run-matrix key) name))
 					 (begin
 					   (set! changed #t)
-					   (iup:attribute-set! run-matrix key name)))))
+					   (iup:attribute-set! run-matrix key name)
+					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
 				 col-indices)
 		       
 		       ;; Cell contents
 		       (for-each (lambda (entry)
-				   (debug:print-info 0 "entry=" entry)
 				   (let* ((row-name  (cadr entry))
 					  (col-name  (car entry))
 					  (valuedat  (caddr entry))
@@ -775,7 +777,7 @@ Misc
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     (set! dashboard:update-run-summary-tab updater)
     (dboard:data-set-runs-tree! *data* tb)
-    (iup:hbox 
+    (iup:split
      tb
      run-matrix)))
 
