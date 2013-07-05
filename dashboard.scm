@@ -31,6 +31,7 @@
 (declare (uses runs))
 (declare (uses dashboard-tests))
 (declare (uses dashboard-guimonitor))
+(declare (uses tree))
 (declare (uses dcommon))
 
 ;; (declare (uses dashboard-main))
@@ -653,6 +654,8 @@ Misc
 ;; (define (tests window-id)
 (define (dashboard:one-run)
   (let* ((tb      (iup:treebox
+		   #:value 0
+		   #:name "Runs"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
@@ -664,7 +667,9 @@ Misc
 	 (run-matrix (iup:matrix
 		      #:expand "YES"))
 	 (updater  (lambda ()
-		     (let* ((run-id       (dboard:data-get-curr-run-id *data*))
+		     (let* ((runs-dat     (mt:get-runs-by-patt *keys* "%" #f))
+			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+			    (run-id       (dboard:data-get-curr-run-id *data*))
 			    (tests-dat    (mt:get-tests-for-run run-id "%" '() '()
 								qryval: "id,testname,item_path,state,status")) ;; get 'em all
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
@@ -676,7 +681,40 @@ Misc
 			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
-			    (changed      #f))
+			    (changed      #f)
+			    (runs-hash    (let ((ht (make-hash-table)))
+					    (for-each (lambda (run)
+							(hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
+						      (vector-ref runs-dat 1))
+					    ht))
+			    (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+						(lambda (a b)
+						  (let* ((record-a (hash-table-ref runs-hash a))
+							 (record-b (hash-table-ref runs-hash b))
+							 (time-a   (db:get-value-by-header record-a runs-header "event_time"))
+							 (time-b   (db:get-value-by-header record-b runs-header "event_time")))
+						    (> time-a time-b))))))
+		       
+		       ;; (iup:attribute-set! tb "VALUE" "0")
+		       ;; (iup:attribute-set! tb "NAME" "Runs")
+		       ;; Update the runs tree
+		       (for-each (lambda (run-id)
+				   (let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+					  (key-vals   (map (lambda (key)(db:get-value-by-header run-record runs-header key))
+							   *keys*))
+					  (run-name   (db:get-value-by-header run-record runs-header "runname"))
+					  (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+					  (run-path   (append key-vals (list run-name))))
+				     (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
+				     ;; (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+				     ;;    		 (conc rownum ":" colnum) col-name)
+				     ;; (hash-table-set! runid-to-col run-id (list colnum run-record))
+				     ;; Here we update the tests treebox and tree keys
+				     (tree:add-node tb "Runs" (append key-vals (list run-name))
+						    userdata: (conc "run-id: " run-id))
+				     ;; (set! colnum (+ colnum 1))
+				     ))
+				 run-ids)
 		       (iup:attribute-set! run-matrix "CLEARVALUE" "CONTENTS")
 		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
 		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
@@ -725,9 +763,6 @@ Misc
 				 tests-mindat)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
     (set! dashboard:update-run-summary-tab updater)
-    (iup:attribute-set! tb "VALUE" "0")
-    (iup:attribute-set! tb "NAME" "Runs")
-    ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
     (dboard:data-set-runs-tree! *data* tb)
     (iup:hbox 
      tb

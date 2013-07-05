@@ -715,7 +715,7 @@
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
 	 (qry-str  #f)
-	 (keyvals  (keys:target->keyval keys targpatt)))
+	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
     (for-each (lambda (keyval)
 		(let* ((key    (car keyval))
 		       (patt   (cadr keyval))
