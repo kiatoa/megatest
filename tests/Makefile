@@ -115,6 +115,17 @@ test9d :
 	@echo Run an itemized test with no items
 	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
+test10 :
+	@echo Run a bunch of different targets simultaneously
+	(cd fullrun;$(MEGATEST) -server - ;sleep 2)&
+	for targ in mint/btrfs/mintdir sunos/sshfs/loc; do \
+	   (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$targ :runname $(RUNNAME) &); done
+	for sys in ubuntu suse redhat debian;do \
+	  for fs in afs nfs zfs; do \
+	     for dpath in none tmp; do \
+	        (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$sys/$$fs/$$dpath :runname $(RUNNAME) &);\
+	     done;done;done
+
 minsetup : 
 	cd ..;make && make install
 	mkdir -p mintest/runs mintest/links

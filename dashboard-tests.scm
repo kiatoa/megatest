@@ -25,6 +25,7 @@
 (declare (unit dashboard-tests))
 (declare (uses common))
 (declare (uses db))
+(declare (uses gutils))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -64,8 +65,8 @@
 				       (oldstatus (iup:attribute lbl "TITLE")))
 				   (if (not (equal? oldstatus newstatus))
 				       (begin
-					 (iup:attribute-set! lbl "FGCOLOR" (common:get-color-for-state-status (db:test-get-state testdat)
-												       (db:test-get-status testdat)))
+					 (iup:attribute-set! lbl "FGCOLOR" (car (gutils:get-color-for-state-status (db:test-get-state testdat)
+														   (db:test-get-status testdat))))
 					 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
 	      lbl)
 	    (store-label "testcomment"
@@ -190,7 +191,7 @@
 (define (update-state-status-buttons testdat)
   (let* ((state  (db:test-get-state  testdat))
 	 (status (db:test-get-status testdat))
-	 (color  (common:get-color-for-state-status state status)))
+	 (color  (car (gutils:get-color-for-state-status state status))))
     ((vector-ref *state-status* 0) state color)
     ((vector-ref *state-status* 1) status color)))
 

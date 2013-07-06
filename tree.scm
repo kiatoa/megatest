@@ -100,32 +100,17 @@
 		(loop (car tal)(cdr tal)(+ depth 1) newpath))))))))
 
 (define (tree:node->path obj nodenum)
-  ;; (print "\ncurrnode  nodenum  depth  node-depth  node-title   path")
   (let loop ((currnode 0)
-	     (depth    0)
 	     (path     '()))
-    (let ((node-depth (iup:attribute obj (conc "DEPTH" currnode)))
-	  (node-title (iup:attribute obj (conc "TITLE" currnode))))
-      ;; (display (conc "\n   "currnode "        " nodenum "       " depth "         " node-depth "          " node-title "         " path))
-      (if (> currnode nodenum)
-	  path
-	  (if (not node-depth) ;; #f if we are out of nodes
-	      '()
-	      (let ((ndepth (string->number node-depth)))
-		(if (eq? ndepth depth)
-		    ;; This next is the match condition depth == node-depth
-		    (if (eq? currnode nodenum)
-			(begin
-			  ;; (display " <X>")
-			  (append path (list node-title)))
-			(loop (+ currnode 1)
-			      (+ depth 1)
-			      (append path (list node-title))))
-		    ;; didn't match, reset to base path and keep looking
-		    ;; due to more iup odditys we don't reset to base
-		    (begin 
-		      ;; (display " <L>")
-		      (loop (+ 1 currnode)
-			    2
-			    (append (take path ndepth)(list node-title)))))))))))
-
+    (let* ((node-depth (string->number (iup:attribute obj (conc "DEPTH" currnode))))
+	   (node-title (iup:attribute obj (conc "TITLE" currnode)))
+	   (trimpath   (if (and (not (null? path))
+				(> (length path) node-depth))
+			   (take path node-depth)
+			   path))
+	   (newpath    (append trimpath (list node-title))))
+      (if (>= currnode nodenum)
+	  newpath
+	  (loop (+ currnode 1)
+		newpath)))))
+	
