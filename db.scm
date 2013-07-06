@@ -2151,13 +2151,20 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+			 (or is-ok (member mode '(toplevel itemmatch))))
 		    (set! parent-waiton-met #t))
-		   ((and same-itempath
-			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+		   ((or (and (not same-itempath)
+			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath
+			(and same-itempath
+			     is-completed
+			     (or is-ok 
+				 (eq? mode 'toplevel)              ;; toplevel does not block on FAIL
+				 (and is-ok (eq? mode 'itemmatch)) ;; itemmatch blocks on not ok
+				 )))
 		    (set! item-waiton-met #t)))))
 	      tests)
+             ;; both requirements, parent and item-waiton must be met to NOT add item to
+             ;; prereq's not met list
 	     (if (not (or parent-waiton-met item-waiton-met))
 		 (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
 	     ;; if the test is not found then clearly the waiton is not met...
