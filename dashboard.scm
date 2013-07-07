@@ -158,9 +158,8 @@ Misc
      (iup:label msg #:margin "40x40")))))
 
 (define (iuplistbox-fill-list lb items . default)
-  (let ((i 1)
+  (let ((i             1)
 	(selected-item (if (null? default) #f (car default))))
-    (iup:attribute-set! lb "VALUE" (if selected-item selected-item ""))
     (for-each (lambda (item)
 		(iup:attribute-set! lb (number->string i) item)
 		(if selected-item
@@ -168,6 +167,7 @@ Misc
 			(iup:attribute-set! lb "VALUE" item))) ;; (number->string i))))
 		(set! i (+ i 1)))
 	      items)
+    (iup:attribute-set! lb "VALUE" (if selected-item selected-item ""))
     i))
 
 (define (pad-list l n)(append l (make-list (- n (length l)))))
@@ -464,9 +464,9 @@ Misc
 		   (if lb
 		       lb
 		       (iup:listbox 
-			#:size "x10" 
+			;; #:size "x10" 
 			#:fontsize "10"
-			#:expand "VERTICAL"
+			#:expand "YES" ;; "VERTICAL"
 			;; #:dropdown "YES"
 			#:editbox "YES"
 			#:action action-proc
@@ -488,6 +488,29 @@ Misc
 		  (append refvals (list selected-value))
 		  (+ indx 1)
 		  (append lbs (list lb))))))))
+
+;; Make a vertical list of toggles using items, when toggled call proc with the conc'd string 
+;; interspersed with commas
+;;
+(define (dashboard:text-list-toggle-box items proc)
+  (let ((alltgls (make-hash-table)))
+    (apply iup:vbox
+	   (map (lambda (item)
+		  (iup:toggle 
+		   item
+		   #:expand "YES"
+		   #:action (lambda (obj tstate)
+			      (if (eq? tstate 0)
+				  (hash-table-delete! alltgls item)
+				  (hash-table-set! alltgls item #t))
+			      (let ((all (hash-table-keys alltgls)))
+				(proc all)))))
+		items))))
+
+;; Extract the various bits of data from *data* and create the command line equivalent that will be displayed
+;;
+(define (dashboard:update-run-command)
+  (print "Updated!!"))
 
 (define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
   (canvas-clear! cnv)
@@ -561,21 +584,73 @@ Misc
     
     ;; refer to *keys*, *dbkeys* for keys
     (iup:vbox
+     ;; The command line display/exectution control
      (iup:hbox
-       ;; Target and action
-      (iup:frame
-       #:title "Target"
-       (iup:vbox
-        ;; Target selectors
-        (apply iup:hbox
-	       (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
-		      (key-lb   (car dat))
-		      (combos   (cadr dat)))
-		 (set! key-listboxes key-lb)
-		 combos))))
-      (iup:frame
-       #:title "Tests and Tasks"
-       (iup:vbox
+      (iup:label "Run on" #:size "40x")
+      (iup:radio 
+       (iup:hbox
+	(iup:toggle "Local" #:size "40x")
+	(iup:toggle "Server" #:size "40x")))
+      (iup:textbox 
+       #:value "megatest -xyz"
+       #:expand "HORIZONTAL")
+      (iup:button "Execute" #:size "50x"))
+     (iup:split
+       ;; Target, testpatt, state and status input boxes
+      (iup:vbox
+       ;; Command to run
+       (iup:frame
+	#:title "Set the action to take"
+	(iup:hbox
+	 (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x")
+	 (let ((lb (iup:listbox #:expand "HORIZONTAL"
+				#:dropdown "YES")))
+	   (iuplistbox-fill-list lb '("-runtests" "-remove-runs" "-set-state-status") "-runtests")
+	   lb)))
+       (iup:frame
+	#:title "Selectors that determine which tests will be operated on"
+	(iup:vbox
+	 ;; Text box for test patterns
+	 (iup:frame
+	  #:title "Test patterns (one per line)"
+	  (iup:textbox #:action (lambda (val a b)
+				  (dboard:data-set-test-patts!
+				   *data*
+				   (dboard:lines->test-patt b)))
+		       #:value (dboard:test-patt->lines
+				(dboard:data-get-test-patts *data*))
+		       #:expand "YES"
+		       #:multiline "YES"))
+	 (iup:frame
+	  #:title "Target"
+	  ;; Target selectors
+	  (apply iup:hbox
+		 (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+			(key-lb   (car dat))
+			(combos   (cadr dat)))
+		   (set! key-listboxes key-lb)
+		   combos)))
+	 (iup:hbox
+	  ;; Text box for STATES
+	  (iup:frame
+	   #:title "States"
+	   (dashboard:text-list-toggle-box 
+	    '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+	    (lambda (all)
+	      (dboard:data-set-states! *data* (string-intersperse all ","))
+	      (dashboard:update-run-command))))
+	  ;; Text box for STATES
+	  (iup:frame
+	   #:title "States"
+	   (dashboard:text-list-toggle-box 
+	    '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+	    (lambda (all)
+	      (dboard:data-set-statuses! *data* (string-intersperse all ","))
+	      (dashboard:update-run-command))))))))
+      (iup:split
+       #:orientation "HORIZONTAL"
+       (iup:frame
+	#:title "Tests and Tasks"
 	(iup:canvas #:action (make-canvas-action
 			      (lambda (cnv xadj yadj)
 				;; (print "cnv: " cnv " x: " x " y: " y)
@@ -584,8 +659,15 @@ Misc
 		    #:expand "YES"
 		    #:scrollbar "YES"
 		    #:posx "0.5"
-		    #:posy "0.5")))))))
-
+		    #:posy "0.5"))
+       (iup:frame
+	#:title "Logs" ;; To be replaced with tabs
+	(let ((logs-tb (iup:textbox #:expand "YES"
+				    #:multiline "YES")))
+	  (dboard:data-set-logs-textbox! *data* logs-tb)
+	  logs-tb))
+       )))))
+  
 
 ;; (trace dashboard:populate-target-dropdown
 ;;        common:list-is-sublist)

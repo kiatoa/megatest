@@ -13,6 +13,7 @@
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
+(use regex)
 
 (declare (unit dcommon))
 
@@ -49,6 +50,11 @@
 (define (dboard:data-get-path-run-ids  vec)    (vector-ref  vec 9))
 (define (dboard:data-get-curr-run-id   vec)    (vector-ref  vec 10))
 (define (dboard:data-get-runs-tree     vec)    (vector-ref  vec 11))
+;; For test-patts convert #f to ""
+(define (dboard:data-get-test-patts    vec)    
+  (let ((val (vector-ref  vec 12)))(if val val "")))
+(define (dboard:data-get-states        vec)    (vector-ref vec 12))
+(define (dboard:data-get-statuses      vec)    (vector-ref vec 13))
 
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
@@ -61,7 +67,14 @@
 (define (dboard:data-set-updaters!      vec val)(vector-set! vec 8 val))
 (define (dboard:data-set-path-run-ids!  vec val)(vector-set! vec 9 val))
 (define (dboard:data-set-curr-run-id!   vec val)(vector-set! vec 10 val))
-(define (dboard:data-set-runs-tree!     vec val)(vector-set! vec 12 val))
+(define (dboard:data-set-runs-tree!     vec val)(vector-set! vec 11 val))
+;; For test-patts convert "" to #f 
+(define (dboard:data-set-test-patts!    vec val)
+  (vector-set! vec 12 (if (equal? val "") #f val)))
+(define (dboard:data-set-states!        vec val)(vector-set! vec 12 val))
+(define (dboard:data-set-statuses!      vec val)(vector-set! vec 13 val))
+(define (dboard:data-set-logs-textbox!  vec val)(vector-set! vec 14 val))
+
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 
@@ -73,6 +86,19 @@
 
 ;; Look up run-ids by ??
 (dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+;;======================================================================
+;; TARGET AND PATTERN MANIPULATIONS
+;;======================================================================
+
+;; Convert to and from list of lines (for a text box)
+;; "," => "\n"
+(define (dboard:test-patt->lines test-patt)
+  (string-substitute (regexp ",") "\n" test-patt))
+
+(define (dboard:lines->test-patt lines)
+  (string-substitute (regexp "\n") "," lines))
+
 
 ;;======================================================================
 ;; P R O C E S S   R U N S
