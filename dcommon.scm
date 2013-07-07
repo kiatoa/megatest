@@ -37,7 +37,7 @@
 ;; Share this structure between newdashboard and dashboard with the 
 ;; intent of converging on a single app.
 ;;
-(define *data* (make-vector 15 #f))
+(define *data* (make-vector 20 #f))
 (define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
 (define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
@@ -53,8 +53,12 @@
 ;; For test-patts convert #f to ""
 (define (dboard:data-get-test-patts    vec)    
   (let ((val (vector-ref  vec 12)))(if val val "")))
-(define (dboard:data-get-states        vec)    (vector-ref vec 12))
-(define (dboard:data-get-statuses      vec)    (vector-ref vec 13))
+(define (dboard:data-get-states        vec)    (vector-ref vec 13))
+(define (dboard:data-get-statuses      vec)    (vector-ref vec 14))
+(define (dboard:data-get-logs-textbox  vec val)(vector-ref vec 15))
+(define (dboard:data-get-command       vec)    (vector-ref vec 16))
+(define (dboard:data-get-command-tb    vec)    (vector-ref vec 17))
+(define (dboard:data-get-target        vec)    (vector-ref vec 18))
 
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
@@ -71,10 +75,12 @@
 ;; For test-patts convert "" to #f 
 (define (dboard:data-set-test-patts!    vec val)
   (vector-set! vec 12 (if (equal? val "") #f val)))
-(define (dboard:data-set-states!        vec val)(vector-set! vec 12 val))
-(define (dboard:data-set-statuses!      vec val)(vector-set! vec 13 val))
-(define (dboard:data-set-logs-textbox!  vec val)(vector-set! vec 14 val))
-
+(define (dboard:data-set-states!        vec val)(vector-set! vec 13 val))
+(define (dboard:data-set-statuses!      vec val)(vector-set! vec 14 val))
+(define (dboard:data-set-logs-textbox!  vec val)(vector-set! vec 15 val))
+(define (dboard:data-set-command!       vec val)(vector-set! vec 16 val))
+(define (dboard:data-set-command-tb!    vec val)(vector-set! vec 17 val))
+(define (dboard:data-set-target!        vec val)(vector-set! vec 18 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 

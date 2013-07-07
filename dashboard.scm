@@ -157,17 +157,16 @@ Misc
     (iup:vbox 
      (iup:label msg #:margin "40x40")))))
 
-(define (iuplistbox-fill-list lb items . default)
-  (let ((i             1)
-	(selected-item (if (null? default) #f (car default))))
+(define (iuplistbox-fill-list lb items #!key (selected-item #f))
+  (let ((i 1))
     (for-each (lambda (item)
 		(iup:attribute-set! lb (number->string i) item)
 		(if selected-item
 		    (if (equal? selected-item item)
-			(iup:attribute-set! lb "VALUE" item))) ;; (number->string i))))
+			(iup:attribute-set! lb "VALUE" i))) ;; (number->string i))))
 		(set! i (+ i 1)))
 	      items)
-    (iup:attribute-set! lb "VALUE" (if selected-item selected-item ""))
+    ;; (iup:attribute-set! lb "VALUE" (if selected-item selected-item ""))
     i))
 
 (define (pad-list l n)(append l (make-list (- n (length l)))))
@@ -510,7 +509,35 @@ Misc
 ;; Extract the various bits of data from *data* and create the command line equivalent that will be displayed
 ;;
 (define (dashboard:update-run-command)
-  (print "Updated!!"))
+  (let* ((cmd-tb       (dboard:data-get-command-tb *data*))
+	 (cmd          (dboard:data-get-command    *data*))
+	 (test-patt    (dboard:data-get-test-patts *data*))
+	 (states       (dboard:data-get-states     *data*))
+	 (statuses     (dboard:data-get-statuses   *data*))
+	 (target       (dboard:data-get-target     *data*))
+	 (states-str   (if (or (not states)
+			       (null? states))
+			   ""
+			   (conc " :state "  (string-intersperse states ","))))
+	 (statuses-str (if (or (not statuses)
+			       (null? statuses))
+			   ""
+			   (conc " :status " (string-intersperse statuses ","))))
+	 (full-cmd  "megatest"))
+    (case (string->symbol cmd)
+      ((runtests)
+       (set! full-cmd (conc full-cmd 
+			    " -runtests "
+			    (if (equal? test-patt "") "%" test-patt) " "
+			    " -target "
+			    (if target (string-intersperse target "/") "no-target-selected")
+			    " :runname "
+			    " somerun " ;; addme!
+			    states-str
+			    statuses-str
+			    )))
+      (else (set! full-cmd " no valid command ")))
+    (iup:attribute-set! cmd-tb "VALUE" full-cmd)))
 
 (define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
   (canvas-clear! cnv)
@@ -574,8 +601,11 @@ Misc
 	 (key-listboxes #f)
 	 (update-keyvals (lambda (obj b c d)
 			   ;; (print "obj: " obj ", b " b ", c " c ", d " d)
-			   (dashboard:update-target-selector key-listboxes)
-			   ))
+			   (let ((targ (map (lambda (x)
+					      (iup:attribute x "VALUE"))
+					    (car (dashboard:update-target-selector key-listboxes)))))
+			     (dboard:data-set-target! *data* targ)
+			     (dashboard:update-run-command))))
 	 (tests-draw-state (make-hash-table))) ;; use for keeping state of the test canvas
     (hash-table-set! tests-draw-state 'first-time #t)
     (hash-table-set! tests-draw-state 'scalef 8)
@@ -591,9 +621,13 @@ Misc
        (iup:hbox
 	(iup:toggle "Local" #:size "40x")
 	(iup:toggle "Server" #:size "40x")))
-      (iup:textbox 
-       #:value "megatest -xyz"
-       #:expand "HORIZONTAL")
+      (let ((tb (iup:textbox 
+		 #:value "megatest "
+		 #:expand "HORIZONTAL"
+		 #:readonly "YES"
+		 )))
+	(dboard:data-set-command-tb! *data* tb)
+	tb)
       (iup:button "Execute" #:size "50x"))
 
       (iup:split
@@ -601,15 +635,23 @@ Misc
        
        (iup:split
 	;; Target, testpatt, state and status input boxes
+	#:value 300
 	(iup:vbox
 	 ;; Command to run
 	 (iup:frame
 	  #:title "Set the action to take"
 	  (iup:hbox
-	   (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x")
-	   (let ((lb (iup:listbox #:expand "HORIZONTAL"
-				  #:dropdown "YES")))
-	     (iuplistbox-fill-list lb '("-runtests" "-remove-runs" "-set-state-status") "-runtests")
+	   (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
+	   (let* ((cmds-list '("runtests" "remove-runs" "set-state-status"))
+		  (lb         (iup:listbox #:expand "HORIZONTAL"
+					   #:dropdown "YES"
+					   #:action (lambda (obj val index lbstate)
+						      ;; (print obj " " val " " index " " lbstate)
+						      (dboard:data-set-command! *data* val)
+						      (dashboard:update-run-command))))
+		  (default-cmd (car cmds-list)))
+	     (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
+	     (dboard:data-set-command! *data* default-cmd)
 	     lb)))
 	 (iup:frame
 	  #:title "Selectors that determine which tests will be operated on"
@@ -620,7 +662,8 @@ Misc
 	    (iup:textbox #:action (lambda (val a b)
 				    (dboard:data-set-test-patts!
 				     *data*
-				     (dboard:lines->test-patt b)))
+				     (dboard:lines->test-patt b))
+				    (dashboard:update-run-command))
 			 #:value (dboard:test-patt->lines
 				  (dboard:data-get-test-patts *data*))
 			 #:expand "YES"
@@ -639,17 +682,18 @@ Misc
 	    (iup:frame
 	     #:title "States"
 	     (dashboard:text-list-toggle-box 
+	      ;; Move these definitions to common and find the other useages and replace!
 	      '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
 	      (lambda (all)
-		(dboard:data-set-states! *data* (string-intersperse all ","))
+		(dboard:data-set-states! *data* all)
 		(dashboard:update-run-command))))
 	    ;; Text box for STATES
 	    (iup:frame
-	     #:title "States"
+	     #:title "Statuses"
 	     (dashboard:text-list-toggle-box 
 	      '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
 	      (lambda (all)
-		(dboard:data-set-statuses! *data* (string-intersperse all ","))
+		(dboard:data-set-statuses! *data* all)
 		(dashboard:update-run-command))))))))
 
 	(iup:frame
