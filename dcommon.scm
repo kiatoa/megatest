@@ -29,6 +29,228 @@
 (define dashboard:update-summary-tab #f)
 
 ;;======================================================================
+;; C O M M O N   D A T A   S T R U C T U R E
+;;======================================================================
+;; 
+;; A single data structure for all the data used in a dashboard.
+;; Share this structure between newdashboard and dashboard with the 
+;; intent of converging on a single app.
+;;
+(define *data* (make-vector 15 #f))
+(define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
+(define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
+(define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
+(define (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
+(define (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
+(define (dboard:data-get-curr-test-ids vec)    (vector-ref  vec 5))
+;; (define (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
+(define (dboard:data-get-path-test-ids vec)    (vector-ref  vec 7))
+(define (dboard:data-get-updaters      vec)    (vector-ref  vec 8))
+(define (dboard:data-get-path-run-ids  vec)    (vector-ref  vec 9))
+(define (dboard:data-get-curr-run-id   vec)    (vector-ref  vec 10))
+(define (dboard:data-get-runs-tree     vec)    (vector-ref  vec 11))
+
+(define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
+(define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
+(define (dboard:data-set-runs-matrix!   vec val)(vector-set! vec 2 val))
+(define (dboard:data-set-tests-tree!    vec val)(vector-set! vec 3 val))
+(define (dboard:data-set-run-keys!      vec val)(vector-set! vec 4 val))
+(define (dboard:data-set-curr-test-ids! vec val)(vector-set! vec 5 val))
+;; (define (dboard:data-set-test-details!  vec val)(vector-set! vec 6 val))
+(define (dboard:data-set-path-test-ids! vec val)(vector-set! vec 7 val))
+(define (dboard:data-set-updaters!      vec val)(vector-set! vec 8 val))
+(define (dboard:data-set-path-run-ids!  vec val)(vector-set! vec 9 val))
+(define (dboard:data-set-curr-run-id!   vec val)(vector-set! vec 10 val))
+(define (dboard:data-set-runs-tree!     vec val)(vector-set! vec 12 val))
+
+(dboard:data-set-run-keys! *data* (make-hash-table))
+
+;; List of test ids being viewed in various panels
+(dboard:data-set-curr-test-ids! *data* (make-hash-table))
+
+;; Look up test-ids by (key1 key2 ... testname [itempath])
+(dboard:data-set-path-test-ids! *data* (make-hash-table))
+
+;; Look up run-ids by ??
+(dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+;;======================================================================
+;; P R O C E S S   R U N S
+;;======================================================================
+
+;; MOVE THIS INTO *data*
+(define *cachedata* (make-hash-table))
+(hash-table-set! *cachedata* "runid-to-col"    (make-hash-table))
+(hash-table-set! *cachedata* "testname-to-row" (make-hash-table))
+
+;; TO-DO
+;;  1. Make "data" hash-table hierarchial store of all displayed data
+;;  2. Update synchash to understand "get-runs", "get-tests" etc.
+;;  3. Add extraction of filters to synchash calls
+;;
+;; Mode is 'full or 'incremental for full refresh or incremental refresh
+(define (run-update keys data runname keypatts testpatt states statuses mode window-id)
+  (let* (;; count and offset => #f so not used
+	 ;; the synchash calls modify the "data" hash
+	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
+	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
+	 (get-details-sig (conc (client:get-signature) " get-test-details"))
+
+	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
+	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
+
+ 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 (tests-detail-changes (if (not (null? test-ids))
+				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data test-ids)
+				   '()))
+
+	 ;; Now can calculate the run-ids
+	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
+	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+
+	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses))
+	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
+	 (header       (hash-table-ref/default runs-hash "header" #f))
+	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+			     (lambda (a b)
+			       (let* ((record-a (hash-table-ref runs-hash a))
+				      (record-b (hash-table-ref runs-hash b))
+				      (time-a   (db:get-value-by-header record-a header "event_time"))
+				      (time-b   (db:get-value-by-header record-b header "event_time")))
+				 (> time-a time-b)))
+			     ))
+	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
+	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
+	 (colnum       1)
+	 (rownum       0)) ;; rownum = 0 is the header
+;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
+    
+	 ;; tests related stuff
+	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
+
+    ;; Given a run-id and testname/item_path calculate a cell R:C
+
+    ;; NOTE: Also build the test tree browser and look up table
+    ;;
+    ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
+    (for-each (lambda (run-id)
+		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
+					keys))
+		       (run-name   (db:get-value-by-header run-record header "runname"))
+		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+		       (run-path   (append key-vals (list run-name))))
+		  (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
+		  (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+				      (conc rownum ":" colnum) col-name)
+		  (hash-table-set! runid-to-col run-id (list colnum run-record))
+		  ;; Here we update the tests treebox and tree keys
+		  (tree:add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name))
+				 userdata: (conc "run-id: " run-id))
+		  (set! colnum (+ colnum 1))))
+	      run-ids)
+
+    ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
+    ;; Do this analysis in the order of the run-ids, the most recent run wins
+    (for-each (lambda (run-id)
+		(let* ((run-path       (hash-table-ref (dboard:data-get-run-keys *data*) run-id))
+		       (new-test-dat   (car test-changes))
+		       (removed-tests  (cadr test-changes))
+		       (tests          (sort (map cadr (filter (lambda (testrec)
+								 (eq? run-id (db:mintest-get-run_id (cadr testrec))))
+							       new-test-dat))
+					     (lambda (a b)
+					       (let ((time-a (db:mintest-get-event_time a))
+						     (time-b (db:mintest-get-event_time b)))
+						 (> time-a time-b)))))
+		       ;; test-changes is a list of (( id record ) ... )
+		       ;; Get list of test names sorted by time, remove tests
+		       (test-names (delete-duplicates (map (lambda (t)
+							     (let ((i (db:mintest-get-item_path t))
+								   (n (db:mintest-get-testname  t)))
+							       (if (string=? i "")
+								   (conc "   " i)
+								   n)))
+							   tests)))
+		       (colnum     (car (hash-table-ref runid-to-col run-id))))
+		  ;; for each test name get the slot if it exists and fill in the cell
+		  ;; or take the next slot and fill in the cell, deal with items in the
+		  ;; run view panel? The run view panel can have a tree selector for
+		  ;; browsing the tests/items
+
+		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
+		  (for-each (lambda (test)
+			      (let* ((test-id   (db:mintest-get-id test))
+				     (state     (db:mintest-get-state test))
+				     (status    (db:mintest-get-status test))
+				     (testname  (db:mintest-get-testname test))
+				     (itempath  (db:mintest-get-item_path test))
+				     (fullname  (conc testname "/" itempath))
+				     (dispname  (if (string=? itempath "") testname (conc "   " itempath)))
+				     (rownum    (hash-table-ref/default testname-to-row fullname #f))
+				     (test-path (append run-path (if (equal? itempath "") 
+								     (list testname)
+								     (list testname itempath)))))
+				(tree:add-node (dboard:data-get-tests-tree *data*) "Runs" 
+					       test-path
+					       userdata: (conc "test-id: " test-id))
+				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
+				(if (not rownum)
+				    (let ((rownums (hash-table-values testname-to-row)))
+				      (set! rownum (if (null? rownums)
+						       1
+						       (+ 1 (apply max rownums))))
+				      (hash-table-set! testname-to-row fullname rownum)
+				      ;; create the label
+				      (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+							  (conc rownum ":" 0) dispname)
+				      ))
+				;; set the cell text and color
+				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
+				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+						    (conc rownum ":" colnum)
+						    (if (string=? state "COMPLETED")
+							status
+							state))
+				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+						    (conc "BGCOLOR" rownum ":" colnum)
+						    (car (gutils:get-color-for-state-status state status)))
+				))
+			    tests)))
+	      run-ids)
+
+    (let ((updater (hash-table-ref/default  (dboard:data-get-updaters *data*) window-id #f)))
+      (if updater (updater (hash-table-ref/default data get-details-sig #f))))
+
+    (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
+    ;; (debug:print 2 "run-changes: " run-changes)
+    ;; (debug:print 2 "test-changes: " test-changes)
+    (list run-changes test-changes)))
+
+;;======================================================================
+;; TESTS DATA
+;;======================================================================
+
+;; Produce a list of lists ready for common:sparse-list-generate-index
+;;
+(define (dcommon:minimize-test-data tests-dat)
+  (if (null? tests-dat) 
+      '()
+      (let loop ((hed (car tests-dat))
+		 (tal (cdr tests-dat))
+		 (res '()))
+	(let* ((test-id    (vector-ref hed 0)) ;; look at the tests-dat spec for locations
+	       (test-name  (vector-ref hed 1))
+	       (item-path  (vector-ref hed 2))
+	       (state      (vector-ref hed 3))
+	       (status     (vector-ref hed 4))
+	       (newitem    (list test-name item-path (list test-id state status))))
+	  (if (null? tal)
+	      (reverse (cons newitem res))
+	      (loop (car tal)(cdr tal)(cons newitem res)))))))
+	  
+
+;;======================================================================
 ;; D A T A   T A B L E S
 ;;======================================================================
 
@@ -114,32 +336,18 @@
 
 (define (dcommon:run-stats)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
+	 (changed      #f)
 	 (updater      (lambda ()
 			 (let* ((run-stats    (mt:get-run-stats))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
-				(max-row      (apply max (map cadr (car indices))))
-				(max-col      (apply max (map cadr (cadr indices))))
+				(row-indices  (car indices))
+				(col-indices  (cadr indices))
+				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
+				(max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
 				(max-visible  (max (- *num-tests* 15) 3))
 				(numrows      1)
-				(numcols      1)
-				(set-cell     (lambda (rnum cnum rname cname v) ;; rownum colnum value
-						(print "proc called: " rnum " " cnum " " rname " " cname " " v)
-						(if (> rnum numrows)
-						    (begin 
-						      ;; add rows numrows to r
-						      (debug:print 0 "Extending matrix from " numrows " to " rnum)
-						      (iup:attribute-set! stats-matrix  "ADDLIN" (conc numrows "-" (- rnum numrows)))
-						      (set! numrows rnum)))
-						(if (> cnum numcols)
-						    (begin 
-						      ;; add rows numrows to r
-						      (debug:print 0 "Extending matrix from " numcols " to " cnum)
-						      (iup:attribute-set! stats-matrix  "ADDLIN" (conc numcols "-" (- rnum numcols)))
-						      (set! numcols cnum)))
-						(debug:print 0 "Setting row " rnum ", col " cnum " to " v)
-						(iup:attribute-set! stats-matrix (conc rnum ":" cnum) v)))
-				(row-indices  (car indices))
-				(col-indices  (cadr indices)))
+				(numcols      1))
+			   (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
 			   (iup:attribute-set! stats-matrix "NUMCOL" max-col )
 			   (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
 			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col)
@@ -147,16 +355,24 @@
 
 			   ;; Row labels
 			   (for-each (lambda (ind)
-				       (let ((name (car ind))
-					     (num  (cadr ind)))
-					 (iup:attribute-set! stats-matrix (conc num ":0") name)))
+				       (let* ((name (car ind))
+					      (num  (cadr ind))
+					      (key  (conc num ":0")))
+					 (if (not (equal? (iup:attribute stats-matrix key) name))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key name)))))
 				     row-indices)
 
 			   ;; Col labels
 			   (for-each (lambda (ind)
-				       (let ((name (car ind))
-					     (num  (cadr ind)))
-					 (iup:attribute-set! stats-matrix (conc "0:" num) name)))
+				       (let* ((name (car ind))
+					      (num  (cadr ind))
+					      (key  (conc "0:" num)))
+					 (if (not (equal? (iup:attribute stats-matrix key) name))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key name)))))
 				     col-indices)
 
 			   ;; Cell contents
@@ -165,9 +381,14 @@
 					      (col-name (cadr entry))
 					      (value    (caddr entry))
 					      (row-num  (cadr (assoc row-name row-indices)))
-					      (col-num  (cadr (assoc col-name col-indices))))
-					 (iup:attribute-set! stats-matrix (conc row-num ":" col-num) value)))
-				     run-stats)))))
+					      (col-num  (cadr (assoc col-name col-indices)))
+					      (key      (conc row-num ":" col-num)))
+					 (if (not (equal? (iup:attribute stats-matrix key) value))
+					     (begin
+					       (set! changed #t)
+					       (iup:attribute-set! stats-matrix key value)))))
+				     run-stats)
+			   (if changed (iup:attribute-set! stats-matrix "REDRAW" "ALL"))))))
     (updater)
     (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
