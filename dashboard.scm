@@ -595,78 +595,82 @@ Misc
        #:value "megatest -xyz"
        #:expand "HORIZONTAL")
       (iup:button "Execute" #:size "50x"))
-     (iup:split
-       ;; Target, testpatt, state and status input boxes
-      (iup:vbox
-       ;; Command to run
-       (iup:frame
-	#:title "Set the action to take"
-	(iup:hbox
-	 (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x")
-	 (let ((lb (iup:listbox #:expand "HORIZONTAL"
-				#:dropdown "YES")))
-	   (iuplistbox-fill-list lb '("-runtests" "-remove-runs" "-set-state-status") "-runtests")
-	   lb)))
-       (iup:frame
-	#:title "Selectors that determine which tests will be operated on"
-	(iup:vbox
-	 ;; Text box for test patterns
-	 (iup:frame
-	  #:title "Test patterns (one per line)"
-	  (iup:textbox #:action (lambda (val a b)
-				  (dboard:data-set-test-patts!
-				   *data*
-				   (dboard:lines->test-patt b)))
-		       #:value (dboard:test-patt->lines
-				(dboard:data-get-test-patts *data*))
-		       #:expand "YES"
-		       #:multiline "YES"))
-	 (iup:frame
-	  #:title "Target"
-	  ;; Target selectors
-	  (apply iup:hbox
-		 (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
-			(key-lb   (car dat))
-			(combos   (cadr dat)))
-		   (set! key-listboxes key-lb)
-		   combos)))
-	 (iup:hbox
-	  ;; Text box for STATES
-	  (iup:frame
-	   #:title "States"
-	   (dashboard:text-list-toggle-box 
-	    '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
-	    (lambda (all)
-	      (dboard:data-set-states! *data* (string-intersperse all ","))
-	      (dashboard:update-run-command))))
-	  ;; Text box for STATES
-	  (iup:frame
-	   #:title "States"
-	   (dashboard:text-list-toggle-box 
-	    '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
-	    (lambda (all)
-	      (dboard:data-set-statuses! *data* (string-intersperse all ","))
-	      (dashboard:update-run-command))))))))
+
       (iup:split
        #:orientation "HORIZONTAL"
-       (iup:frame
-	#:title "Tests and Tasks"
-	(iup:canvas #:action (make-canvas-action
-			      (lambda (cnv xadj yadj)
-				;; (print "cnv: " cnv " x: " x " y: " y)
-				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    #:size "150x150"
-		    #:expand "YES"
-		    #:scrollbar "YES"
-		    #:posx "0.5"
-		    #:posy "0.5"))
+       
+       (iup:split
+	;; Target, testpatt, state and status input boxes
+	(iup:vbox
+	 ;; Command to run
+	 (iup:frame
+	  #:title "Set the action to take"
+	  (iup:hbox
+	   (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x")
+	   (let ((lb (iup:listbox #:expand "HORIZONTAL"
+				  #:dropdown "YES")))
+	     (iuplistbox-fill-list lb '("-runtests" "-remove-runs" "-set-state-status") "-runtests")
+	     lb)))
+	 (iup:frame
+	  #:title "Selectors that determine which tests will be operated on"
+	  (iup:vbox
+	   ;; Text box for test patterns
+	   (iup:frame
+	    #:title "Test patterns (one per line)"
+	    (iup:textbox #:action (lambda (val a b)
+				    (dboard:data-set-test-patts!
+				     *data*
+				     (dboard:lines->test-patt b)))
+			 #:value (dboard:test-patt->lines
+				  (dboard:data-get-test-patts *data*))
+			 #:expand "YES"
+			 #:multiline "YES"))
+	   (iup:frame
+	    #:title "Target"
+	    ;; Target selectors
+	    (apply iup:hbox
+		   (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+			  (key-lb   (car dat))
+			  (combos   (cadr dat)))
+		     (set! key-listboxes key-lb)
+		     combos)))
+	   (iup:hbox
+	    ;; Text box for STATES
+	    (iup:frame
+	     #:title "States"
+	     (dashboard:text-list-toggle-box 
+	      '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+	      (lambda (all)
+		(dboard:data-set-states! *data* (string-intersperse all ","))
+		(dashboard:update-run-command))))
+	    ;; Text box for STATES
+	    (iup:frame
+	     #:title "States"
+	     (dashboard:text-list-toggle-box 
+	      '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+	      (lambda (all)
+		(dboard:data-set-statuses! *data* (string-intersperse all ","))
+		(dashboard:update-run-command))))))))
+
+	(iup:frame
+	 #:title "Tests and Tasks"
+	 (iup:canvas #:action (make-canvas-action
+			       (lambda (cnv xadj yadj)
+				 ;; (print "cnv: " cnv " x: " x " y: " y)
+				 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
+		     #:size "150x150"
+		     #:expand "YES"
+		     #:scrollbar "YES"
+		     #:posx "0.5"
+		     #:posy "0.5")))
+     
        (iup:frame
 	#:title "Logs" ;; To be replaced with tabs
 	(let ((logs-tb (iup:textbox #:expand "YES"
 				    #:multiline "YES")))
 	  (dboard:data-set-logs-textbox! *data* logs-tb)
 	  logs-tb))
-       )))))
+       ))))
   
 
 ;; (trace dashboard:populate-target-dropdown
