@@ -511,10 +511,13 @@ Misc
 (define (dashboard:update-run-command)
   (let* ((cmd-tb       (dboard:data-get-command-tb *data*))
 	 (cmd          (dboard:data-get-command    *data*))
-	 (test-patt    (dboard:data-get-test-patts *data*))
+	 (test-patt    (let ((tp (dboard:data-get-test-patts *data*)))
+			 (if (equal? tp "") "%" tp)))
 	 (states       (dboard:data-get-states     *data*))
 	 (statuses     (dboard:data-get-statuses   *data*))
-	 (target       (dboard:data-get-target     *data*))
+	 (target       (let ((targ-list (dboard:data-get-target     *data*)))
+			 (if targ-list (string-intersperse targ-list "/") "no-target-selected")))
+	 (run-name     (dboard:data-get-run-name   *data*))
 	 (states-str   (if (or (not states)
 			       (null? states))
 			   ""
@@ -528,11 +531,20 @@ Misc
       ((runtests)
        (set! full-cmd (conc full-cmd 
 			    " -runtests "
-			    (if (equal? test-patt "") "%" test-patt) " "
+			    test-patt
 			    " -target "
-			    (if target (string-intersperse target "/") "no-target-selected")
+			    target
 			    " :runname "
-			    " somerun " ;; addme!
+			    run-name
+			    )))
+      ((remove-runs)
+       (set! full-cmd (conc full-cmd
+			    " -remove-runs "
+			    run-name
+			    " -target " 
+			    target
+			    " -testpatt "
+			    test-patt
 			    states-str
 			    statuses-str
 			    )))
@@ -615,22 +627,30 @@ Misc
     ;; refer to *keys*, *dbkeys* for keys
     (iup:vbox
      ;; The command line display/exectution control
-     (iup:hbox
-      (iup:label "Run on" #:size "40x")
-      (iup:radio 
-       (iup:hbox
-	(iup:toggle "Local" #:size "40x")
+     (iup:frame
+      #:title "Command to be exectuted"
+      (iup:hbox
+       (iup:label "Run on" #:size "40x")
+       (iup:radio 
+	(iup:hbox
+	 (iup:toggle "Local" #:size "40x")
 	(iup:toggle "Server" #:size "40x")))
-      (let ((tb (iup:textbox 
-		 #:value "megatest "
-		 #:expand "HORIZONTAL"
-		 #:readonly "YES"
-		 )))
-	(dboard:data-set-command-tb! *data* tb)
-	tb)
-      (iup:button "Execute" #:size "50x"))
+       (let ((tb (iup:textbox 
+		  #:value "megatest "
+		  #:expand "HORIZONTAL"
+		  #:readonly "YES"
+		  #:font "Courier New, -12"
+		  )))
+	 (dboard:data-set-command-tb! *data* tb)
+	 tb)
+       (iup:button "Execute" #:size "50x"
+		   #:action (lambda (obj)
+			      (let ((cmd (conc "xterm -geometry 180x20 -e \""
+					       (iup:attribute (dboard:data-get-command-tb *data*) "VALUE")
+					       ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+				(system cmd))))))
 
-      (iup:split
+     (iup:split
        #:orientation "HORIZONTAL"
        
        (iup:split
@@ -641,8 +661,8 @@ Misc
 	 (iup:frame
 	  #:title "Set the action to take"
 	  (iup:hbox
-	   (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-	   (let* ((cmds-list '("runtests" "remove-runs" "set-state-status"))
+	   ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
+	   (let* ((cmds-list '("runtests" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
 		  (lb         (iup:listbox #:expand "HORIZONTAL"
 					   #:dropdown "YES"
 					   #:action (lambda (obj val index lbstate)
@@ -654,7 +674,18 @@ Misc
 	     (dboard:data-set-command! *data* default-cmd)
 	     lb)))
 	 (iup:frame
-	  #:title "Selectors that determine which tests will be operated on"
+	  #:title "Runname"
+	  (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
+		 (tb (iup:textbox #:expand "HORIZONTAL"
+				 #:action (lambda (obj val txt)
+					    ;; (print "obj: " obj " val: " val " unk: " unk)
+					    (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
+					    (dashboard:update-run-command))
+				 #:value default-run-name)))
+	    (dboard:data-set-run-name! *data* default-run-name)
+	    tb))
+	 (iup:frame
+	  #:title "SELECTORS"
 	  (iup:vbox
 	   ;; Text box for test patterns
 	   (iup:frame

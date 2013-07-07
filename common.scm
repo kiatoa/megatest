@@ -311,6 +311,10 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
+(define (seconds->work-week/day sec)
+  (time->string
+   (seconds->local-time sec) "%V.%u"))
+
 ;;======================================================================
 ;; Colors
 ;;======================================================================

@@ -37,7 +37,7 @@
 ;; Share this structure between newdashboard and dashboard with the 
 ;; intent of converging on a single app.
 ;;
-(define *data* (make-vector 20 #f))
+(define *data* (make-vector 25 #f))
 (define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
 (define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
@@ -59,6 +59,8 @@
 (define (dboard:data-get-command       vec)    (vector-ref vec 16))
 (define (dboard:data-get-command-tb    vec)    (vector-ref vec 17))
 (define (dboard:data-get-target        vec)    (vector-ref vec 18))
+(define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
+
 
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
@@ -81,6 +83,7 @@
 (define (dboard:data-set-command!       vec val)(vector-set! vec 16 val))
 (define (dboard:data-set-command-tb!    vec val)(vector-set! vec 17 val))
 (define (dboard:data-set-target!        vec val)(vector-set! vec 18 val))
+(define (dboard:data-set-run-name!      vec val)(vector-set! vec 19 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 
