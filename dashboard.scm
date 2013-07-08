@@ -779,14 +779,18 @@ Misc
        (iup:frame
 	#:title "Tests and Tasks"
 	(let* ((updater #f)
+	       (last-xadj 0)
+	       (last-yadj 0)
 	       (canvas-obj   
 	(iup:canvas #:action (make-canvas-action
 			      (lambda (cnv xadj yadj)
 				(if (not updater)
-				    (set! updater (lambda ()
+				    (set! updater (lambda (xadj yadj)
 						    ;; (print "cnv: " cnv " x: " x " y: " y)
 						    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames))))
-				(updater)))
+				(updater xadj yadj)
+				(set! last-xadj xadj)
+				(set! last-yadj yadj)))
 		    ;; Following doesn't work 
 		    ;; #:wheel-cb (make-canvas-action
 		    ;;           (lambda (cnv xadj yadj)
@@ -827,7 +831,7 @@ Misc
 							  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
 							  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
 							  (dashboard:update-run-command)
-							  (if updater (updater)))))))
+							  (if updater (updater last-xadj last-yadj)))))))
 					      (hash-table-keys tests-info)))))))
 	  canvas-obj)))
       ;; (print "obj: " obj " btn: " btn " pressed: " pressed " x: " x " y: " y " status: " status))
