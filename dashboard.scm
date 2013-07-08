@@ -620,11 +620,13 @@ Misc
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
+	 (updater-for-runs #f)
 	 (update-keyvals (lambda ()
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes)))))
 			     (dboard:data-set-target! *data* targ)
+			     (if updater-for-runs (updater-for-runs))
 			     (dashboard:update-run-command))))
 	 (tests-draw-state (make-hash-table))) ;; use for keeping state of the test canvas
     (hash-table-set! tests-draw-state 'first-time #t)
@@ -683,15 +685,37 @@ Misc
 	     lb)))
 	 (iup:frame
 	  #:title "Runname"
-	  (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
-		 (tb (iup:textbox #:expand "HORIZONTAL"
-				 #:action (lambda (obj val txt)
-					    ;; (print "obj: " obj " val: " val " unk: " unk)
-					    (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
-					    (dashboard:update-run-command))
-				 #:value default-run-name)))
-	    (dboard:data-set-run-name! *data* default-run-name)
-	    tb))
+	   (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
+		  (tb (iup:textbox #:expand "HORIZONTAL"
+				   #:action (lambda (obj val txt)
+					      ;; (print "obj: " obj " val: " val " unk: " unk)
+					      (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
+					      (dashboard:update-run-command))
+				   #:value default-run-name))
+		  (lb (iup:listbox #:expand "HORIZONTAL"
+				   #:dropdown "YES"
+				   #:action (lambda (obj val index lbstate)
+					      (iup:attribute-set! tb "VALUE" val)
+					      (dboard:data-set-run-name! *data* val)
+					      (dashboard:update-run-command))))
+		  (refresh-runs-list (lambda ()
+				       (let* ((target        (dboard:data-get-target-string *data*))
+					      (runs-for-targ (mt:get-runs-by-patt *keys* "%" target))
+					      (runs-header   (vector-ref runs-for-targ 0))
+					      (runs-dat      (vector-ref runs-for-targ 1))
+					      (run-names     (cons default-run-name 
+								   (map (lambda (x)
+									  (db:get-value-by-header x runs-header "runname"))
+									runs-dat))))
+					 (iup:attribute-set! lb "REMOVEITEM" "ALL")
+					 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
+	     (set! updater-for-runs refresh-runs-list)
+	     (refresh-runs-list)
+	     (dboard:data-set-run-name! *data* default-run-name)
+	     (iup:hbox
+	      tb
+	      lb)))
+
 	 (iup:frame
 	  #:title "SELECTORS"
 	  (iup:vbox
