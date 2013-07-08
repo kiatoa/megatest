@@ -598,7 +598,7 @@
 	     ;(debug:print 4 "qry: " qry) 
 	     qry)
 	   qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=?;" state status res)
 	  res) 
 	(begin
 	  (debug:print 0 "ERROR: Called without all necessary keys")
@@ -679,6 +679,27 @@
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
+;; get some basic run stats
+;;
+;; ( (runname (( state  count ) ... ))
+;;   (   ...  
+(define (db:get-run-stats db)
+  (let ((totals       (make-hash-table))
+	(res          '()))
+    (sqlite3:for-each-row
+     (lambda (runname state count)
+       (let* ((stateparts (string-split state "|"))
+	      (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
+	 (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
+	 (set! res (cons (list runname newstate count) res))))
+     db
+    "SELECT runname,t.state||'|'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname ORDER BY r.event_time,s DESC;" )
+    ;; (set! res (reverse res))
+    (for-each (lambda (state)
+		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
+	      (sort (hash-table-keys totals) string>=))
+    res))
+
 ;; db:get-runs-by-patt
 ;; get runs by list of criteria
 ;; register a test run with the db
@@ -694,7 +715,7 @@
 	 (key-patt "")
 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
 	 (qry-str  #f)
-	 (keyvals  (keys:target->keyval keys targpatt)))
+	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
     (for-each (lambda (keyval)
 		(let* ((key    (car keyval))
 		       (patt   (cadr keyval))
@@ -706,7 +727,7 @@
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE runname " runwildtype " ? " key-patt ";"))
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time;"))
     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
     (sqlite3:for-each-row 
      (lambda (a . r)
@@ -830,10 +851,11 @@
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by
 			      #!key
-			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
+			      (qryvals #f)
 			      )
   (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
-  (let* ((res '())
+  (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
+	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
 			      #f
@@ -2129,13 +2151,20 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+			 (or is-ok (member mode '(toplevel itemmatch))))
 		    (set! parent-waiton-met #t))
-		   ((and same-itempath
-			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+		   ((or (and (not same-itempath)
+			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath
+			(and same-itempath
+			     is-completed
+			     (or is-ok 
+				 (eq? mode 'toplevel)              ;; toplevel does not block on FAIL
+				 (and is-ok (eq? mode 'itemmatch)) ;; itemmatch blocks on not ok
+				 )))
 		    (set! item-waiton-met #t)))))
 	      tests)
+             ;; both requirements, parent and item-waiton must be met to NOT add item to
+             ;; prereq's not met list
 	     (if (not (or parent-waiton-met item-waiton-met))
 		 (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
 	     ;; if the test is not found then clearly the waiton is not met...

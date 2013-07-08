@@ -47,8 +47,8 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by #f))
-  (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by))
+(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by #f) (qryvals #f))
+  (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by qryvals: qryvals))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -56,8 +56,8 @@
 	   (have-more (eq? (length testsdat) limit)))
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
-	    (debug:print-info 0 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status new-offset limit not-in sort-by)
+	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
+	    (loop (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status new-offset limit not-in sort-by qryvals: qryvals)
 		  full-list
 		  new-offset
 		  limit))
@@ -65,3 +65,6 @@
 
 (define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode))
+
+(define (mt:get-run-stats)
+  (cdb:remote-run db:get-run-stats #f))

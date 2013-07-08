@@ -112,12 +112,23 @@ test9c :
 	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
-	@echo Run mintest f with an empty waiton spec
-	cd mintest;megatest -runtests f -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	@echo Run an itemized test with no items
+	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+
+test10 :
+	@echo Run a bunch of different targets simultaneously
+	(cd fullrun;$(MEGATEST) -server - ;sleep 2)&
+	for targ in mint/btrfs/mintdir sunos/sshfs/loc; do \
+	   (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$targ :runname $(RUNNAME) &); done
+	for sys in ubuntu suse redhat debian;do \
+	  for fs in afs nfs zfs; do \
+	     for dpath in none tmp; do \
+	        (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$sys/$$fs/$$dpath :runname $(RUNNAME) &);\
+	     done;done;done
 
 minsetup : 
 	cd ..;make && make install
-	mkdir -p mintest/{runs,links}
+	mkdir -p mintest/runs mintest/links
 	cd mintest;megatest -stop-server 0
 	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3

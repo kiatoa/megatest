@@ -3,6 +3,7 @@ PATH     := $(BINDIR):$(PATH)
 MEGATEST  = $(BINDIR)/megatest
 DASHBOARD = $(BINDIR)/dashboard
 all :
+	$(MEGATEST) -remove-runs -target a/b :runname c -testpatt %/%
 	$(MEGATEST) -runtests % -target a/b :runname c
 
 bigbig :
