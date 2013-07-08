@@ -575,6 +575,7 @@ Misc
 	    (hash-table-set! tests-draw-state 'first-time #f)
 	    (hash-table-set! tests-draw-state 'scalef 8)
 	    (hash-table-set! tests-draw-state 'tests-info (make-hash-table))
+	    (hash-table-set! tests-draw-state 'selected-tests (make-hash-table))
 	    ;; set these 
 	    (hash-table-set! tests-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
 	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
@@ -587,7 +588,8 @@ Misc
 	     (boxh   25)
 	     (gapx   20)
 	     (gapy   30)
-	     (tests-hash (hash-table-ref tests-draw-state 'tests-info)))
+	     (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
+	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
 	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
 	(let loop ((hed (car (reverse sorted-testnames)))
 		   (tal (cdr (reverse sorted-testnames)))
@@ -598,6 +600,8 @@ Misc
 	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
 	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
 	  (canvas-rectangle! cnv llx urx lly ury)
+	  (if (hash-table-ref/default selected-tests hed #f)
+	      (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))
 	  (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly))) ;; NB// Swap ury and lly
 	  (if (not (null? tal))
 	      ;; leave a column of space to the right to list items
@@ -774,10 +778,15 @@ Misc
       
        (iup:frame
 	#:title "Tests and Tasks"
+	(let* ((updater #f)
+	       (canvas-obj   
 	(iup:canvas #:action (make-canvas-action
 			      (lambda (cnv xadj yadj)
-				;; (print "cnv: " cnv " x: " x " y: " y)
-				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
+				(if (not updater)
+				    (set! updater (lambda ()
+						    ;; (print "cnv: " cnv " x: " x " y: " y)
+						    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames))))
+				(updater)))
 		    ;; Following doesn't work 
 		    ;; #:wheel-cb (make-canvas-action
 		    ;;           (lambda (cnv xadj yadj)
@@ -789,7 +798,9 @@ Misc
 		    #:posx "0.5"
 		    #:posy "0.5"
 		    #:button-cb (lambda (obj btn pressed x y status)
-				  (let ((tests-info (hash-table-ref tests-draw-state  'tests-info)))
+				  ;; (print "obj: " obj)
+				  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
+					(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
 				    ;; (print "x\ty\tllx\tlly\turx\tury")
 				    (for-each (lambda (test-name)
 						(let* ((rec-coords (hash-table-ref tests-info test-name))
@@ -804,14 +815,21 @@ Misc
 							   (< x urx)
 							   (< y ury))
 						      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
-							(let* ((newpatt-list (if (member test-name patterns)
-										 (delete test-name patterns)
-										 (cons test-name patterns)))
+							(let* ((selected     (not (member test-name patterns)))
+							       (newpatt-list (if selected
+										 (cons test-name patterns)
+										 (delete test-name patterns)))
 							       (newpatt      (string-intersperse newpatt-list "\n")))
+							  ;; (if cnv-obj
+							  ;;    (dashboard:draw-tests cnv-obj 0 0 tests-draw-state sorted-testnames))
+							  (iup:attribute-set! obj "REDRAW" "ALL")
+							  (hash-table-set! selected-tests test-name selected)
 							  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
 							  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
-							  (dashboard:update-run-command))))))
+							  (dashboard:update-run-command)
+							  (if updater (updater)))))))
 					      (hash-table-keys tests-info)))))))
+	  canvas-obj)))
       ;; (print "obj: " obj " btn: " btn " pressed: " pressed " x: " x " y: " y " status: " status))
       
       (iup:frame
