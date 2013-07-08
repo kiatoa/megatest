@@ -110,7 +110,7 @@
   (string-substitute (regexp ",") "\n" test-patt))
 
 (define (dboard:lines->test-patt lines)
-  (string-substitute (regexp "\n") "," lines))
+  (string-substitute (regexp "\n") "," lines #t))
 
 
 ;;======================================================================

@@ -561,28 +561,34 @@ Misc
       (else (set! full-cmd " no valid command ")))
     (iup:attribute-set! cmd-tb "VALUE" full-cmd)))
 
-(define (dashboard:draw-tests cnv xadj yadj test-draw-state sorted-testnames)
+;; Display the tests as rows of boxes on the test/task pane
+;;
+(define (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)
   (canvas-clear! cnv)
-  (canvas-font-set! cnv "Courier New, -10")
+  (canvas-font-set! cnv "Helvetica, -10")
   (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
 	       ((originx originy)             (canvas-origin cnv)))
-      (if (hash-table-ref/default test-draw-state 'first-time #t)
+      ;; (print "originx: " originx " originy: " originy)
+      ;; (canvas-origin-set! cnv 0 (- (/ sizey 2)))
+      (if (hash-table-ref/default tests-draw-state 'first-time #t)
 	  (begin
-	    (hash-table-set! test-draw-state 'first-time #f)
-	    (hash-table-set! test-draw-state 'scalef 8)
+	    (hash-table-set! tests-draw-state 'first-time #f)
+	    (hash-table-set! tests-draw-state 'scalef 8)
+	    (hash-table-set! tests-draw-state 'tests-info (make-hash-table))
 	    ;; set these 
-	    (hash-table-set! test-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
-	    (hash-table-set! test-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
-      (let* ((scalef (hash-table-ref/default test-draw-state 'scalef 8))
-	     (test-browse-xoffset (hash-table-ref test-draw-state 'test-browse-xoffset))
-	     (test-browse-yoffset (hash-table-ref test-draw-state 'test-browse-yoffset))
+	    (hash-table-set! tests-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
+	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+      (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
+	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
+	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
 	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
 	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
 	     (boxw   90)
 	     (boxh   25)
 	     (gapx   20)
-	     (gapy   30))
-	(print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
+	     (gapy   30)
+	     (tests-hash (hash-table-ref tests-draw-state 'tests-info)))
+	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
 	(let loop ((hed (car (reverse sorted-testnames)))
 		   (tal (cdr (reverse sorted-testnames)))
 		   (llx xtorig)
@@ -592,6 +598,7 @@ Misc
 	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
 	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
 	  (canvas-rectangle! cnv llx urx lly ury)
+	  (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly))) ;; NB// Swap ury and lly
 	  (if (not (null? tal))
 	      ;; leave a column of space to the right to list items
 	      (let ((have-room 
@@ -628,7 +635,8 @@ Misc
 			     (dboard:data-set-target! *data* targ)
 			     (if updater-for-runs (updater-for-runs))
 			     (dashboard:update-run-command))))
-	 (tests-draw-state (make-hash-table))) ;; use for keeping state of the test canvas
+	 (tests-draw-state (make-hash-table)) ;; use for keeping state of the test canvas
+	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
     (hash-table-set! tests-draw-state 'scalef 8)
     (tests:get-full-data test-names test-records '())
@@ -644,7 +652,7 @@ Misc
        (iup:radio 
 	(iup:hbox
 	 (iup:toggle "Local" #:size "40x")
-	(iup:toggle "Server" #:size "40x")))
+	 (iup:toggle "Server" #:size "40x")))
        (let ((tb (iup:textbox 
 		  #:value "megatest "
 		  #:expand "HORIZONTAL"
@@ -661,124 +669,155 @@ Misc
 				(system cmd))))))
 
      (iup:split
-       #:orientation "HORIZONTAL"
-       
-       (iup:split
-	;; Target, testpatt, state and status input boxes
-	#:value 300
-	(iup:vbox
-	 ;; Command to run
-	 (iup:frame
-	  #:title "Set the action to take"
-	  (iup:hbox
-	   ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
-	   (let* ((cmds-list '("runtests" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
-		  (lb         (iup:listbox #:expand "HORIZONTAL"
-					   #:dropdown "YES"
-					   #:action (lambda (obj val index lbstate)
-						      ;; (print obj " " val " " index " " lbstate)
-						      (dboard:data-set-command! *data* val)
-						      (dashboard:update-run-command))))
-		  (default-cmd (car cmds-list)))
-	     (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-	     (dboard:data-set-command! *data* default-cmd)
-	     lb)))
-	 (iup:frame
-	  #:title "Runname"
-	   (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
-		  (tb (iup:textbox #:expand "HORIZONTAL"
-				   #:action (lambda (obj val txt)
-					      ;; (print "obj: " obj " val: " val " unk: " unk)
-					      (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
-					      (dashboard:update-run-command))
-				   #:value default-run-name))
-		  (lb (iup:listbox #:expand "HORIZONTAL"
-				   #:dropdown "YES"
-				   #:action (lambda (obj val index lbstate)
-					      (iup:attribute-set! tb "VALUE" val)
-					      (dboard:data-set-run-name! *data* val)
-					      (dashboard:update-run-command))))
-		  (refresh-runs-list (lambda ()
-				       (let* ((target        (dboard:data-get-target-string *data*))
-					      (runs-for-targ (mt:get-runs-by-patt *keys* "%" target))
-					      (runs-header   (vector-ref runs-for-targ 0))
-					      (runs-dat      (vector-ref runs-for-targ 1))
-					      (run-names     (cons default-run-name 
-								   (map (lambda (x)
-									  (db:get-value-by-header x runs-header "runname"))
-									runs-dat))))
-					 (iup:attribute-set! lb "REMOVEITEM" "ALL")
-					 (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
-	     (set! updater-for-runs refresh-runs-list)
-	     (refresh-runs-list)
-	     (dboard:data-set-run-name! *data* default-run-name)
-	     (iup:hbox
-	      tb
-	      lb)))
+      #:orientation "HORIZONTAL"
+      
+      (iup:split
+       #:value 300
 
-	 (iup:frame
-	  #:title "SELECTORS"
-	  (iup:vbox
-	   ;; Text box for test patterns
-	   (iup:frame
-	    #:title "Test patterns (one per line)"
-	    (iup:textbox #:action (lambda (val a b)
-				    (dboard:data-set-test-patts!
-				     *data*
-				     (dboard:lines->test-patt b))
-				    (dashboard:update-run-command))
-			 #:value (dboard:test-patt->lines
-				  (dboard:data-get-test-patts *data*))
-			 #:expand "YES"
-			 #:multiline "YES"))
-	   (iup:frame
-	    #:title "Target"
-	    ;; Target selectors
-	    (apply iup:hbox
-		   (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
-			  (key-lb   (car dat))
-			  (combos   (cadr dat)))
-		     (set! key-listboxes key-lb)
-		     combos)))
-	   (iup:hbox
-	    ;; Text box for STATES
-	    (iup:frame
-	     #:title "States"
-	     (dashboard:text-list-toggle-box 
-	      ;; Move these definitions to common and find the other useages and replace!
-	      '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
-	      (lambda (all)
-		(dboard:data-set-states! *data* all)
-		(dashboard:update-run-command))))
-	    ;; Text box for STATES
-	    (iup:frame
-	     #:title "Statuses"
-	     (dashboard:text-list-toggle-box 
-	      '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
-	      (lambda (all)
-		(dboard:data-set-statuses! *data* all)
-		(dashboard:update-run-command))))))))
+       ;; Target, testpatt, state and status input boxes
+       ;;
+       (iup:vbox
+	;; Command to run
+	(iup:frame
+	 #:title "Set the action to take"
+	 (iup:hbox
+	  ;; (iup:label "Command to run" #:expand "HORIZONTAL" #:size "70x" #:alignment "LEFT:ACENTER")
+	  (let* ((cmds-list '("runtests" "remove-runs" "set-state-status" "lock-runs" "unlock-runs"))
+		 (lb         (iup:listbox #:expand "HORIZONTAL"
+					  #:dropdown "YES"
+					  #:action (lambda (obj val index lbstate)
+						     ;; (print obj " " val " " index " " lbstate)
+						     (dboard:data-set-command! *data* val)
+						     (dashboard:update-run-command))))
+		 (default-cmd (car cmds-list)))
+	    (iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
+	    (dboard:data-set-command! *data* default-cmd)
+	    lb)))
 
 	(iup:frame
-	 #:title "Tests and Tasks"
-	 (iup:canvas #:action (make-canvas-action
-			       (lambda (cnv xadj yadj)
-				 ;; (print "cnv: " cnv " x: " x " y: " y)
-				 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		     #:size "150x150"
-		     #:expand "YES"
-		     #:scrollbar "YES"
-		     #:posx "0.5"
-		     #:posy "0.5")))
-     
+	 #:title "Runname"
+	 (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
+		(tb (iup:textbox #:expand "HORIZONTAL"
+				 #:action (lambda (obj val txt)
+					    ;; (print "obj: " obj " val: " val " unk: " unk)
+					    (dboard:data-set-run-name! *data* txt) ;; (iup:attribute obj "VALUE"))
+					    (dashboard:update-run-command))
+				 #:value default-run-name))
+		(lb (iup:listbox #:expand "HORIZONTAL"
+				 #:dropdown "YES"
+				 #:action (lambda (obj val index lbstate)
+					    (iup:attribute-set! tb "VALUE" val)
+					    (dboard:data-set-run-name! *data* val)
+					    (dashboard:update-run-command))))
+		(refresh-runs-list (lambda ()
+				     (let* ((target        (dboard:data-get-target-string *data*))
+					    (runs-for-targ (mt:get-runs-by-patt *keys* "%" target))
+					    (runs-header   (vector-ref runs-for-targ 0))
+					    (runs-dat      (vector-ref runs-for-targ 1))
+					    (run-names     (cons default-run-name 
+								 (map (lambda (x)
+									(db:get-value-by-header x runs-header "runname"))
+								      runs-dat))))
+				       (iup:attribute-set! lb "REMOVEITEM" "ALL")
+				       (iuplistbox-fill-list lb run-names selected-item: default-run-name)))))
+	   (set! updater-for-runs refresh-runs-list)
+	   (refresh-runs-list)
+	   (dboard:data-set-run-name! *data* default-run-name)
+	   (iup:hbox
+	    tb
+	    lb)))
+
+	(iup:frame
+	 #:title "SELECTORS"
+	 (iup:vbox
+	  ;; Text box for test patterns
+	  (iup:frame
+	   #:title "Test patterns (one per line)"
+	   (let ((tb (iup:textbox #:action (lambda (val a b)
+					     (dboard:data-set-test-patts!
+					      *data*
+					      (dboard:lines->test-patt b))
+					     (dashboard:update-run-command))
+				  #:value (dboard:test-patt->lines
+					   (dboard:data-get-test-patts *data*))
+				  #:expand "YES"
+				  #:multiline "YES")))
+	     (set! test-patterns-textbox tb)
+	     tb))
+	  (iup:frame
+	   #:title "Target"
+	   ;; Target selectors
+	   (apply iup:hbox
+		  (let* ((dat      (dashboard:update-target-selector key-listboxes action-proc: update-keyvals))
+			 (key-lb   (car dat))
+			 (combos   (cadr dat)))
+		    (set! key-listboxes key-lb)
+		    combos)))
+	  (iup:hbox
+	   ;; Text box for STATES
+	   (iup:frame
+	    #:title "States"
+	    (dashboard:text-list-toggle-box 
+	     ;; Move these definitions to common and find the other useages and replace!
+	     '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+	     (lambda (all)
+	       (dboard:data-set-states! *data* all)
+	       (dashboard:update-run-command))))
+	   ;; Text box for STATES
+	   (iup:frame
+	    #:title "Statuses"
+	    (dashboard:text-list-toggle-box 
+	     '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+	     (lambda (all)
+	       (dboard:data-set-statuses! *data* all)
+	       (dashboard:update-run-command))))))))
+      
        (iup:frame
-	#:title "Logs" ;; To be replaced with tabs
-	(let ((logs-tb (iup:textbox #:expand "YES"
-				    #:multiline "YES")))
-	  (dboard:data-set-logs-textbox! *data* logs-tb)
-	  logs-tb))
-       ))))
-  
+	#:title "Tests and Tasks"
+	(iup:canvas #:action (make-canvas-action
+			      (lambda (cnv xadj yadj)
+				;; (print "cnv: " cnv " x: " x " y: " y)
+				(dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
+		    ;; Following doesn't work 
+		    ;; #:wheel-cb (make-canvas-action
+		    ;;           (lambda (cnv xadj yadj)
+		    ;;    	 ;; (print "cnv: " cnv " x: " x " y: " y)
+		    ;;    	 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
+		    #:size "150x150"
+		    #:expand "YES"
+		    #:scrollbar "YES"
+		    #:posx "0.5"
+		    #:posy "0.5"
+		    #:button-cb (lambda (obj btn pressed x y status)
+				  (let ((tests-info (hash-table-ref tests-draw-state  'tests-info)))
+				    ;; (print "x\ty\tllx\tlly\turx\tury")
+				    (for-each (lambda (test-name)
+						(let* ((rec-coords (hash-table-ref tests-info test-name))
+						       (llx        (list-ref rec-coords 0))
+						       (urx        (list-ref rec-coords 1))
+						       (lly        (list-ref rec-coords 2))
+						       (ury        (list-ref rec-coords 3)))
+						  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
+						  (if (and (> x llx)
+							   (> y lly)
+							   (< x urx)
+							   (< y ury))
+						      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+							(if (not (member test-name patterns))
+							    (let* ((newpatt (string-intersperse (cons test-name patterns) "\n")))
+							      (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
+							      (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
+							      (dashboard:update-run-command)))))))
+					      (hash-table-keys tests-info)))))))
+      ;; (print "obj: " obj " btn: " btn " pressed: " pressed " x: " x " y: " y " status: " status))
+      
+      (iup:frame
+       #:title "Logs" ;; To be replaced with tabs
+       (let ((logs-tb (iup:textbox #:expand "YES"
+				   #:multiline "YES")))
+	 (dboard:data-set-logs-textbox! *data* logs-tb)
+	 logs-tb))))))
+
 
 ;; (trace dashboard:populate-target-dropdown
 ;;        common:list-is-sublist)
@@ -1037,7 +1076,7 @@ Misc
 						      (if (eq? val 1)
 							  (hash-table-set! *status-ignore-hash* status #t)
 							  (hash-table-delete! *status-ignore-hash* status)))))
-	      '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+		   '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
@@ -1057,8 +1096,8 @@ Misc
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
 			   #:expand "YES"
 			   #:max (* 10 (length *allruns*)))))
-	   ;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
-	   ;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
+					;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
+					;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
 	   )
 	  )
     
@@ -1068,11 +1107,11 @@ Misc
 			(apply iup:vbox 
 			       (map (lambda (x)		
 				      (let ((res (iup:hbox #:expand "HORIZONTAL"
-						  (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
-						  (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
-							       #:action (lambda (obj unk val)
-									  (mark-for-update)
-									  (update-search x val))))))
+							   (iup:label x #:size "x15" #:fontsize "10" #:expand "HORIZONTAL")
+							   (iup:textbox #:size "x15" #:fontsize "10" #:value "%" #:expand "HORIZONTAL"
+									#:action (lambda (obj unk val)
+										   (mark-for-update)
+										   (update-search x val))))))
 					(set! i (+ i 1))
 					res))
 				    keynames)))))
@@ -1082,25 +1121,25 @@ Misc
        ((>= testnum ntests)
 	;; now lftlst will be an hbox with the test keys and the test name labels
 	(set! lftlst (append lftlst (list (iup:hbox  #:expand "HORIZONTAL"
-					   (iup:valuator #:valuechanged_cb (lambda (obj)
-									     (let ((val (string->number (iup:attribute obj "VALUE")))
-										   (oldmax  (string->number (iup:attribute obj "MAX")))
-										   (newmax  (* 10 (length *alltestnamelst*))))
-									       (set! *please-update-buttons* #t)
-									       (set! *start-test-offset* (inexact->exact (round (/ val 10))))
-									       (debug:print 6 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
-									       (if (< val 10)
-										   (iup:attribute-set! obj "MAX" newmax))
-									       ))
-							 #:expand "VERTICAL" 
-							 #:orientation "VERTICAL")
-					   (apply iup:vbox (reverse res)))))))
+						     (iup:valuator #:valuechanged_cb (lambda (obj)
+										       (let ((val (string->number (iup:attribute obj "VALUE")))
+											     (oldmax  (string->number (iup:attribute obj "MAX")))
+											     (newmax  (* 10 (length *alltestnamelst*))))
+											 (set! *please-update-buttons* #t)
+											 (set! *start-test-offset* (inexact->exact (round (/ val 10))))
+											 (debug:print 6 "*start-test-offset* " *start-test-offset* " val: " val " newmax: " newmax " oldmax: " oldmax)
+											 (if (< val 10)
+											     (iup:attribute-set! obj "MAX" newmax))
+											 ))
+								   #:expand "VERTICAL" 
+								   #:orientation "VERTICAL")
+						     (apply iup:vbox (reverse res)))))))
        (else
 	(let ((labl  (iup:button "" 
 				 #:flat "YES" 
 				 #:alignment "ALEFT"
-				 ; #:image img1
-				 ; #:impress img2
+					; #:image img1
+					; #:impress img2
 				 #:size "x15"
 				 #:expand "HORIZONTAL"
 				 #:fontsize "10"
@@ -1146,7 +1185,7 @@ Misc
 							 (buttndat (hash-table-ref *buttondat* button-key))
 							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
 							 (cmd  (conc toolpath " -test " test-id "&")))
-						    ;(print "Launching " cmd)
+					;(print "Launching " cmd)
 						    (system cmd))))))
 	  (hash-table-set! *buttondat* button-key (vector 0 "100 100 100" button-key #f #f)) 
 	  (vector-set! testvec testnum butn)
@@ -1180,14 +1219,14 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
 	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
 	tabs)))
-     (vector keycol lftcol header runsvec)))
+    (vector keycol lftcol header runsvec)))
 
 (if (or (args:get-arg "-rows")
 	(get-environment-variable "DASHBOARDROWS" ))
     (begin
-        (set! *num-tests* (string->number (or (args:get-arg "-rows")
-					      (get-environment-variable "DASHBOARDROWS"))))
-	(update-rundat "%" *num-runs* "%/%" '()))
+      (set! *num-tests* (string->number (or (args:get-arg "-rows")
+					    (get-environment-variable "DASHBOARDROWS"))))
+      (update-rundat "%" *num-runs* "%/%" '()))
     (set! *num-tests* (min (max (update-rundat "%" *num-runs* "%/%" '()) 8) 20)))
 
 (define *tim* (iup:timer))
@@ -1263,7 +1302,7 @@ Misc
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test")
-    (let ((testid (string->number (args:get-arg "-test"))))
+  (let ((testid (string->number (args:get-arg "-test"))))
     (if testid
 	(examine-test testid)
 	(begin
