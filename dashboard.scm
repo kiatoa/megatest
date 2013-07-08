@@ -422,7 +422,7 @@ Misc
 ;;   a b f
 ;;        a/b => c f
 ;;
-(define (dashboard:populate-target-dropdown lb referent-vals targets)
+(define (dashboard:populate-target-dropdown lb referent-vals targets) ;;  runconf-targs)
   ;; is the current value in the new list? choose new default if not
   (let* ((remvalues  (map (lambda (row)
 			    (common:list-is-sublist referent-vals (vector->list row)))
@@ -450,9 +450,17 @@ Misc
 		newval))))))
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
-  (let* ((db-target-dat (open-run-close db:get-targets #f))
+  (let* ((runconf-targs (common:get-runconfig-targets))
+	 (db-target-dat (open-run-close db:get-targets #f))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
+	 (all-targets   (append db-targets
+				(map (lambda (x)
+				       (list->vector
+					(take (append (string-split x "/")
+						      (make-list (length header) "na"))
+					      (length header))))
+				     runconf-targs)))
 	 (key-listboxes (if key-lbs key-lbs (make-list (length header) #f))))
     (let loop ((key     (car header))
 	       (remkeys (cdr header))
@@ -468,17 +476,19 @@ Misc
 			#:expand "YES" ;; "VERTICAL"
 			;; #:dropdown "YES"
 			#:editbox "YES"
-			#:action action-proc
+			#:action (lambda (obj a b c)
+				   (action-proc))
+			#:caret_cb (lambda (obj a b c)(action-proc))
 			))))
 	     ;; loop though all the targets and build the list for this dropdown
-	     (selected-value (dashboard:populate-target-dropdown lb refvals db-targets)))
+	     (selected-value (dashboard:populate-target-dropdown lb refvals all-targets)))
 	(if (null? remkeys)
 	    ;; return a list of the listbox items and an iup:hbox with the labels and listboxes
 	    (let ((listboxes (append lbs (list lb))))
 	      (list listboxes
 		    (map (lambda (htxt lb)
 			   (iup:vbox
-			    (iup:label htxt)
+			    (iup:label htxt) 
 			    lb))
 			 header
 			 listboxes)))
@@ -539,7 +549,7 @@ Misc
 			    )))
       ((remove-runs)
        (set! full-cmd (conc full-cmd
-			    " -remove-runs "
+			    " -remove-runs :runname "
 			    run-name
 			    " -target " 
 			    target
@@ -603,7 +613,6 @@ Misc
 ;;
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
-	 (runconf-targs (common:get-runconfig-targets))
 	 (test-records  (make-hash-table))
 	 (test-names    (tests:get-valid-tests *toppath* '()))
 	 (sorted-testnames #f)
@@ -611,8 +620,7 @@ Misc
 	 (cmdln         "")
 	 (runlogs       (make-hash-table))
 	 (key-listboxes #f)
-	 (update-keyvals (lambda (obj b c d)
-			   ;; (print "obj: " obj ", b " b ", c " c ", d " d)
+	 (update-keyvals (lambda ()
 			   (let ((targ (map (lambda (x)
 					      (iup:attribute x "VALUE"))
 					    (car (dashboard:update-target-selector key-listboxes)))))
