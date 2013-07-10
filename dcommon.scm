@@ -307,7 +307,8 @@
 			#:numlin-visible (length key-vals)
 			#:click-cb (lambda (obj lin col status)
 				     (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
-    (iup:attribute-set! keys-matrix "0:0" "Run Keys")
+    ;; (iup:attribute-set! keys-matrix "0:0" "Run Keys")
+    (iup:attribute-set! keys-matrix "WIDTH0" 0)
     (iup:attribute-set! keys-matrix "0:1" "Key Name")
     ;; (iup:attribute-set! keys-matrix "WIDTH1" "100")
     ;; fill in keys
@@ -318,6 +319,7 @@
        (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
        (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
      key-vals)
+    (iup:attribute-set! keys-matrix "WIDTHDEF" "40")
     keys-matrix))
 
 ;; Section to table
@@ -366,11 +368,12 @@
     (iup:attribute-set! general-matrix "1:0" "User")
     (iup:attribute-set! general-matrix "1:1" (current-user-name))
     ;; Megatest area
-    (iup:attribute-set! general-matrix "2:0" "Megatest area")
+    (iup:attribute-set! general-matrix "2:0" "Area")
     (iup:attribute-set! general-matrix "2:1" *toppath*)
     ;; Megatest version
-    (iup:attribute-set! general-matrix "3:0" "Megatest version")
+    (iup:attribute-set! general-matrix "3:0" "Version")
     (iup:attribute-set! general-matrix "3:1" megatest-version)
+
     general-matrix))
 
 (define (dcommon:run-stats)

@@ -173,6 +173,19 @@
 			  (cdr talb)))
 		#f)))))
 
+;; Needed for long lists to be sorted where (apply max ... ) dies
+;;
+(define (common:max inlst)
+  (let loop ((max-val (car inlst))
+	     (hed     (car inlst))
+	     (tal     (cdr inlst)))
+    (if (null? tal)
+	(loop (max hed max-val)
+	      (car tal)
+	      (cdr tal))
+	(max hed max-val))))
+
+
 ;;======================================================================
 ;; Munge data into nice forms
 ;;======================================================================

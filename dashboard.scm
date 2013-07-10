@@ -877,11 +877,40 @@ Misc
 (define (dashboard:summary)
   (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
     (iup:vbox
-     (iup:frame 
-      #:title "General Info"
-      (iup:hbox 
-       (dcommon:general-info)
-       (dcommon:keys-matrix rawconfig)))
+     (iup:split
+      ;; #:value 500
+      (iup:frame 
+       #:title "General Info"
+       (iup:hbox 
+	(dcommon:keys-matrix rawconfig)
+	(dcommon:general-info)
+	))
+      (iup:frame
+       #:title "Server"
+       (iup:vbox
+	(iup:hbox
+	 (iup:button "Start"
+		      #:size "50x"
+		      #:action (lambda (obj)
+				(let ((cmd (conc "xterm -geometry 180x20 -e \""
+						 "megatest -server -"
+						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+				  (system cmd))))
+	 (iup:button "Stop"
+		      #:size "50x"
+		      #:action (lambda (obj)
+				(let ((cmd (conc "xterm -geometry 180x20 -e \""
+						 "megatest -stop-server 0"
+						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+				  (system cmd))))
+	 (iup:button "Restart"
+		      #:size "50x"
+		      #:action (lambda (obj)
+				(let ((cmd (conc "xterm -geometry 180x20 -e \""
+						 "megatest -stop-server 0;megatest -server -"
+						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+				  (system cmd))))
+	 ))))
      (iup:frame 
       #:title "Megatest config settings"
       (iup:hbox
@@ -934,13 +963,19 @@ Misc
 			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id "%" '() '()
 									    qryvals: "id,testname,item_path,state,status"))) ;; get 'em all
 					    (sort tdat (lambda (a b)
-							 (string<= (vector-ref a 2)(vector-ref b 2))))))
+							 (let* ((aval (vector-ref a 2))
+								(bval (vector-ref b 2))
+								(anum (string->number aval))
+								(bnum (string->number bval)))
+							   (if (and anum bnum)
+							       (< anum bnum)
+							       (string<= aval bval)))))))
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
 			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 			    (row-indices  (cadr indices))
 			    (col-indices  (car indices))
-			    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
-			    (max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
+			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
+			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
 			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
