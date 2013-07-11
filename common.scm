@@ -101,6 +101,9 @@
 ;; Misc utils
 ;;======================================================================
 
+(define (common:version-signature)
+  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
+
 ;; one-of args defined
 (define (args-defined? . param)
   (let ((res #f))

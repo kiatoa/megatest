@@ -346,19 +346,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let ((tl (setup-for-run)))
       (if tl 
 	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
-		 (fmtstr  "~5a~8a~8a~20a~20a~10a~10a~10a~10a~10a\n")
+		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
 		 (killinfo   (args:get-arg "-stop-server"))
 		 (khost-port (if killinfo (if (substring-index ":" killinfo)(string-split ":") #f) #f))
 		 (sid        (if killinfo (if (substring-index ":" killinfo) #f (string->number killinfo)) #f)))
-	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface" "OutPort" "InPort" "LastBeat" "State" "Transport")
-	    (format #t fmtstr "==" "=====" "===" "====" "=========" "=======" "======" "========" "=====" "=========")
+	    (format #t fmtstr "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "LastBeat" "State" "Transport")
+	    (format #t fmtstr "==" "=====" "===" "====" "=================" "======" "========" "=====" "=========")
 	    (for-each 
 	     (lambda (server)
 	       (let* ((id         (vector-ref server 0))
 		      (pid        (vector-ref server 1))
 		      (hostname   (vector-ref server 2))
-		      (interface  (vector-ref server 3))
+		      (interface  (vector-ref server 3)) 
 		      (pullport   (vector-ref server 4))
 		      (pubport    (vector-ref server 5))
 		      (start-time (vector-ref server 6))
@@ -377,7 +377,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
 			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
-		 (format #t fmtstr id mt-ver pid hostname interface pullport pubport last-update
+		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
 			 (if status "alive" "dead") transport)
 		 (if (or (equal? id sid)
 			 (equal? sid 0)) ;; kill all/any

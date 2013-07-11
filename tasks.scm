@@ -99,7 +99,10 @@
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,pubport,start_time,priority,state,mt_version,heartbeat,interface,transport)
                              VALUES(?,  ?,       ?,   ?,  strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?,?);"
-   pid (get-host-name) port pubport priority (conc state) megatest-version interface (conc transport))
+   pid (get-host-name) port pubport priority (conc state) 
+   (common:version-signature)
+   interface 
+   (conc transport))
   (vector 
    (tasks:server-get-server-id mdb (get-host-name) interface port pid)
    interface
@@ -208,7 +211,7 @@
      
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
           WHERE strftime('%s','now')-heartbeat < 10 
-          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
+          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" (common:version-signature))
     ;; for now we are keeping only one server registered in the db, return #f or first server found
     (if (null? res) #f (car res))))
 
