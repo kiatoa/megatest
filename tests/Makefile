@@ -28,6 +28,10 @@ stopserver :
 	cd ..;make && make install
 	cd fullrun;$(MEGATEST) -stop-server 0
 
+repl :
+	cd ..;make && make install
+	cd fullrun;$(MEGATEST) -repl
+
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
 

@@ -849,11 +849,30 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
-		   (begin
-		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
-		     (set! *globalexitstatus* 1) ;; 
-		     (process-signal (current-process-id) signal/kill))))))
+	       ;; 
+	       (let ((skip-test   #f)
+		     (skip-check  (configf:get-section test-conf "skip")))
+		 (cond 
+		  ;; Have to check for skip conditions. This one skips if there are same-named tests
+		  ;; currently running
+		  ((and skip-check
+			(configf:lookup test-conf "skip" "prevrunning"))
+		   (let ((running-tests (cdb:remote-run db:get-tests-for-runs-mindata #f #f full-test-name '("RUNNING") '() #f)))
+		     (if (not (null? running-tests)) ;; have to skip 
+			 (set! skip-test "Skipping due to previous tests running"))))
+		  ((and skip-check
+			(configf:lookup test-conf "skip" "fileexists"))
+		   (if (file-exists? (configf:lookup test-conf "skip" "fileexists"))
+		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists"))))))
+		 (if skip-test
+		     (begin
+		       (cdb:remote-run db:test-set-state-status-by-id #f test-id "COMPLETED" "SKIP" skip-test)
+		       (debug:info 1 "SKIPPING Test " test-full-name " due to " skip-test))
+		     (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
+			 (begin
+			   (print "ERROR: Failed to launch the test. Exiting as soon as possible")
+			   (set! *globalexitstatus* 1) ;; 
+			   (process-signal (current-process-id) signal/kill))))))))
 	((KILLED) 
 	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it."))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  

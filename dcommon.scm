@@ -148,7 +148,7 @@
 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
 
-	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses))
+	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses #f))
 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (header       (hash-table-ref/default runs-hash "header" #f))
 	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
