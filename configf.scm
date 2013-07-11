@@ -61,7 +61,7 @@
 
 ;; read a line and process any #{ ... } constructs
 
-(define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get)\\s+([^\\}\\{]*)\\}(.*)"))
+(define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
 (define (configf:process-line l ht)
   (let loop ((res l))
     (if (string? res)
@@ -83,6 +83,7 @@
 					(var   (cadr parts)))
 				   (conc "(lambda (ht)(config-lookup ht \"" sect "\" \"" var "\"))")))
 				((runconfigs-get) (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
+				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
 		(with-input-from-string fullcmd
@@ -112,14 +113,22 @@
 (define (runconfigs-get config var)
   (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
     (if targ
-	(config-lookup config targ var)
-	#f)))
+	(or (configf:lookup config targ var)
+	    (configf:lookup config "default" var))
+	(configf:lookup config "default" var))))
 
 (define-inline (configf:read-line p ht allow-processing)
-  (if (and allow-processing 
-	   (not (eq? allow-processing 'return-string)))
-      (configf:process-line (read-line p) ht)
-      (read-line p)))
+  (let loop ((inl (read-line p)))
+    (if (and (string? inl)
+	     (not (string-null? inl))
+	     (equal? "\\" (string-take-right inl 1))) ;; last character is \ 
+	(let ((nextl (read-line p)))
+	  (if (not (eof-object? nextl))
+	      (loop (string-append inl nextl))))
+	(if (and allow-processing 
+		 (not (eq? allow-processing 'return-string)))
+	    (configf:process-line inl ht)
+	    inl))))
 
 ;; read a config file, returns hash table of alists
 
@@ -262,7 +271,7 @@
 	'()
 	(map car sectdat))))
 
-(define (configf:get-section cfdat section)
+(define (configf:get-section cfgdat section)
   (hash-table-ref/default cfgdat section '()))
 
 (define (setup)

@@ -19,8 +19,8 @@
 
 (define (args:get-arg-from ht arg . default)
   (if (null? default)
-      (hash-table-ref/default ht arg #f))
-      (hash-table-ref/default ht arg (car default)))
+      (hash-table-ref/default ht arg #f)
+      (hash-table-ref/default ht arg (car default))))
 
 (define (args:usage . args)
   (if (> (length args) 0)
@@ -36,7 +36,8 @@
 	 (adj-num-needed (if num-needed (+ num-needed 2) #f)))
     (if (< numargs (if adj-num-needed adj-num-needed 2))
 	(if (>= num-needed 1)
-	    (args:usage "No arguments provided"))
+	    (args:usage "No arguments provided")
+	    '())
 	(let loop ((arg (cadr args))
 		   (tail (cddr args))
 		   (remargs '()))

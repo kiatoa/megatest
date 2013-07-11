@@ -23,12 +23,16 @@
 ;;======================================================================
 
 (define (tasks:open-db)
-  (let* ((dbpath  (conc *toppath* "/monitor.db"))
-	 (exists  (file-exists? dbpath))
-	 (mdb     (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler (make-busy-timeout 36000)))
+  (let* ((dbpath       (conc *toppath* "/monitor.db"))
+	 (exists       (file-exists? dbpath))
+	 (write-access (file-write-access? dbpath))
+	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (handler      (make-busy-timeout 36000)))
+    (if (and exists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (sqlite3:set-busy-handler! mdb handler)
-    (sqlite3:execute mdb (conc "PRAGMA synchronous = 1;"))
+    (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
     (if (not exists)
 	(begin
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
@@ -95,7 +99,10 @@
    mdb 
    "INSERT OR REPLACE INTO servers (pid,hostname,port,pubport,start_time,priority,state,mt_version,heartbeat,interface,transport)
                              VALUES(?,  ?,       ?,   ?,  strftime('%s','now'), ?, ?, ?, strftime('%s','now'),?,?);"
-   pid (get-host-name) port pubport priority (conc state) megatest-version interface (conc transport))
+   pid (get-host-name) port pubport priority (conc state) 
+   (common:version-signature)
+   interface 
+   (conc transport))
   (vector 
    (tasks:server-get-server-id mdb (get-host-name) interface port pid)
    interface
@@ -105,17 +112,18 @@
    ))
 
 ;; NB// two servers with same pid on different hosts will be removed from the list if pid: is used!
-(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f)(action 'markdead))
+(define (tasks:server-deregister mdb hostname #!key (port #f)(pid #f)(action 'delete))
   (debug:print-info 11 "server-deregister " hostname ", port " port ", pid " pid)
-  (if pid
-      (case action
-	((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid))
-	(else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
-      (if port
+  (if *db-write-access*
+      (if pid
 	  (case action
-	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE  hostname=? AND port=?;" hostname port))
-	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE hostname=? AND port=?;" hostname port)))
-	  (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified"))))
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE pid=?;" pid))
+	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE pid=?;" pid)))
+	  (if port
+	      (case action
+	    ((delete)(sqlite3:execute mdb "DELETE FROM servers WHERE (interface=? or hostname=?) AND port=?;" hostname hostname port))
+	    (else    (sqlite3:execute mdb "UPDATE servers SET state='dead' WHERE (interface=? or hostname=?) AND port=?;" hostname hostname port)))
+	      (debug:print 0 "ERROR: tasks:server-deregister called with neither pid nor port specified")))))
 
 (define (tasks:server-deregister-self mdb hostname)
   (tasks:server-deregister mdb hostname pid: (current-process-id)))
@@ -143,8 +151,14 @@
     res))
 
 (define (tasks:server-update-heartbeat mdb server-id)
-  (debug:print-info 0 "Heart beat update of server id=" server-id)
-  (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id))
+  (debug:print-info 1 "Heart beat update of server id=" server-id)
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: probable timeout on monitor.db access")
+     (thread-sleep! 1)
+     (tasks:server-update-heartbeat mdb server-id))
+   (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id)))
 
 ;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
 (define (tasks:server-alive? mdb server-id #!key (iface #f)(hostname #f)(port #f)(pid #f))
@@ -197,7 +211,7 @@
      
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
           WHERE strftime('%s','now')-heartbeat < 10 
-          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" megatest-version)
+          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" (common:version-signature))
     ;; for now we are keeping only one server registered in the db, return #f or first server found
     (if (null? res) #f (car res))))
 
@@ -252,13 +266,13 @@
 	     ;;(process-signal pid signal/kill)
 	     ) ;; local machine, send sig term
 	    (begin
-		(debug:print-info 1 "Stopping remote servers not yet supported."))))
-	;;      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-	;;      (let ((serverdat (list hostname port)))
-	;;	(case (string->symbol transport)
-	;;	  ((http)(http-transport:client-connect hostname port))
-	;;	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
-	;;	(cdb:kill-server serverdat)))))    ;; remote machine, try telling server to commit suicide
+	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
+	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
+	      (let ((serverdat (list hostname port)))
+	      	(case (if (string? transport) (string->symbol transport) transport)
+	      	  ((http)(http-transport:client-connect hostname port))
+	      	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
+	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
       (begin
 	(if status 
 	    (if (equal? hostname (get-host-name))
@@ -533,13 +547,13 @@
 (define (tasks:rollup-runs db mdb task)
   (let* ((flags (make-hash-table)) 
 	 (keys  (db:get-keys db))
-	 (keyvallst (keys:target->keyval keys (tasks:task-get-target task))))
+	 (keyvals (keys:target-keyval keys (tasks:task-get-target task))))
     ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
     (print "Starting rollup " task)
     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
     (runs:rollup-run db
 		     keys 
-		     keyvallst
+		     keyvals
 		     (tasks:task-get-name  task)
 		     (tasks:task-get-owner  task))
     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))

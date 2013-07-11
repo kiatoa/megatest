@@ -13,9 +13,11 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars)
+(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb spiffy-directory-listing)
 
+;; Configurations for server
 (tcp-buffer-size 2048)
+(max-connections 2048) 
 
 (declare (unit http-transport))
 
@@ -34,7 +36,7 @@
       #f
       (conc "http://" (car hostport) ":" (cadr hostport))))
 
-(define  *server-loop-heart-beat* (current-seconds))
+(define *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================
@@ -87,7 +89,8 @@
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
-
+    (handle-directory spiffy-directory-listing)
+    ;; http-transport:handle-directory) ;; simple-directory-handler)
     ;; Setup the web server and a /ctrl interface
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
@@ -97,10 +100,6 @@
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
-				  ((equal? (uri-path (request-uri (current-request))) 
-					   '(/ "hey"))
-				   (send-response body: "hey there!\n"
-						  headers: '((content-type text/plain))))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
@@ -122,6 +121,20 @@
 								res
 								"</body>")
 						    headers: '((content-type text/plain)))))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ ""))
+				   (send-response body: (http-transport:main-page)))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "runs"))
+				   (send-response body: (http-transport:main-page)))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ any))
+				   (send-response body: "hey there!\n"
+						  headers: '((content-type text/plain))))
+				  ((equal? (uri-path (request-uri (current-request))) 
+					   '(/ "hey"))
+				   (send-response body: "hey there!\n"
+						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
     (http-transport:try-start-server ipaddrstr start-port)))
 
@@ -146,13 +159,13 @@
    (open-run-close tasks:server-register 
 		   tasks:open-db 
 		   (current-process-id)
-		   ipaddrstr portnum 0 'live 'http)
-   (print "INFO: Trying to start server on " ipaddrstr ":" portnum)
+		   ipaddrstr portnum 0 'startup 'http)
+   (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
    (start-server bind-address: ipaddrstr port: portnum)
    (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
-   (print "INFO: server has been stopped")))
+   (debug:print 1 "INFO: server has been stopped")))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -162,34 +175,62 @@
 ;; C L I E N T S
 ;;======================================================================
 
+(define *http-mutex* (make-mutex))
+
+;; (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 4")
+
 ;; <html>
 ;; <head></head>
 ;; <body>1 Hello, world! Goodbye Dolly</body></html>
 ;; Send msg to serverdat and receive result
-(define (http-transport:client-send-receive serverdat msg)
-  (let* ((url        (http-transport:make-server-url serverdat))
-	 (fullurl    (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
-	 (numretries 0))     
+(define (http-transport:client-send-receive serverdat msg #!key (numretries 30))
+  (let* (;; (url        (http-transport:make-server-url serverdat))
+	 (fullurl    (caddr serverdat)) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
+	 (res        #f))
     (handle-exceptions
      exn
-     (if (< numretries 200)
-	 (http-transport:client-send-receive serverdat msg))
+     (begin
+       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
+       (thread-sleep! 2)
+       (if (> numretries 0)
+	   (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
        ;; set up the http-client here
-       (max-retry-attempts 100)
+       (max-retry-attempts 5)
+       ;; consider all requests indempotent
        (retry-request? (lambda (request)
-			 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
-			 (set! numretries (+ numretries 1))
-			 #t))
+			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
+       ;; (set! numretries (- numretries 1))
+       ;;  		 #t))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.
-       (let* ((res   (with-input-from-request fullurl 
-					      ;; #f
-					      ;; msg 
-					      (list (cons 'dat msg)) 
-					      read-string)))
+       (let* ((send-recieve (lambda ()
+			      (mutex-lock! *http-mutex*)
+			      (set! res (with-input-from-request 
+					 fullurl 
+					 (list (cons 'dat msg)) 
+					 read-string))
+			      (close-all-connections!) 
+			      (mutex-unlock! *http-mutex*)))
+	      (time-out     (lambda ()
+			      (thread-sleep! 45)
+			      (if (not res)
+				  (begin
+				    (debug:print 0 "WARNING: communication with the server timed out.")
+				    (mutex-unlock! *http-mutex*)
+				    (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))
+				    (if (< numretries 3) ;; on last try just exit
+					(begin
+					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
+					  (exit 1)))))))
+	      (th1 (make-thread send-recieve "with-input-from-request"))
+	      (th2 (make-thread time-out     "time out")))
+	 (thread-start! th1)
+	 (thread-start! th2)
+	 (thread-join! th1)
+	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
 	 (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
 	   (debug:print-info 11 "match=" match)
@@ -199,7 +240,8 @@
 
 (define (http-transport:client-connect iface port)
   (let* ((login-res   #f)
-	 (serverdat   (list iface port)))
+	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+	 (serverdat   (list iface port uri-dat)))
     (set! login-res (client:login serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))
@@ -208,10 +250,11 @@
 	  (set! *runremote* serverdat)
 	  serverdat)
 	(begin
-	  (debug:print-info 0 "Failed to login or connect to " iface ":" port)
-	  (set! *runremote* #f)
-	  (set! *transport-type* 'fs)
-	  #f))))
+	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
+	  (exit 1)))))
+;; 	  (set! *runremote* #f)
+;; 	  (set! *transport-type* 'fs)
+;; 	  #f))))
 
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
@@ -226,7 +269,8 @@
                           (mutex-lock! *heartbeat-mutex*)
                           (set! sdat *runremote*)
                           (mutex-unlock! *heartbeat-mutex*)
-                          (if sdat sdat
+                          (if sdat
+			      sdat
                               (begin
                                 (sleep 4)
                                 (loop))))))
@@ -273,10 +317,11 @@
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
 	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (> (+ last-access server-timeout)
-               (current-seconds))
+        (if (and *server-run*
+		 (> (+ last-access server-timeout)
+		    (current-seconds)))
             (begin
-              (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
               (debug:print-info 0 "Starting to shutdown the server.")
@@ -368,3 +413,62 @@
      (thread-start! th2)
      (thread-start! th1)
      (thread-join! th2))))
+
+;;======================================================================
+;; web pages
+;;======================================================================
+
+(define (http-transport:main-page)
+  (let ((linkpath (root-path)))
+    (conc "<head><h1>" (pathname-strip-directory *toppath*) "</h1></head>"
+	  "<body>"
+	  "Run area: " *toppath*
+	  "<h2>Server Stats</h2>"
+	  (http-transport:stats-table) 
+	  "<hr>"
+	  (http-transport:runs linkpath)
+	  "<hr>"
+	  (http-transport:run-stats)
+	  "</body>"
+	  )))
+
+(define (http-transport:stats-table)
+  (mutex-lock! *heartbeat-mutex*)
+  (let ((res 
+	 (conc "<table>"
+	       "<tr><td>Max cached queries</td>        <td>" *max-cache-size* "</td></tr>"
+	       "<tr><td>Number of cached writes</td>   <td>" *number-of-writes* "</td></tr>"
+	       "<tr><td>Average cached write time</td> <td>" (if (eq? *number-of-writes* 0)
+								 "n/a (no writes)"
+								 (/ *writes-total-delay*
+								    *number-of-writes*))
+	       " ms</td></tr>"
+	       "<tr><td>Number non-cached queries</td> <td>"  *number-non-write-queries* "</td></tr>"
+	       "<tr><td>Average non-cached time</td>   <td>" (if (eq? *number-non-write-queries* 0)
+								 "n/a (no queries)"
+								 (/ *total-non-write-delay* 
+								    *number-non-write-queries*))
+	       " ms</td></tr>"
+	       "<tr><td>Last access</td><td>"              (seconds->time-string *last-db-access*) "</td></tr>"
+	       "</table>")))
+    (mutex-unlock! *heartbeat-mutex*)
+    res))
+
+(define (http-transport:runs linkpath)
+  (conc "<h3>Runs</h3>"
+	(string-intersperse
+	 (let ((files (map pathname-strip-directory (glob (conc linkpath "/*")))))
+	   (map (lambda (p)
+		  (conc "<a href=\"" p "\">" p "</a><br>"))
+		files))
+	 " ")))
+
+(define (http-transport:run-stats)
+  (let ((stats (open-run-close db:get-running-stats #f)))
+    (conc "<table>"
+	  (string-intersperse
+	   (map (lambda (stat)
+		  (conc "<tr><td>" (car stat) "</td><td>" (cadr stat) "</td></tr>"))
+		stats)
+	   " ")
+	  "</table>")))

@@ -73,6 +73,7 @@
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
+	       (runtlim   (assoc/default 'runtlim   cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
 	       (keyvals   #f)
@@ -93,7 +94,7 @@
 	  ;; (set! *runremote* runremote)
 	  (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
-	  (set! keyvals    (if run-id (cdb:remote-run db:get-key-vals #f run-id) #f))
+	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
 	  (if (string? set-vars)
@@ -128,7 +129,7 @@
 	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
-	  (set-run-config-vars run-id keys keyvals target) ;; (db:get-target db run-id))
+	  (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
 	  (set-megatest-env-vars run-id)
@@ -276,7 +277,14 @@
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
+				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
+							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
+									       (time-exceeded (> run-seconds runtlim)))
+									  (if time-exceeded
+									      (begin
+										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
+										#t)
+									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
 				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
 				       (if kill-job? 
@@ -284,21 +292,22 @@
 					     (mutex-lock! m)
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
-						   (begin
-						     (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
-						     (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
-						       (for-each 
-							(lambda (p)
-							  (let* ((parts  (string-split p))
-								 (p-id   (if (> (length parts) 0)
-									     (string->number (car parts))
-									     #f)))
-							    (if p-id
-								(begin
-								  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
-								  (system (conc "kill -9 " p-id))))))
-							(car processes))
-						       (system (conc "kill -9 -" pid))))
+						   (process-signal pid signal/kill)
+						   ;; (begin
+						   ;;   (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						   ;;   (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
+						   ;;     (for-each 
+						   ;;      (lambda (p)
+						   ;;        (let* ((parts  (string-split p))
+						   ;;      	 (p-id   (if (> (length parts) 0)
+						   ;;      		     (string->number (car parts))
+						   ;;      		     #f)))
+						   ;;          (if p-id
+						   ;;      	(begin
+						   ;;      	  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
+						   ;;      	  (system (conc "kill -9 " p-id))))))
+						   ;;      (car processes))
+						   ;;     (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
@@ -408,13 +417,13 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info key-vals test-id test-src-path disk-path testname itemdat)
+(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat)
   (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-row run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
-	 (target   (string-intersperse key-vals "/"))
+	 (target   (string-intersperse (map cadr keyvals) "/"))
 
 	 (not-iterated  (equal? "" item-path))
 
@@ -556,7 +565,7 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info key-vals runname test-conf keyvallst test-name test-path itemdat params)
+(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
   (change-directory *toppath*)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
@@ -566,14 +575,15 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
-	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
-	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
-	 (ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
-	 (diskspace  (config-lookup test-conf   "requirements" "diskspace"))
-	 (memory     (config-lookup test-conf   "requirements" "memory"))
-	 (hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
+  (let* ((useshell        (config-lookup *configdat* "jobtools"     "useshell"))
+	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
+	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
+	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	 (diskspace       (config-lookup test-conf   "requirements" "diskspace"))
+	 (memory          (config-lookup test-conf   "requirements" "memory"))
+	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
+	 (run-time-limit  (configf:lookup  test-conf   "requirements" "runtimelim"))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard
@@ -597,7 +607,7 @@
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
-	 (mt_target  (string-intersperse (map cadr keyvallst) "/"))
+	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
     (if hosts (set! hosts (string-split hosts)))
@@ -608,7 +618,7 @@
     ;; set up the run work area for this test
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
-	(let ((dat  (create-work-area run-id run-info key-vals test-id test-path diskpath test-name itemdat)))
+	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
 	  (set! toptest-work-area (cadr dat))
 	  (debug:print-info 2 "Using work area " work-area))
@@ -633,10 +643,11 @@
 				     (list 'megatest  remote-megatest)
 				     (list 'ezsteps   ezsteps) 
 				     (list 'target    mt_target)
+				     (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
 				     (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 				     (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 				     (list 'runname   runname)
-				     (list 'mt-bindir-path mt-bindir-path))))))) ;; (string-intersperse keyvallst " "))))
+				     (list 'mt-bindir-path mt-bindir-path)))))))
     ;; clean out step records from previous run if they exist
     ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     ;; (open-run-close db:delete-test-step-records db test-id)
@@ -669,7 +680,9 @@
 					  (list "MT_TARGET"    mt_target)
 					  )
 				    itemdat)))
-	   (launch-results (apply (if (equal? (configf:lookup *configdat* "setup" "launchwait") "yes")
+	   ;; Launchwait defaults to true, must override it to turn off wait
+	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
+	   (launch-results (apply (if launchwait
 				      cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
@@ -678,11 +691,14 @@
 				  (if useshell
 				      '()
 				      (cdr fullcmd)))))
-      (if (list? launch-results)
-	  (with-output-to-file "mt_launch.log"
-	    (lambda ()
-	      (apply print launch-results))
-	    #:append))
+      (if (not launchwait) ;; give the OS a little time to allow the process to start
+	  (thread-sleep! 0.01))
+      (with-output-to-file "mt_launch.log"
+	(lambda ()
+	  (if (list? launch-results)
+	      (apply print launch-results)
+	      (print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
+	  #:append))
       (debug:print 2 "Launching completed, updating db")
       (debug:print 2 "Launch results: " launch-results)
       (if (not launch-results)

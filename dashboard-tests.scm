@@ -25,6 +25,7 @@
 (declare (unit dashboard-tests))
 (declare (uses common))
 (declare (uses db))
+(declare (uses gutils))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -64,8 +65,8 @@
 				       (oldstatus (iup:attribute lbl "TITLE")))
 				   (if (not (equal? oldstatus newstatus))
 				       (begin
-					 (iup:attribute-set! lbl "FGCOLOR" (common:get-color-for-state-status (db:test-get-state testdat)
-												       (db:test-get-status testdat)))
+					 (iup:attribute-set! lbl "FGCOLOR" (car (gutils:get-color-for-state-status (db:test-get-state testdat)
+														   (db:test-get-status testdat))))
 					 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
 	      lbl)
 	    (store-label "testcomment"
@@ -190,7 +191,7 @@
 (define (update-state-status-buttons testdat)
   (let* ((state  (db:test-get-state  testdat))
 	 (status (db:test-get-status testdat))
-	 (color  (common:get-color-for-state-status state status)))
+	 (color  (car (gutils:get-color-for-state-status state status))))
     ((vector-ref *state-status* 0) state color)
     ((vector-ref *state-status* 1) status color)))
 
@@ -272,6 +273,8 @@
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
+	       ;; These next two are intentional bad values to ensure errors if they should not
+	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
@@ -294,6 +297,13 @@
 					;(system (conc "firefox " logfile "&"))
 				 (iup:send-url logfile)
 				 (message-window (conc "File " logfile " not found")))))
+	       (view-a-log (lambda (lfile)
+			     (let ((lfilename (conc rundir "/" lfile)))
+			       ;; (print "lfilename: " lfilename)
+			       (if (file-exists? lfilename)
+					;(system (conc "firefox " logfile "&"))
+				   (iup:send-url lfilename)
+				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)
 				 (let ((shell (if (get-environment-variable "SHELL") 
@@ -355,6 +365,13 @@
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
 									(let ((cmd (iup:attribute command-text-box "VALUE")))
 									  (system (conc cmd "  &"))))))
+	       (kill-jobs (lambda (x)
+			    (iup:attribute-set! 
+			     command-text-box "VALUE"
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname "  runname 
+				   " -set-state-status KILLREQ,n/a -testpatt %/% "
+				   ;; (conc testname "/" (if (equal? item-path "") "%" item-path))
+				   " :state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
@@ -362,7 +379,7 @@
 				   " -runtests " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
-				   ";echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   " ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
@@ -370,7 +387,7 @@
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -390,11 +407,12 @@
 			       (iup:frame #:title "Actions" 
 					  (iup:vbox
 					   (iup:hbox 
-					    (iup:button "View Log"    #:action viewlog     #:size "80x")
-					    (iup:button "Start Xterm" #:action xterm       #:size "80x")
-					    (iup:button "Run Test"    #:action run-test    #:size "80x")
-					    (iup:button "Clean Test"  #:action remove-test #:size "80x")
-					    (iup:button "Close"       #:action (lambda (x)(exit)) #:size "80x"))
+					    (iup:button "View Log"      #:action viewlog     #:size "80x")
+					    (iup:button "Start Xterm"   #:action xterm       #:size "80x")
+					    (iup:button "Run Test"      #:action run-test    #:size "80x")
+					    (iup:button "Clean Test"    #:action remove-test #:size "80x")
+					    (iup:button "Kill All Jobs" #:action kill-jobs   #:size "80x")
+					    (iup:button "Close"         #:action (lambda (x)(exit)) #:size "80x"))
 					   (apply 
 					    iup:hbox
 					    (list command-text-box command-launch-button))))
@@ -411,11 +429,12 @@
 							    #:numcol-visible 6
 							    #:numlin-visible 5
 							    #:click-cb (lambda (obj lin col status)
-									 (if (equal? col 6)
-									     (let ((fname (iup:attribute obj (conc lin ":" col))))
-									       (viewlog fname)
-									       (print "obj: " obj " lin: " lin " col: " col " status: " status)))))
-							   ))
+									 ;; (if (equal? col 6)
+									 (let* ((mtrx-rc (conc lin ":" 6))
+										(fname   (iup:attribute obj mtrx-rc))) ;; col))))
+									   (view-a-log fname)))
+									   ;; (print "obj: " obj " mtrx-rc: " mtrx-rc " fname: " fname " lin: " lin " col: " col " status: " status)))
+							    )))
 					 ;; (let loop ((count 0))
 					 ;;   (iup:attribute-set! steps-matrix "FITTOTEXT" (conc "L" count))
 					 ;;   (if (< count 30)
@@ -438,12 +457,14 @@
 								 (tal    (cdr teststeps))
 								 (rownum 1)
 								 (colnum 1))
-							(let ((val (vector-ref hed (- colnum 1))))
-							  (iup:attribute-set! steps-matrix  (conc rownum ":" colnum)(if val (conc val) ""))
+							(let ((val     (vector-ref hed (- colnum 1)))
+							      (mtrx-rc (conc rownum ":" colnum)))
+							  (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
 							  (if (< colnum 6)
 							      (loop hed tal rownum (+ colnum 1))
 							      (if (not (null? tal))
-								  (loop (car tal)(cdr tal)(+ rownum 1) 1)))))))))
+								  (loop (car tal)(cdr tal)(+ rownum 1) 1))))
+							(iup:attribute-set! steps-matrix "REDRAW" "ALL"))))))
 					   (hash-table-set! widgets "StepsMatrix" proc)
 					   (proc testdat))
 					 steps-matrix)
@@ -481,7 +502,9 @@
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
-					  test-data)))))
+					  test-data))
+				       ;;(dashboard:run-controls)
+				       )))
 				 (iup:attribute-set! tabs "TABTITLE0" "Steps")
 				 (iup:attribute-set! tabs "TABTITLE1" "Test Data")
 				 tabs))))

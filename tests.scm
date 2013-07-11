@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -53,9 +53,9 @@
 
 ;; if itempath is #f then look only at the testname part
 ;;
-(define (tests:match patterns testname itempath)
+(define (tests:match patterns testname itempath #!key (required '()))
   (if (string? patterns)
-      (let ((patts (string-split patterns ",")))
+      (let ((patts (append (string-split patterns ",") required)))
 	(if (null? patts) ;;; no pattern(s) means no match
 	    #f
 	    (let loop ((patt (car patts))
@@ -107,10 +107,13 @@
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found
+;; 
+;; Run this server-side
+;;
 (define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (cdb:remote-run db:get-keys #f))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
     ;; first look up the key values from the run selected by run-id
     (sqlite3:for-each-row 
@@ -132,7 +135,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path)'() '())))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -143,8 +146,11 @@
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
 ;; can use wildcards. Also can likely be factored in with get test paths?
+;;
+;; Run this remotely!!
+;;
 (define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (cdb:remote-run db:get-keys #f))
+  (let* ((keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -170,7 +176,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (cdb:remote-run db:get-tests-for-run #f hed (conc test-name "/" item-path) '() '())))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -263,7 +269,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (open-run-close test:get-previous-test-run-record db run-id test-name item-path)
+			  (cdb:remote-run test:get-previous-test-run-record #f run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -366,81 +372,86 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if (obtain-dot-lock outputfilename 1 20 30) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-	      (print "Obtained lock for " outputfilename)
-	      (print "Failed to obtain lock for " outputfilename))
-	  (let ((oup    (open-output-file outputfilename))
-		(counts (make-hash-table))
-		(statecounts (make-hash-table))
-		(outtxt "")
-		(tot    0)
-		(testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
-	    (with-output-to-port
-		oup
-	      (lambda ()
-		(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
-				   "</title><body><h2>Summary for " test-name "</h2>"))
-		(for-each
-		 (lambda (testrecord)
-		   (let ((id             (vector-ref testrecord 0))
-			 (itempath       (vector-ref testrecord 1))
-			 (state          (vector-ref testrecord 2))
-			 (status         (vector-ref testrecord 3))
-			 (run_duration   (vector-ref testrecord 4))
-			 (logf           (vector-ref testrecord 5))
-			 (comment        (vector-ref testrecord 6)))
-		     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-		     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-		     (set! outtxt (conc outtxt "<tr>"
-					"<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-					"<td>" state    "</td>" 
-					"<td><font color=" (common:get-color-from-status status)
-					">"   status   "</font></td>"
-					"<td>" (if (equal? comment "")
-						   "&nbsp;"
-						   comment) "</td>"
-						   "</tr>"))))
-		 testdat)
-		(print "<table><tr><td valign=\"top\">")
-		;; Print out stats for status
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
-		(for-each (lambda (state)
-			    (set! tot (+ tot (hash-table-ref statecounts state)))
-			    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
-			  (hash-table-keys statecounts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td><td valign=\"top\">")
-		;; Print out stats for state
-		(set! tot 0)
-		(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
-		(for-each (lambda (status)
-			    (set! tot (+ tot (hash-table-ref counts status)))
-			    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
-				   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
-			  (hash-table-keys counts))
-		(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		(print "</td></td></tr></table>")
+	  (if (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+	      (print "Failed to obtain lock for " outputfilename)
+	      (begin
+		(print "Obtained lock for " outputfilename)
+		(let ((oup    (open-output-file outputfilename))
+		      (counts (make-hash-table))
+		      (statecounts (make-hash-table))
+		      (outtxt "")
+		      (tot    0)
+		      (testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
+		  (with-output-to-port
+		      oup
+		    (lambda ()
+		      (set! outtxt (conc outtxt "<html><title>Summary: " test-name 
+					 "</title><body><h2>Summary for " test-name "</h2>"))
+		      (for-each
+		       (lambda (testrecord)
+			 (let ((id             (vector-ref testrecord 0))
+			       (itempath       (vector-ref testrecord 1))
+			       (state          (vector-ref testrecord 2))
+			       (status         (vector-ref testrecord 3))
+			       (run_duration   (vector-ref testrecord 4))
+			       (logf           (vector-ref testrecord 5))
+			       (comment        (vector-ref testrecord 6)))
+			   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+			   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+			   (set! outtxt (conc outtxt "<tr>"
+					      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+					      "<td>" state    "</td>" 
+					      "<td><font color=" (common:get-color-from-status status)
+					      ">"   status   "</font></td>"
+					      "<td>" (if (equal? comment "")
+							 "&nbsp;"
+							 comment) "</td>"
+							 "</tr>"))))
+		       testdat)
+		      (print "<table><tr><td valign=\"top\">")
+		      ;; Print out stats for status
+		      (set! tot 0)
+		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
+		      (for-each (lambda (state)
+				  (set! tot (+ tot (hash-table-ref statecounts state)))
+				  (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
+				(hash-table-keys statecounts))
+		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+		      (print "</td><td valign=\"top\">")
+		      ;; Print out stats for state
+		      (set! tot 0)
+		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
+		      (for-each (lambda (status)
+				  (set! tot (+ tot (hash-table-ref counts status)))
+				  (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
+					 "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
+				(hash-table-keys counts))
+		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+		      (print "</td></td></tr></table>")
+		      
+		      (print "<table cellspacing=\"0\" border=\"1\">" 
+			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
+			     outtxt "</table></body></html>")
+		      (release-dot-lock outputfilename)))
+		  (close-output-port oup)
+		  (change-directory orig-dir)
+		  ;; NB// tests:test-set-toplog! is remote internal...
+		  (tests:test-set-toplog! db run-id test-name outputfilename)
+		  )))))))
 
-		(print "<table cellspacing=\"0\" border=\"1\">" 
-		       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
-		       outtxt "</table></body></html>")
-		(release-dot-lock outputfilename)))
-	    (close-output-port oup)
-	    (change-directory orig-dir)
-	    ;; NB// tests:test-set-toplog! is remote internal...
-	    (tests:test-set-toplog! db run-id test-name outputfilename)
-	    )))))
+;;======================================================================
+;; Gather data from test/task specifications
+;;======================================================================
 
-(define (get-all-legal-tests)
-  (let* ((tests  (glob (conc *toppath* "/tests/*")))
-	 (res    '()))
-    (debug:print-info 4 "Looking at tests " (string-intersperse tests ","))
-    (for-each (lambda (testpath)
-		(if (file-exists? (conc testpath "/testconfig"))
-		    (set! res (cons (last (string-split testpath "/")) res))))
-	      tests)
-    res))
+(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+    (delete-duplicates
+     (filter (lambda (testname)
+	       (tests:match test-patts testname #f))
+	     (map (lambda (testp)
+		    (last (string-split testp "/")))
+		  tests)))))
 
 (define (tests:get-testconfig test-name system-allowed)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))
@@ -535,15 +546,100 @@
     runnables))
 
 ;;======================================================================
+;; refactoring this block into tests:get-full-data from line 263 of runs.scm
+;;======================================================================
+;; hed is the test name
+;; test-records is a hash of test-name => test record
+(define (tests:get-full-data test-names test-records required-tests)
+  (if (not (null? test-names))
+      (let loop ((hed (car test-names))
+		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	(debug:print-info 4 "hed=" hed " at top of loop")
+	(let* ((config  (tests:get-testconfig hed 'return-procs))
+	       (waitons (let ((instr (if config 
+					 (config-lookup config "requirements" "waiton")
+					 (begin ;; No config means this is a non-existant test
+					   (debug:print 0 "ERROR: non-existent required test \"" hed "\", grep through your testconfigs to find and remove or create the test. Discarding and continuing.")
+					     ""))))
+			  (debug:print-info 8 "waitons string is " instr)
+			  (string-split (cond
+					 ((procedure? instr)
+					  (let ((res (instr)))
+					    (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
+					    res))
+					 ((string? instr)     instr)
+					 (else 
+					  ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
+					  ""))))))
+	  (if (not config) ;; this is a non-existant test called in a waiton. 
+	      (if (null? tal)
+		  test-records
+		  (loop (car tal)(cdr tal)))
+	      (begin
+		(debug:print-info 8 "waitons: " waitons)
+		;; check for hed in waitons => this would be circular, remove it and issue an
+		;; error
+		(if (member hed waitons)
+		    (begin
+		      (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
+		      (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+		
+		;; (items   (items:get-items-from-config config)))
+		(if (not (hash-table-ref/default test-records hed #f))
+		    (hash-table-set! test-records
+				     hed (vector hed     ;; 0
+						 config  ;; 1
+						 waitons ;; 2
+						 (config-lookup config "requirements" "priority")     ;; priority 3
+						 (let ((items      (hash-table-ref/default config "items" #f)) ;; items 4
+						       (itemstable (hash-table-ref/default config "itemstable" #f))) 
+						   ;; if either items or items table is a proc return it so test running
+						   ;; process can know to call items:get-items-from-config
+						   ;; if either is a list and none is a proc go ahead and call get-items
+						   ;; otherwise return #f - this is not an iterated test
+						   (cond
+						    ((procedure? items)      
+						     (debug:print-info 4 "items is a procedure, will calc later")
+						     items)            ;; calc later
+						    ((procedure? itemstable)
+						     (debug:print-info 4 "itemstable is a procedure, will calc later")
+						     itemstable)       ;; calc later
+						    ((filter (lambda (x)
+							       (let ((val (car x)))
+								 (if (procedure? val) val #f)))
+							     (append (if (list? items) items '())
+								     (if (list? itemstable) itemstable '())))
+						     'have-procedure)
+						    ((or (list? items)(list? itemstable)) ;; calc now
+						     (debug:print-info 4 "items and itemstable are lists, calc now\n"
+								       "    items: " items " itemstable: " itemstable)
+						     (items:get-items-from-config config))
+						    (else #f)))                           ;; not iterated
+						 #f      ;; itemsdat 5
+						 #f      ;; spare - used for item-path
+						 )))
+		(for-each 
+		 (lambda (waiton)
+		   (if (and waiton (not (member waiton test-names)))
+		       (begin
+			 (set! required-tests (cons waiton required-tests))
+			 (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+		 waitons)
+		(let ((remtests (delete-duplicates (append waitons tal))))
+		  (if (not (null? remtests))
+		      (loop (car remtests)(cdr remtests))
+		      test-records))))))))
+
+;;======================================================================
 ;; test steps
 ;;======================================================================
 
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* (;; (item-path (item-list->path itemdat))
-	 (testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
-    (equal? (test:get-state testdat) "KILLREQ")))
+  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+    (and testdat
+	 (equal? (test:get-state testdat) "KILLREQ"))))
 
 (define (test:tdb-get-rundat-count tdb)
   (if tdb

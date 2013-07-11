@@ -55,6 +55,9 @@
 (define *time-to-exit*      #f)
 (define *received-response* #f)
 (define *default-numtries*  10)
+(define *server-run*        #t)
+(define *db-write-access*   #t)
+
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -97,6 +100,31 @@
 ;;======================================================================
 ;; Misc utils
 ;;======================================================================
+
+;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
+(define (common:hms-string->seconds tstr)
+  (let ((parts     (string-split tstr))
+	(time-secs 0)
+	;; s=seconds, m=minutes, h=hours, d=days
+	(trx       (regexp "(\\d+)([smhd])")))
+    (for-each (lambda (part)
+		(let ((match  (string-match trx part)))
+		  (if match
+		      (let ((val (string->number (cadr match)))
+			    (unt (caddr match)))
+			(if val 
+			    (set! time-secs (+ time-secs (* val
+							    (case (string->symbol unt)
+							      ((s) 1)
+							      ((m) 60)
+							      ((h) (* 60 60))
+							      ((d) (* 24 60 60))
+							      (else 0))))))))))
+	      parts)
+    time-secs))
+		       
+(define (common:version-signature)
+  (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
 
 ;; one-of args defined
 (define (args-defined? . param)
@@ -144,6 +172,87 @@
   (hash-table-ref/default 
    (read-config "megatest.config" #f #t)
    "disks" '("none" "")))
+
+;;======================================================================
+;; M I S C   L I S T S
+;;======================================================================
+
+;; items in lista are matched value and position in listb
+;; return the remaining items in listb or #f
+;;
+(define (common:list-is-sublist lista listb)
+  (if (null? lista)
+      listb ;; all items in listb are "remaining"
+      (if (> (length lista)(length listb)) 
+	  #f
+	  (let loop ((heda (car lista))
+		     (tala (cdr lista))
+		     (hedb (car listb))
+		     (talb (cdr listb)))
+	    (if (equal? heda hedb)
+		(if (null? tala) ;; we are done
+		    talb
+		    (loop (car tala)
+			  (cdr tala)
+			  (car talb)
+			  (cdr talb)))
+		#f)))))
+
+;; Needed for long lists to be sorted where (apply max ... ) dies
+;;
+(define (common:max inlst)
+  (let loop ((max-val (car inlst))
+	     (hed     (car inlst))
+	     (tal     (cdr inlst)))
+    (if (not (null? tal))
+	(loop (max hed max-val)
+	      (car tal)
+	      (cdr tal))
+	(max hed max-val))))
+
+
+;;======================================================================
+;; Munge data into nice forms
+;;======================================================================
+
+;; Generate an index for a sparse list of key values
+;;   ( (rowname1 colname1 val1)(rowname2 colname2 val2) )
+;;
+;; => 
+;;
+;;   ( (rowname1 0)(rowname2 1))    ;; rownames -> num
+;;     (colname1 0)(colname2 1)) )  ;; colnames -> num
+;; 
+;; optional apply proc to rownum colnum value
+(define (common:sparse-list-generate-index data #!key (proc #f))
+  (if (null? data)
+      (list '() '())
+      (let loop ((hed (car data))
+		 (tal (cdr data))
+		 (rownames '())
+		 (colnames '())
+		 (rownum   0)
+		 (colnum   0))
+	(let* ((rowkey          (car   hed))
+	       (colkey          (cadr  hed))
+	       (value           (caddr hed))
+	       (existing-rowdat (assoc rowkey rownames))
+	       (existing-coldat (assoc colkey colnames))
+	       (curr-rownum     (if existing-rowdat rownum (+ rownum 1)))
+	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
+	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
+	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
+	  ;; (debug:print-info 0 "Processing record: " hed )
+	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
+	  (if (null? tal)
+	      (list new-rownames new-colnames)
+	      (loop (car tal)
+		    (cdr tal)
+		    new-rownames
+		    new-colnames
+		    (if (> curr-rownum rownum) curr-rownum rownum)
+		    (if (> curr-colnum colnum) curr-colnum colnum)
+		    ))))))
 
 ;;======================================================================
 ;; System stuff
@@ -240,6 +349,10 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
+(define (seconds->work-week/day sec)
+  (time->string
+   (seconds->local-time sec) "%V.%u"))
+
 ;;======================================================================
 ;; Colors
 ;;======================================================================
@@ -251,22 +364,22 @@
     ((orange) "255 172 13")
     ((purple) "This is unfinished ...")))
 
-(define (common:get-color-for-state-status state status)
-  (case (string->symbol state)
-    ((COMPLETED)
-     (case (string->symbol status)
-       ((PASS)        "70  249 73")
-       ((WARN WAIVED) "255 172 13")
-       ((SKIP)        "230 230 0")
-       (else "223 33 49")))
-    ((LAUNCHED)         "101 123 142")
-    ((CHECK)            "255 100 50")
-    ((REMOTEHOSTSTART)  "50  130 195")
-    ((RUNNING)          "9   131 232")
-    ((KILLREQ)          "39  82  206")
-    ((KILLED)           "234 101 17")
-    ((NOT_STARTED)      "240 240 240")
-    (else               "192 192 192")))
+;; (define (common:get-color-for-state-status state status)
+;;   (case (string->symbol state)
+;;     ((COMPLETED)
+;;      (case (string->symbol status)
+;;        ((PASS)        "70  249 73")
+;;        ((WARN WAIVED) "255 172 13")
+;;        ((SKIP)        "230 230 0")
+;;        (else "223 33 49")))
+;;     ((LAUNCHED)         "101 123 142")
+;;     ((CHECK)            "255 100 50")
+;;     ((REMOTEHOSTSTART)  "50  130 195")
+;;     ((RUNNING)          "9   131 232")
+;;     ((KILLREQ)          "39  82  206")
+;;     ((KILLED)           "234 101 17")
+;;     ((NOT_STARTED)      "240 240 240")
+;;     (else               "192 192 192")))
 
 (define (common:get-color-from-status status)
   (cond

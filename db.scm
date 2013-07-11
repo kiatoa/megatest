@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -29,6 +29,7 @@
 (declare (uses ods))
 (declare (uses fs-transport))
 (declare (uses client))
+(declare (uses mt))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -70,10 +71,14 @@
 	    (exit))))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
+	 (write-access (file-write-access? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+    (if (and dbexists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
@@ -135,12 +140,12 @@
 (define (db:initialize db)
   (debug:print-info 11 "db:initialize START")
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
-	 (keys     (config-get-fields configdat))
+	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys)))
     (for-each (lambda (key)
-		(let ((keyn (vector-ref key 0)))
+		(let ((keyn key))
 		  (if (member (string-downcase keyn)
 			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
 				    "pass_count"))
@@ -153,7 +158,7 @@
     (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
-		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" (key:get-fieldname key)(key:get-fieldtype key)))
+		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 	      keys)
     (sqlite3:execute db (conc 
 			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
@@ -494,22 +499,25 @@
   (sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var)
   (debug:print-info 11 "db:del-var END " var))
 
-;; use a global for some primitive caching, it is just silly to re-read the db 
-;; over and over again for the keys since they never change
+;; use a global for some primitive caching, it is just silly to
+;; re-read the db over and over again for the keys since they never
+;; change
+
+;; why get the keys from the db? why not get from the *configdat*
+;; using keys:config-get-fields?
 
 (define (db:get-keys db)
   (if *db-keys* *db-keys* 
       (let ((res '()))
-	(debug:print-info 11 "db:get-keys START (cache miss)")
 	(sqlite3:for-each-row 
-	 (lambda (key keytype)
-	   (set! res (cons (vector key keytype) res)))
+	 (lambda (key)
+	   (set! res (cons key res)))
 	 db
-	 "SELECT fieldname,fieldtype FROM keys ORDER BY id DESC;")
+	 "SELECT fieldname FROM keys ORDER BY id DESC;")
 	(set! *db-keys* res)
-	(debug:print-info 11 "db:get-keys END (cache miss)")
 	res)))
 
+;; 
 (define (db:get-value-by-header row header field)
   (debug:print-info 4 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
@@ -524,10 +532,29 @@
 ;;  R U N S
 ;;======================================================================
 
+(define (db:get-run-name-from-id db run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (runname)
+       (set! res runname))
+     db
+     "SELECT runname FROM runs WHERE id=?;"
+     run-id)
+    res))
+
+(define (db:get-run-key-val db run-id key)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (val)
+       (set! res val))
+     db 
+     (conc "SELECT " key " FROM runs WHERE id=?;")
+     run-id)
+    res))
+
 ;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
-  (let* ((header    (append (map key:get-fieldname keys)
-			    remfields))
+  (let* ((header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (list keystr header)))
@@ -547,18 +574,18 @@
 
 
 ;; register a test run with the db
-(define (db:register-run db keys keyvallst runname state status user)
-  (debug:print 3 "runs:register-run, keys: " keys " keyvallst: " keyvallst " runname: " runname " state: " state " status: " status " user: " user)
-  (let* ((keystr    (keys->keystr keys))
+(define (db:register-run db keyvals runname state status user)
+  (debug:print 3 "runs:register-run runname: " runname " state: " state " status: " status " user: " user)
+  (let* ((keys      (map car keyvals))
+	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
 	 (valslots  (keys->valslots keys)) ;; ?,?,? ...
-	 (keyvals   (map cadr keyvallst))
-	 (allvals   (append (list runname state status user) keyvals))
-	 (qryvals   (append (list runname) keyvals))
-	 (key=?str  (string-intersperse (map (lambda (k)(conc (key:get-fieldname k) "=?")) keys) " AND ")))
-    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals)
-    (debug:print 2 "NOTE: using target " (string-intersperse keyvals "/") " for this run")
+	 (allvals   (append (list runname state status user) (map cadr keyvals)))
+	 (qryvals   (append (list runname) (map cadr keyvals)))
+	 (key=?str  (string-intersperse (map (lambda (k)(conc k "=?")) keys) " AND ")))
+    (debug:print 3 "keys: " keys " allvals: " allvals " keyvals: " keyvals " key=?str is " key=?str)
+    (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
@@ -571,7 +598,7 @@
 	     ;(debug:print 4 "qry: " qry) 
 	     qry)
 	   qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=? WHERE id=?;" state status res)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=?;" state status res)
 	  res) 
 	(begin
 	  (debug:print 0 "ERROR: Called without all necessary keys")
@@ -588,8 +615,7 @@
 	 (keys       (db:get-keys db))
 	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
-	 (header     (append (map key:get-fieldname keys)
-		             remfields))
+	 (header     (append keys remfields))
 	 (keystr     (conc (keys->keystr keys) ","
 		           (string-intersperse remfields ",")))
 	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
@@ -603,7 +629,7 @@
 					       (db:patt->like key patt)))
 					   keypatts)
 				      " AND ")))
-		           " ORDER BY event_time DESC "
+		           " AND state != 'deleted' ORDER BY event_time DESC "
 		           (if (number? count)
 		               (conc " LIMIT " count)
 		               "")
@@ -620,6 +646,27 @@
     (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
+;; Get all targets from the db
+;;
+(define (db:get-targets db)
+  (let* ((res       '())
+	 (keys       (db:get-keys db))
+	 (header     keys) ;; (map key:get-fieldname keys))
+	 (keystr     (keys->keystr keys))
+	 (qrystr     (conc "SELECT " keystr " FROM runs;"))
+	 (seen       (make-hash-table)))
+    (sqlite3:for-each-row
+     (lambda (a . x)
+       (let ((targ (cons a x)))
+	 (if (not (hash-table-ref/default seen targ #f))
+	     (begin
+	       (hash-table-set! seen targ #t)
+	       (set! res (cons (apply vector targ) res))))))
+     db
+     qrystr)
+    (debug:print-info 11 "db:get-targets END qrystr: " qrystr )
+    (vector header res)))
+
 ;; just get count of runs
 (define (db:get-num-runs db runpatt)
   (let ((numruns 0))
@@ -628,9 +675,67 @@
      (lambda (count)
        (set! numruns count))
      db
-     "SELECT COUNT(id) FROM runs WHERE runname LIKE ?;" runpatt)
+     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
+
+;; get some basic run stats
+;;
+;; ( (runname (( state  count ) ... ))
+;;   (   ...  
+(define (db:get-run-stats db)
+  (let ((totals       (make-hash-table))
+	(res          '()))
+    (sqlite3:for-each-row
+     (lambda (runname state count)
+       (let* ((stateparts (string-split state "|"))
+	      (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
+	 (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
+	 (set! res (cons (list runname newstate count) res))))
+     db
+    "SELECT runname,t.state||'|'||t.status AS s,count(t.id) FROM runs AS r INNER JOIN tests AS t ON r.id=t.run_id GROUP BY s,runname ORDER BY r.event_time,s DESC;" )
+    ;; (set! res (reverse res))
+    (for-each (lambda (state)
+		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
+	      (sort (hash-table-keys totals) string>=))
+    res))
+
+;; db:get-runs-by-patt
+;; get runs by list of criteria
+;; register a test run with the db
+;;
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;;  to extract info from the structure returned
+;;
+(define (db:get-runs-by-patt db keys runnamepatt targpatt) ;; test-name)
+  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+	 (keystr   (car tmp))
+	 (header   (cadr tmp))
+	 (res     '())
+	 (key-patt "")
+	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
+	 (qry-str  #f)
+	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
+    (for-each (lambda (keyval)
+		(let* ((key    (car keyval))
+		       (patt   (cadr keyval))
+		       (fulkey (conc ":" key))
+		       (wildtype (if (substring-index "%" patt) "like" "glob")))
+		  (if patt
+		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
+		      (begin
+			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
+			(exit 6)))))
+	      keyvals)
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time;"))
+    (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
+    (sqlite3:for-each-row 
+     (lambda (a . r)
+       (set! res (cons (list->vector (cons a r)) res)))
+     db 
+     qry-str
+     runnamepatt)
+    (vector header res)))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
 (define (db:get-run-info db run-id)
@@ -639,8 +744,7 @@
       (let* ((res      #f)
 	     (keys      (db:get-keys db))
 	     (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
-	     (header    (append (map key:get-fieldname keys)
-				remfields))
+	     (header    (append keys remfields))
 	     (keystr    (conc (keys->keystr keys) ","
 			      (string-intersperse remfields ","))))
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
@@ -648,7 +752,7 @@
 	 (lambda (a . x)
 	   (set! res (apply vector a x)))
 	 db
-	 (conc "SELECT " keystr " FROM runs WHERE id=?;")
+	 (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
 	 run-id)
 	(debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
 	(let ((finalres (vector header res)))
@@ -663,7 +767,10 @@
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
-  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+  (sqlite3:execute db "UPDATE runs SET state='deleted' WHERE id=?;" run-id))
+;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
+
+
 
 (define (db:update-run-event_time db run-id)
   (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
@@ -687,16 +794,16 @@
 ;; get key val pairs for a given run-id
 ;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
 (define (db:get-key-val-pairs db run-id)
-  (let* ((keys (get-keys db))
+  (let* ((keys (db:get-keys db))
 	 (res  '()))
     (debug:print-info 11 "db:get-key-val-pairs START keys: " keys " run-id: " run-id)
     (for-each 
      (lambda (key)
-       (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
 	 ;; (debug:print 0 "qry: " qry)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
-	    (set! res (cons (list (key:get-fieldname key) key-val) res)))
+	    (set! res (cons (list key key-val) res)))
 	  db qry run-id)))
      keys)
     (debug:print-info 11 "db:get-key-val-pairs END keys: " keys " run-id: " run-id)
@@ -704,22 +811,22 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals db run-id)
-  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
+   (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
     (if mykeyvals 
 	mykeyvals
-	(let* ((keys (get-keys db))
-	       (res  '()))
-	  (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
-	  (for-each 
-	   (lambda (key)
-	     (let ((qry (conc "SELECT " (key:get-fieldname key) " FROM runs WHERE id=?;")))
-	       ;; (debug:print 0 "qry: " qry)
-	       (sqlite3:for-each-row 
-		(lambda (key-val)
-		  (set! res (cons key-val res)))
-		db qry run-id)))
-	   keys)
-	  (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
+    (let* ((keys (db:get-keys db))
+	 (res  '()))
+    (debug:print-info 11 "db:get-key-vals START keys: " keys " run-id: " run-id)
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
+	 ;; (debug:print 0 "qry: " qry)
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons key-val res)))
+	  db qry run-id)))
+     keys)
+    (debug:print-info 11 "db:get-key-vals END keys: " keys " run-id: " run-id)
 	  (let ((final-res (reverse res)))
 	    (hash-table-set! *keyvals* run-id final-res)
 	    final-res)))))
@@ -729,8 +836,8 @@
   (let ((mytarg (hash-table-ref/default *target* run-id #f)))
     (if mytarg
 	mytarg
-	(let* ((keyvals (db:get-key-vals db run-id))
-	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+  (let* ((keyvals (db:get-key-vals db run-id))
+	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
 	  (hash-table-set! *target* run-id thekey)
 	  thekey))))
 
@@ -742,38 +849,53 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses 
-			      #!key (not-in #t)
-			      (sort-by #f) ;; 'rundir 'event_time
-			      (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
+(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by
+			      #!key
+			      (qryvals #f)
 			      )
   (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
-  (let* ((res '())
+  (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
+	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
 			      #f
 			      (conc " state "  
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse states   "','")
 				    "')")))
 	 (statuses-qry    (if (null? statuses)
 			      #f
 			      (conc " status "
-				    (if not-in "NOT" "") 
-				    " IN ('" 
+				    (if not-in 
+					" NOT IN ('"
+					" IN ('") 
 				    (string-intersperse statuses "','")
 				    "')")))
+	 (states-statuses-qry 
+	                  (cond 
+			   ((and states-qry statuses-qry)
+			    (conc " AND ( " states-qry " AND " statuses-qry " ) "))
+			   (states-qry  
+			    (conc " AND " states-qry))
+			   (statuses-qry 
+			    (conc " AND " statuses-qry))
+			   (else "")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals
-				" FROM tests WHERE run_id=? "
-				(if states-qry   (conc " AND " states-qry)   "")
-				(if statuses-qry (conc " AND " statuses-qry) "")
+				" FROM tests WHERE run_id=? AND state != 'DELETED' "
+				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
-				  ((rundir)     " ORDER BY length(rundir) DESC;")
-				  ((event_time) " ORDER BY event_time ASC;")
-				  (else         ";"))
+				  ((rundir)     " ORDER BY length(rundir) DESC ")
+				  ((event_time) " ORDER BY event_time ASC ")
+				  (else         (if (string? sort-by)
+						    (conc " ORDER BY " sort-by) 
+						    "")))
+				(if limit  (conc " LIMIT " limit)   "")
+				(if offset (conc " OFFSET " offset) "")
+				";"
 			 )))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row 
@@ -788,8 +910,8 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
-(define (db:get-tests-for-runs-mindata db run-ids testpatt states status)
-  (db:get-tests-for-runs db run-ids testpatt states status qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+(define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)
+  (db:get-tests-for-runs db run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
 ;; NB // This is get tests for "runs" (note the plural!!)
 ;;
@@ -797,7 +919,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-;; run-ids is a list of run-ids or a single number
+;; run-ids is a list of run-ids or a single number or #f for all runs
 (define (db:get-tests-for-runs db run-ids testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f)
@@ -821,11 +943,11 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals 
-				" FROM tests WHERE " 
+				" FROM tests WHERE state != 'DELETED' "
 				(if run-ids
 				    (if (list? run-ids)
-					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")
-					(conc "run_id=" run-ids " "))
+					(conc "AND run_id IN (" (string-intersperse (map conc run-ids) ",") ") ")
+					(conc "AND run_id=" run-ids " "))
 				    " ") ;; #f => run-ids don't filter on run-ids
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
@@ -877,12 +999,14 @@
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
+  (common:clear-caches)
   (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
     (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
-;; WARNING: SQL injection risk
+;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
+;;
 (define (db:set-tests-state-status db run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
@@ -893,7 +1017,29 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
+
+(define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
+  ;; Convert #f to wildcard %
+  (if (null? testnames)
+      #t
+      (let ((currstate  (if currstate currstate "%"))
+	    (currstatus (if currstatus currstatus "%")))
+	(let loop ((hed (car testnames))
+		   (tal (cdr testnames))
+		   (thr '()))
+	  (let ((th1 (if newstate  (create-thread (cbd:client-call serverdat 'update-test-state  #t *default-numtries* newstate  currstate  run-id testname testname)) #f))
+		(th2 (if newstatus (create-thread (cbd:client-call serverdat 'update-test-status #t *default-numtries* newstatus currstatus run-id testname testname)) #f)))
+	    (thread-start! th1)
+	    (thread-start! th2)
+	    (if (null? tal)
+		(loop (car tal)(cdr tal)(cons th1 (cons th2 thr)))
+		(for-each
+		 (lambda (th)
+		   (if th (thread-join! th)))
+		 thr)))))))
+
 (define (cdb:delete-tests-in-state serverdat run-id state)
+  (common:clear-caches)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
 (define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
@@ -909,7 +1055,7 @@
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
    ((and newstate newstatus)
     (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
    (else
@@ -928,6 +1074,15 @@
        (set! res count))
      db
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
+    res))
+
+(define (db:get-running-stats db)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (state count)
+       (set! res (cons (list state count) res)))
+     db
+     "SELECT state,count(id) FROM tests GROUP BY state ORDER BY id DESC;")
     res))
 
 (define (db:get-count-tests-running-in-jobgroup db jobgroup)
@@ -1224,8 +1379,13 @@
 	      (rawdat      (http-transport:client-send-receive serverdat zdat))
 	      (tmp         #f))
 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
-	 (set! tmp (db:string->obj rawdat))
-	 (vector-ref tmp 2))))
+	 (if rawdat
+	     (begin
+	       (set! tmp (db:string->obj rawdat))
+	       (vector-ref tmp 2))
+	     (begin
+	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
+	       (exit 1))))))
     ((zmq)
      (handle-exceptions
       exn
@@ -1307,8 +1467,8 @@
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
 
-(define (cdb:kill-server serverdat)
-  (cdb:client-call serverdat 'killserver #t *default-numtries*))
+(define (cdb:kill-server serverdat pid)
+  (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
 
 (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
@@ -1363,6 +1523,8 @@
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
 	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
+	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
+	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
     ))
 
 ;; do not run these as part of the transaction
@@ -1542,14 +1704,20 @@
 		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
 		((set-verbosity)
 		 (set! *verbosity* (car params))
-		 (server:reply return-address qry-sig #t '(#t *verbosity*)))
+		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
 		((killserver)
-		 (debug:print 0 "WARNING: Server going down in 15 seconds by user request!")
-		 (open-run-close tasks:server-deregister tasks:open-db 
-				 (car *runremote*)
-				 pullport: (cadr *runremote*))
-		 (thread-start! (make-thread (lambda ()(thread-sleep! 15)(exit))))
-		 (server:reply return-address qry-sig #t '(#t "exit process started")))
+		 (let ((hostname (car  *runremote*))
+		       (port     (cadr *runremote*))
+		       (pid      (car params)))
+		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+		   (debug:print-info 1 "current pid=" (current-process-id))
+		   (open-run-close tasks:server-deregister tasks:open-db 
+				   hostname
+				   port: port)
+		   (set! *server-run* #f)
+		   (thread-sleep! 3)
+		   (process-signal pid signal/kill)
+		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
 		(else ;; not a command, i.e. is a query
 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
 		 (server:reply return-address qry-sig #f 'failed)))))
@@ -1965,7 +2133,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (cdb:remote-run db:get-tests-for-run #f run-id waitontest-name '() '()))
+	   (let ((tests             (mt:get-tests-for-run run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
@@ -1976,6 +2144,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
+		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
@@ -1983,13 +2152,25 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+			 (or is-ok (member mode '(toplevel itemmatch))))
 		    (set! parent-waiton-met #t))
-		   ((and same-itempath
-			 is-completed
-			 (or is-ok (eq? mode 'toplevel)))
+		   ;; Special case for toplevel and KILLED
+		   ((and (equal? item-path "") ;; this is the parent test
+			 is-killed
+			 (eq? mode 'toplevel))
+		    (set! parent-waiton-met #t))
+		   ((or (and (not same-itempath)
+			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath
+			(and same-itempath
+			     is-completed
+			     (or is-ok 
+				 (eq? mode 'toplevel)              ;; toplevel does not block on FAIL
+				 (and is-ok (eq? mode 'itemmatch)) ;; itemmatch blocks on not ok
+				 )))
 		    (set! item-waiton-met #t)))))
 	      tests)
+             ;; both requirements, parent and item-waiton must be met to NOT add item to
+             ;; prereq's not met list
 	     (if (not (or parent-waiton-met item-waiton-met))
 		 (set! result (append (if (null? tests) (list waitontest-name) tests) result)))
 	     ;; if the test is not found then clearly the waiton is not met...
