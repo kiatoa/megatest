@@ -867,7 +867,7 @@
 		 (if skip-test
 		     (begin
 		       (cdb:remote-run db:test-set-state-status-by-id #f test-id "COMPLETED" "SKIP" skip-test)
-		       (debug:info 1 "SKIPPING Test " test-full-name " due to " skip-test))
+		       (debug:print-info 1 "SKIPPING Test " full-test-name " due to " skip-test))
 		     (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
 			 (begin
 			   (print "ERROR: Failed to launch the test. Exiting as soon as possible")
