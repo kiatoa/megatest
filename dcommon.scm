@@ -28,6 +28,7 @@
 
 ;; yes, this is non-ideal 
 (define dashboard:update-summary-tab #f)
+(define dashboard:update-servers-table #f)
 
 ;;======================================================================
 ;; C O M M O N   D A T A   S T R U C T U R E
@@ -438,6 +439,89 @@
      (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))
 
+(define (dcommon:servers-table)
+  (let* ((colnum         0)
+	 (rownum         0)
+	 (servers-matrix (iup:matrix #:expand "YES"
+				     #:numcol 7
+				     #:numcol-visible 7
+				     #:numlin-visible 3
+				     ))
+	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "State" "Transport"))
+	 (updater        (lambda ()
+			   (let ((servers (open-run-close tasks:get-all-servers tasks:open-db)))
+			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
+			     ;; (set! colnum 0)
+			     ;; (for-each (lambda (colname)
+			     ;;    	 ;; (print "colnum: " colnum " colname: " colname)
+			     ;;    	 (iup:attribute-set! servers-matrix (conc "0:" colnum) colname)
+			     ;;    	 (set! colnum (+ 1 colnum)))
+			     ;;           colnames)
+			     (set! rownum 1)
+			     (for-each 
+			      (lambda (server)
+				(set! colnum 0)
+				(let* ((vals (list (vector-ref server 0) ;; Id
+						   (vector-ref server 9) ;; MT-Ver
+						   (vector-ref server 1) ;; Pid
+						   (vector-ref server 2) ;; Hostname
+						   (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
+						   (vector-ref server 5) ;; Pubport
+						   ;; (vector-ref server 10) ;; Last beat
+						   ;; (vector-ref server 6) ;; Start time
+						   ;; (vector-ref server 7) ;; Priority
+						   ;; (vector-ref server 8) ;; State
+						   (if (< (vector-ref server 10) 20) ;; Status (Please redo this properly!)
+						       "alive"
+						       "dead")
+						   (vector-ref server 11)  ;; Transport
+						   )))
+				  (for-each (lambda (val)
+					      ;; (print "rownum: " rownum " colnum: " colnum " val: " val)
+					      (iup:attribute-set! servers-matrix (conc rownum ":" colnum) val)
+					      (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))
+					      (set! colnum (+ 1 colnum)))
+					    vals)
+				  (set! rownum (+ rownum 1)))
+				 (iup:attribute-set! servers-matrix "REDRAW" "ALL"))
+			      servers)))))
+    (set! colnum 0)
+    (for-each (lambda (colname)
+		(iup:attribute-set! servers-matrix (conc "0:" colnum) colname)
+		(iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))
+		(set! colnum (+ colnum 1)))
+	      colnames)
+    (set! dashboard:update-servers-table updater) 
+    ;; (iup:attribute-set! servers-matrix "WIDTHDEF" "40")
+    (iup:hbox
+     (iup:vbox
+      (iup:button "Start"
+		  ;; #:size "50x"
+		  #:expand "YES"
+		  #:action (lambda (obj)
+			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+					      "megatest -server - &")))
+					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+			       (system cmd))))
+      (iup:button "Stop"
+		  #:expand "YES"
+		  ;; #:size "50x"
+		  #:action (lambda (obj)
+			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+					      "megatest -stop-server 0 &")))
+					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+			       (system cmd))))
+      (iup:button "Restart"
+		  #:expand "YES"
+		  ;; #:size "50x"
+		  #:action (lambda (obj)
+			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+					      "megatest -stop-server 0;megatest -server - &")))
+					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+			       (system cmd)))))
+      servers-matrix
+     )))
+  
 ;; The main menu
 (define (dcommon:main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)

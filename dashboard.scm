@@ -887,30 +887,7 @@ Misc
 	))
       (iup:frame
        #:title "Server"
-       (iup:vbox
-	(iup:hbox
-	 (iup:button "Start"
-		      #:size "50x"
-		      #:action (lambda (obj)
-				(let ((cmd (conc "xterm -geometry 180x20 -e \""
-						 "megatest -server -"
-						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-				  (system cmd))))
-	 (iup:button "Stop"
-		      #:size "50x"
-		      #:action (lambda (obj)
-				(let ((cmd (conc "xterm -geometry 180x20 -e \""
-						 "megatest -stop-server 0"
-						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-				  (system cmd))))
-	 (iup:button "Restart"
-		      #:size "50x"
-		      #:action (lambda (obj)
-				(let ((cmd (conc "xterm -geometry 180x20 -e \""
-						 "megatest -stop-server 0;megatest -server -"
-						 ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-				  (system cmd))))
-	 ))))
+       (dcommon:servers-table)))
      (iup:frame 
       #:title "Megatest config settings"
       (iup:hbox
@@ -1309,16 +1286,24 @@ Misc
       (and (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
+(define *monitor-db-path* (conc *toppath* "/monitor.db"))
+(define *last-monitor-update-time* 0)
+
 (define (dashboard:run-update x)
   (let* ((modtime         (file-modification-time *db-file-path*))
+	 (monitor-modtime (file-modification-time *monitor-db-path*))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
-    (if recalc
+    (if (and (eq? *current-tab-number* 0)
+	     (> monitor-modtime *last-monitor-update-time*))
 	(begin
+	  (set! *last-monitor-update-time* monitor-modtime)
+	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
+    (if recalc
+	(begin	
 	  (case *current-tab-number* 
 	    ((0) 
-	     ;; (thread-sleep! 0.25) ;; 
-	     (dashboard:update-summary-tab))
+	     (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 	    ((1) ;; The runs table is active
 	     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 			    (hash-table-ref/default *searchpatts* "test-name" "%/%")
