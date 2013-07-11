@@ -73,6 +73,7 @@
 	       (set-vars  (assoc/default 'set-vars  cmdinfo)) ;; pre-overrides from -setvar
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
+	       (runtlim   (assoc/default 'runtlim   cmdinfo))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
 	       (keyvals   #f)
@@ -276,7 +277,14 @@
 					(kill-tries 0))
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (test-get-kill-request test-id)) ;; run-id test-name itemdat))
+				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
+							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
+									       (time-exceeded (> run-seconds runtlim)))
+									  (if time-exceeded
+									      (begin
+										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
+										#t)
+									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
 				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
 				       (if kill-job? 
@@ -284,21 +292,22 @@
 					     (mutex-lock! m)
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
-						   (begin
-						     (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
-						     (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
-						       (for-each 
-							(lambda (p)
-							  (let* ((parts  (string-split p))
-								 (p-id   (if (> (length parts) 0)
-									     (string->number (car parts))
-									     #f)))
-							    (if p-id
-								(begin
-								  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
-								  (system (conc "kill -9 " p-id))))))
-							(car processes))
-						       (system (conc "kill -9 -" pid))))
+						   (process-signal pid signal/kill)
+						   ;; (begin
+						   ;;   (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						   ;;   (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
+						   ;;     (for-each 
+						   ;;      (lambda (p)
+						   ;;        (let* ((parts  (string-split p))
+						   ;;      	 (p-id   (if (> (length parts) 0)
+						   ;;      		     (string->number (car parts))
+						   ;;      		     #f)))
+						   ;;          (if p-id
+						   ;;      	(begin
+						   ;;      	  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
+						   ;;      	  (system (conc "kill -9 " p-id))))))
+						   ;;      (car processes))
+						   ;;     (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
@@ -566,14 +575,15 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell   (config-lookup *configdat* "jobtools"     "useshell"))
-	 (launcher   (config-lookup *configdat* "jobtools"     "launcher"))
-	 (runscript  (config-lookup test-conf   "setup"        "runscript"))
-	 (ezsteps    (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
-	 (diskspace  (config-lookup test-conf   "requirements" "diskspace"))
-	 (memory     (config-lookup test-conf   "requirements" "memory"))
-	 (hosts      (config-lookup *configdat* "jobtools"     "workhosts"))
+  (let* ((useshell        (config-lookup *configdat* "jobtools"     "useshell"))
+	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
+	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
+	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	 (diskspace       (config-lookup test-conf   "requirements" "diskspace"))
+	 (memory          (config-lookup test-conf   "requirements" "memory"))
+	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
+	 (run-time-limit  (configf:lookup  test-conf   "requirements" "runtimelim"))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard
@@ -633,6 +643,7 @@
 				     (list 'megatest  remote-megatest)
 				     (list 'ezsteps   ezsteps) 
 				     (list 'target    mt_target)
+				     (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
 				     (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
 				     (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 				     (list 'runname   runname)

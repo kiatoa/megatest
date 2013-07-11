@@ -101,6 +101,28 @@
 ;; Misc utils
 ;;======================================================================
 
+;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
+(define (common:hms-string->seconds tstr)
+  (let ((parts     (string-split tstr))
+	(time-secs 0)
+	;; s=seconds, m=minutes, h=hours, d=days
+	(trx       (regexp "(\\d+)([smhd])")))
+    (for-each (lambda (part)
+		(let ((match  (string-match trx part)))
+		  (if match
+		      (let ((val (string->number (cadr match)))
+			    (unt (caddr match)))
+			(if val 
+			    (set! time-secs (+ time-secs (* val
+							    (case (string->symbol unt)
+							      ((s) 1)
+							      ((m) 60)
+							      ((h) (* 60 60))
+							      ((d) (* 24 60 60))
+							      (else 0))))))))))
+	      parts)
+    time-secs))
+		       
 (define (common:version-signature)
   (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
 
@@ -182,7 +204,7 @@
   (let loop ((max-val (car inlst))
 	     (hed     (car inlst))
 	     (tal     (cdr inlst)))
-    (if (null? tal)
+    (if (not (null? tal))
 	(loop (max hed max-val)
 	      (car tal)
 	      (cdr tal))

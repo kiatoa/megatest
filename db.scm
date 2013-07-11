@@ -2144,6 +2144,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
+		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
@@ -2152,6 +2153,11 @@
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
 			 (or is-ok (member mode '(toplevel itemmatch))))
+		    (set! parent-waiton-met #t))
+		   ;; Special case for toplevel and KILLED
+		   ((and (equal? item-path "") ;; this is the parent test
+			 is-killed
+			 (eq? mode 'toplevel))
 		    (set! parent-waiton-met #t))
 		   ((or (and (not same-itempath)
 			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath

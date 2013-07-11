@@ -920,6 +920,7 @@ Misc
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
+		   #:addexpanded "NO"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)

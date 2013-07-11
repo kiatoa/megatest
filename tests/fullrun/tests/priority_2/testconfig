@@ -3,6 +3,8 @@ runscript main.sh
 
 [requirements]
 priority 2
+# runtimelim 1d 1h 1m 10s
+runtimelim 10s
 
 [test_meta]
 author matt
