@@ -117,6 +117,7 @@
      (lambda (key val)
        (debug:print 2 "setenv " key " " val)
        (setenv key val)))
+    (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
     (setenv "MT_RUNNAME" (if inrunname inrunname (cdb:remote-run db:get-run-name-from-id #f run-id)))
@@ -183,9 +184,7 @@
 	 (required-tests '())
 	 (test-records (make-hash-table))
 	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
-
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
-
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
@@ -214,6 +213,7 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
+	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (let* ((config  (tests:get-testconfig hed 'return-procs))
 		 (waitons (let ((instr (if config 
 					   (config-lookup config "requirements" "waiton")
@@ -849,11 +849,30 @@
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
-	       (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
-		   (begin
-		     (print "ERROR: Failed to launch the test. Exiting as soon as possible")
-		     (set! *globalexitstatus* 1) ;; 
-		     (process-signal (current-process-id) signal/kill))))))
+	       ;; 
+	       (let ((skip-test   #f)
+		     (skip-check  (configf:get-section test-conf "skip")))
+		 (cond 
+		  ;; Have to check for skip conditions. This one skips if there are same-named tests
+		  ;; currently running
+		  ((and skip-check
+			(configf:lookup test-conf "skip" "prevrunning"))
+		   (let ((running-tests (cdb:remote-run db:get-tests-for-runs-mindata #f #f full-test-name '("RUNNING") '() #f)))
+		     (if (not (null? running-tests)) ;; have to skip 
+			 (set! skip-test "Skipping due to previous tests running"))))
+		  ((and skip-check
+			(configf:lookup test-conf "skip" "fileexists"))
+		   (if (file-exists? (configf:lookup test-conf "skip" "fileexists"))
+		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists"))))))
+		 (if skip-test
+		     (begin
+		       (cdb:remote-run db:test-set-state-status-by-id #f test-id "COMPLETED" "SKIP" skip-test)
+		       (debug:print-info 1 "SKIPPING Test " full-test-name " due to " skip-test))
+		     (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
+			 (begin
+			   (print "ERROR: Failed to launch the test. Exiting as soon as possible")
+			   (set! *globalexitstatus* 1) ;; 
+			   (process-signal (current-process-id) signal/kill))))))))
 	((KILLED) 
 	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it."))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  

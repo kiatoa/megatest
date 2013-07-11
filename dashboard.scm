@@ -877,11 +877,17 @@ Misc
 (define (dashboard:summary)
   (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
     (iup:vbox
-     (iup:frame 
-      #:title "General Info"
-      (iup:hbox 
-       (dcommon:general-info)
-       (dcommon:keys-matrix rawconfig)))
+     (iup:split
+      ;; #:value 500
+      (iup:frame 
+       #:title "General Info"
+       (iup:hbox 
+	(dcommon:keys-matrix rawconfig)
+	(dcommon:general-info)
+	))
+      (iup:frame
+       #:title "Server"
+       (dcommon:servers-table)))
      (iup:frame 
       #:title "Megatest config settings"
       (iup:hbox
@@ -914,6 +920,7 @@ Misc
 		   #:value 0
 		   #:name "Runs"
 		   #:expand "YES"
+		   #:addexpanded "NO"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
@@ -934,13 +941,19 @@ Misc
 			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id "%" '() '()
 									    qryvals: "id,testname,item_path,state,status"))) ;; get 'em all
 					    (sort tdat (lambda (a b)
-							 (string<= (vector-ref a 2)(vector-ref b 2))))))
+							 (let* ((aval (vector-ref a 2))
+								(bval (vector-ref b 2))
+								(anum (string->number aval))
+								(bnum (string->number bval)))
+							   (if (and anum bnum)
+							       (< anum bnum)
+							       (string<= aval bval)))))))
 			    (tests-mindat (dcommon:minimize-test-data tests-dat))
 			    (indices      (common:sparse-list-generate-index tests-mindat)) ;;  proc: set-cell))
 			    (row-indices  (cadr indices))
 			    (col-indices  (car indices))
-			    (max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
-			    (max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
+			    (max-row      (if (null? row-indices) 1 (common:max (map cadr row-indices))))
+			    (max-col      (if (null? col-indices) 1 (common:max (map cadr col-indices))))
 			    (max-visible  (max (- *num-tests* 15) 3)) ;; *num-tests* is proportional to the size of the window
 			    (numrows      1)
 			    (numcols      1)
@@ -1274,16 +1287,24 @@ Misc
       (and (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
+(define *monitor-db-path* (conc *toppath* "/monitor.db"))
+(define *last-monitor-update-time* 0)
+
 (define (dashboard:run-update x)
   (let* ((modtime         (file-modification-time *db-file-path*))
+	 (monitor-modtime (file-modification-time *monitor-db-path*))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
-    (if recalc
+    (if (and (eq? *current-tab-number* 0)
+	     (> monitor-modtime *last-monitor-update-time*))
 	(begin
+	  (set! *last-monitor-update-time* monitor-modtime)
+	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
+    (if recalc
+	(begin	
 	  (case *current-tab-number* 
 	    ((0) 
-	     ;; (thread-sleep! 0.25) ;; 
-	     (dashboard:update-summary-tab))
+	     (if dashboard:update-summary-tab (dashboard:update-summary-tab)))
 	    ((1) ;; The runs table is active
 	     (update-rundat (hash-table-ref/default *searchpatts* "runname" "%") *num-runs*
 			    (hash-table-ref/default *searchpatts* "test-name" "%/%")

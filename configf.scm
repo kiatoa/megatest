@@ -271,7 +271,7 @@
 	'()
 	(map car sectdat))))
 
-(define (configf:get-section cfdat section)
+(define (configf:get-section cfgdat section)
   (hash-table-ref/default cfgdat section '()))
 
 (define (setup)

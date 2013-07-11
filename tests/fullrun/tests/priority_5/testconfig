@@ -4,6 +4,9 @@ runscript main.sh
 [requirements]
 priority 5
 
+[skip]
+prevrunning #t
+
 [test_meta]
 author matt
 owner  bob

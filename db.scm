@@ -910,8 +910,8 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
-(define (db:get-tests-for-runs-mindata db run-ids testpatt states status)
-  (db:get-tests-for-runs db run-ids testpatt states status qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+(define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)
+  (db:get-tests-for-runs db run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
 ;; NB // This is get tests for "runs" (note the plural!!)
 ;;
@@ -919,7 +919,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-;; run-ids is a list of run-ids or a single number
+;; run-ids is a list of run-ids or a single number or #f for all runs
 (define (db:get-tests-for-runs db run-ids testpatt states statuses 
 			      #!key (not-in #t)
 			      (sort-by #f)
@@ -943,11 +943,11 @@
 				    "')")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT " qryvals 
-				" FROM tests WHERE state != 'DELETED' AND " 
+				" FROM tests WHERE state != 'DELETED' "
 				(if run-ids
 				    (if (list? run-ids)
-					(conc " run_id in (" (string-intersperse (map conc run-ids) ",") ") ")
-					(conc "run_id=" run-ids " "))
+					(conc "AND run_id IN (" (string-intersperse (map conc run-ids) ",") ") ")
+					(conc "AND run_id=" run-ids " "))
 				    " ") ;; #f => run-ids don't filter on run-ids
 				(if states-qry   (conc " AND " states-qry)   "")
 				(if statuses-qry (conc " AND " statuses-qry) "")
@@ -1055,7 +1055,7 @@
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (sqlite3:exectute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
    ((and newstate newstatus)
     (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
    (else
@@ -2144,6 +2144,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
+		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
@@ -2152,6 +2153,11 @@
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
 			 (or is-ok (member mode '(toplevel itemmatch))))
+		    (set! parent-waiton-met #t))
+		   ;; Special case for toplevel and KILLED
+		   ((and (equal? item-path "") ;; this is the parent test
+			 is-killed
+			 (eq? mode 'toplevel))
 		    (set! parent-waiton-met #t))
 		   ((or (and (not same-itempath)
 			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath
