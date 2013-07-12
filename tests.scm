@@ -28,15 +28,39 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; Call this one to do all the work and get a standardized list of tests
+(define (tests:get-all)
+  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
+				   (tests:get-tests-search-path *configdat*))))
+    (tests:get-valid-tests (make-hash-table) test-search-path)))
+
+
+(define (tests:get-tests-search-path cfgdat)
+  (let ((paths (map car (configf:get-section cfgdat "tests-paths"))))
+    (cons (conc *toppath* "/tests") paths)))
+
+(define (tests:get-valid-tests test-registry tests-paths)
+  (if (null? tests-paths) 
+      test-registry
+      (let loop ((hed (car tests-paths))
+		 (tal (cdr tests-paths)))
+	(if (file-exists? hed)
+	    (for-each (lambda (test-path)
+			(let* ((tname   (last (string-split test-path "/")))
+			       (tconfig (conc test-path "/testconfig")))
+			  (if (and (not (hash-table-ref/default test-registry tname #f))
+				   (file-exists? tconfig))
+			      (hash-table-set! test-registry tname test-path))))
+		      (glob (conc hed "/*"))))
+	(if (null? tal)
+	    test-registry
+	    (loop (car tal)(cdr tal))))))
+
+(define (tests:filter-test-names test-names test-patts)
+  (delete-duplicates
+   (filter (lambda (testname)
+	     (tests:match test-patts testname #f))
+	   test-names)))
 
 ;; tests:glob-like-match
 (define (tests:glob-like-match patt str) 
@@ -443,15 +467,15 @@
 ;; Gather data from test/task specifications
 ;;======================================================================
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (delete-duplicates
+;;      (filter (lambda (testname)
+;; 	       (tests:match test-patts testname #f))
+;; 	     (map (lambda (testp)
+;; 		    (last (string-split testp "/")))
+;; 		  tests)))))
 
 (define (tests:get-testconfig test-name system-allowed)
   (let* ((test-path    (conc *toppath* "/tests/" test-name))

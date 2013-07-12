@@ -176,14 +176,16 @@
 ;;            
 (define (runs:run-tests target runname test-patts user flags) ;; test-names
   (common:clear-caches) ;; clear all caches
-  (let* ((keys        (keys:config-get-fields *configdat*))
-	 (keyvals     (keys:target->keyval keys target))
-	 (run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
-	 (deferred    '()) ;; delay running these since they have a waiton clause
-	 (runconfigf   (conc  *toppath* "/runconfigs.config"))
-	 (required-tests '())
-	 (test-records (make-hash-table))
-	 (all-test-names (tests:get-valid-tests *toppath* "%"))) ;; we need a list of all valid tests to check waiton names
+  (let* ((keys               (keys:config-get-fields *configdat*))
+	 (keyvals            (keys:target->keyval keys target))
+	 (run-id             (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
+	 (deferred          '()) ;; delay running these since they have a waiton clause
+	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
+	 (required-tests    '())
+	 (test-records       (make-hash-table))
+	 (tests-registry     (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
+	 (all-test-names     (hash-table-keys tests-registry))
+	 (test-names         (tests:filter-test-names all-test-names test-patts)))
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
@@ -192,7 +194,7 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
+    ;; (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
     (debug:print-info 0 "test names " test-names)
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
@@ -232,7 +234,7 @@
 						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
 						   "")))))
 			      (filter (lambda (x)
-					(if (member x all-test-names)
+					(if (hash-table-ref/default tests-registry x #f)
 					    #t
 					    (begin
 					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
