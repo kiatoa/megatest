@@ -35,7 +35,7 @@
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
-  (let ((paths (map car (configf:get-section cfgdat "tests-paths"))))
+  (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
     (cons (conc *toppath* "/tests") paths)))
 
 (define (tests:get-valid-tests test-registry tests-paths)
