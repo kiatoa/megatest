@@ -183,8 +183,8 @@
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (required-tests    '())
 	 (test-records       (make-hash-table))
-	 (tests-registry     (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
-	 (all-test-names     (hash-table-keys tests-registry))
+	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
+	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts)))
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
@@ -211,12 +211,15 @@
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
     ;; refactoring this block into tests:get-full-data
+    ;;
+    ;; What happended, this code is now duplicated in tests!?
+    ;;
     ;;======================================================================
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
-	  (let* ((config  (tests:get-testconfig hed 'return-procs))
+	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 		 (waitons (let ((instr (if config 
 					   (config-lookup config "requirements" "waiton")
 					   (begin ;; No config means this is a non-existant test
@@ -234,7 +237,7 @@
 						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
 						   "")))))
 			      (filter (lambda (x)
-					(if (hash-table-ref/default tests-registry x #f)
+					(if (hash-table-ref/default all-tests-registry x #f)
 					    #t
 					    (begin
 					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
@@ -299,7 +302,7 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen))
+	  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")))
 
@@ -401,7 +404,7 @@
       (debug:print 4 "ERROR: No handler for this condition.")
       (list (car newtal)(cdr newtal) reg reruns)))))
 
-(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal)
+(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
@@ -497,7 +500,7 @@
 	   (or (null? prereqs-not-met)
 	       (and (eq? testmode 'toplevel)
 		    (null? non-completed))))
-      (run:test run-id run-info keyvals runname test-record flags #f test-registry)
+      (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
@@ -540,7 +543,7 @@
 		    (list hed tal reg reruns)))))))))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
-(define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in)
+(define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
@@ -633,7 +636,7 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal)))
+	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)))
 	    (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
@@ -741,13 +744,13 @@
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry)
+(define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry)
   ;; All these vars might be referenced by the testconfig file reader
   (let* ((test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
 	 (test-conf    (tests:testqueue-get-testconfig test-record))
 	 (itemdat      (tests:testqueue-get-itemdat    test-record))
-	 (test-path    (conc *toppath* "/tests/" test-name)) ;; could use tests:get-testconfig here ...
+	 (test-path    (hash-table-ref all-tests-registry test-name)) ;; (conc *toppath* "/tests/" test-name)) ;; could use tests:get-testconfig here ...
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))

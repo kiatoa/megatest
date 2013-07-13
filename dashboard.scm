@@ -625,8 +625,8 @@ Misc
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))
-	 (test-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
-	 (test-names    (hash-table-keys test-registry))
+	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
+	 (test-names    (hash-table-keys all-tests-registry))
 	 (sorted-testnames #f)
 	 (action        "-runtests")
 	 (cmdln         "")
@@ -644,7 +644,7 @@ Misc
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
     (hash-table-set! tests-draw-state 'scalef 8)
-    (tests:get-full-data test-names test-records '())
+    (tests:get-full-data test-names test-records '() all-tests-registry)
     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
     
     ;; refer to *keys*, *dbkeys* for keys
