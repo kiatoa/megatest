@@ -1,0 +1,1222 @@
+(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
+       (http://www.gnumeric.org/v10.dtd:Workbook
+         (@ (http://www.w3.org/2001/XMLSchema-instance:schemaLocation
+              "http://www.gnumeric.org/v9.xsd"))
+         (http://www.gnumeric.org/v10.dtd:Version
+           (@ (Minor "17") (Major "10") (Full "1.10.17") (Epoch "1")))
+         (http://www.gnumeric.org/v10.dtd:Attributes
+           (http://www.gnumeric.org/v10.dtd:Attribute
+             (http://www.gnumeric.org/v10.dtd:type "4")
+             (http://www.gnumeric.org/v10.dtd:name
+               "WorkbookView::show_horizontal_scrollbar")
+             (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+           (http://www.gnumeric.org/v10.dtd:Attribute
+             (http://www.gnumeric.org/v10.dtd:type "4")
+             (http://www.gnumeric.org/v10.dtd:name
+               "WorkbookView::show_vertical_scrollbar")
+             (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+           (http://www.gnumeric.org/v10.dtd:Attribute
+             (http://www.gnumeric.org/v10.dtd:type "4")
+             (http://www.gnumeric.org/v10.dtd:name
+               "WorkbookView::show_notebook_tabs")
+             (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+           (http://www.gnumeric.org/v10.dtd:Attribute
+             (http://www.gnumeric.org/v10.dtd:type "4")
+             (http://www.gnumeric.org/v10.dtd:name
+               "WorkbookView::do_auto_completion")
+             (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+           (http://www.gnumeric.org/v10.dtd:Attribute
+             (http://www.gnumeric.org/v10.dtd:type "4")
+             (http://www.gnumeric.org/v10.dtd:name
+               "WorkbookView::is_protected")
+             (http://www.gnumeric.org/v10.dtd:value "FALSE")))
+         (urn:oasis:names:tc:opendocument:xmlns:office:1.0:document-meta
+           (@ (urn:oasis:names:tc:opendocument:xmlns:office:1.0:version "1.2"))
+           (urn:oasis:names:tc:opendocument:xmlns:office:1.0:meta
+             (http://purl.org/dc/elements/1.1/:date "2013-07-13T04:45:21Z")
+             (urn:oasis:names:tc:opendocument:xmlns:meta:1.0:creation-date
+               "2013-07-13T04:38:00Z")))
+         (http://www.gnumeric.org/v10.dtd:Calculation
+           (@ (MaxIterations "100")
+              (ManualRecalc "0")
+              (IterationTolerance "0.001")
+              (FloatRadix "2")
+              (FloatDigits "53")
+              (EnableIteration "1")))
+         (http://www.gnumeric.org/v10.dtd:SheetNameIndex
+           (http://www.gnumeric.org/v10.dtd:SheetName
+             (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+                (http://www.gnumeric.org/v10.dtd:Cols "256"))
+             "First Sheet")
+           (http://www.gnumeric.org/v10.dtd:SheetName
+             (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+                (http://www.gnumeric.org/v10.dtd:Cols "256"))
+             "Second-sheet")
+           (http://www.gnumeric.org/v10.dtd:SheetName
+             (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+                (http://www.gnumeric.org/v10.dtd:Cols "256"))
+             "Sheet3"))
+         (http://www.gnumeric.org/v10.dtd:Geometry
+           (@ (Width "1440") (Height "647")))
+         (http://www.gnumeric.org/v10.dtd:Sheets
+           (http://www.gnumeric.org/v10.dtd:Sheet
+             (@ (Visibility "GNM_SHEET_VISIBILITY_VISIBLE")
+                (OutlineSymbolsRight "1")
+                (OutlineSymbolsBelow "1")
+                (HideZero "0")
+                (HideRowHeader "0")
+                (HideGrid "0")
+                (HideColHeader "0")
+                (GridColor "0:0:0")
+                (DisplayOutlines "1")
+                (DisplayFormulas "0"))
+             (http://www.gnumeric.org/v10.dtd:Name "First Sheet")
+             (http://www.gnumeric.org/v10.dtd:MaxCol "8")
+             (http://www.gnumeric.org/v10.dtd:MaxRow "17")
+             (http://www.gnumeric.org/v10.dtd:Zoom "1")
+             (http://www.gnumeric.org/v10.dtd:Names
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Print_Area")
+                 (http://www.gnumeric.org/v10.dtd:value "#REF!")
+                 (http://www.gnumeric.org/v10.dtd:position "A1"))
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Sheet_Title")
+                 (http://www.gnumeric.org/v10.dtd:value "\"First Sheet\"")
+                 (http://www.gnumeric.org/v10.dtd:position "A1")))
+             (http://www.gnumeric.org/v10.dtd:PrintInformation
+               (http://www.gnumeric.org/v10.dtd:Margins
+                 (http://www.gnumeric.org/v10.dtd:top
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:bottom
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:left
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:right
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:header
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:footer
+                   (@ (PrefUnit "mm") (Points "72"))))
+               (http://www.gnumeric.org/v10.dtd:Scale
+                 (@ (type "percentage") (percentage "100")))
+               (http://www.gnumeric.org/v10.dtd:vcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:hcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:grid (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:even_if_only_styles
+                 (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:monochrome (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:draft (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:titles (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:do_not_print (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:print_range (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:order "d_then_r")
+               (http://www.gnumeric.org/v10.dtd:orientation "portrait")
+               (http://www.gnumeric.org/v10.dtd:Header
+                 (@ (Right "") (Middle "&[tab]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:Footer
+                 (@ (Right "") (Middle "&[page]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:paper "na_letter")
+               (http://www.gnumeric.org/v10.dtd:comments "in_place")
+               (http://www.gnumeric.org/v10.dtd:errors "as_displayed"))
+             (http://www.gnumeric.org/v10.dtd:Styles
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0") (startCol "0") (endRow "0") (endCol "1"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "1") (startCol "0") (endRow "17") (endCol "1"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "hh\":\"mm\":\"ss AM/PM")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "18") (startCol "0") (endRow "31") (endCol "2"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "32") (startCol "0") (endRow "255") (endCol "7"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "256")
+                    (startCol "0")
+                    (endRow "65535")
+                    (endCol "63"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0") (startCol "2") (endRow "1") (endCol "2"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "2") (startCol "2") (endRow "17") (endCol "2"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "0")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0") (startCol "3") (endRow "31") (endCol "7"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0") (startCol "8") (endRow "255") (endCol "63"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0")
+                    (startCol "64")
+                    (endRow "65535")
+                    (endCol "255"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans"))))
+             (http://www.gnumeric.org/v10.dtd:Cols
+               (@ (DefaultSizePts "48"))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "48") (No "0")))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "99") (No "1") (HardSize "1")))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "64.01") (No "2") (Count "7"))))
+             (http://www.gnumeric.org/v10.dtd:Rows
+               (@ (DefaultSizePts "12.1"))
+               (http://www.gnumeric.org/v10.dtd:RowInfo
+                 (@ (Unit "12.64") (No "0")))
+               (http://www.gnumeric.org/v10.dtd:RowInfo
+                 (@ (Unit "13.5") (No "1") (Count "17"))))
+             (http://www.gnumeric.org/v10.dtd:Selections
+               (@ (CursorRow "31") (CursorCol "0"))
+               (http://www.gnumeric.org/v10.dtd:Selection
+                 (@ (startRow "31")
+                    (startCol "0")
+                    (endRow "31")
+                    (endCol "0"))))
+             (http://www.gnumeric.org/v10.dtd:Cells
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "1"))
+                 "Time")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "2"))
+                 "DeltaTime")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "3"))
+                 "Ambient")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "4"))
+                 "Firebox")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "5"))
+                 "2nd row")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "6"))
+                 "3rd row")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "7"))
+                 "4th row")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "8"))
+                 "Exit ")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "1") (Col "0"))
+                 "A")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "1"))
+                 "0.32430555555555557")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "2"))
+                 "0")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "3"))
+                 "35.399999999999999")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "4"))
+                 "34.299999999999997")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "5"))
+                 "34.299999999999997")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "6"))
+                 "34.100000000000001")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "7"))
+                 "34")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "8"))
+                 "34")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "2") (Col "0"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "1"))
+                 "0.33124999999999999")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "2") (ExprID "1") (Col "2"))
+                 "=days(B3,$B$2)*24*60")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "3"))
+                 "35.399999999999999")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "4"))
+                 "72")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "5"))
+                 "60")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "6"))
+                 "42")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "7"))
+                 "39")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "2") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "3") (Col "0"))
+                 "C")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "1"))
+                 "0.3347222222222222")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "3") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "3"))
+                 "35")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "4"))
+                 "100")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "5"))
+                 "90")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "6"))
+                 "57")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "7"))
+                 "46")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "3") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "4") (Col "0"))
+                 "D")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "1"))
+                 "0.33680555555555558")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "4") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "3"))
+                 "35")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "4"))
+                 "130")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "5"))
+                 "116")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "6"))
+                 "69")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "7"))
+                 "52")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "4") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "5") (Col "0"))
+                 "E")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "1"))
+                 "0.33888888888888891")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "5") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "3"))
+                 "35")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "4"))
+                 "145")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "5"))
+                 "121")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "6"))
+                 "73")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "7"))
+                 "54")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "5") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "6") (Col "0"))
+                 "F")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "1"))
+                 "0.34097222222222223")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "6") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "3"))
+                 "35")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "4"))
+                 "150")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "5"))
+                 "125")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "6"))
+                 "78")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "7"))
+                 "56")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "6") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "7") (Col "0"))
+                 "G")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "1"))
+                 "0.34305555555555556")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "7") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "3"))
+                 "35")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "4"))
+                 "150")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "5"))
+                 "128")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "6"))
+                 "82")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "7"))
+                 "60")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "7") (Col "8"))
+                 "69")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "8") (Col "0"))
+                 "H")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "1"))
+                 "0.34583333333333333")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "8") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "3"))
+                 "36")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "4"))
+                 "158")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "5"))
+                 "129")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "6"))
+                 "86")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "7"))
+                 "62")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "8") (Col "8"))
+                 "70")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "9") (Col "0"))
+                 "I")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "1"))
+                 "0.34791666666666665")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "9") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "3"))
+                 "36")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "4"))
+                 "156")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "5"))
+                 "128")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "6"))
+                 "87")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "7"))
+                 "65")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "9") (Col "8"))
+                 "72")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "10") (Col "0"))
+                 "J")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "1"))
+                 "0.35138888888888886")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "10") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "3"))
+                 "37")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "4"))
+                 "152")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "5"))
+                 "126")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "6"))
+                 "89")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "7"))
+                 "67")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "10") (Col "8"))
+                 "75")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "11") (Col "0"))
+                 "K")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "1"))
+                 "0.36666666666666664")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "11") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "3"))
+                 "37")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "4"))
+                 "134")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "5"))
+                 "117")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "6"))
+                 "94")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "7"))
+                 "77")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "11") (Col "8"))
+                 "107")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "12") (Col "0"))
+                 "L")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "1"))
+                 "0.37916666666666665")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "12") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "3"))
+                 "38")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "4"))
+                 "117")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "5"))
+                 "108")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "6"))
+                 "96")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "7"))
+                 "82")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "12") (Col "8"))
+                 "106")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "13") (Col "0"))
+                 "M")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "1"))
+                 "0.39583333333333331")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "13") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "3"))
+                 "39")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "4"))
+                 "100")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "5"))
+                 "100")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "6"))
+                 "93")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "7"))
+                 "82")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "13") (Col "8"))
+                 "106")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "14") (Col "0"))
+                 "N")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "1"))
+                 "0.42222222222222222")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "14") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "3"))
+                 "40")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "4"))
+                 "91")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "5"))
+                 "90")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "6"))
+                 "88")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "7"))
+                 "81")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "14") (Col "8"))
+                 "100")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "15") (Col "0"))
+                 "O")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "1"))
+                 "0.45208333333333334")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "15") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "3"))
+                 "41")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "4"))
+                 "79")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "5"))
+                 "78")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "6"))
+                 "77")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "7"))
+                 "72")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "15") (Col "8"))
+                 "79")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "16") (Col "0"))
+                 "P")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "1"))
+                 "0.49166666666666664")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "16") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "3"))
+                 "41")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "4"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "5"))
+                 "63")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "6"))
+                 "64")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "7"))
+                 "62")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "16") (Col "8"))
+                 "68")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "17") (Col "0"))
+                 "Q")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "1"))
+                 "0.5708333333333333")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (Row "17") (ExprID "1") (Col "2")))
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "3"))
+                 "41.5")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "4"))
+                 "51")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "5"))
+                 "51")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "6"))
+                 "51")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "7"))
+                 "51")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "17") (Col "8"))
+                 "51"))
+             (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
+             (http://www.gnumeric.org/v10.dtd:Solver
+               (@ (ProgramR "0")
+                  (ProblemType "0")
+                  (NonNeg "1")
+                  (ModelType "0")
+                  (MaxTime "60")
+                  (MaxIter "1000")
+                  (Discr "0")
+                  (AutoScale "0"))))
+           (http://www.gnumeric.org/v10.dtd:Sheet
+             (@ (Visibility "GNM_SHEET_VISIBILITY_VISIBLE")
+                (OutlineSymbolsRight "1")
+                (OutlineSymbolsBelow "1")
+                (HideZero "0")
+                (HideRowHeader "0")
+                (HideGrid "0")
+                (HideColHeader "0")
+                (GridColor "0:0:0")
+                (DisplayOutlines "1")
+                (DisplayFormulas "0"))
+             (http://www.gnumeric.org/v10.dtd:Name "Second-sheet")
+             (http://www.gnumeric.org/v10.dtd:MaxCol "4")
+             (http://www.gnumeric.org/v10.dtd:MaxRow "20")
+             (http://www.gnumeric.org/v10.dtd:Zoom "1")
+             (http://www.gnumeric.org/v10.dtd:Names
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Print_Area")
+                 (http://www.gnumeric.org/v10.dtd:value "#REF!")
+                 (http://www.gnumeric.org/v10.dtd:position "A1"))
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Sheet_Title")
+                 (http://www.gnumeric.org/v10.dtd:value "\"Second-sheet\"")
+                 (http://www.gnumeric.org/v10.dtd:position "A1")))
+             (http://www.gnumeric.org/v10.dtd:PrintInformation
+               (http://www.gnumeric.org/v10.dtd:Margins
+                 (http://www.gnumeric.org/v10.dtd:top
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:bottom
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:left
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:right
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:header
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:footer
+                   (@ (PrefUnit "mm") (Points "72"))))
+               (http://www.gnumeric.org/v10.dtd:Scale
+                 (@ (type "percentage") (percentage "100")))
+               (http://www.gnumeric.org/v10.dtd:vcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:hcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:grid (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:even_if_only_styles
+                 (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:monochrome (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:draft (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:titles (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:do_not_print (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:print_range (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:order "d_then_r")
+               (http://www.gnumeric.org/v10.dtd:orientation "portrait")
+               (http://www.gnumeric.org/v10.dtd:Header
+                 (@ (Right "") (Middle "&[tab]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:Footer
+                 (@ (Right "") (Middle "&[page]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:paper "na_letter")
+               (http://www.gnumeric.org/v10.dtd:comments "in_place")
+               (http://www.gnumeric.org/v10.dtd:errors "as_displayed"))
+             (http://www.gnumeric.org/v10.dtd:Styles
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0")
+                    (startCol "0")
+                    (endRow "65535")
+                    (endCol "255"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans"))))
+             (http://www.gnumeric.org/v10.dtd:Cols
+               (@ (DefaultSizePts "48"))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "64.01") (No "0")))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "48") (No "1") (Count "4"))))
+             (http://www.gnumeric.org/v10.dtd:Rows
+               (@ (DefaultSizePts "12.1"))
+               (http://www.gnumeric.org/v10.dtd:RowInfo
+                 (@ (Unit "13.5") (No "0") (Count "21"))))
+             (http://www.gnumeric.org/v10.dtd:Selections
+               (@ (CursorRow "1") (CursorCol "0"))
+               (http://www.gnumeric.org/v10.dtd:Selection
+                 (@ (startRow "1") (startCol "0") (endRow "1") (endCol "0"))))
+             (http://www.gnumeric.org/v10.dtd:Cells
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "0") (Col "0"))
+                 "This is a title, which has now been edited")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "1") (Col "1"))
+                 "A1")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "2"))
+                 "2")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "1") (Col "3"))
+                 "A1")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "40") (Row "1") (Col "4"))
+                 "3")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "2") (Col "0"))
+                 "V1")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "2") (Col "1"))
+                 "X")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "3") (Col "0"))
+                 "V2")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "3") (Col "2"))
+                 "X")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "4") (Col "0"))
+                 "V3")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "4") (Col "3"))
+                 "X")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "5") (Col "0"))
+                 "V4")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "5") (Col "4"))
+                 "X")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "6") (Col "0"))
+                 "V5")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "6") (Col "3"))
+                 "Y")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "7") (Col "0"))
+                 "V6")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "7") (Col "2"))
+                 "Y")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "8") (Col "0"))
+                 "V7")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "8") (Col "1"))
+                 "Y")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "9") (Col "0"))
+                 "V8")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "9") (Col "1"))
+                 "Z")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "10") (Col "0"))
+                 "V8")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "10") (Col "2"))
+                 "Z")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "11") (Col "0"))
+                 "V10")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "11") (Col "3"))
+                 "Z")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "12") (Col "4"))
+                 "Z")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "13") (Col "0"))
+                 "V11")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "13") (Col "3"))
+                 "E")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "14") (Col "0"))
+                 "V12")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "14") (Col "2"))
+                 "E")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "15") (Col "0"))
+                 "V13")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "15") (Col "1"))
+                 "E")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "16") (Col "0"))
+                 "V14")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "16") (Col "1"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "17") (Col "0"))
+                 "V15")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "17") (Col "2"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "18") (Col "0"))
+                 "V16")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "18") (Col "3"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "19") (Col "4"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "20") (Col "0"))
+                 "V17")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "20") (Col "1"))
+                 "-")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "20") (Col "2"))
+                 "+")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "20") (Col "3"))
+                 "=")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "20") (Col "4"))
+                 "~"))
+             (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
+             (http://www.gnumeric.org/v10.dtd:Solver
+               (@ (ProgramR "0")
+                  (ProblemType "0")
+                  (NonNeg "1")
+                  (ModelType "0")
+                  (MaxTime "60")
+                  (MaxIter "1000")
+                  (Discr "0")
+                  (AutoScale "0"))))
+           (http://www.gnumeric.org/v10.dtd:Sheet
+             (@ (Visibility "GNM_SHEET_VISIBILITY_VISIBLE")
+                (OutlineSymbolsRight "1")
+                (OutlineSymbolsBelow "1")
+                (HideZero "0")
+                (HideRowHeader "0")
+                (HideGrid "0")
+                (HideColHeader "0")
+                (GridColor "0:0:0")
+                (DisplayOutlines "1")
+                (DisplayFormulas "0"))
+             (http://www.gnumeric.org/v10.dtd:Name "Sheet3")
+             (http://www.gnumeric.org/v10.dtd:MaxCol "0")
+             (http://www.gnumeric.org/v10.dtd:MaxRow "0")
+             (http://www.gnumeric.org/v10.dtd:Zoom "1")
+             (http://www.gnumeric.org/v10.dtd:Names
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Print_Area")
+                 (http://www.gnumeric.org/v10.dtd:value "#REF!")
+                 (http://www.gnumeric.org/v10.dtd:position "A1"))
+               (http://www.gnumeric.org/v10.dtd:Name
+                 (http://www.gnumeric.org/v10.dtd:name "Sheet_Title")
+                 (http://www.gnumeric.org/v10.dtd:value "\"Sheet3\"")
+                 (http://www.gnumeric.org/v10.dtd:position "A1")))
+             (http://www.gnumeric.org/v10.dtd:PrintInformation
+               (http://www.gnumeric.org/v10.dtd:Margins
+                 (http://www.gnumeric.org/v10.dtd:top
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:bottom
+                   (@ (PrefUnit "mm") (Points "93.26")))
+                 (http://www.gnumeric.org/v10.dtd:left
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:right
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:header
+                   (@ (PrefUnit "mm") (Points "72")))
+                 (http://www.gnumeric.org/v10.dtd:footer
+                   (@ (PrefUnit "mm") (Points "72"))))
+               (http://www.gnumeric.org/v10.dtd:Scale
+                 (@ (type "percentage") (percentage "100")))
+               (http://www.gnumeric.org/v10.dtd:vcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:hcenter (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:grid (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:even_if_only_styles
+                 (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:monochrome (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:draft (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:titles (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:do_not_print (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:print_range (@ (value "0")))
+               (http://www.gnumeric.org/v10.dtd:order "d_then_r")
+               (http://www.gnumeric.org/v10.dtd:orientation "portrait")
+               (http://www.gnumeric.org/v10.dtd:Header
+                 (@ (Right "") (Middle "&[tab]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:Footer
+                 (@ (Right "") (Middle "&[page]") (Left "")))
+               (http://www.gnumeric.org/v10.dtd:paper "na_letter")
+               (http://www.gnumeric.org/v10.dtd:comments "in_place")
+               (http://www.gnumeric.org/v10.dtd:errors "as_displayed"))
+             (http://www.gnumeric.org/v10.dtd:Styles
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "0")
+                    (startCol "0")
+                    (endRow "65535")
+                    (endCol "255"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans"))))
+             (http://www.gnumeric.org/v10.dtd:Cols
+               (@ (DefaultSizePts "48"))
+               (http://www.gnumeric.org/v10.dtd:ColInfo
+                 (@ (Unit "64.01") (No "0"))))
+             (http://www.gnumeric.org/v10.dtd:Rows
+               (@ (DefaultSizePts "12.1"))
+               (http://www.gnumeric.org/v10.dtd:RowInfo
+                 (@ (Unit "12.82") (No "0"))))
+             (http://www.gnumeric.org/v10.dtd:Selections
+               (@ (CursorRow "0") (CursorCol "0"))
+               (http://www.gnumeric.org/v10.dtd:Selection
+                 (@ (startRow "0") (startCol "0") (endRow "0") (endCol "0"))))
+             (http://www.gnumeric.org/v10.dtd:Cells)
+             (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
+             (http://www.gnumeric.org/v10.dtd:Solver
+               (@ (ProgramR "0")
+                  (ProblemType "0")
+                  (NonNeg "1")
+                  (ModelType "0")
+                  (MaxTime "60")
+                  (MaxIter "1000")
+                  (Discr "0")
+                  (AutoScale "0")))))
+         (http://www.gnumeric.org/v10.dtd:UIData (@ (SelectedTab "1")))))
