@@ -49,3 +49,20 @@
 		(loop (car tal)(cdr tal)))))))
   
 (find-section x 'http://www.gnumeric.org/v10.dtd:Workbook)
+(define sheets (find-section x 'http://www.gnumeric.org/v10.dtd:Sheets))
+
+(define sheet1 (car sheets))
+(define cells-sheet1 (find-section sheet1 'http://www.gnumeric.org/v10.dtd:Cells))
+(map (lambda (c)(find-section c 'Row)) cells-sheet1)
+
+(for-each (lambda (cell)
+	    (let* ((len (length cell))
+		   (row (car (find-section cell 'Row)))
+		   (col (car (find-section cell 'Col)))
+		   (val (let ((res (cdr (filter (lambda (x)(not (list? x))) cell))))
+			  (if (null? res) "" (car res)))))
+	      (print "Row=" row " col=" col " val=" val)))
+	  cells-sheet1)
+
+
+(map (lambda (c)(filter (lambda (x)(not (list? x))) c)) cells-sheet1)
