@@ -118,25 +118,25 @@
 	(print (sxml-serializer#serialize-sxml remaining))))
     sheet-name))
 
+(define (sxml->file dat fname)
+  (with-output-to-file fname
+    (lambda ()
+      (print (sxml-serializer#serialize-sxml dat)))))
 
 (define (extract-txtdb dat targdir)
-  (let* ((wrkbk   (find-section   dat   'http://www.gnumeric.org/v10.dtd:Workbook))
-	 (wrk-rem (remove-section dat   'http://www.gnumeric.org/v10.dtd:Workbook))
-	 (sheets  (find-section   wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
-	 (sht-rem (remove-section wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets)))
+  (let* ((wrkbk       (find-section   dat   'http://www.gnumeric.org/v10.dtd:Workbook))
+	 (wrk-rem     (remove-section dat   'http://www.gnumeric.org/v10.dtd:Workbook))
+	 (sheets      (find-section   wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
+	 (sht-rem     (remove-section wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
+	 (sheet-names (map (lambda (sheet)
+			     (sheet->txtdb sheet targdir))
+			   sheets)))
     (create-directory (conc targdir "/xml") #t)
-    (with-output-to-file (conc targdir "/xml/workbook.xml")
+    (sxml->file wrk-rem (conc targdir "/xml/workbook.xml"))
+    (sxml->file sht-rem (conc targdir "/xml/sheets.xml"))
+    (with-output-to-file (conc targdir "/sheet-names.cfg")
       (lambda ()
-	(print (sxml-serializer#serialize-sxml wrk-rem))))
-    (with-output-to-file (conc targdir "/xml/sheets.xml")
-      (lambda ()
-	(print (sxml-serializer#serialize-sxml sht-rem))))
-    (let ((sheet-names (map (lambda (sheet)
-			      (sheet->txtdb sheet targdir))
-			    sheets)))
-      (with-output-to-file (conc targdir "/sheet-names.cfg")
-	(lambda ()
-	  (map print sheet-names))))))
+	(map print sheet-names)))))
 
 (define (read-gnumeric-file fname)
   (if (not (string-match (regexp ".*.gnumeric$") fname))
@@ -161,14 +161,22 @@
     (system (conc "gzip " tmpf))
     (file-copy tmpf fname)
     (delete-file tmpf)))
+
+(define (read-dat fname)
+  (read-file fname read-line)) ;; Placeholder!
     
 (define (txtdb->sxml dbdir)
-  ;; Read sheets list
-  ;; Read sheets
-  ;; Read xml for each sheet
-  ;; Read meta data xml
-  ;; Construct the final sxml and return it
-  #f)
+  (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
+	 (wrk-rem   (read-file (conc dbdir "/xml/workbook.xml") read-line))
+	 (sht-rem   (read-file (conc dbdir "/xml/sheets.xml")   read-line))
+	 (sheets    (fold (lambda (sheetname res)
+			    (let ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
+				  (sht-meta (txtdb:read-gnumeric-xml (conc dbdir "/xml/" sheetname ".xml"))))
+			      (cons (cons sht-meta sheetdat)
+				    res)))
+			  '()
+			  sht-names)))
+    (append wrk-rem (list sheets))))
 
 #|  
  (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
