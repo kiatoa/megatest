@@ -125,6 +125,14 @@
       ;; (print (sxml-serializer#serialize-sxml dat))
       (pp dat))))
 
+(define (file->sxml fname)
+  (let ((res (read-file fname read)))
+    (if (null? res)
+	(begin
+	  (print "ERROR: file " fname " is malformed for read")
+	  #f)
+	(car res))))
+
 ;; Write an sxml gnumeric workbook to a txtdb directory structure.
 ;;
 (define (extract-txtdb dat targdir)
@@ -159,14 +167,15 @@
 ;; Write a gnumeric compressed xml spreadsheet from a txtdb directory structure.
 ;;
 (define (txtdb-export dbdir fname)
-  (let ((sxml-dat (txtdb->sxml dbdir))
-	(tmpf     (create-temporary-file (pathname-strip-directory fname))))
+  (let* ((sxml-dat (txtdb->sxml dbdir))
+	 (tmpf     (create-temporary-file (pathname-strip-directory fname)))
+	 (tmpgzf   (conc tmpf ".gz")))
     (with-output-to-file tmpf
       (lambda ()
-	(print (sxml-serializer#serialize-sxml sxml-dat))))
+	(print (sxml-serializer#serialize-sxml sxml-dat ns-prefixes: (list (cons 'gnm "http://www.gnumeric.org/v10.dtd"))))))
     (system (conc "gzip " tmpf))
-    (file-copy tmpf fname)
-    (delete-file tmpf)))
+    (file-copy tmpgzf fname #t)
+    (delete-file tmpgzf)))
 
 (define (hash-table-reverse-lookup ht val)
   (hash-table-fold ht (lambda (k v res)(if (equal? v val) k res)) #f))
@@ -202,7 +211,7 @@
   (cond 
    ((string->number val) '(ValueType "40"))
    ((equal? (substring val 0 1) "=")
-    (let ((exid (hash-table-ref/default expressions val)))
+    (let ((exid (hash-table-ref/default expressions val #f)))
       (if exid 
 	  (list 'ExprID exid)
 	  (let* ((values  (hash-table-keys expressions)) ;; note, values are the id numbers
@@ -230,17 +239,19 @@
     
 (define (txtdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
-	 (wrk-rem   (read-file (conc dbdir "/sxml/workbook.sxml") read-line))
-	 (sht-rem   (read-file (conc dbdir "/sxml/sheets.sxml")   read-line))
+	 (wrk-rem   (file->sxml (conc dbdir "/sxml/workbook.sxml")))
+	 (sht-rem   (file->sxml (conc dbdir "/sxml/sheets.sxml")))
 	 (sheets    (fold (lambda (sheetname res)
 			    (let* ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
 				   (cells    (dat->cells sheetdat))
-				   (sht-meta (txtdb:read-gnumeric-xml (conc dbdir "/sxml/" sheetname ".sxml"))))
-			      (cons (cons sht-meta cells)
+				   (sht-meta (file->sxml (conc dbdir "/sxml/" sheetname ".sxml"))))
+			      (cons (append (append sht-meta (list (list 'http://www.gnumeric.org/v10.dtd:Name sheetname)))
+					    cells)
 				    res)))
 			  '()
 			  sht-names)))
-    (append wrk-rem (list sheets))))
+    (append wrk-rem (list (cons 'http://www.gnumeric.org/v10.dtd:Workbook 
+				(list (cons 'http://www.gnumeric.org/v10.dtd:Sheets sheets)))))))
 
 ;; (define (
 
