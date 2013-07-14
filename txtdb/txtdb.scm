@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -13,6 +13,7 @@
 (use sxml-modifications)
 (use regex)
 (use srfi-69)
+(use regex-case)
 
 ;; Read a non-compressed gnumeric file
 (define (txtdb:read-gnumeric-xml fname)
@@ -162,8 +163,35 @@
     (file-copy tmpf fname)
     (delete-file tmpf)))
 
+(define (hash-table-reverse-lookup ht val)
+  (hash-table-fold ht (lambda (k v res)(if (equal? v val) k res)) #f))
+
 (define (read-dat fname)
-  (read-file fname read-line)) ;; Placeholder!
+  (let ((section-rx (regexp "^\\[(.*)\\]\\s*$"))
+	(comment-rx (regexp "^#.*"))          ;; This means a cell name cannot start with #
+	(cell-rx    (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
+	(blank-rx   (regexp "^\\s*$"))
+	(inp        (open-input-file fname)))
+    (let loop ((inl     (read-line inp))
+	       (section #f)
+	       (res     '()))
+      (if (eof-object? inl)
+	  (begin
+	    (close-input-port inp)
+	    res)
+	  (regex-case
+	   inl 
+	   (comment-rx _          (read-line inp) section res)
+	   (blank-rx   _          (read-line inp) section res)
+	   (section-rx (x sname)  (loop (read-line inp) 
+					sname 
+					res))
+	   (cell-rx   (x k v)     (loop (read-line inp)
+					section
+					(cons (list section k v) res)))
+	   (else                  (begin
+				    (print "ERROR: Unrecognised line in input file " fname ", ignoring it")
+				    (loop (read-line inp) section res))))))))
     
 (define (txtdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
