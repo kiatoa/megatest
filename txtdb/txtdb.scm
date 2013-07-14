@@ -18,19 +18,6 @@
     (lambda ()
       (ssax:xml->sxml (current-input-port) '()))))
 
- (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
-
-
-
-;; Write out sxml
-(with-output-to-file "testdata.sxml" (lambda()(pp x)))
-
-
-;; (serialize-sxml a output: "new.xml")
-(with-output-to-file "testdata-stripped.xml" (lambda ()(print (sxml-serializer#serialize-sxml y))))
-
-;; Read in sxml file
-(with-input-from-file "testdata.sxml" (lambda ()(set! y (read))))
 
 (define (find-section dat section #!key (depth 0))
   (let loop ((hed   (car dat))
@@ -47,8 +34,46 @@
 	    (if (null? tal)
 		#f
 		(loop (car tal)(cdr tal)))))))
-  
+
+(define (sheet->txtdb dat)
+  (let ((at-info     (find-section dat '@)) ;; misc info about the sheet
+	(sheet-name  (find-section dat 'http://www.gnumeric.org/v10.dtd:Name))
+	(cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells)))
+    (print "sheet-name: " sheet-name)
+    (print "Rownum\tColnum\tType\tValue")
+    (for-each (lambda (cell)
+		(let ((rownum  (string->number (car (find-section cell 'Row))))
+		      (colnum  (string->number (car (find-section cell 'Col))))
+		      (valtype (let ((res (find-section cell 'ValueType)))
+				 (if res (car res) #f)))
+		      (value   (let ((res (cdr (filter (lambda (x)(not (list? x))) cell))))
+				 (if (null? res) "" (car res)))))
+		  (print rownum "\t" colnum "\t" valtype "\t" value)))
+	      cells)))
+
+(define (extract-txtdb dat)
+  (let ((sheets (find-section dat 'http://www.gnumeric.org/v10.dtd:Sheets)))
+    (for-each (lambda (sheet)
+		(sheet->txtdb sheet))
+	      sheets)))
+
+#|  
+ (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
+
+
+
+;; Write out sxml
+(with-output-to-file "testdata.sxml" (lambda()(pp x)))
+
+
+;; (serialize-sxml a output: "new.xml")
+(with-output-to-file "testdata-stripped.xml" (lambda ()(print (sxml-serializer#serialize-sxml y))))
+
+;; Read in sxml file
+(with-input-from-file "testdata.sxml" (lambda ()(set! y (read))))
+
 (find-section x 'http://www.gnumeric.org/v10.dtd:Workbook)
+
 (define sheets (find-section x 'http://www.gnumeric.org/v10.dtd:Sheets))
 
 (define sheet1 (car sheets))
@@ -66,3 +91,4 @@
 
 
 (map (lambda (c)(filter (lambda (x)(not (list? x))) c)) cells-sheet1)
+|#
