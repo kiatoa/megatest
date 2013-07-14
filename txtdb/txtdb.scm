@@ -114,17 +114,21 @@
 							(if (and (string? a)
 								 (string? b))
 							    (string< a b))))))))))
-    (with-output-to-file (conc targdir "/xml/" sheet-name ".xml")
+    (with-output-to-file (conc targdir "/sxml/" sheet-name ".sxml")
       (lambda ()
-	(print (sxml-serializer#serialize-sxml remaining))))
+	(pp remaining)))
     sheet-name))
 
 (define (sxml->file dat fname)
   (with-output-to-file fname
     (lambda ()
-      (print (sxml-serializer#serialize-sxml dat)))))
+      ;; (print (sxml-serializer#serialize-sxml dat))
+      (pp dat))))
 
+;; Write an sxml gnumeric workbook to a txtdb directory structure.
+;;
 (define (extract-txtdb dat targdir)
+  (create-directory (conc targdir "/sxml") #t)
   (let* ((wrkbk       (find-section   dat   'http://www.gnumeric.org/v10.dtd:Workbook))
 	 (wrk-rem     (remove-section dat   'http://www.gnumeric.org/v10.dtd:Workbook))
 	 (sheets      (find-section   wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
@@ -132,9 +136,8 @@
 	 (sheet-names (map (lambda (sheet)
 			     (sheet->txtdb sheet targdir))
 			   sheets)))
-    (create-directory (conc targdir "/xml") #t)
-    (sxml->file wrk-rem (conc targdir "/xml/workbook.xml"))
-    (sxml->file sht-rem (conc targdir "/xml/sheets.xml"))
+    (sxml->file wrk-rem (conc targdir "/sxml/workbook.sxml"))
+    (sxml->file sht-rem (conc targdir "/sxml/sheets.sxml"))
     (with-output-to-file (conc targdir "/sheet-names.cfg")
       (lambda ()
 	(map print sheet-names)))))
@@ -153,6 +156,8 @@
 (define (import-gnumeric-file fname targdir)
   (extract-txtdb (read-gnumeric-file fname) targdir))
 
+;; Write a gnumeric compressed xml spreadsheet from a txtdb directory structure.
+;;
 (define (txtdb-export dbdir fname)
   (let ((sxml-dat (txtdb->sxml dbdir))
 	(tmpf     (create-temporary-file (pathname-strip-directory fname))))
@@ -192,19 +197,89 @@
 	   (else                  (begin
 				    (print "ERROR: Unrecognised line in input file " fname ", ignoring it")
 				    (loop (read-line inp) section res))))))))
+
+(define (get-value-type val expressions)
+  (cond 
+   ((string->number val) '(ValueType "40"))
+   ((equal? (substring val 0 1) "=")
+    (let ((exid (hash-table-ref/default expressions val)))
+      (if exid 
+	  (list 'ExprID exid)
+	  (let* ((values  (hash-table-keys expressions)) ;; note, values are the id numbers
+		 (new-max (+ 1 (if (null? values) 0 (apply max values)))))
+	    (hash-table-set! expressions val new-max)
+	    (list 'ExprID new-max)))))
+   (else '(ValueType "60"))))
+
+(define (dat->cells dat)
+  (let* ((indx     (common:sparse-list-generate-index dat))
+	 (row-indx (car indx))
+	 (col-indx (cadr indx))
+	 (exprs    (make-hash-table)))
+    (map (lambda (item)
+	   (let* ((row-name (car item))
+		  (col-name (cadr item))
+		  (row-num  (cadr (assoc row-name row-indx)))
+		  (col-num  (cadr (assoc col-name col-indx)))
+		  (value    (caddr item))
+		  (val-type (get-value-type value exprs)))
+	     (list 'http://www.gnumeric.org/v10.dtd:Cell
+		   (list '@ val-type (list 'Row (conc row-num)) (list 'Col (conc col-num)))
+		   value)))
+	 dat)))
     
 (define (txtdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
-	 (wrk-rem   (read-file (conc dbdir "/xml/workbook.xml") read-line))
-	 (sht-rem   (read-file (conc dbdir "/xml/sheets.xml")   read-line))
+	 (wrk-rem   (read-file (conc dbdir "/sxml/workbook.sxml") read-line))
+	 (sht-rem   (read-file (conc dbdir "/sxml/sheets.sxml")   read-line))
 	 (sheets    (fold (lambda (sheetname res)
-			    (let ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
-				  (sht-meta (txtdb:read-gnumeric-xml (conc dbdir "/xml/" sheetname ".xml"))))
-			      (cons (cons sht-meta sheetdat)
+			    (let* ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
+				   (cells    (dat->cells sheetdat))
+				   (sht-meta (txtdb:read-gnumeric-xml (conc dbdir "/sxml/" sheetname ".sxml"))))
+			      (cons (cons sht-meta cells)
 				    res)))
 			  '()
 			  sht-names)))
     (append wrk-rem (list sheets))))
+
+;; (define (
+
+;; 
+;; optional apply proc to rownum colnum value
+;; 
+;; NB// If a change is made to this routine please look also at applying
+;;      it to the code in Megatest (http://www.kiatoa.com/fossils/megatest)
+;;      in the file common.scm
+;;
+(define (common:sparse-list-generate-index data #!key (proc #f))
+  (if (null? data)
+      (list '() '())
+      (let loop ((hed (car data))
+		 (tal (cdr data))
+		 (rownames '())
+		 (colnames '())
+		 (rownum   0)
+		 (colnum   0))
+	(let* ((rowkey          (car   hed))
+	       (colkey          (cadr  hed))
+	       (value           (caddr hed))
+	       (existing-rowdat (assoc rowkey rownames))
+	       (existing-coldat (assoc colkey colnames))
+	       (curr-rownum     (if existing-rowdat rownum (+ rownum 1)))
+	       (curr-colnum     (if existing-coldat colnum (+ colnum 1)))
+	       (new-rownames    (if existing-rowdat rownames (cons (list rowkey curr-rownum) rownames)))
+	       (new-colnames    (if existing-coldat colnames (cons (list colkey curr-colnum) colnames))))
+	  ;; (debug:print-info 0 "Processing record: " hed )
+	  (if proc (proc curr-rownum curr-colnum rowkey colkey value))
+	  (if (null? tal)
+	      (list new-rownames new-colnames)
+	      (loop (car tal)
+		    (cdr tal)
+		    new-rownames
+		    new-colnames
+		    (if (> curr-rownum rownum) curr-rownum rownum)
+		    (if (> curr-colnum colnum) curr-colnum colnum)
+		    ))))))
 
 #|  
  (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
