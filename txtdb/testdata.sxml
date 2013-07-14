@@ -33,7 +33,7 @@
          (urn:oasis:names:tc:opendocument:xmlns:office:1.0:document-meta
            (@ (urn:oasis:names:tc:opendocument:xmlns:office:1.0:version "1.2"))
            (urn:oasis:names:tc:opendocument:xmlns:office:1.0:meta
-             (http://purl.org/dc/elements/1.1/:date "2013-07-13T04:45:21Z")
+             (http://purl.org/dc/elements/1.1/:date "2013-07-14T22:32:27Z")
              (urn:oasis:names:tc:opendocument:xmlns:meta:1.0:creation-date
                "2013-07-13T04:38:00Z")))
          (http://www.gnumeric.org/v10.dtd:Calculation
@@ -47,7 +47,7 @@
            (http://www.gnumeric.org/v10.dtd:SheetName
              (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
                 (http://www.gnumeric.org/v10.dtd:Cols "256"))
-             "First Sheet")
+             "First_Sheet")
            (http://www.gnumeric.org/v10.dtd:SheetName
              (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
                 (http://www.gnumeric.org/v10.dtd:Cols "256"))
@@ -70,7 +70,7 @@
                 (GridColor "0:0:0")
                 (DisplayOutlines "1")
                 (DisplayFormulas "0"))
-             (http://www.gnumeric.org/v10.dtd:Name "First Sheet")
+             (http://www.gnumeric.org/v10.dtd:Name "First_Sheet")
              (http://www.gnumeric.org/v10.dtd:MaxCol "8")
              (http://www.gnumeric.org/v10.dtd:MaxRow "17")
              (http://www.gnumeric.org/v10.dtd:Zoom "1")
@@ -81,7 +81,7 @@
                  (http://www.gnumeric.org/v10.dtd:position "A1"))
                (http://www.gnumeric.org/v10.dtd:Name
                  (http://www.gnumeric.org/v10.dtd:name "Sheet_Title")
-                 (http://www.gnumeric.org/v10.dtd:value "\"First Sheet\"")
+                 (http://www.gnumeric.org/v10.dtd:value "\"First_Sheet\"")
                  (http://www.gnumeric.org/v10.dtd:position "A1")))
              (http://www.gnumeric.org/v10.dtd:PrintInformation
                (http://www.gnumeric.org/v10.dtd:Margins
@@ -380,12 +380,12 @@
                (http://www.gnumeric.org/v10.dtd:RowInfo
                  (@ (Unit "13.5") (No "1") (Count "17"))))
              (http://www.gnumeric.org/v10.dtd:Selections
-               (@ (CursorRow "31") (CursorCol "0"))
+               (@ (CursorRow "29") (CursorCol "1"))
                (http://www.gnumeric.org/v10.dtd:Selection
-                 (@ (startRow "31")
-                    (startCol "0")
-                    (endRow "31")
-                    (endCol "0"))))
+                 (@ (startRow "29")
+                    (startCol "1")
+                    (endRow "29")
+                    (endCol "1"))))
              (http://www.gnumeric.org/v10.dtd:Cells
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "0") (Col "1"))
@@ -928,6 +928,60 @@
                (http://www.gnumeric.org/v10.dtd:StyleRegion
                  (@ (startRow "0")
                     (startCol "0")
+                    (endRow "65279")
+                    (endCol "255"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "65280")
+                    (startCol "0")
+                    (endRow "65534")
+                    (endCol "255"))
+                 (http://www.gnumeric.org/v10.dtd:Style
+                   (@ (WrapText "0")
+                      (VAlign "2")
+                      (ShrinkToFit "0")
+                      (Shade "0")
+                      (Rotation "0")
+                      (PatternColor "0:0:0")
+                      (Locked "1")
+                      (Indent "0")
+                      (Hidden "0")
+                      (HAlign "1")
+                      (Format "General")
+                      (Fore "0:0:0")
+                      (Back "FFFF:FFFF:FFFF"))
+                   (http://www.gnumeric.org/v10.dtd:Font
+                     (@ (Unit "10")
+                        (Underline "0")
+                        (StrikeThrough "0")
+                        (Script "0")
+                        (Italic "0")
+                        (Bold "0"))
+                     "Sans")))
+               (http://www.gnumeric.org/v10.dtd:StyleRegion
+                 (@ (startRow "65535")
+                    (startCol "0")
                     (endRow "65535")
                     (endCol "255"))
                  (http://www.gnumeric.org/v10.dtd:Style
@@ -961,143 +1015,140 @@
              (http://www.gnumeric.org/v10.dtd:Rows
                (@ (DefaultSizePts "12.1"))
                (http://www.gnumeric.org/v10.dtd:RowInfo
-                 (@ (Unit "13.5") (No "0") (Count "21"))))
+                 (@ (Unit "13.5") (No "0") (Count "20"))))
              (http://www.gnumeric.org/v10.dtd:Selections
-               (@ (CursorRow "1") (CursorCol "0"))
+               (@ (CursorRow "4") (CursorCol "4"))
                (http://www.gnumeric.org/v10.dtd:Selection
-                 (@ (startRow "1") (startCol "0") (endRow "1") (endCol "0"))))
+                 (@ (startRow "4") (startCol "4") (endRow "4") (endCol "4"))))
              (http://www.gnumeric.org/v10.dtd:Cells
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "0") (Col "0"))
-                 "This is a title, which has now been edited")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "1") (Col "1"))
+                 (@ (ValueType "60") (Row "0") (Col "1"))
                  "A1")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "40") (Row "1") (Col "2"))
+                 (@ (ValueType "40") (Row "0") (Col "2"))
                  "2")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "1") (Col "3"))
+                 (@ (ValueType "60") (Row "0") (Col "3"))
                  "A1")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "40") (Row "1") (Col "4"))
+                 (@ (ValueType "40") (Row "0") (Col "4"))
                  "3")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "2") (Col "0"))
+                 (@ (ValueType "60") (Row "1") (Col "0"))
                  "V1")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "2") (Col "1"))
+                 (@ (ValueType "60") (Row "1") (Col "1"))
+                 "X")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "2") (Col "0"))
+                 "V2")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "2") (Col "2"))
                  "X")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "3") (Col "0"))
-                 "V2")
+                 "V3")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "3") (Col "2"))
+                 (@ (ValueType "60") (Row "3") (Col "3"))
                  "X")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "4") (Col "0"))
-                 "V3")
+                 "V4")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "4") (Col "3"))
+                 (@ (ValueType "60") (Row "4") (Col "4"))
                  "X")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "5") (Col "0"))
-                 "V4")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "5") (Col "4"))
-                 "X")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "6") (Col "0"))
                  "V5")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "6") (Col "3"))
+                 (@ (ValueType "60") (Row "5") (Col "3"))
+                 "Y")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "6") (Col "0"))
+                 "V6")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "6") (Col "2"))
                  "Y")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "7") (Col "0"))
-                 "V6")
+                 "V7")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "7") (Col "2"))
+                 (@ (ValueType "60") (Row "7") (Col "1"))
                  "Y")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "8") (Col "0"))
-                 "V7")
+                 "V8")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "8") (Col "1"))
-                 "Y")
+                 "Z")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "9") (Col "0"))
                  "V8")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "9") (Col "1"))
+                 (@ (ValueType "60") (Row "9") (Col "2"))
                  "Z")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "10") (Col "0"))
-                 "V8")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "10") (Col "2"))
-                 "Z")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "11") (Col "0"))
                  "V10")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "11") (Col "3"))
+                 (@ (ValueType "60") (Row "10") (Col "3"))
                  "Z")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "12") (Col "4"))
+                 (@ (ValueType "60") (Row "11") (Col "4"))
                  "Z")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "13") (Col "0"))
+                 (@ (ValueType "60") (Row "12") (Col "0"))
                  "V11")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "13") (Col "3"))
+                 (@ (ValueType "60") (Row "12") (Col "3"))
+                 "E")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "13") (Col "0"))
+                 "V12")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "13") (Col "2"))
                  "E")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "14") (Col "0"))
-                 "V12")
+                 "V13")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "14") (Col "2"))
+                 (@ (ValueType "60") (Row "14") (Col "1"))
                  "E")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "15") (Col "0"))
-                 "V13")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "15") (Col "1"))
-                 "E")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "16") (Col "0"))
                  "V14")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "16") (Col "1"))
+                 (@ (ValueType "60") (Row "15") (Col "1"))
+                 "B")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "16") (Col "0"))
+                 "V15")
+               (http://www.gnumeric.org/v10.dtd:Cell
+                 (@ (ValueType "60") (Row "16") (Col "2"))
                  "B")
                (http://www.gnumeric.org/v10.dtd:Cell
                  (@ (ValueType "60") (Row "17") (Col "0"))
-                 "V15")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "17") (Col "2"))
-                 "B")
-               (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "18") (Col "0"))
                  "V16")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "18") (Col "3"))
+                 (@ (ValueType "60") (Row "17") (Col "3"))
                  "B")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "19") (Col "4"))
+                 (@ (ValueType "60") (Row "18") (Col "4"))
                  "B")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "20") (Col "0"))
+                 (@ (ValueType "60") (Row "19") (Col "0"))
                  "V17")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "20") (Col "1"))
+                 (@ (ValueType "60") (Row "19") (Col "1"))
                  "-")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "20") (Col "2"))
+                 (@ (ValueType "60") (Row "19") (Col "2"))
                  "+")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "20") (Col "3"))
+                 (@ (ValueType "60") (Row "19") (Col "3"))
                  "=")
                (http://www.gnumeric.org/v10.dtd:Cell
-                 (@ (ValueType "60") (Row "20") (Col "4"))
+                 (@ (ValueType "60") (Row "19") (Col "4"))
                  "~"))
              (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
              (http://www.gnumeric.org/v10.dtd:Solver
@@ -1219,4 +1270,4 @@
                   (MaxIter "1000")
                   (Discr "0")
                   (AutoScale "0")))))
-         (http://www.gnumeric.org/v10.dtd:UIData (@ (SelectedTab "1")))))
+         (http://www.gnumeric.org/v10.dtd:UIData (@ (SelectedTab "0")))))

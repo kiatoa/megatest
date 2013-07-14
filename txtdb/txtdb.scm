@@ -65,13 +65,14 @@
   (string-substitute (regexp " ") "_" str #t))
 
 (define (sheet->txtdb dat targdir)
-  (let ((sheet-name  (string->safe-filename (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name))))
-	(cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells))
-	(remaining   (remove-section (remove-section dat 'http://www.gnumeric.org/v10.dtd:Name)
-				     'http://www.gnumeric.org/v10.dtd:Cells))
-	(rownums     (make-hash-table))  ;; num -> name
-	(colnums     (make-hash-table))  ;; num -> name
-	(cols        (make-hash-table))) ;; name -> ( (name val) ... )
+  (let* ((sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
+	 ;; (safe-name   (string->safe-filename sheet-name))
+	 (cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells))
+	 (remaining   (remove-section (remove-section dat 'http://www.gnumeric.org/v10.dtd:Name)
+				      'http://www.gnumeric.org/v10.dtd:Cells))
+	 (rownums     (make-hash-table))  ;; num -> name
+	 (colnums     (make-hash-table))  ;; num -> name
+	 (cols        (make-hash-table))) ;; name -> ( (name val) ... )
     (for-each (lambda (cell)
 		(let ((rownum  (string->number (car (find-section cell 'Row))))
 		      (colnum  (string->number (car (find-section cell 'Col))))
@@ -225,17 +226,18 @@
 	 (row-indx (car indx))
 	 (col-indx (cadr indx))
 	 (exprs    (make-hash-table)))
-    (map (lambda (item)
-	   (let* ((row-name (car item))
-		  (col-name (cadr item))
-		  (row-num  (cadr (assoc row-name row-indx)))
-		  (col-num  (cadr (assoc col-name col-indx)))
-		  (value    (caddr item))
-		  (val-type (get-value-type value exprs)))
-	     (list 'http://www.gnumeric.org/v10.dtd:Cell
-		   (list '@ val-type (list 'Row (conc row-num)) (list 'Col (conc col-num)))
-		   value)))
-	 dat)))
+    (list (cons 'http://www.gnumeric.org/v10.dtd:Cells 
+		(map (lambda (item)
+		       (let* ((row-name (car item))
+			      (col-name (cadr item))
+			      (row-num  (cadr (assoc row-name row-indx)))
+			      (col-num  (cadr (assoc col-name col-indx)))
+			      (value    (caddr item))
+			      (val-type (get-value-type value exprs)))
+			 (list 'http://www.gnumeric.org/v10.dtd:Cell
+			       (list '@ val-type (list 'Row (conc row-num)) (list 'Col (conc col-num)))
+			       value)))
+		     dat)))))
     
 (define (txtdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
@@ -245,13 +247,17 @@
 			    (let* ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
 				   (cells    (dat->cells sheetdat))
 				   (sht-meta (file->sxml (conc dbdir "/sxml/" sheetname ".sxml"))))
-			      (cons (append (append sht-meta (list (list 'http://www.gnumeric.org/v10.dtd:Name sheetname)))
-					    cells)
+			      (cons (cons (car sht-meta) 
+					  (append (cons (list 'http://www.gnumeric.org/v10.dtd:Name sheetname)
+							(cdr sht-meta))
+						  cells))
 				    res)))
 			  '()
 			  sht-names)))
-    (append wrk-rem (list (cons 'http://www.gnumeric.org/v10.dtd:Workbook 
-				(list (cons 'http://www.gnumeric.org/v10.dtd:Sheets sheets)))))))
+    (append wrk-rem (list (append
+			   (cons 'http://www.gnumeric.org/v10.dtd:Workbook
+				 sht-rem)
+			   (list (cons 'http://www.gnumeric.org/v10.dtd:Sheets sheets)))))))
 
 ;; (define (
 
