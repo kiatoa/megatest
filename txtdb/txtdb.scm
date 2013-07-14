@@ -138,6 +138,38 @@
 	(lambda ()
 	  (map print sheet-names))))))
 
+(define (read-gnumeric-file fname)
+  (if (not (string-match (regexp ".*.gnumeric$") fname))
+      (begin
+	(print "ERROR: Attempt to import gnumeric file with extention other than .gnumeric")
+	(exit))
+      (let ((tmpf (create-temporary-file (pathname-strip-directory fname))))
+	(system (conc " gunzip > " tmpf " < " fname))
+	(let ((res (txtdb:read-gnumeric-xml tmpf)))
+	  (delete-file tmpf)
+	  res))))
+
+(define (import-gnumeric-file fname targdir)
+  (extract-txtdb (read-gnumeric-file fname) targdir))
+
+(define (txtdb-export dbdir fname)
+  (let ((sxml-dat (txtdb->sxml dbdir))
+	(tmpf     (create-temporary-file (pathname-strip-directory fname))))
+    (with-output-to-file tmpf
+      (lambda ()
+	(print (sxml-serializer#serialize-sxml sxml-dat))))
+    (system (conc "gzip " tmpf))
+    (file-copy tmpf fname)
+    (delete-file tmpf)))
+    
+(define (txtdb->sxml dbdir)
+  ;; Read sheets list
+  ;; Read sheets
+  ;; Read xml for each sheet
+  ;; Read meta data xml
+  ;; Construct the final sxml and return it
+  #f)
+
 #|  
  (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
 
