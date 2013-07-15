@@ -28,15 +28,38 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; Call this one to do all the work and get a standardized list of tests
+(define (tests:get-all)
+  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
+				   (tests:get-tests-search-path *configdat*))))
+    (tests:get-valid-tests (make-hash-table) test-search-path)))
+
+(define (tests:get-tests-search-path cfgdat)
+  (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
+    (cons (conc *toppath* "/tests") paths)))
+
+(define (tests:get-valid-tests test-registry tests-paths)
+  (if (null? tests-paths) 
+      test-registry
+      (let loop ((hed (car tests-paths))
+		 (tal (cdr tests-paths)))
+	(if (file-exists? hed)
+	    (for-each (lambda (test-path)
+			(let* ((tname   (last (string-split test-path "/")))
+			       (tconfig (conc test-path "/testconfig")))
+			  (if (and (not (hash-table-ref/default test-registry tname #f))
+				   (file-exists? tconfig))
+			      (hash-table-set! test-registry tname test-path))))
+		      (glob (conc hed "/*"))))
+	(if (null? tal)
+	    test-registry
+	    (loop (car tal)(cdr tal))))))
+
+(define (tests:filter-test-names test-names test-patts)
+  (delete-duplicates
+   (filter (lambda (testname)
+	     (tests:match test-patts testname #f))
+	   test-names)))
 
 ;; tests:glob-like-match
 (define (tests:glob-like-match patt str) 
@@ -443,18 +466,18 @@
 ;; Gather data from test/task specifications
 ;;======================================================================
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (delete-duplicates
+;;      (filter (lambda (testname)
+;; 	       (tests:match test-patts testname #f))
+;; 	     (map (lambda (testp)
+;; 		    (last (string-split testp "/")))
+;; 		  tests)))))
 
-(define (tests:get-testconfig test-name system-allowed)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name))
+(define (tests:get-testconfig test-name test-registry system-allowed)
+  (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
     (if testexists
@@ -550,12 +573,12 @@
 ;;======================================================================
 ;; hed is the test name
 ;; test-records is a hash of test-name => test record
-(define (tests:get-full-data test-names test-records required-tests)
+(define (tests:get-full-data test-names test-records required-tests all-tests-registry)
   (if (not (null? test-names))
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	(debug:print-info 4 "hed=" hed " at top of loop")
-	(let* ((config  (tests:get-testconfig hed 'return-procs))
+	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
