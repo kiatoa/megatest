@@ -193,17 +193,17 @@
       (if (eof-object? inl)
 	  (begin
 	    (close-input-port inp)
-	    res)
+	    (reverse res))
 	  (regex-case
 	   inl 
-	   (comment-rx _          (read-line inp) section res)
-	   (blank-rx   _          (read-line inp) section res)
+	   (comment-rx _          (loop (read-line inp) section res))
+	   (blank-rx   _          (loop (read-line inp) section res))
 	   (section-rx (x sname)  (loop (read-line inp) 
 					sname 
 					res))
 	   (cell-rx   (x k v)     (loop (read-line inp)
 					section
-					(cons (list section k v) res)))
+					(cons (list k section v) res)))
 	   (else                  (begin
 				    (print "ERROR: Unrecognised line in input file " fname ", ignoring it")
 				    (loop (read-line inp) section res))))))))
@@ -211,6 +211,7 @@
 (define (get-value-type val expressions)
   (cond 
    ((string->number val) '(ValueType "40"))
+   ((equal? val "")      '(ValueType "60"))
    ((equal? (substring val 0 1) "=")
     (let ((exid (hash-table-ref/default expressions val #f)))
       (if exid 
@@ -225,19 +226,23 @@
   (let* ((indx     (common:sparse-list-generate-index dat))
 	 (row-indx (car indx))
 	 (col-indx (cadr indx))
+	 (rowdat   (map (lambda (row)(list (car row) "    " (car row))) row-indx))
+	 (coldat   (map (lambda (col)(list "    " (car col) (car col))) col-indx))
 	 (exprs    (make-hash-table)))
     (list (cons 'http://www.gnumeric.org/v10.dtd:Cells 
 		(map (lambda (item)
 		       (let* ((row-name (car item))
 			      (col-name (cadr item))
-			      (row-num  (cadr (assoc row-name row-indx)))
-			      (col-num  (cadr (assoc col-name col-indx)))
+			      (row-num  (let ((i (assoc row-name row-indx)))
+					  (if i (cadr i) 0))) ;; 0 for the title row/col
+			      (col-num  (let ((i (assoc col-name col-indx)))
+					  (if i (cadr i) 0)))
 			      (value    (caddr item))
 			      (val-type (get-value-type value exprs)))
 			 (list 'http://www.gnumeric.org/v10.dtd:Cell
 			       (list '@ val-type (list 'Row (conc row-num)) (list 'Col (conc col-num)))
 			       value)))
-		     dat)))))
+		     (append rowdat coldat dat))))))
     
 (define (txtdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
