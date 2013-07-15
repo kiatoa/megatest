@@ -17,7 +17,7 @@
 (use posix)
 
 ;; Read a non-compressed gnumeric file
-(define (txtdb:read-gnumeric-xml fname)
+(define (refdb:read-gnumeric-xml fname)
   (with-input-from-file fname
     (lambda ()
       (ssax:xml->sxml (current-input-port) '()))))
@@ -65,7 +65,7 @@
 (define (string->safe-filename str)
   (string-substitute (regexp " ") "_" str #t))
 
-(define (sheet->txtdb dat targdir)
+(define (sheet->refdb dat targdir)
   (let* ((sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
 	 ;; (safe-name   (string->safe-filename sheet-name))
 	 (cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells))
@@ -135,16 +135,16 @@
 	  #f)
 	(car res))))
 
-;; Write an sxml gnumeric workbook to a txtdb directory structure.
+;; Write an sxml gnumeric workbook to a refdb directory structure.
 ;;
-(define (extract-txtdb dat targdir)
+(define (extract-refdb dat targdir)
   (create-directory (conc targdir "/sxml") #t)
   (let* ((wrkbk       (find-section   dat   'http://www.gnumeric.org/v10.dtd:Workbook))
 	 (wrk-rem     (remove-section dat   'http://www.gnumeric.org/v10.dtd:Workbook))
 	 (sheets      (find-section   wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
 	 (sht-rem     (remove-section wrkbk 'http://www.gnumeric.org/v10.dtd:Sheets))
 	 (sheet-names (map (lambda (sheet)
-			     (sheet->txtdb sheet targdir))
+			     (sheet->refdb sheet targdir))
 			   sheets)))
     (sxml->file wrk-rem (conc targdir "/sxml/workbook.sxml"))
     (sxml->file sht-rem (conc targdir "/sxml/sheets.sxml"))
@@ -159,17 +159,17 @@
 	(exit))
       (let ((tmpf (create-temporary-file (pathname-strip-directory fname))))
 	(system (conc " gunzip > " tmpf " < " fname))
-	(let ((res (txtdb:read-gnumeric-xml tmpf)))
+	(let ((res (refdb:read-gnumeric-xml tmpf)))
 	  (delete-file tmpf)
 	  res))))
 
 (define (import-gnumeric-file fname targdir)
-  (extract-txtdb (read-gnumeric-file fname) targdir))
+  (extract-refdb (read-gnumeric-file fname) targdir))
 
-;; Write a gnumeric compressed xml spreadsheet from a txtdb directory structure.
+;; Write a gnumeric compressed xml spreadsheet from a refdb directory structure.
 ;;
-(define (txtdb-export dbdir fname)
-  (let* ((sxml-dat (txtdb->sxml dbdir))
+(define (refdb-export dbdir fname)
+  (let* ((sxml-dat (refdb->sxml dbdir))
 	 (tmpf     (create-temporary-file (pathname-strip-directory fname)))
 	 (tmpgzf   (conc tmpf ".gz")))
     (with-output-to-file tmpf
@@ -245,7 +245,7 @@
 			       value)))
 		     (append rowdat coldat dat))))))
     
-(define (txtdb->sxml dbdir)
+(define (refdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
 	 (wrk-rem   (file->sxml (conc dbdir "/sxml/workbook.sxml")))
 	 (sht-rem   (file->sxml (conc dbdir "/sxml/sheets.sxml")))
@@ -304,16 +304,24 @@
 		    (if (> curr-colnum colnum) curr-colnum colnum)
 		    ))))))
 (define help
-  (conc "Usage: txtdb action params ...
+  (conc "Usage: refdb action params ...
 
-Note: txtdbdir is a path to the directory containg sheet-names.cfg
+Note: refdbdir is a path to the directory containg sheet-names.cfg
 
-  import filename.gnumeric txtdbdir   : Import a gnumeric file into a txt db directory
-  edit   txtdbdir                     : Edit a txtdbdir using gnumeric.
-  lookup txtdbdir sheetname row col   : Look up a value in the text db   
-  json   txtdbdir                     : Print the db as list of lists json data
+  import filename.gnumeric refdbdir   : Import a gnumeric file into a txt db directory
+  edit   refdbdir                     : Edit a refdbdir using gnumeric.
+  lookup refdbdir sheetname row col   : Look up a value in the text db   
+  ls refdbdir                         : List the keys for specified level 
 
 Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest"))
+
+(define (list-sheets path)
+  ;; (cond
+  ;;  ((and path (not sheet)(not row)(not col))
+  (if (file-exists? path)
+      (read-file (conc path "/sheet-names.cfg") read-line)
+      '()))
+;; ((and path sheet (not row)(not col))
 
 (define (lookup path sheet row col)
   (let ((fname (conc path "/" sheet ".dat")))
@@ -331,11 +339,11 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 			(loop (car tal)(cdr tal)))))))
 	#f)))
 
-(define (edit-txtdb path)
+(define (edit-refdb path)
   (let* ((dbname  (pathname-strip-directory path))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
     (if (file-exists? (conc path "/sheet-names.cfg"))
-	(txtdb-export path tmpf))
+	(refdb-export path tmpf))
     (let ((pid (process-run "gnumeric" (list tmpf))))
       (process-wait pid)
       (import-gnumeric-file tmpf path))))
@@ -347,7 +355,9 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
      ((eq? num-params 1)
       (case action
 	((edit)
-	 (edit-txtdb (car param)))))
+	 (edit-refdb (car param)))
+	((ls)
+	 (map print (list-sheets (car param))))))
      ((eq? num-params 2)
       (case action
 	((import)
@@ -377,7 +387,7 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 (main)
 
 #|  
- (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
+ (define x (refdb:read-gnumeric-xml "testdata-stripped.xml"))
 
 
 
