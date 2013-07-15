@@ -14,6 +14,7 @@
 (use regex)
 (use srfi-69)
 (use regex-case)
+(use posix)
 
 ;; Read a non-compressed gnumeric file
 (define (txtdb:read-gnumeric-xml fname)
@@ -302,6 +303,31 @@
 		    (if (> curr-rownum rownum) curr-rownum rownum)
 		    (if (> curr-colnum colnum) curr-colnum colnum)
 		    ))))))
+(define (edit-txtdb path)
+  (let* ((dbname  (pathname-strip-directory path))
+	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
+    (txtdb-export path tmpf)
+    (let ((pid (process-run "gnumeric" (list tmpf))))
+      (process-wait pid)
+      (import-gnumeric-file tmpf path))))
+
+
+(define (process-action action . param)
+  (case (string->symbol action)
+    ((edit)
+     (edit-txtdb (car param)))))
+
+(define (main)
+  (let* ((args (argv))
+	 (prog (car args))
+	 (rema (cdr args)))
+    (cond
+     ((null? rema)(print help))
+     ((eq? (length rema) 2)
+      (apply process-action (car rema)(cdr rema)))
+     (else (print help)))))
+
+(main)
 
 #|  
  (define x (txtdb:read-gnumeric-xml "testdata-stripped.xml"))
