@@ -303,19 +303,66 @@
 		    (if (> curr-rownum rownum) curr-rownum rownum)
 		    (if (> curr-colnum colnum) curr-colnum colnum)
 		    ))))))
+(define help
+  (conc "Usage: txtdb action params ...
+
+Note: txtdbdir is a path to the directory containg sheet-names.cfg
+
+  import filename.gnumeric txtdbdir   : Import a gnumeric file into a txt db directory
+  edit   txtdbdir                     : Edit a txtdbdir using gnumeric.
+  lookup txtdbdir sheetname row col   : Look up a value in the text db   
+  json   txtdbdir                     : Print the db as list of lists json data
+
+Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest"))
+
+(define (lookup path sheet row col)
+  (let ((fname (conc path "/" sheet ".dat")))
+    (if (file-exists? fname)
+	(let ((dat (read-dat fname)))
+	  (if (null? dat)
+	      #f
+	      (let loop ((hed (car dat))
+			 (tal (cdr dat)))
+		(if (and (equal? row (car hed))
+			 (equal? col (cadr hed)))
+		    (caddr hed)
+		    (if (null? tal)
+			#f
+			(loop (car tal)(cdr tal)))))))
+	#f)))
+
 (define (edit-txtdb path)
   (let* ((dbname  (pathname-strip-directory path))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
-    (txtdb-export path tmpf)
+    (if (file-exists? (conc path "/sheet-names.cfg"))
+	(txtdb-export path tmpf))
     (let ((pid (process-run "gnumeric" (list tmpf))))
       (process-wait pid)
       (import-gnumeric-file tmpf path))))
 
-
-(define (process-action action . param)
-  (case (string->symbol action)
-    ((edit)
-     (edit-txtdb (car param)))))
+(define (process-action action-str . param)
+  (let ((num-params (length param))
+	(action     (string->symbol action-str)))
+    (cond
+     ((eq? num-params 1)
+      (case action
+	((edit)
+	 (edit-txtdb (car param)))))
+     ((eq? num-params 2)
+      (case action
+	((import)
+	 (let ((fname     (car param))
+	       (targname  (cadr param)))
+	   (import-gnumeric-file fname targname)))))
+     ((eq? num-params 4)
+      (case action
+	((lookup)               ;; path    section     row          col 
+	 (let ((res (lookup (car param)(cadr param)(caddr param)(cadddr param))))
+	   (if res 
+	       (print res)
+	       (begin
+		 (print "")
+		 (exit 1))))))))))
 
 (define (main)
   (let* ((args (argv))
@@ -323,7 +370,7 @@
 	 (rema (cdr args)))
     (cond
      ((null? rema)(print help))
-     ((eq? (length rema) 2)
+     ((>= (length rema) 2)
       (apply process-action (car rema)(cdr rema)))
      (else (print help)))))
 

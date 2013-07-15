@@ -304,9 +304,9 @@
     (http://www.gnumeric.org/v10.dtd:RowInfo
       (@ (Unit "13.5") (No "0") (Count "20"))))
   (http://www.gnumeric.org/v10.dtd:Selections
-    (@ (CursorRow "23") (CursorCol "8"))
+    (@ (CursorRow "0") (CursorCol "0"))
     (http://www.gnumeric.org/v10.dtd:Selection
-      (@ (startRow "23") (startCol "8") (endRow "23") (endCol "8"))))
+      (@ (startRow "0") (startCol "0") (endRow "0") (endCol "0"))))
   (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
   (http://www.gnumeric.org/v10.dtd:Solver
     (@ (ProgramR "0")

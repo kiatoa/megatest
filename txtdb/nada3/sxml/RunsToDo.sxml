@@ -87,9 +87,9 @@
     (http://www.gnumeric.org/v10.dtd:RowInfo
       (@ (Unit "13.5") (No "0") (Count "2"))))
   (http://www.gnumeric.org/v10.dtd:Selections
-    (@ (CursorRow "0") (CursorCol "0"))
+    (@ (CursorRow "2") (CursorCol "1"))
     (http://www.gnumeric.org/v10.dtd:Selection
-      (@ (startRow "0") (startCol "0") (endRow "0") (endCol "0"))))
+      (@ (startRow "2") (startCol "1") (endRow "2") (endCol "1"))))
   (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
   (http://www.gnumeric.org/v10.dtd:Solver
     (@ (ProgramR "0")
