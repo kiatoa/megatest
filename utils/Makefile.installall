@@ -77,7 +77,9 @@ else
 ARCHSIZE=64_
 endif
 
-IUPFILES="cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz iup-3.6_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz"
+IUPFILES=cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz iup-3.6_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz
+CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
+CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
 all : $(EGGSOFILES) $(CHICKEN_EGG_DIR)/sqlite3.so
 
@@ -103,7 +105,7 @@ chicken-$(CHICKEN_VERSION).tar.gz :
 # NB// Must touch csi.scm since tar puts original date on it and deps are wrong then
 chicken-$(CHICKEN_VERSION)/csi.scm : chicken-$(CHICKEN_VERSION).tar.gz
 	tar xfvz chicken-$(CHICKEN_VERSION).tar.gz
-	touch chicken-$(CHICKEN_VERSION)/csi.scm
+	touch -c chicken-$(CHICKEN_VERSION)/csi.scm
 
 $(CHICKEN_INSTALL) : chicken-$(CHICKEN_VERSION)/csi.scm setup-chicken4x.sh
 	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX)
@@ -140,18 +142,33 @@ $(CHICKEN_EGG_DIR)/qtree.so : opensrc/qtree/qtree.scm
 # $(CHICKEN_EGG_DIR)/dbi.so # Don't include as requires postgres
 mattseggs : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
 
+# 
+# IUP
+#
+
+iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+# $(PREFIX)/lib/libiup.so 
+
 ffcall.tar.gz :
 	wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
 
 ffcall/README : ffcall.tar.gz
 	tar xfvz ffcall.tar.gz
+	touch -c ffcall/README
 
 $(PREFIX)/lib/libavcall.a : ffcall/README
 	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make && make install
 
-$(PREFIX)/lib/libiup.so : $(IUPFILES)
-
 $(IUPFILES) :
-	wget http://www.kiatoa.com/matt/iup/$<
-	cd $(PREFIX)/lib;tar xfvz ../$<
+	wget http://www.kiatoa.com/matt/iup/$@
+	cd $(PREFIX)/lib;tar xfvz $(BUILDHOME)/$@
 	mv $(PREFIX)/lib/include/* $(PREFIX)/include
+
+$(PREFIX)/lib/libiup.so : $(IUPFILES)
+	touch -c $(PREFIX)/lib/libiup.so
+
+$(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+
+$(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
