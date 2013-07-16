@@ -1,0 +1,98 @@
+
+# Copyright 2013, Matthew Welland.
+# 
+#  This program is made available under the GNU GPL version 2.0 or
+#  greater. See the accompanying file COPYING for details.
+# 
+#  This program is distributed WITHOUT ANY WARRANTY; without even the
+#  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE.
+
+help :
+	@echo You may need to do the following first:
+	@echo sudo apt-get install libreadline-dev
+	@echo sudo apt-get install libwebkitgtk-dev 
+	@echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
+	@echo KTYPE can be 26, 26g4, or 32
+	@echo KTYPE=$KTYPE
+	@echo You are using PREFIX=$PREFIX
+	@echo You are using proxy="$(proxy)"
+	@echo If needed set proxy to host.dom:port
+	@echo 
+	@echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
+	@echo ADDITIONAL_LIBPATH=$(ADDITIONAL_LIBPATH)
+	@echo  
+	@echo To use previous IUP libraries set USEOLDIUP to yes
+	@echo USEOLDIUP=$(USEOLDIUP)
+	@echo 
+	@echo To make all do: make all
+
+# Put the installation here
+PREFIX=$(PWD)/target
+
+# Set this on the command line of your make call if needed: make PROXY=host.com:1234
+PROXY=
+
+# Select IUP library type
+KTYPE=26g4
+
+# Select version of chicken
+CHICKEN_VERSION=4.8.0
+
+# Eggs to install (straightforward ones)
+EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars
+
+#
+# Derived variables
+#
+
+ifeq ($(PROXY),)
+PROX=
+else
+http_proxy=http://$(PROXY)
+PROX="-proxy $(PROXY)"
+endif
+
+BUILDHOME=$(PWD)
+PATH:=$(PREFIX)/bin:$(PATH)
+LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
+LD_LIBRARY_PATH=$(LIBPATH)
+CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
+
+# VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
+
+vpath %.so $(CHICKEN_EGG_DIR)
+vpath %.flag eggflags
+
+EGGSOFILES=$(addprefix $(CHICKEN_EGG_DIR)/,$(addsuffix .so,$(EGGS)))
+EGGFLAGS=$(addprefix eggflags/,$(addsuffix .flag,$(EGGS)))
+
+all : $(EGGSOFILES)
+
+# Silly rule to make installing eggs more makeish, I don't understand why I need the basename
+%.so : %.flag
+	$(CHICKEN_INSTALL) $(PROX) $(shell basename $*)
+
+$(EGGFLAGS) : $(PREFIX)/bin/csi
+	mkdir -p eggflags
+	touch $(EGGFLAGS)
+
+# some setup stuff
+#
+setup-chicken4x.sh : $(EGGFLAGS)
+	(echo "export PATH=$(PATH)" > setup-chicken4x.sh)
+	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
+	mkdir -p $(PREFIX)
+
+# Download chicken source
+chicken-$(CHICKEN_VERSION).tar.gz : 
+	wget http://code.call-cc.org/releases/$(CHICKEN_VERSION)/chicken-$(CHICKEN_VERSION).tar.gz
+
+chicken-$(CHICKEN_VERSION)/csi.scm : chicken-$(CHICKEN_VERSION).tar.gz
+	tar xfvz chicken-$(CHICKEN_VERSION).tar.gz
+
+$(PREFIX)/bin/csi : chicken-$(CHICKEN_VERSION)/csi.scm setup-chicken4x.sh
+	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX)
+	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX) install
+
