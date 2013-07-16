@@ -36,8 +36,9 @@ PROXY=
 # Select IUP library type
 KTYPE=26g4
 
-# Select version of chicken
+# Select version of chicken, sqlite3 etc
 CHICKEN_VERSION=4.8.0
+SQLITE3_VERSION=3071401
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars
@@ -68,13 +69,13 @@ vpath %.flag eggflags
 EGGSOFILES=$(addprefix $(CHICKEN_EGG_DIR)/,$(addsuffix .so,$(EGGS)))
 EGGFLAGS=$(addprefix eggflags/,$(addsuffix .flag,$(EGGS)))
 
-all : $(EGGSOFILES)
+all : $(EGGSOFILES) $(CHICKEN_EGG_DIR)/sqlite3.so
 
 # Silly rule to make installing eggs more makeish, I don't understand why I need the basename
 %.so : %.flag
 	$(CHICKEN_INSTALL) $(PROX) $(shell basename $*)
 
-$(EGGFLAGS) : $(PREFIX)/bin/csi
+$(EGGFLAGS) : # $(CHICKEN_INSTALL)
 	mkdir -p eggflags
 	touch $(EGGFLAGS)
 
@@ -89,10 +90,41 @@ setup-chicken4x.sh : $(EGGFLAGS)
 chicken-$(CHICKEN_VERSION).tar.gz : 
 	wget http://code.call-cc.org/releases/$(CHICKEN_VERSION)/chicken-$(CHICKEN_VERSION).tar.gz
 
+# NB// Must touch csi.scm since tar puts original date on it and deps are wrong then
 chicken-$(CHICKEN_VERSION)/csi.scm : chicken-$(CHICKEN_VERSION).tar.gz
 	tar xfvz chicken-$(CHICKEN_VERSION).tar.gz
+	touch chicken-$(CHICKEN_VERSION)/csi.scm
 
-$(PREFIX)/bin/csi : chicken-$(CHICKEN_VERSION)/csi.scm setup-chicken4x.sh
+$(CHICKEN_INSTALL) : chicken-$(CHICKEN_VERSION)/csi.scm setup-chicken4x.sh
 	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX)
 	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX) install
 
+sqlite-autoconf-$(SQLITE3_VERSION).tar.gz : 
+	wget http://www.sqlite.org/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+sqlite-autoconf-$(SQLITE3_VERSION) : sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	tar xfz sqlite-autoconf-$(SQLITE3_VERSION).tar.gz 
+
+$(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)
+	(cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install)
+
+$(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
+
+
+# Get and install my various utilities that haven't been eggified yet.
+opensrc/margs/margs.scm opensrc/dbi/dbi.scm opensrc/qtree/qtree.scm : $(CHICKEN_INSTALL) $(CHICKEN_EGG_DIR)/sqlite3.so
+	mkdir -p opensrc
+	cd opensrc;fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
+	cd opensrc;fossil open opensrc.fossil
+
+$(CHICKEN_EGG_DIR)/dbi.so : opensrc/dbi/dbi.scm 
+	cd opensrc/dbi;chicken-install
+
+$(CHICKEN_EGG_DIR)/margs.so : opensrc/margs/margs.scm
+	cd opensrc/margs;chicken-install
+
+$(CHICKEN_EGG_DIR)/qtree.so : opensrc/qtree/qtree.scm
+	cd opensrc/qtree;chicken-install
+
+mattseggs : $(CHICKEN_EGG_DIR)/dbi.so $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
