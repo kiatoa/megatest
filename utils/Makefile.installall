@@ -61,7 +61,7 @@ LD_LIBRARY_PATH=$(LIBPATH)
 CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
 CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
 
-# VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
+VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
 
 vpath %.so $(CHICKEN_EGG_DIR)
 vpath %.flag eggflags
@@ -81,7 +81,15 @@ IUPFILES=cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARC
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : $(EGGSOFILES) $(CHICKEN_EGG_DIR)/sqlite3.so
+all : chkn eggs iup
+
+chkn : $(CHICKEN_INSTALL)
+
+eggs : $(EGGSOFILES)
+
+sqlite3 :  $(CHICKEN_EGG_DIR)/sqlite3.so
+
+iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
 
 # Silly rule to make installing eggs more makeish, I don't understand why I need the basename
 %.so : %.flag
@@ -145,9 +153,6 @@ mattseggs : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
 # 
 # IUP
 #
-
-iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
-# $(PREFIX)/lib/libiup.so 
 
 ffcall.tar.gz :
 	wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
