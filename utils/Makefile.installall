@@ -69,6 +69,16 @@ vpath %.flag eggflags
 EGGSOFILES=$(addprefix $(CHICKEN_EGG_DIR)/,$(addsuffix .so,$(EGGS)))
 EGGFLAGS=$(addprefix eggflags/,$(addsuffix .flag,$(EGGS)))
 
+# Stuff needed for IUP
+ISARCHX86_64=$(shell uname -a | grep x86_64)
+ifeq ($(ISARCHX86_64),)
+ARCHSIZE=
+else
+ARCHSIZE=64_
+endif
+
+IUPFILES="cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz iup-3.6_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz"
+
 all : $(EGGSOFILES) $(CHICKEN_EGG_DIR)/sqlite3.so
 
 # Silly rule to make installing eggs more makeish, I don't understand why I need the basename
@@ -115,8 +125,8 @@ $(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 # Get and install my various utilities that haven't been eggified yet.
 opensrc/margs/margs.scm opensrc/dbi/dbi.scm opensrc/qtree/qtree.scm : $(CHICKEN_INSTALL) $(CHICKEN_EGG_DIR)/sqlite3.so
 	mkdir -p opensrc
-	cd opensrc;fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
-	cd opensrc;fossil open opensrc.fossil
+	cd opensrc;if [ ! -e opensrc.fossil ]; then fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil; fi
+	cd opensrc;if [ -e dbi/dbi.scm ]; then fossil update; else fossil open opensrc.fossil; fi
 
 $(CHICKEN_EGG_DIR)/dbi.so : opensrc/dbi/dbi.scm 
 	cd opensrc/dbi;chicken-install
@@ -127,4 +137,21 @@ $(CHICKEN_EGG_DIR)/margs.so : opensrc/margs/margs.scm
 $(CHICKEN_EGG_DIR)/qtree.so : opensrc/qtree/qtree.scm
 	cd opensrc/qtree;chicken-install
 
-mattseggs : $(CHICKEN_EGG_DIR)/dbi.so $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
+# $(CHICKEN_EGG_DIR)/dbi.so # Don't include as requires postgres
+mattseggs : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
+
+ffcall.tar.gz :
+	wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
+
+ffcall/README : ffcall.tar.gz
+	tar xfvz ffcall.tar.gz
+
+$(PREFIX)/lib/libavcall.a : ffcall/README
+	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make && make install
+
+$(PREFIX)/lib/libiup.so : $(IUPFILES)
+
+$(IUPFILES) :
+	wget http://www.kiatoa.com/matt/iup/$<
+	cd $(PREFIX)/lib;tar xfvz ../$<
+	mv $(PREFIX)/lib/include/* $(PREFIX)/include
