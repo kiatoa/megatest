@@ -28,7 +28,9 @@ help :
 	@echo To make all do: make all
 
 # Put the installation here
+ifeq ($(PREFIX),)
 PREFIX=$(PWD)/target
+endif
 
 # Set this on the command line of your make call if needed: make PROXY=host.com:1234
 PROXY=
@@ -92,7 +94,7 @@ sqlite3 :  $(CHICKEN_EGG_DIR)/sqlite3.so
 iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
 
 # Silly rule to make installing eggs more makeish, I don't understand why I need the basename
-%.so : %.flag
+$(CHICKEN_EGG_DIR)/%.so : %.flag
 	$(CHICKEN_INSTALL) $(PROX) $(shell basename $*)
 
 $(EGGFLAGS) : # $(CHICKEN_INSTALL)
@@ -177,3 +179,6 @@ $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
 	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+
+clean :
+	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)
