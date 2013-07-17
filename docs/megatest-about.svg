@@ -17,7 +17,29 @@
    inkscape:version="0.48.3.1 r9886"
    sodipodi:docname="megatest-about.svg">
   <defs
-     id="defs4" />
+     id="defs4">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient4210">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop4212" />
+      <stop
+         style="stop-color:#000000;stop-opacity:0;"
+         offset="1"
+         id="stop4214" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4210"
+       id="linearGradient4216"
+       x1="32.261719"
+       y1="719.68437"
+       x2="599.57812"
+       y2="719.68437"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
   <sodipodi:namedview
      id="base"
      pagecolor="#ffffff"
@@ -26,7 +48,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.7"
-     inkscape:cx="561.49058"
+     inkscape:cx="597.97545"
      inkscape:cy="534.40312"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
@@ -52,6 +74,13 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1">
+    <rect
+       style="opacity:0.78378378000000004;fill:#d6d6d6;fill-opacity:1;stroke:#000000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4442"
+       width="651.42859"
+       height="675.71442"
+       x="32.857143"
+       y="330.93362" />
     <flowRoot
        xml:space="preserve"
        id="flowRoot2985"
@@ -323,40 +352,87 @@ FM/1Piolgf8Do6DT7EsG7IgAAAAASUVORK5CYII=
        height="41.42857"
        x="235.71428"
        y="268.79074" />
-    <flowRoot
-       xml:space="preserve"
-       id="flowRoot3378"
-       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:#000000;font-family:Sans;stroke-opacity:1"
-       transform="translate(38.571428,-70)"><flowRegion
-         id="flowRegion3380"><rect
-           id="rect3382"
-           width="595.71429"
-           height="620.00006"
-           x="34.285713"
-           y="430.93362"
-           style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1" /></flowRegion><flowPara
-         id="flowPara3384">Write one task or test and iterate</flowPara><flowPara
-         id="flowPara3386">Distribute tasks over one or many hosts</flowPara><flowPara
-         id="flowPara3388">Organise runs by any variables you wish</flowPara><flowPara
-         id="flowPara3390"> - release</flowPara><flowPara
-         id="flowPara3392"> - architecture</flowPara><flowPara
-         id="flowPara3398"> - unit or partition</flowPara><flowPara
-         id="flowPara3404">Tasks or tests may depend on others</flowPara><flowPara
-         id="flowPara3406">Each task or test runs in clean area</flowPara><flowPara
-         id="flowPara3408">Add disk space or partitions as needed</flowPara><flowPara
-         id="flowPara3410">Rigorous results; error, pass, warn etc.</flowPara><flowPara
-         id="flowPara3414">Crontab friendly runs (skip if running)</flowPara><flowPara
-         id="flowPara3418">Easy debugging</flowPara><flowPara
-         id="flowPara3426"> - easy to recreate environment for task</flowPara><flowPara
-         id="flowPara3422"> - annotated HTML logs help find issues</flowPara><flowPara
-         id="flowPara3424">Simplify scripts</flowPara><flowPara
-         id="flowPara3412"> - eliminate for-each or while loops</flowPara><flowPara
-         id="flowPara3440"> - parallel running handled by tool</flowPara></flowRoot>    <rect
+    <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3402"
        width="0"
        height="0"
        x="687.14282"
        y="729.50494" />
+    <text
+       xml:space="preserve"
+       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="81.428574"
+       y="390.93362"
+       id="text4402"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4404"
+         x="81.428574"
+         y="390.93362">Write one task or test and iterate</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="425.93362"
+         id="tspan4406">Distribute tasks over one or many hosts</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="460.93362"
+         id="tspan4408">Organize runs by any variables you wish</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="495.93362"
+         id="tspan4410"> - release</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="530.93359"
+         id="tspan4412"> - architecture</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="565.93359"
+         id="tspan4414"> - unit or partition</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="600.93359"
+         id="tspan4416">Tasks or tests may depend on others</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="635.93359"
+         id="tspan4418">Each task or test runs in clean area</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="670.93359"
+         id="tspan4420">Add disk space or partitions as needed</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="705.93359"
+         id="tspan4422">Rigorous results; error, pass, warn etc.</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="740.93359"
+         id="tspan4424">Crontab friendly runs (skip if running)</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="775.93359"
+         id="tspan4426">Easy debugging</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="810.93359"
+         id="tspan4428"> - easy to recreate environment for task</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="845.93359"
+         id="tspan4430"> - annotated HTML logs help find issues</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="880.93353"
+         id="tspan4432">Simplify scripts</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="915.93353"
+         id="tspan4434"> - eliminate for-each or while loops</tspan><tspan
+         sodipodi:role="line"
+         x="81.428574"
+         y="950.93353"
+         id="tspan4436"> - parallel running handled by tool</tspan></text>
   </g>
 </svg>
