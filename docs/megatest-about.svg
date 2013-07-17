@@ -48,7 +48,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.7"
-     inkscape:cx="597.97545"
+     inkscape:cx="263.11623"
      inkscape:cy="534.40312"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
@@ -283,75 +283,75 @@ FM/1Piolgf8Do6DT7EsG7IgAAAAASUVORK5CYII=
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="150"
-       y="148.07648"
+       x="78.571426"
+       y="139.50505"
        id="text3142"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3144"
-         x="150"
-         y="148.07648">Automation</tspan></text>
+         x="78.571426"
+         y="139.50505">Automation</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="201.42857"
-       y="198.07646"
+       x="208.57144"
+       y="185.21931"
        id="text3146"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3148"
-         x="201.42857"
-         y="198.07646">Quality Assurance</tspan></text>
+         x="208.57144"
+         y="185.21931">Quality Assurance</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="238.57143"
-       y="248.07646"
+       x="310"
+       y="230.93361"
        id="text3150"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3152"
-         x="238.57143"
-         y="248.07646">Regression Testing</tspan></text>
+         x="310"
+         y="230.93361">Regression Testing</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="290"
-       y="299.50504"
+       x="401.42856"
+       y="283.79074"
        id="text3154"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3156"
-         x="290"
-         y="299.50504">System Administration</tspan></text>
+         x="401.42856"
+         y="283.79074">System Administration</tspan></text>
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158"
        width="40"
        height="41.42857"
-       x="95.714279"
-       y="119.50504" />
+       x="24.285707"
+       y="110.93362" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-5"
        width="40"
        height="41.42857"
-       x="140"
-       y="168.79076" />
+       x="147.14287"
+       y="155.93361" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-9"
        width="40"
        height="41.42857"
-       x="187.14285"
-       y="218.79077" />
+       x="258.57141"
+       y="201.64792" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-50"
        width="40"
        height="41.42857"
-       x="235.71428"
-       y="268.79074" />
+       x="347.14282"
+       y="253.07646" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3402"
@@ -434,5 +434,59 @@ FM/1Piolgf8Do6DT7EsG7IgAAAAASUVORK5CYII=
          x="81.428574"
          y="950.93353"
          id="tspan4436"> - parallel running handled by tool</tspan></text>
+    <rect
+       style="opacity:0.7837838;fill:#e81c1c;fill-opacity:1;stroke:#000000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4444"
+       width="95.714287"
+       height="38.57143"
+       x="17.142857"
+       y="223.79076" />
+    <text
+       xml:space="preserve"
+       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="31.428562"
+       y="253.79076"
+       id="text4446"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4448"
+         x="31.428562"
+         y="253.79076">FAIL</tspan></text>
+    <rect
+       style="opacity:0.7837838;fill:#1ac92c;fill-opacity:1;stroke:#000000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4444-6"
+       width="92.85714"
+       height="40"
+       x="19.285711"
+       y="177.36217" />
+    <text
+       xml:space="preserve"
+       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="29.285706"
+       y="208.79076"
+       id="text4446-1"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4448-6"
+         x="29.285706"
+         y="208.79076">PASS</tspan></text>
+    <rect
+       style="opacity:0.7837838;fill:#ffbf02;fill-opacity:1;stroke:#000000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4444-9"
+       width="95.714287"
+       height="38.57143"
+       x="17.857157"
+       y="268.79077" />
+    <text
+       xml:space="preserve"
+       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="22.142862"
+       y="295.93362"
+       id="text4446-3"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4448-9"
+         x="22.142862"
+         y="295.93362">WARN</tspan></text>
   </g>
 </svg>
