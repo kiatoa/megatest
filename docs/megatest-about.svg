@@ -333,14 +333,15 @@ FM/1Piolgf8Do6DT7EsG7IgAAAAASUVORK5CYII=
     <flowRoot
        xml:space="preserve"
        id="flowRoot3378"
-       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:#000000;font-family:Sans;stroke-opacity:1"
        transform="translate(38.571428,-70)"><flowRegion
          id="flowRegion3380"><rect
            id="rect3382"
            width="595.71429"
            height="620.00006"
            x="34.285713"
-           y="430.93362" /></flowRegion><flowPara
+           y="430.93362"
+           style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1" /></flowRegion><flowPara
          id="flowPara3384">Write one task or test and iterate</flowPara><flowPara
          id="flowPara3386">Distribute tasks over one or many hosts</flowPara><flowPara
          id="flowPara3388">Organise runs by any variables you wish</flowPara><flowPara
