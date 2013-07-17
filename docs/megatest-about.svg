@@ -26,8 +26,8 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.7"
-     inkscape:cx="375"
-     inkscape:cy="520"
+     inkscape:cx="561.49058"
+     inkscape:cy="534.40312"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -53,12 +53,12 @@
      inkscape:groupmode="layer"
      id="layer1">
     <rect
-       style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       style="opacity:0.84942082;fill:none;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3396"
        width="644.28595"
        height="635.71442"
-       x="57.142857"
-       y="398.07648" />
+       x="38.571426"
+       y="342.36218" />
     <flowRoot
        xml:space="preserve"
        id="flowRoot2985"
@@ -73,26 +73,26 @@
          id="flowPara2991"></flowPara></flowRoot>    <text
        xml:space="preserve"
        style="font-size:22px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="184.28571"
-       y="76.647903"
+       x="187.14285"
+       y="58.076473"
        id="text2993"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan2995"
-         x="184.28571"
-         y="76.647903"
+         x="187.14285"
+         y="58.076473"
          style="font-size:64px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Sans;-inkscape-font-specification:Sans Bold">Megatest</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:22px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="192.85715"
-       y="125.21933"
+       x="195.71429"
+       y="100.93362"
        id="text2997"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan2999"
-         x="192.85715"
-         y="125.21933">Simple - but not TOO simple!</tspan></text>
+         x="195.71429"
+         y="100.93362">Simple - but not TOO simple!</tspan></text>
     <image
        y="7.3621907"
        x="4.3571429"
@@ -261,80 +261,80 @@ FM/1Piolgf8Do6DT7EsG7IgAAAAASUVORK5CYII=
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="147.14285"
-       y="200.93362"
+       x="150"
+       y="148.07648"
        id="text3142"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3144"
-         x="147.14285"
-         y="200.93362">Automation</tspan></text>
+         x="150"
+         y="148.07648">Automation</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="198.57143"
-       y="250.93361"
+       x="201.42857"
+       y="198.07646"
        id="text3146"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3148"
-         x="198.57143"
-         y="250.93361">Quality Assurance</tspan></text>
+         x="201.42857"
+         y="198.07646">Quality Assurance</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="235.71428"
-       y="300.93362"
+       x="238.57143"
+       y="248.07646"
        id="text3150"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3152"
-         x="235.71428"
-         y="300.93362">Regression Testing</tspan></text>
+         x="238.57143"
+         y="248.07646">Regression Testing</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       x="287.14285"
-       y="352.36218"
+       x="290"
+       y="299.50504"
        id="text3154"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
          id="tspan3156"
-         x="287.14285"
-         y="352.36218">System Administration</tspan></text>
+         x="290"
+         y="299.50504">System Administration</tspan></text>
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158"
        width="40"
        height="41.42857"
-       x="92.85714"
-       y="172.36218" />
+       x="95.714279"
+       y="119.50504" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-5"
        width="40"
        height="41.42857"
-       x="137.14285"
-       y="221.6479" />
+       x="140"
+       y="168.79076" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-9"
        width="40"
        height="41.42857"
-       x="184.28571"
-       y="271.64792" />
+       x="187.14285"
+       y="218.79077" />
     <rect
        style="opacity:0.84942082;fill:#000000;fill-opacity:0.05608335;stroke:#2b0000;stroke-width:3;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="rect3158-50"
        width="40"
        height="41.42857"
-       x="232.85713"
-       y="321.64789" />
+       x="235.71428"
+       y="268.79074" />
     <flowRoot
        xml:space="preserve"
        id="flowRoot3378"
        style="font-size:28px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
-       transform="translate(57.142857,-14.285714)"><flowRegion
+       transform="translate(38.571428,-70)"><flowRegion
          id="flowRegion3380"><rect
            id="rect3382"
            width="595.71429"
