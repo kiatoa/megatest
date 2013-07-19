@@ -51,16 +51,20 @@
   (if (debug:debug-mode n)
       (with-output-to-port (current-error-port)
 	(lambda ()
-	  (apply print params)
-	  (if *logging* (apply db:log-event params))))))
+	  (if *logging*
+	      (db:log-event (apply conc params))
+	      (apply print params)
+	      )))))
 
 (define (debug:print-info n . params)
   (if (debug:debug-mode n)
       (with-output-to-port (current-error-port)
 	(lambda ()
-	  (let ((res #f));; (format#format #f "INFO:~2d ~a" n (apply conc params))))
-	    (apply print "INFO: (" n ") " params) ;; res)
-	    (if *logging* (db:log-event res)))))))
+	  (let ((res (format#format #f "INFO: (~2d) ~a" n (apply conc params))))
+	    (if *logging*
+		(db:log-event res)
+		(apply print "INFO: (" n ") " params) ;; res)
+		))))))
 
 ;; if a value is printable (i.e. string or number) return the value
 ;; else return an empty string

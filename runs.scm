@@ -650,8 +650,14 @@
 		   (and (list? (car items))
 			(> (length (car items)) 0))
 		   (debug:debug-mode 1))
-	      (pp items))
-	  
+	      (debug:print 2 (map (lambda (row)
+				    (conc (string-intersperse
+					   (map (lambda (varval)
+						  (string-intersperse varval "="))
+						row)
+					   " ")
+					  "\n"))
+				  items)))
 	  (for-each
 	   (lambda (my-itemdat)
 	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
