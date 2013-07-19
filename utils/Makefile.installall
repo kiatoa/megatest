@@ -1,0 +1,184 @@
+
+# Copyright 2013, Matthew Welland.
+# 
+#  This program is made available under the GNU GPL version 2.0 or
+#  greater. See the accompanying file COPYING for details.
+# 
+#  This program is distributed WITHOUT ANY WARRANTY; without even the
+#  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE.
+
+help :
+	@echo You may need to do the following first:
+	@echo sudo apt-get install libreadline-dev
+	@echo sudo apt-get install libwebkitgtk-dev 
+	@echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
+	@echo KTYPE can be 26, 26g4, or 32
+	@echo KTYPE=$KTYPE
+	@echo You are using PREFIX=$PREFIX
+	@echo You are using proxy="$(proxy)"
+	@echo If needed set proxy to host.dom:port
+	@echo 
+	@echo "Set additional_libpath to help find gtk or other libraries, don't forget a leading :"
+	@echo ADDITIONAL_LIBPATH=$(ADDITIONAL_LIBPATH)
+	@echo  
+	@echo To use previous IUP libraries set USEOLDIUP to yes
+	@echo USEOLDIUP=$(USEOLDIUP)
+	@echo 
+	@echo To make all do: make all
+
+# Put the installation here
+ifeq ($(PREFIX),)
+PREFIX=$(PWD)/target
+endif
+
+# Set this on the command line of your make call if needed: make PROXY=host.com:1234
+PROXY=
+
+# Select IUP library type
+KTYPE=26g4
+
+# Select version of chicken, sqlite3 etc
+CHICKEN_VERSION=4.8.0
+SQLITE3_VERSION=3071401
+
+# Eggs to install (straightforward ones)
+EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars
+
+#
+# Derived variables
+#
+
+ifeq ($(PROXY),)
+PROX=
+else
+http_proxy=http://$(PROXY)
+PROX="-proxy $(PROXY)"
+endif
+
+BUILDHOME=$(PWD)
+PATH:=$(PREFIX)/bin:$(PATH)
+LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
+LD_LIBRARY_PATH=$(LIBPATH)
+CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
+
+VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
+
+vpath %.so $(CHICKEN_EGG_DIR)
+vpath %.flag eggflags
+
+EGGSOFILES=$(addprefix $(CHICKEN_EGG_DIR)/,$(addsuffix .so,$(EGGS)))
+EGGFLAGS=$(addprefix eggflags/,$(addsuffix .flag,$(EGGS)))
+
+# Stuff needed for IUP
+ISARCHX86_64=$(shell uname -a | grep x86_64)
+ifeq ($(ISARCHX86_64),)
+ARCHSIZE=
+else
+ARCHSIZE=64_
+endif
+
+IUPFILES=cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz iup-3.6_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz
+CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
+CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
+
+all : chkn eggs iup
+
+chkn : $(CHICKEN_INSTALL)
+
+eggs : $(EGGSOFILES)
+
+sqlite3 :  $(CHICKEN_EGG_DIR)/sqlite3.so
+
+iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+
+# Silly rule to make installing eggs more makeish, I don't understand why I need the basename
+$(CHICKEN_EGG_DIR)/%.so : %.flag
+	$(CHICKEN_INSTALL) $(PROX) $(shell basename $*)
+
+$(EGGFLAGS) : # $(CHICKEN_INSTALL)
+	mkdir -p eggflags
+	touch $(EGGFLAGS)
+
+# some setup stuff
+#
+setup-chicken4x.sh : $(EGGFLAGS)
+	(echo "export PATH=$(PATH)" > setup-chicken4x.sh)
+	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
+	mkdir -p $(PREFIX)
+
+# Download chicken source
+chicken-$(CHICKEN_VERSION).tar.gz : 
+	wget http://code.call-cc.org/releases/$(CHICKEN_VERSION)/chicken-$(CHICKEN_VERSION).tar.gz
+
+# NB// Must touch csi.scm since tar puts original date on it and deps are wrong then
+chicken-$(CHICKEN_VERSION)/csi.scm : chicken-$(CHICKEN_VERSION).tar.gz
+	tar xfvz chicken-$(CHICKEN_VERSION).tar.gz
+	touch -c chicken-$(CHICKEN_VERSION)/csi.scm
+
+$(CHICKEN_INSTALL) : chicken-$(CHICKEN_VERSION)/csi.scm setup-chicken4x.sh
+	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX)
+	cd chicken-$(CHICKEN_VERSION);make PLATFORM=linux PREFIX=$(PREFIX) install
+
+sqlite-autoconf-$(SQLITE3_VERSION).tar.gz : 
+	wget http://www.sqlite.org/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+sqlite-autoconf-$(SQLITE3_VERSION) : sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	tar xfz sqlite-autoconf-$(SQLITE3_VERSION).tar.gz 
+
+$(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)
+	(cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install)
+
+$(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
+
+
+# Get and install my various utilities that haven't been eggified yet.
+opensrc/margs/margs.scm opensrc/dbi/dbi.scm opensrc/qtree/qtree.scm : $(CHICKEN_INSTALL) $(CHICKEN_EGG_DIR)/sqlite3.so
+	mkdir -p opensrc
+	cd opensrc;if [ ! -e opensrc.fossil ]; then fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil; fi
+	cd opensrc;if [ -e dbi/dbi.scm ]; then fossil update; else fossil open opensrc.fossil; fi
+
+$(CHICKEN_EGG_DIR)/dbi.so : opensrc/dbi/dbi.scm 
+	cd opensrc/dbi;chicken-install
+
+$(CHICKEN_EGG_DIR)/margs.so : opensrc/margs/margs.scm
+	cd opensrc/margs;chicken-install
+
+$(CHICKEN_EGG_DIR)/qtree.so : opensrc/qtree/qtree.scm
+	cd opensrc/qtree;chicken-install
+
+# $(CHICKEN_EGG_DIR)/dbi.so # Don't include as requires postgres
+mattseggs : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
+
+# 
+# IUP
+#
+
+ffcall.tar.gz :
+	wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
+
+ffcall/README : ffcall.tar.gz
+	tar xfvz ffcall.tar.gz
+	touch -c ffcall/README
+
+$(PREFIX)/lib/libavcall.a : ffcall/README
+	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make && make install
+
+$(IUPFILES) :
+	wget http://www.kiatoa.com/matt/iup/$@
+	cd $(PREFIX)/lib;tar xfvz $(BUILDHOME)/$@
+	mv $(PREFIX)/lib/include/* $(PREFIX)/include
+
+$(PREFIX)/lib/libiup.so : $(IUPFILES)
+	touch -c $(PREFIX)/lib/libiup.so
+
+$(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+
+$(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+
+clean :
+	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)
