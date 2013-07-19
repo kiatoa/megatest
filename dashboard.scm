@@ -1291,6 +1291,10 @@ Misc
 (define *monitor-db-path* (conc *toppath* "/monitor.db"))
 (define *last-monitor-update-time* 0)
 
+;; Force creation of the db in case it isn't already there.
+(let ((db (tasks:open-db)))
+  (sqlite3:finalize! db))
+
 (define (dashboard:run-update x)
   (let* ((modtime         (file-modification-time *db-file-path*))
 	 (monitor-modtime (file-modification-time *monitor-db-path*))
