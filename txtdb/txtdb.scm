@@ -339,6 +339,34 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 			(loop (car tal)(cdr tal)))))))
 	#f)))
 
+;; call with proc = car to get row names
+;; call with proc = cadr to get col names
+(define (get-rowcol-names path sheet proc)
+  (let ((fname (conc path "/" sheet ".dat")))
+    (if (file-exists? fname)
+	(let ((dat (read-dat fname)))
+	  (if (null? dat)
+	      #f
+	      (let loop ((hed (car dat))
+			 (tal (cdr dat))
+			 (res '()))
+		(let* ((row-name (proc hed))
+		       (newres (if (not (member row-name res))
+				   (cons row-name res)
+				   res)))
+		  (if (null? tal)
+		      (reverse newres)
+		      (loop (car tal)(cdr tal) newres))))))
+	#f)))
+
+(define (get-col-names path sheet)
+  (let ((fname (conc path "/" sheet ".dat")))
+    (if (file-exists? fname)
+	(let ((dat (read-dat fname)))
+	  (if (null? dat)
+	      #f
+	      (map cadr dat))))))
+
 (define (edit-refdb path)
   (let* ((dbname  (pathname-strip-directory path))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
@@ -360,6 +388,8 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 	 (map print (list-sheets (car param))))))
      ((eq? num-params 2)
       (case action
+	((getrownames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) car)  " ")))
+	((getcolnames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) cadr) " ")))
 	((import)
 	 (let ((fname     (car param))
 	       (targname  (cadr param)))
