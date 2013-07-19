@@ -259,7 +259,7 @@
 						  cells))
 				    res)))
 			  '()
-			  sht-names)))
+			 (reverse  sht-names))))
     (append wrk-rem (list (append
 			   (cons 'http://www.gnumeric.org/v10.dtd:Workbook
 				 sht-rem)
