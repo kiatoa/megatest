@@ -361,15 +361,19 @@
     db))
 
 (define (db:log-local-event . loglst)
-  (let ((logline (apply conc loglst))
-	(pwd     (current-directory))
-	(cmdline (string-intersperse (argv) " "))
-	(pid     (current-process-id)))
-    (db:log-event logline pwd cmdline pid)))
+  (let ((logline (apply conc loglst)))
+	;; (pwd     (current-directory))
+	;; (cmdline (string-intersperse (argv) " "))
+	;; (pid     (current-process-id)))
+    (db:log-event logline)))
 
-(define (db:log-event logline pwd cmdline pid)
+(define (db:log-event logline)
   (let ((db (open-logging-db)))
-    (sqlite3:execute db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);" logline (current-directory)(string-intersperse (argv) " ")(current-process-id))
+    (sqlite3:execute db "INSERT INTO log (logline,pwd,cmdline,pid) VALUES (?,?,?,?);"
+		     logline
+		     (current-directory)
+		     (string-intersperse (argv) " ")
+		     (current-process-id))
     (sqlite3:finalize! db)
     logline))
 

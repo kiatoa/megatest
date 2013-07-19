@@ -1,3 +1,34 @@
+Road Map
+========
+
+.	Quality improvements
+..	Server stutters occasionally
+..	Large number of items or tests still has some issues.
+..	Code refactoring
+..	Replace remote process with true API using json (supports Web app also)
+.	Streamline the gui
+..	Everything resizable
+..	Less clutter
+..	Tool tips
+..	Filters on Run Summary, Summary and Run Control panel
+..	Built in log viewer (partially implemented)
+..	Refactor the test control panel
+.	Help and documentation
+..	Complete the user manual (I’ve been working on this lately).
+..	Online help in the gui
+.	Streamlined install
+..	Deployed version (download a location independent ready to run binary bundle)
+..	Install Makefile (in progress, needed for Mike to install on VMs)
+..	Added option to compile IUP (needed for VMs)
+.	Server side run launching
+.	Support for re-running, cleaning etc. of individual steps (ezsteps makes this very easy to implement).
+.	Launch process needs built in daemonizing (easy to do, just need to test it thoroughly).
+.	Wizards for creating tests, regression areas (current ones are text only and limited).
+.	Fully functional built in web service (currently you can browse runs but it is very simplistic).
+.	Wildcards in runconfigs: e.g. [p1271/9/%/%]
+.	Gui panels for editing megatest.config and runconfigs.config
+.	Fully isolated tests (no use of NFS to see regression area files)
+.	Windows version
 
 Move test specific db to test dir
 =================================

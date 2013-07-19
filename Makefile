@@ -140,4 +140,4 @@ test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
 
 clean : 
-	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o
+	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o
