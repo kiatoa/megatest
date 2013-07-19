@@ -310,8 +310,10 @@ Note: refdbdir is a path to the directory containg sheet-names.cfg
 
   import filename.gnumeric refdbdir   : Import a gnumeric file into a txt db directory
   edit   refdbdir                     : Edit a refdbdir using gnumeric.
-  lookup refdbdir sheetname row col   : Look up a value in the text db   
   ls refdbdir                         : List the keys for specified level 
+  lookup refdbdir sheetname row col   : Look up a value in the text db   
+  getrownames refdb sheetname         : Get a list of row titles
+  getcolnames refdb sheetname         : Get a list of column titles  
 
 Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest"))
 
@@ -346,7 +348,7 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
     (if (file-exists? fname)
 	(let ((dat (read-dat fname)))
 	  (if (null? dat)
-	      #f
+	      '()
 	      (let loop ((hed (car dat))
 			 (tal (cdr dat))
 			 (res '()))
@@ -357,7 +359,7 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 		  (if (null? tal)
 		      (reverse newres)
 		      (loop (car tal)(cdr tal) newres))))))
-	#f)))
+	'())))
 
 (define (get-col-names path sheet)
   (let ((fname (conc path "/" sheet ".dat")))
