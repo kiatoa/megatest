@@ -41,7 +41,26 @@
 ;;  to extract info from the structure returned
 ;;
 (define (mt:get-runs-by-patt keys runnamepatt targpatt)
-  (cdb:remote-run db:get-runs-by-patt #f keys runnamepatt targpatt))
+  (let loop ((runsdat  (cdb:remote-run db:get-runs-by-patt #f keys runnamepatt targpatt 0 500))
+	     (res      '())
+	     (offset   0)
+	     (limit    500))
+    (print "runsdat: " runsdat)
+    (let* ((header    (vector-ref runsdat 0))
+	   (runslst   (vector-ref runsdat 1))
+	   (full-list (append res runslst))
+	   (have-more (eq? (length runslst) limit)))
+      (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
+      (if have-more 
+	  (let ((new-offset (+ offset limit))
+		(next-batch (cdb:remote-run db:get-runs-by-patt #f keys runnamepatt targpatt offset limit)))
+	    (debug:print-info 4 "More than " limit " runs, have " (length full-list) " runs so far.")
+	    (debug:print-info 0 "next-batch: " next-batch)
+	    (loop next-batch
+		  full-list
+		  new-offset
+		  limit))
+	 (vector header full-list)))))
 
 ;;======================================================================
 ;;  T E S T S
