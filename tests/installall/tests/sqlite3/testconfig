@@ -1,14 +1,16 @@
 # Add additional steps here. Format is "stepname script"
 [ezsteps]
 download download.sh
-untar untar.sh
 compile compile.sh
 install install.sh
+installegg installegg.sh
 
 # Test requirements are specified here
 [requirements]
-waiton 
-priority 
+# We waiton chicken because this one installs the egg. It would behove us to split this
+# into two tests ...
+waiton chicken
+priority 2
 
 # Iteration for your tests are controlled by the items section
 [items]

@@ -5,7 +5,6 @@ install install.sh
 # Test requirements are specified here
 [requirements]
 waiton zmqlib chicken
-priority 
 
 # Iteration for your tests are controlled by the items section
 [items]

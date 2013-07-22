@@ -1,14 +1,11 @@
 # Add additional steps here. Format is "stepname script"
 [ezsteps]
-download download
-untar untar
-compile compile
-install install
+download download.sh
+compile compile.sh
+install install.sh
 
 # Test requirements are specified here
 [requirements]
-waiton 
-priority 
 
 # Iteration for your tests are controlled by the items section
 [items]
