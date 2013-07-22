@@ -84,7 +84,7 @@ fi
 
 # Some eggs are quoted since they are reserved to Bash
 # for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
-$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars
+$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars spiffy-directory-listing ssax sxml-serializer sxml-modifications
 #   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
 #     $CHICKEN_INSTALL $PROX $f
 #     # $CHICKEN_INSTALL -deploy -prefix $DEPLOYTARG $PROX $f

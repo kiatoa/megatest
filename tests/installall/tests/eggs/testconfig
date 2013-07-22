@@ -4,12 +4,12 @@ install install.sh
 
 # Test requirements are specified here
 [requirements]
-waiton chicken
+waiton chicken setup
 priority 9
 
 # Iteration for your tests are controlled by the items section
 [items]
-EGG_NAME matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 
+EGG_NAME matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 ssax sxml-serializer sxml-modifications
 
 # test_meta is a section for storing additional data on your test
 [test_meta]

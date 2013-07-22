@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Run your step here
-source $PREFIX/setup-chicken4x.sh
+source $PREFIX/buildsetup.sh
+# source $PREFIX/setup-chicken4x.sh
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''

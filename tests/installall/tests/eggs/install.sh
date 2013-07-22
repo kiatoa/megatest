@@ -2,4 +2,7 @@
 
 # Run your step here
 
-$PREFIX/bin/chicken-install $EGG_NAME
+source $PREFIX/buildsetup.sh
+
+$PREFIX/bin/chicken-install $PROX $EGG_NAME
+

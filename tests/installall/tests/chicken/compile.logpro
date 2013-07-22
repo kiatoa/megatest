@@ -7,4 +7,4 @@
 (expect:ignore   in "LogFileBody"  >= 0 "Ignore HAVE_STRERROR" #/HAVE_STRERROR/)
 
 (expect:warning  in "LogFileBody"  = 0 "Any warning" #/warn/)
-(expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/error/)) ;; but disallow any other errors
+(expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/error/i)) ;; but disallow any other errors

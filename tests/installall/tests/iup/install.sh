@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # Run your step here
-source $PREFIX/setup-chicken4x.sh
+source $PREFIX/buildsetup.sh
+# source $PREFIX/setup-chicken4x.sh
 
 export CSCLIBS=`echo $LD_LIBRARY_PATH | sed 's/:/ -L/g'`
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $PREFIX/bin/chicken-install $PROX -D no-library-checks -feature disable-iup-web iup

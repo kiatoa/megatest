@@ -7,7 +7,7 @@ install install.sh
 
 # Test requirements are specified here
 [requirements]
-waiton 
+waiton setup
 
 # Iteration for your tests are controlled by the items section
 [items]

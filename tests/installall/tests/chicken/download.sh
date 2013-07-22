@@ -2,6 +2,8 @@
 
 # Run your step here
 
+source $PREFIX/buildsetup.sh
+
 if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
     wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz
 fi 
