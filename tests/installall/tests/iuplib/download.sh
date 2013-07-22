@@ -19,10 +19,10 @@ fi
 
 mkdir -p $PREFIX/iuplib
 for a in `echo $files` ; do
-    if ! [[ -e $a ]] ; then
-	wget http://www.kiatoa.com/matt/iup/$a
+    if ! [[ -e ${DOWNLOADS}/$a ]] ; then
+	(cd ${DOWNLOADS};wget http://www.kiatoa.com/matt/iup/$a)
     fi
     echo Untarring $a into $PREFIX/lib
-    (cd $PREFIX/lib;tar xfvz $MT_TEST_RUN_DIR/$a;mv include/* ../include)
+    (cd $PREFIX/lib;tar xfvz ${DOWNLOADS}/$a;mv include/* ../include)
 done
 

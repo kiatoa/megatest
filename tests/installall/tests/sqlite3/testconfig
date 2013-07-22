@@ -9,7 +9,7 @@ installegg installegg.sh
 [requirements]
 # We waiton chicken because this one installs the egg. It would behove us to split this
 # into two tests ...
-waiton chicken setup
+waiton tougheggs
 priority 2
 
 # Iteration for your tests are controlled by the items section

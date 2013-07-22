@@ -6,6 +6,8 @@ cksetupsh=$PREFIX/setup-chicken4x.sh
 cksetupcsh=$PREFIX/setup-chicken4x.csh
 setupsh=$PREFIX/buildsetup.sh
 
+# make a cache dir
+mkdir -p $DOWNLOADS
 mkdir -p $PREFIX
 
 # File for users to source to run chicken
