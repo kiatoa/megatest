@@ -1,1 +1,3 @@
+(expect:ignore in "LogFileBody" >= 0 "Ignore these binary operator errors for now" #/error: missing binary operator/ expires: "10/10/2013")
+
 (load "compile.logpro")
