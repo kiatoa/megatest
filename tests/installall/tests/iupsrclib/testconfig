@@ -1,10 +1,11 @@
 # Add additional steps here. Format is "stepname script"
 [ezsteps]
-install install.sh
+download download.sh
+compile  compile.sh
 
 # Test requirements are specified here
 [requirements]
-waiton iup#{getenv IUPMODE}lib tougheggs
+waiton ffcall setup
 
 # Iteration for your tests are controlled by the items section
 [items]
@@ -13,6 +14,6 @@ waiton iup#{getenv IUPMODE}lib tougheggs
 [test_meta]
 author matt
 owner  matt
-description Install iup egg
+description Install the iup library if it is not already installed
 tags tagone,tagtwo
 reviewed never
