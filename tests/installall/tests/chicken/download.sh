@@ -5,7 +5,11 @@
 source $PREFIX/buildsetup.sh
 
 if ! [[ -e ${DOWNLOADS}/chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
-    (cd ${DOWNLOADS};wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz)
+  if [ "${CHICKEN_URL}" == "" ]; then
+     (cd ${DOWNLOADS};wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz)
+  else
+     (cd ${DOWNLOADS};wget ${CHICKEN_URL})
+  fi
 fi 
 
 ls -l ${DOWNLOADS}/chicken-${CHICKEN_VERSION}.tar.gz
