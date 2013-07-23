@@ -1,7 +1,10 @@
 # Add additional steps here. Format is "stepname script"
 [ezsteps]
 download download.sh
-compile  compile.sh
+lua compile.sh lua52
+im compile.sh im
+cd compile.sh cd
+iup compile.sh iup
 
 # Test requirements are specified here
 [requirements]
