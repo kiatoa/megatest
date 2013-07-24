@@ -4,7 +4,7 @@
 
 source $PREFIX/buildsetup.sh
 
-if ! [[ -e i${DOWNLOADS}/ffcall.tar.gz ]] ; then
+if ! [[ -e ${DOWNLOADS}/ffcall.tar.gz ]] ; then
     (cd ${DOWNLOADS};wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz )
 fi
 
