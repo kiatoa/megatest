@@ -474,7 +474,8 @@
 ;;    b. ....
 ;;
 (define (db:clean-up db)
-  (let ((statements
+  (let ((count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
+	(statements
 	 (map (lambda (stmt)
 		(sqlite3:prepare db stmt))
 	      (list
@@ -483,17 +484,24 @@
 	       ;; delete all tests that are 'DELETED'
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ;; delete all tests that have no run
-	       "DELETE FROM tests WHERE run_id NOT IN (SELECT run_id FROM runs);"
+	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT run_id FROM runs);"
 	       ;; delete all runs that are state='deleted'
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
-	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+	       ;; "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
 	       ))))
     (sqlite3:with-transaction 
      db
      (lambda ()
-       (map sqlite3:execute statements)))
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count before clean: " tot))
+			     count-stmt)
+       (map sqlite3:execute statements)
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count after  clean: " tot))
+			     count-stmt)))
     (map sqlite3:finalize! statements)
+    (sqlite3:finalize! count-stmt)
     (sqlite3:execute db "VACUUM;")))
 
 ;; (define (db:report-junk-records db)
