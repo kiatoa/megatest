@@ -520,7 +520,8 @@
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
-	    (debug:print-info 4 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
+	    (debug:print-info 0 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
+	    (debug:print-info 0 "   test is " hed ", prereqs-not-met is " prereqs-not-met)
 	    ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
 	    ;; we made new tal by sticking hed at the back of the list
 	    (list (car newtal)(cdr newtal) reg reruns))
@@ -538,9 +539,11 @@
 			  (runs:queue-next-reg tal reg reglen regfull)
 			  (cons hed reruns)))
 		  (begin
-		    (debug:print 1 "WARN: Test not processed correctly. Could be a race condition in your test implementation? " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+		    (debug:print 0 "WARNING: Test not processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
-		    (list hed tal reg reruns)))))))))
+		    ;; (list hed tal reg reruns)
+		    (list (car newtal)(cdr newtal) reg reruns)
+		    ))))))))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry)

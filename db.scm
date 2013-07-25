@@ -462,6 +462,43 @@
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
+;; Clean out old junk and vacuum the database
+;;
+;; Ultimately do something like this:
+;;
+;; 1. Look at test records either deleted or part of deleted run:
+;;    a. If test dir exists, set the the test to state='UNKNOWN', Set the run to 'unknown'
+;;    b. If test dir gone, delete the test record
+;; 2. Look at run records
+;;    a. If have tests that are not deleted, set state='unknown'
+;;    b. ....
+;;
+(define (db:clean-up db)
+  (let ((statements
+	 (map (lambda (stmt)
+		(sqlite3:prepare db stmt))
+	      (list
+	       ;; delete all tests that belong to runs that are 'deleted'
+	       "DELETE FROM tests WHERE run_id in (SELECT run_id FROM runs WHERE state='deleted');"
+	       ;; delete all tests that are 'DELETED'
+	       "DELETE FROM tests WHERE state='DELETED';"
+	       ;; delete all tests that have no run
+	       "DELETE FROM tests WHERE run_id NOT IN (SELECT run_id FROM runs);"
+	       ;; delete all runs that are state='deleted'
+	       "DELETE FROM runs WHERE state='deleted';"
+	       ;; delete empty runs
+	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+	       ))))
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (map sqlite3:execute statements)))
+    (map sqlite3:finalize! statements)
+    (sqlite3:execute db "VACUUM;")))
+
+;; (define (db:report-junk-records db)
+  
+
 ;;======================================================================
 ;; meta get and set vars
 ;;======================================================================
@@ -774,10 +811,16 @@
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
-  (sqlite3:execute db "UPDATE runs SET state='deleted' WHERE id=?;" run-id))
+  ;; First set any related tests to DELETED
+  (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED' WHERE run_id=?;"))
+	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted' WHERE id=?;")))
+    (sqlite3:with-transaction
+     db (lambda ()
+	  (sqlite3:execute stmt1 run-id)
+	  (sqlite3:execute stmt2 run-id)))
+    (sqlite3:finalize! stmt1)
+    (sqlite3:finalize! stmt2)))
 ;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
-
-
 
 (define (db:update-run-event_time db run-id)
   (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
@@ -1347,11 +1390,13 @@
   (case *transport-type*
    ((fs) msg)
    ((http)
-    (with-input-from-string 
-       (base64:base64-decode
-         (string-substitute 
-	   (regexp "_") "=" msg #t))
-       (lambda ()(deserialize))))
+    (if (string? msg)
+	(with-input-from-string 
+	    (base64:base64-decode
+	     (string-substitute 
+	      (regexp "_") "=" msg #t))
+	  (lambda ()(deserialize)))
+	(vector #f #f #f))) ;; crude reply for when things go awry
    ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
    (else msg)))
 

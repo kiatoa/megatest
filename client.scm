@@ -62,6 +62,7 @@
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
+  (change-directory *toppath*) ;; This is probably NOT needed 
   (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
   (let* ((hostinfo  (if (not *transport-type*) ;; If we dont' already have transport type set then figure it out
 			(open-run-close tasks:get-best-server tasks:open-db)

@@ -329,12 +329,12 @@
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
-	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
-		  (begin
-		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (tests:test-set-status! test-id 
-				    (if kill-job? "KILLED" "COMPLETED")
-				    (cond
+	      (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
+		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
+				                                        ;; "COMPLETED"
+							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
+				    )
+			(new-status (cond
 				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				     ((eq? rollup-status 0)
 				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
@@ -343,8 +343,17 @@
 				     ((eq? rollup-status 2)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				     (else "FAIL"))
-				    (args:get-arg "-m") #f)))
+				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
+		    (debug:print-info 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
+		    (tests:test-set-status! test-id 
+					    new-state
+					    new-status
+					    (args:get-arg "-m") #f)
+		    ;; need to update the top test record if PASS or FAIL and this is a subtest
+		    (if (not (equal? item-path ""))
+			(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status))
+		    
+		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no

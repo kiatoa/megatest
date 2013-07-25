@@ -110,6 +110,7 @@ Queries
 
 Misc 
   -rebuild-db             : bring the database schema up to date
+  -cleanup-db             : remove any orphan records, vacuum the db
   -update-meta            : update the tests metadata for all tests
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
@@ -230,6 +231,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-runall"    ;; run all tests
 			"-remove-runs"
 			"-rebuild-db"
+			"-cleanup-db"
 			"-rollup"
 			"-update-meta"
 			"-gen-megatest-area"
@@ -1009,7 +1011,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
-;; Update the database schema on request
+;; Update the database schema, clean up the db
 ;;======================================================================
 
 (if (args:get-arg "-rebuild-db")
@@ -1020,6 +1022,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       ;; keep this one local
       (open-run-close patch-db #f)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-cleanup-db")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      ;; keep this one local
+      (open-run-close db:clean-up #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
