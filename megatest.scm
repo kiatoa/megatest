@@ -880,7 +880,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (change-directory testpath)
 	  ;; (set! *runremote* runremote)
 	  (set! *transport-type* (string->symbol transport))
 	  (if (not (setup-for-run))
@@ -888,6 +887,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 
+	  (debug:print-info 1 "Runing -runstep, first change to directory " work-area)
+	  (change-directory work-area)
 	  ;; can setup as client for server mode now
 	  ;; (client:setup)
 
@@ -928,11 +929,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;; DO NOT run remote
 		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
 		    ;; run the test step
-		    (debug:print-info 2 "Running \"" fullcmd "\"")
+		    (debug:print-info 2 "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
-		    (change-directory testpath)
+		    ;; (change-directory testpath)
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
