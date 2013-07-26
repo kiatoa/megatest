@@ -10,7 +10,7 @@
      (DisplayOutlines "1")
      (DisplayFormulas "0"))
   (http://www.gnumeric.org/v10.dtd:MaxCol "3")
-  (http://www.gnumeric.org/v10.dtd:MaxRow "19")
+  (http://www.gnumeric.org/v10.dtd:MaxRow "21")
   (http://www.gnumeric.org/v10.dtd:Zoom "1")
   (http://www.gnumeric.org/v10.dtd:Names
     (http://www.gnumeric.org/v10.dtd:Name
@@ -151,7 +151,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "16") (startCol "3") (endRow "17") (endCol "3"))
+      (@ (startRow "16") (startCol "3") (endRow "18") (endCol "3"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -175,7 +175,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "18") (startCol "3") (endRow "18") (endCol "3"))
+      (@ (startRow "19") (startCol "3") (endRow "19") (endCol "3"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -199,7 +199,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "19") (startCol "3") (endRow "31") (endCol "3"))
+      (@ (startRow "20") (startCol "3") (endRow "31") (endCol "3"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -297,16 +297,20 @@
   (http://www.gnumeric.org/v10.dtd:Cols
     (@ (DefaultSizePts "48"))
     (http://www.gnumeric.org/v10.dtd:ColInfo (@ (Unit "64.01") (No "0")))
+    (http://www.gnumeric.org/v10.dtd:ColInfo (@ (Unit "48") (No "1")))
     (http://www.gnumeric.org/v10.dtd:ColInfo
-      (@ (Unit "48") (No "1") (Count "3"))))
+      (@ (Unit "99") (No "2") (HardSize "1")))
+    (http://www.gnumeric.org/v10.dtd:ColInfo
+      (@ (Unit "227.2") (No "3") (HardSize "1"))))
   (http://www.gnumeric.org/v10.dtd:Rows
     (@ (DefaultSizePts "12.1"))
     (http://www.gnumeric.org/v10.dtd:RowInfo
-      (@ (Unit "13.5") (No "0") (Count "20"))))
+      (@ (Unit "13.5") (No "0") (Count "21")))
+    (http://www.gnumeric.org/v10.dtd:RowInfo (@ (Unit "12.1") (No "21"))))
   (http://www.gnumeric.org/v10.dtd:Selections
-    (@ (CursorRow "0") (CursorCol "0"))
+    (@ (CursorRow "11") (CursorCol "3"))
     (http://www.gnumeric.org/v10.dtd:Selection
-      (@ (startRow "0") (startCol "0") (endRow "0") (endCol "0"))))
+      (@ (startRow "11") (startCol "3") (endRow "11") (endCol "3"))))
   (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
   (http://www.gnumeric.org/v10.dtd:Solver
     (@ (ProgramR "0")

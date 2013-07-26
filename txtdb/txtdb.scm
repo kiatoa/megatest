@@ -66,7 +66,8 @@
   (string-substitute (regexp " ") "_" str #t))
 
 (define (sheet->refdb dat targdir)
-  (let* ((sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
+  (let* ((comment-rx  (regexp "^#CMNT\\d+\\s*"))
+	 (sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
 	 ;; (safe-name   (string->safe-filename sheet-name))
 	 (cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells))
 	 (remaining   (remove-section (remove-section dat 'http://www.gnumeric.org/v10.dtd:Name)
@@ -105,7 +106,11 @@
 	  (for-each (lambda (colname)
 		      (print "[" colname "]")
 		      (for-each (lambda (row)
-				  (print (car row) " " (cadr row)))
+				  (let ((key (car row))
+					(val (cadr row)))
+				    (if (string-search comment-rx key)
+					(print val)
+					(print key " " val))))
 				(reverse (hash-table-ref cols colname)))
 		      (print))
 		    (sort (hash-table-keys cols)(lambda (a b)
@@ -183,11 +188,12 @@
   (hash-table-fold ht (lambda (k v res)(if (equal? v val) k res)) #f))
 
 (define (read-dat fname)
-  (let ((section-rx (regexp "^\\[(.*)\\]\\s*$"))
-	(comment-rx (regexp "^#.*"))          ;; This means a cell name cannot start with #
-	(cell-rx    (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
-	(blank-rx   (regexp "^\\s*$"))
-	(inp        (open-input-file fname)))
+  (let ((section-rx  (regexp "^\\[(.*)\\]\\s*$"))
+	(comment-rx  (regexp "^#.*"))          ;; This means a cell name cannot start with #
+	(cell-rx     (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
+	(blank-rx    (regexp "^\\s*$"))
+	(inp         (open-input-file fname))
+	(cmnt-indx   (make-hash-table)))
     (let loop ((inl     (read-line inp))
 	       (section #f)
 	       (res     '()))
@@ -197,7 +203,11 @@
 	    (reverse res))
 	  (regex-case
 	   inl 
-	   (comment-rx _          (loop (read-line inp) section res))
+	   (comment-rx _          (let ((curr-indx (+ 1 (hash-table-ref/default cmnt-indx section 0))))
+				    (hash-table-set! cmnt-indx section curr-indx)
+				    (loop (read-line inp)
+					  section 
+					  (cons (list (conc "#CMNT" curr-indx) section inl) res))))
 	   (blank-rx   _          (loop (read-line inp) section res))
 	   (section-rx (x sname)  (loop (read-line inp) 
 					sname 
@@ -344,7 +354,8 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 ;; call with proc = car to get row names
 ;; call with proc = cadr to get col names
 (define (get-rowcol-names path sheet proc)
-  (let ((fname (conc path "/" sheet ".dat")))
+  (let ((fname (conc path "/" sheet ".dat"))
+	(cmnt-rx (regexp "^#CMNT\\d+\\s*")))
     (if (file-exists? fname)
 	(let ((dat (read-dat fname)))
 	  (if (null? dat)
@@ -353,7 +364,8 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 			 (tal (cdr dat))
 			 (res '()))
 		(let* ((row-name (proc hed))
-		       (newres (if (not (member row-name res))
+		       (newres (if (and (not (member row-name res))
+					(not (string-search cmnt-rx row-name)))
 				   (cons row-name res)
 				   res)))
 		  (if (null? tal)
@@ -361,13 +373,13 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 		      (loop (car tal)(cdr tal) newres))))))
 	'())))
 
-(define (get-col-names path sheet)
-  (let ((fname (conc path "/" sheet ".dat")))
-    (if (file-exists? fname)
-	(let ((dat (read-dat fname)))
-	  (if (null? dat)
-	      #f
-	      (map cadr dat))))))
+;; (define (get-col-names path sheet)
+;;   (let ((fname (conc path "/" sheet ".dat")))
+;;     (if (file-exists? fname)
+;; 	(let ((dat (read-dat fname)))
+;; 	  (if (null? dat)
+;; 	      #f
+;; 	      (map cadr dat))))))
 
 (define (edit-refdb path)
   (let* ((dbname  (pathname-strip-directory path))
