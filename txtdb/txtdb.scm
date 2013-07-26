@@ -451,6 +451,10 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 	 (rema (cdr args)))
     (cond
      ((null? rema)(print help))
+     ((eq? (length rema) 1)
+      (case (string->symbol (car rema))
+	((mtedit) ;; Edit a Megatest area
+	 (megatest->refdb))))
      ((>= (length rema) 2)
       (apply process-action (car rema)(cdr rema)))
      (else (print help)))))
@@ -464,6 +468,54 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 ;; Creates a new db at path with one sheet
 (define (create-new-db path)
   (extract-refdb minimal-sxml path))
+
+;;======================================================================
+;; M E G A T E S T   S U P P O R T
+;;======================================================================
+
+;; Construct a temporary refdb area from the files in a Megatest area
+;; 
+;; .refdb
+;;      megatest.dat    (from megatest.config)
+;;      runconfigs.dat  (from runconfigs.config)
+;;      tests_test1.dat (from tests/test1/testconfig)
+;; etc.
+;;
+
+(define (make-sheet-meta-if-needed fname)
+  (if (not (file-exists? fname))
+      (sxml->file sheet-meta fname)))
+
+(define (megatest->refdb)
+  (if (not (file-exists? "megatest.config")) ;; must be at top of Megatest area
+      (begin
+	(print "ERROR: Must be at top of Megatest area to edit")
+	(exit)))
+  (create-directory ".refdb/sxml" #t)
+  (if (not (file-exists? ".refdb/sxml/_workbook.sxml"))
+      (sxml->file workbook-meta  ".refdb/sxml/_workbook.sxml"))
+  (if (not (file-exists? ".refdb/sxml/_sheets.sxml"))
+      (sxml->file sheets-meta ".refdb/sxml/_sheets.sxml"))
+  (file-copy "megatest.config" ".refdb/megatest.dat" #t)
+  (make-sheet-meta-if-needed ".refdb/sxml/megatest.sxml")
+  (file-copy "runconfigs.config" ".refdb/runconfigs.dat" #t)
+  (make-sheet-meta-if-needed ".refdb/sxml/runconfigs.sxml")
+  (let ((testnames '()))
+    (for-each (lambda (tdir)
+		(let* ((testname (pathname-strip-directory tdir))
+		       (tconfig  (conc tdir "/testconfig"))
+		       (metafile (conc ".refdb/sxml/" testname ".sxml")))
+		  (if (file-exists? tconfig)
+		      (begin
+			(set! testnames (append testnames (list testname)))
+			(file-copy tconfig (conc ".refdb/" testname ".dat") #t)
+			(make-sheet-meta-if-needed metafile)))))
+	      (glob "tests/*"))
+    (with-output-to-file ".refdb/sheet-names.cfg"
+      (lambda ()
+	(map print (append (list "megatest" "runconfigs") testnames))))))
+  
+
 
 
 (main)
