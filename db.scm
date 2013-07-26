@@ -480,7 +480,7 @@
 		(sqlite3:prepare db stmt))
 	      (list
 	       ;; delete all tests that belong to runs that are 'deleted'
-	       "DELETE FROM tests WHERE run_id in (SELECT run_id FROM runs WHERE state='deleted');"
+	       "DELETE FROM tests WHERE run_id in (SELECT id FROM runs WHERE state='deleted');"
 	       ;; delete all tests that are 'DELETED'
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ;; delete all tests that have no run
@@ -488,7 +488,7 @@
 	       ;; delete all runs that are state='deleted'
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
-	       ;; "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
+	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
 	       ))))
     (sqlite3:with-transaction 
      db
