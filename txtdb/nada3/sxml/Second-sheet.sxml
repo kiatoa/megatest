@@ -10,7 +10,7 @@
      (DisplayOutlines "1")
      (DisplayFormulas "0"))
   (http://www.gnumeric.org/v10.dtd:MaxCol "3")
-  (http://www.gnumeric.org/v10.dtd:MaxRow "21")
+  (http://www.gnumeric.org/v10.dtd:MaxRow "24")
   (http://www.gnumeric.org/v10.dtd:Zoom "1")
   (http://www.gnumeric.org/v10.dtd:Names
     (http://www.gnumeric.org/v10.dtd:Name
@@ -55,31 +55,7 @@
     (http://www.gnumeric.org/v10.dtd:errors "as_displayed"))
   (http://www.gnumeric.org/v10.dtd:Styles
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "0") (startCol "0") (endRow "15") (endCol "7"))
-      (http://www.gnumeric.org/v10.dtd:Style
-        (@ (WrapText "0")
-           (VAlign "2")
-           (ShrinkToFit "0")
-           (Shade "0")
-           (Rotation "0")
-           (PatternColor "0:0:0")
-           (Locked "1")
-           (Indent "0")
-           (Hidden "0")
-           (HAlign "1")
-           (Format "General")
-           (Fore "0:0:0")
-           (Back "FFFF:FFFF:FFFF"))
-        (http://www.gnumeric.org/v10.dtd:Font
-          (@ (Unit "10")
-             (Underline "0")
-             (StrikeThrough "0")
-             (Script "0")
-             (Italic "0")
-             (Bold "0"))
-          "Sans")))
-    (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "16") (startCol "0") (endRow "31") (endCol "2"))
+      (@ (startRow "0") (startCol "0") (endRow "31") (endCol "2"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -127,7 +103,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "256") (startCol "0") (endRow "65535") (endCol "63"))
+      (@ (startRow "256") (startCol "0") (endRow "65279") (endCol "255"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -151,7 +127,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "16") (startCol "3") (endRow "18") (endCol "3"))
+      (@ (startRow "65280") (startCol "0") (endRow "65532") (endCol "255"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -175,7 +151,79 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "19") (startCol "3") (endRow "19") (endCol "3"))
+      (@ (startRow "65533") (startCol "0") (endRow "65535") (endCol "255"))
+      (http://www.gnumeric.org/v10.dtd:Style
+        (@ (WrapText "0")
+           (VAlign "2")
+           (ShrinkToFit "0")
+           (Shade "0")
+           (Rotation "0")
+           (PatternColor "0:0:0")
+           (Locked "1")
+           (Indent "0")
+           (Hidden "0")
+           (HAlign "1")
+           (Format "General")
+           (Fore "0:0:0")
+           (Back "FFFF:FFFF:FFFF"))
+        (http://www.gnumeric.org/v10.dtd:Font
+          (@ (Unit "10")
+             (Underline "0")
+             (StrikeThrough "0")
+             (Script "0")
+             (Italic "0")
+             (Bold "0"))
+          "Sans")))
+    (http://www.gnumeric.org/v10.dtd:StyleRegion
+      (@ (startRow "0") (startCol "3") (endRow "0") (endCol "3"))
+      (http://www.gnumeric.org/v10.dtd:Style
+        (@ (WrapText "0")
+           (VAlign "2")
+           (ShrinkToFit "0")
+           (Shade "0")
+           (Rotation "0")
+           (PatternColor "0:0:0")
+           (Locked "1")
+           (Indent "0")
+           (Hidden "0")
+           (HAlign "1")
+           (Format "General")
+           (Fore "0:0:0")
+           (Back "FFFF:FFFF:FFFF"))
+        (http://www.gnumeric.org/v10.dtd:Font
+          (@ (Unit "28")
+             (Underline "0")
+             (StrikeThrough "0")
+             (Script "0")
+             (Italic "0")
+             (Bold "0"))
+          "Sans")))
+    (http://www.gnumeric.org/v10.dtd:StyleRegion
+      (@ (startRow "1") (startCol "3") (endRow "15") (endCol "3"))
+      (http://www.gnumeric.org/v10.dtd:Style
+        (@ (WrapText "0")
+           (VAlign "2")
+           (ShrinkToFit "0")
+           (Shade "0")
+           (Rotation "0")
+           (PatternColor "0:0:0")
+           (Locked "1")
+           (Indent "0")
+           (Hidden "0")
+           (HAlign "1")
+           (Format "General")
+           (Fore "0:0:0")
+           (Back "FFFF:FFFF:FFFF"))
+        (http://www.gnumeric.org/v10.dtd:Font
+          (@ (Unit "10")
+             (Underline "0")
+             (StrikeThrough "0")
+             (Script "0")
+             (Italic "0")
+             (Bold "0"))
+          "Sans")))
+    (http://www.gnumeric.org/v10.dtd:StyleRegion
+      (@ (startRow "16") (startCol "3") (endRow "16") (endCol "3"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -199,7 +247,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "20") (startCol "3") (endRow "31") (endCol "3"))
+      (@ (startRow "17") (startCol "3") (endRow "31") (endCol "3"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -223,7 +271,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "16") (startCol "4") (endRow "31") (endCol "7"))
+      (@ (startRow "0") (startCol "4") (endRow "31") (endCol "7"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -247,31 +295,7 @@
              (Bold "0"))
           "Sans")))
     (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "0") (startCol "8") (endRow "255") (endCol "63"))
-      (http://www.gnumeric.org/v10.dtd:Style
-        (@ (WrapText "0")
-           (VAlign "2")
-           (ShrinkToFit "0")
-           (Shade "0")
-           (Rotation "0")
-           (PatternColor "0:0:0")
-           (Locked "1")
-           (Indent "0")
-           (Hidden "0")
-           (HAlign "1")
-           (Format "General")
-           (Fore "0:0:0")
-           (Back "FFFF:FFFF:FFFF"))
-        (http://www.gnumeric.org/v10.dtd:Font
-          (@ (Unit "10")
-             (Underline "0")
-             (StrikeThrough "0")
-             (Script "0")
-             (Italic "0")
-             (Bold "0"))
-          "Sans")))
-    (http://www.gnumeric.org/v10.dtd:StyleRegion
-      (@ (startRow "0") (startCol "64") (endRow "65535") (endCol "255"))
+      (@ (startRow "0") (startCol "8") (endRow "255") (endCol "255"))
       (http://www.gnumeric.org/v10.dtd:Style
         (@ (WrapText "0")
            (VAlign "2")
@@ -305,12 +329,15 @@
   (http://www.gnumeric.org/v10.dtd:Rows
     (@ (DefaultSizePts "12.1"))
     (http://www.gnumeric.org/v10.dtd:RowInfo
-      (@ (Unit "13.5") (No "0") (Count "21")))
-    (http://www.gnumeric.org/v10.dtd:RowInfo (@ (Unit "12.1") (No "21"))))
+      (@ (Unit "60") (No "0") (HardSize "1")))
+    (http://www.gnumeric.org/v10.dtd:RowInfo
+      (@ (Unit "13.5") (No "1") (Count "17")))
+    (http://www.gnumeric.org/v10.dtd:RowInfo
+      (@ (Unit "12.1") (No "18") (Count "4"))))
   (http://www.gnumeric.org/v10.dtd:Selections
-    (@ (CursorRow "11") (CursorCol "3"))
+    (@ (CursorRow "0") (CursorCol "3"))
     (http://www.gnumeric.org/v10.dtd:Selection
-      (@ (startRow "11") (startCol "3") (endRow "11") (endCol "3"))))
+      (@ (startRow "0") (startCol "3") (endRow "0") (endCol "3"))))
   (http://www.gnumeric.org/v10.dtd:SheetLayout (@ (TopLeft "A1")))
   (http://www.gnumeric.org/v10.dtd:Solver
     (@ (ProgramR "0")

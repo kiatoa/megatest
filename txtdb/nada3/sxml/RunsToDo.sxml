@@ -10,7 +10,7 @@
      (DisplayOutlines "1")
      (DisplayFormulas "0"))
   (http://www.gnumeric.org/v10.dtd:MaxCol "3")
-  (http://www.gnumeric.org/v10.dtd:MaxRow "3")
+  (http://www.gnumeric.org/v10.dtd:MaxRow "4")
   (http://www.gnumeric.org/v10.dtd:Zoom "1")
   (http://www.gnumeric.org/v10.dtd:Names
     (http://www.gnumeric.org/v10.dtd:Name
@@ -84,7 +84,8 @@
   (http://www.gnumeric.org/v10.dtd:Rows
     (@ (DefaultSizePts "12.75"))
     (http://www.gnumeric.org/v10.dtd:RowInfo
-      (@ (Unit "13.5") (No "0") (Count "4"))))
+      (@ (Unit "13.5") (No "0") (Count "4")))
+    (http://www.gnumeric.org/v10.dtd:RowInfo (@ (Unit "12.75") (No "4"))))
   (http://www.gnumeric.org/v10.dtd:Selections
     (@ (CursorRow "3") (CursorCol "2"))
     (http://www.gnumeric.org/v10.dtd:Selection
