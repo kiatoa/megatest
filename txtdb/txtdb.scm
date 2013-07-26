@@ -396,6 +396,10 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 
 (define (edit-refdb path)
   ;; TEMPORARY, REMOVE IN 2014
+  (if (not (file-exists? path)) ;; Create new 
+      (begin
+	(print "INFO: Creating new txtdb at " path)
+	(create-new-db path)))
   (if (not (file-exists? (conc path "/sxml/_sheets.sxml")))
       (begin
 	(print "ERROR: You appear to have the old file structure for txtdb. Please do the following and try again.")
@@ -455,17 +459,11 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 ;;  C R E A T E   N E W   D B S
 ;;======================================================================
 
-(include "txtdb/metadat.scm")
+(include "metadat.scm")
 
 ;; Creates a new db at path with one sheet
 (define (create-new-db path)
-  (create-directory path #t)
-  (create-directory (conc path "/sxml") #t))
-  ;; Sheet1.dat
-  ;; sheet-names.cfg
-  ;; sxml/Sheet1.sxml
-  ;; sxml/_sheets.sxml
-  ;; sxml/_workbook.sxml
+  (extract-refdb minimal-sxml path))
 
 
 (main)
