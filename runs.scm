@@ -778,6 +778,7 @@
 		      )
     (debug:print 2 "Attempting to launch test " full-test-name)
     (setenv "MT_TEST_NAME" test-name) ;; 
+    (setenv "MT_ITEMPATH"  item-path)
     (setenv "MT_RUNNAME"   runname)
     (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
     (change-directory *toppath*)

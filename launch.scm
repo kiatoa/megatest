@@ -619,6 +619,7 @@
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
+    (setenv "MT_ITEMPATH" item-path)
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -687,6 +688,7 @@
 					  (list "MT_ITEM_INFO" (conc itemdat)) 
 					  (list "MT_RUNNAME"   runname)
 					  (list "MT_TARGET"    mt_target)
+					  (list "MT_ITEMPATH"  item-path)
 					  )
 				    itemdat)))
 	   ;; Launchwait defaults to true, must override it to turn off wait
