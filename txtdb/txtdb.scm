@@ -15,6 +15,8 @@
 (use srfi-69)
 (use regex-case)
 (use posix)
+(use json)
+(use csv)
 
 ;; Read a non-compressed gnumeric file
 (define (refdb:read-gnumeric-xml fname)
@@ -155,8 +157,8 @@
 	 (sheet-names (map (lambda (sheet)
 			     (sheet->refdb sheet targdir))
 			   sheets)))
-    (sxml->file wrk-rem (conc targdir "/sxml/workbook.sxml"))
-    (sxml->file sht-rem (conc targdir "/sxml/sheets.sxml"))
+    (sxml->file wrk-rem (conc targdir "/sxml/_workbook.sxml"))
+    (sxml->file sht-rem (conc targdir "/sxml/_sheets.sxml"))
     (with-output-to-file (conc targdir "/sheet-names.cfg")
       (lambda ()
 	(map print sheet-names)))))
@@ -266,8 +268,8 @@
     
 (define (refdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
-	 (wrk-rem   (file->sxml (conc dbdir "/sxml/workbook.sxml")))
-	 (sht-rem   (file->sxml (conc dbdir "/sxml/sheets.sxml")))
+	 (wrk-rem   (file->sxml (conc dbdir "/sxml/_workbook.sxml")))
+	 (sht-rem   (file->sxml (conc dbdir "/sxml/_sheets.sxml")))
 	 (sheets    (fold (lambda (sheetname res)
 			    (let* ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
 				   (cells    (dat->cells sheetdat))
@@ -393,6 +395,16 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 ;; 	      (map cadr dat))))))
 
 (define (edit-refdb path)
+  ;; TEMPORARY, REMOVE IN 2014
+  (if (not (file-exists? (conc path "/sxml/_sheets.sxml")))
+      (begin
+	(print "ERROR: You appear to have the old file structure for txtdb. Please do the following and try again.")
+	(print)
+	(print "mv " path "/sxml/sheets.sxml " path "/sxml/_sheets.sxml")
+	(print "mv " path "/sxml/workbook.sxml " path "/sxml/_workbook.sxml")
+	(print)
+	(print "Don't forget to remove the old files from your revision control system and add the new.")
+	(exit)))
   (let* ((dbname  (pathname-strip-directory path))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
     (if (file-exists? (conc path "/sheet-names.cfg"))
@@ -438,6 +450,23 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
      ((>= (length rema) 2)
       (apply process-action (car rema)(cdr rema)))
      (else (print help)))))
+
+;;======================================================================
+;;  C R E A T E   N E W   D B S
+;;======================================================================
+
+(include "txtdb/metadat.scm")
+
+;; Creates a new db at path with one sheet
+(define (create-new-db path)
+  (create-directory path #t)
+  (create-directory (conc path "/sxml") #t))
+  ;; Sheet1.dat
+  ;; sheet-names.cfg
+  ;; sxml/Sheet1.sxml
+  ;; sxml/_sheets.sxml
+  ;; sxml/_workbook.sxml
+
 
 (main)
 
