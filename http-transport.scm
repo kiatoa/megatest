@@ -185,7 +185,11 @@
 ;; Send msg to serverdat and receive result
 (define (http-transport:client-send-receive serverdat msg #!key (numretries 30))
   (let* (;; (url        (http-transport:make-server-url serverdat))
-	 (fullurl    (caddr serverdat)) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
+	 (fullurl    (if (list? serverdat)
+			 (caddr serverdat)
+			 (begin
+			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
+			   (exit 1)))) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
 	 (res        #f))
     (handle-exceptions
      exn

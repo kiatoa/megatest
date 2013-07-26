@@ -110,6 +110,7 @@ Queries
 
 Misc 
   -rebuild-db             : bring the database schema up to date
+  -cleanup-db             : remove any orphan records, vacuum the db
   -update-meta            : update the tests metadata for all tests
   -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
@@ -230,6 +231,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-runall"    ;; run all tests
 			"-remove-runs"
 			"-rebuild-db"
+			"-cleanup-db"
 			"-rollup"
 			"-update-meta"
 			"-gen-megatest-area"
@@ -878,7 +880,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (change-directory testpath)
 	  ;; (set! *runremote* runremote)
 	  (set! *transport-type* (string->symbol transport))
 	  (if (not (setup-for-run))
@@ -886,6 +887,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 
+	  (debug:print-info 1 "Runing -runstep, first change to directory " work-area)
+	  (change-directory work-area)
 	  ;; can setup as client for server mode now
 	  ;; (client:setup)
 
@@ -926,11 +929,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;; DO NOT run remote
 		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
 		    ;; run the test step
-		    (debug:print-info 2 "Running \"" fullcmd "\"")
+		    (debug:print-info 2 "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
 		    (set! exitstat (system fullcmd)) ;; cmd params))
 		    (set! *globalexitstatus* exitstat)
-		    (change-directory testpath)
+		    ;; (change-directory testpath)
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
 		    (if logprofile
 			(let* ((htmllogfile (conc stepname ".html"))
@@ -1009,7 +1012,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
-;; Update the database schema on request
+;; Update the database schema, clean up the db
 ;;======================================================================
 
 (if (args:get-arg "-rebuild-db")
@@ -1020,6 +1023,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       ;; keep this one local
       (open-run-close patch-db #f)
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-cleanup-db")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      ;; keep this one local
+      (open-run-close db:clean-up #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================

@@ -7,6 +7,7 @@ all :
 	$(MEGATEST) -runtests % -target a/b :runname c
 
 bigbig :
+	$(MEGATEST) -server - -daemonize ; sleep 3
 	for tn in a b c d;do \
 	   ($(MEGATEST) -runtests % -target a/b :runname $tn & ) ; \
 	done

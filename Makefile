@@ -26,7 +26,7 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 all : mtest dboard newdboard txtdb
 
 refdb : txtdb/txtdb.scm
-	csc txtdb/txtdb.scm -o refdb
+	csc -I txtdb txtdb/txtdb.scm -o refdb
 
 mtest: $(OFILES) megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest

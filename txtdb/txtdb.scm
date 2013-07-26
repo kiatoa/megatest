@@ -15,6 +15,8 @@
 (use srfi-69)
 (use regex-case)
 (use posix)
+(use json)
+(use csv)
 
 ;; Read a non-compressed gnumeric file
 (define (refdb:read-gnumeric-xml fname)
@@ -66,7 +68,9 @@
   (string-substitute (regexp " ") "_" str #t))
 
 (define (sheet->refdb dat targdir)
-  (let* ((sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
+  (let* ((comment-rx  (regexp "^#CMNT\\d+\\s*"))
+	 (blank-rx    (regexp "^#BLNK\\d+\\s*"))
+	 (sheet-name  (car (find-section dat 'http://www.gnumeric.org/v10.dtd:Name)))
 	 ;; (safe-name   (string->safe-filename sheet-name))
 	 (cells       (find-section dat 'http://www.gnumeric.org/v10.dtd:Cells))
 	 (remaining   (remove-section (remove-section dat 'http://www.gnumeric.org/v10.dtd:Name)
@@ -105,9 +109,16 @@
 	  (for-each (lambda (colname)
 		      (print "[" colname "]")
 		      (for-each (lambda (row)
-				  (print (car row) " " (cadr row)))
+				  (let ((key (car row))
+					(val (cadr row)))
+				    (if (string-search comment-rx key)
+					(print val)
+					(if (string-search blank-rx key)
+					    (print)
+					    (print key " " val)))))
 				(reverse (hash-table-ref cols colname)))
-		      (print))
+		      ;; (print)
+		      )
 		    (sort (hash-table-keys cols)(lambda (a b)
 						  (let ((colnum-a (assoc a ref-colnums))
 							(colnum-b (assoc b ref-colnums)))
@@ -135,6 +146,19 @@
 	  #f)
 	(car res))))
 
+(define (replace-sheet-name-index indat sheets)
+  (let* ((rem-dat  (remove-section indat 'http://www.gnumeric.org/v10.dtd:SheetNameIndex))
+	 (one-sht  (find-section rem-dat 'http://www.gnumeric.org/v10.dtd:SheetName)) ;; for the future if I ever decide to do this "right"
+	 (mk-entry (lambda (sheet-name)
+		     (append '(http://www.gnumeric.org/v10.dtd:SheetName
+			       (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+				  (http://www.gnumeric.org/v10.dtd:Cols "256")))
+			     (list sheet-name))))
+	 (new-indx-values (map mk-entry sheets)))
+    (append rem-dat (list (cons 'http://www.gnumeric.org/v10.dtd:SheetNameIndex
+				new-indx-values)))))
+    
+    
 ;; Write an sxml gnumeric workbook to a refdb directory structure.
 ;;
 (define (extract-refdb dat targdir)
@@ -146,8 +170,8 @@
 	 (sheet-names (map (lambda (sheet)
 			     (sheet->refdb sheet targdir))
 			   sheets)))
-    (sxml->file wrk-rem (conc targdir "/sxml/workbook.sxml"))
-    (sxml->file sht-rem (conc targdir "/sxml/sheets.sxml"))
+    (sxml->file wrk-rem (conc targdir "/sxml/_workbook.sxml"))
+    (sxml->file sht-rem (conc targdir "/sxml/_sheets.sxml"))
     (with-output-to-file (conc targdir "/sheet-names.cfg")
       (lambda ()
 	(map print sheet-names)))))
@@ -183,13 +207,17 @@
   (hash-table-fold ht (lambda (k v res)(if (equal? v val) k res)) #f))
 
 (define (read-dat fname)
-  (let ((section-rx (regexp "^\\[(.*)\\]\\s*$"))
-	(comment-rx (regexp "^#.*"))          ;; This means a cell name cannot start with #
-	(cell-rx    (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
-	(blank-rx   (regexp "^\\s*$"))
-	(inp        (open-input-file fname)))
+  (let ((section-rx  (regexp "^\\[(.*)\\]\\s*$"))
+	(comment-rx  (regexp "^#.*"))          ;; This means a cell name cannot start with #
+	(cell-rx     (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
+	(blank-rx    (regexp "^\\s*$"))
+	(continue-rx (regexp ".*\\\\$"))
+	(var-no-val-rx (regexp "^(\\S+)\\s*$"))
+	(inp         (open-input-file fname))
+	(cmnt-indx   (make-hash-table))
+	(blnk-indx   (make-hash-table)))
     (let loop ((inl     (read-line inp))
-	       (section #f)
+	       (section ".............")
 	       (res     '()))
       (if (eof-object? inl)
 	  (begin
@@ -197,14 +225,26 @@
 	    (reverse res))
 	  (regex-case
 	   inl 
-	   (comment-rx _          (loop (read-line inp) section res))
-	   (blank-rx   _          (loop (read-line inp) section res))
+	   (continue-rx _         (loop (conc inl (read-line inp)) section res))
+	   (comment-rx _          (let ((curr-indx (+ 1 (hash-table-ref/default cmnt-indx section 0))))
+				    (hash-table-set! cmnt-indx section curr-indx)
+				    (loop (read-line inp)
+					  section 
+					  (cons (list (conc "#CMNT" curr-indx) section inl) res))))
+	   (blank-rx   _          (let ((curr-indx (+ 1 (hash-table-ref/default blnk-indx section 0))))
+				    (hash-table-set! blnk-indx section curr-indx)
+				    (loop (read-line inp)
+					  section
+					  (cons (list (conc "#BLNK" curr-indx) section " ") res))))
 	   (section-rx (x sname)  (loop (read-line inp) 
 					sname 
 					res))
 	   (cell-rx   (x k v)     (loop (read-line inp)
 					section
 					(cons (list k section v) res)))
+	   (var-no-val-rx (x k)   (loop (read-line inp)
+					section
+					(cons (list k section "") res)))
 	   (else                  (begin
 				    (print "ERROR: Unrecognised line in input file " fname ", ignoring it")
 				    (loop (read-line inp) section res))))))))
@@ -247,8 +287,8 @@
     
 (define (refdb->sxml dbdir)
   (let* ((sht-names (read-file (conc dbdir "/sheet-names.cfg")  read-line))
-	 (wrk-rem   (file->sxml (conc dbdir "/sxml/workbook.sxml")))
-	 (sht-rem   (file->sxml (conc dbdir "/sxml/sheets.sxml")))
+	 (wrk-rem   (file->sxml (conc dbdir "/sxml/_workbook.sxml")))
+	 (sht-rem   (file->sxml (conc dbdir "/sxml/_sheets.sxml")))
 	 (sheets    (fold (lambda (sheetname res)
 			    (let* ((sheetdat (read-dat (conc dbdir "/" sheetname ".dat")))
 				   (cells    (dat->cells sheetdat))
@@ -344,7 +384,9 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 ;; call with proc = car to get row names
 ;; call with proc = cadr to get col names
 (define (get-rowcol-names path sheet proc)
-  (let ((fname (conc path "/" sheet ".dat")))
+  (let ((fname (conc path "/" sheet ".dat"))
+	(cmnt-rx (regexp "^#CMNT\\d+\\s*"))
+	(blnk-rx (regexp "^#BLNK\\d+\\s*")))
     (if (file-exists? fname)
 	(let ((dat (read-dat fname)))
 	  (if (null? dat)
@@ -353,7 +395,9 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 			 (tal (cdr dat))
 			 (res '()))
 		(let* ((row-name (proc hed))
-		       (newres (if (not (member row-name res))
+		       (newres (if (and (not (member row-name res))
+					(not (string-search cmnt-rx row-name))
+					(not (string-search blnk-rx row-name)))
 				   (cons row-name res)
 				   res)))
 		  (if (null? tal)
@@ -361,15 +405,29 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 		      (loop (car tal)(cdr tal) newres))))))
 	'())))
 
-(define (get-col-names path sheet)
-  (let ((fname (conc path "/" sheet ".dat")))
-    (if (file-exists? fname)
-	(let ((dat (read-dat fname)))
-	  (if (null? dat)
-	      #f
-	      (map cadr dat))))))
+;; (define (get-col-names path sheet)
+;;   (let ((fname (conc path "/" sheet ".dat")))
+;;     (if (file-exists? fname)
+;; 	(let ((dat (read-dat fname)))
+;; 	  (if (null? dat)
+;; 	      #f
+;; 	      (map cadr dat))))))
 
 (define (edit-refdb path)
+  ;; TEMPORARY, REMOVE IN 2014
+  (if (not (file-exists? path)) ;; Create new 
+      (begin
+	(print "INFO: Creating new txtdb at " path)
+	(create-new-db path)))
+  (if (not (file-exists? (conc path "/sxml/_sheets.sxml")))
+      (begin
+	(print "ERROR: You appear to have the old file structure for txtdb. Please do the following and try again.")
+	(print)
+	(print "mv " path "/sxml/sheets.sxml " path "/sxml/_sheets.sxml")
+	(print "mv " path "/sxml/workbook.sxml " path "/sxml/_workbook.sxml")
+	(print)
+	(print "Don't forget to remove the old files from your revision control system and add the new.")
+	(exit)))
   (let* ((dbname  (pathname-strip-directory path))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
     (if (file-exists? (conc path "/sheet-names.cfg"))
@@ -412,9 +470,75 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 	 (rema (cdr args)))
     (cond
      ((null? rema)(print help))
+     ((eq? (length rema) 1)
+      (case (string->symbol (car rema))
+	((mtedit) ;; Edit a Megatest area
+	 (megatest->refdb))))
      ((>= (length rema) 2)
       (apply process-action (car rema)(cdr rema)))
      (else (print help)))))
+
+;;======================================================================
+;;  C R E A T E   N E W   D B S
+;;======================================================================
+
+(include "metadat.scm")
+
+;; Creates a new db at path with one sheet
+(define (create-new-db path)
+  (extract-refdb minimal-sxml path))
+
+;;======================================================================
+;; M E G A T E S T   S U P P O R T
+;;======================================================================
+
+;; Construct a temporary refdb area from the files in a Megatest area
+;; 
+;; .refdb
+;;      megatest.dat    (from megatest.config)
+;;      runconfigs.dat  (from runconfigs.config)
+;;      tests_test1.dat (from tests/test1/testconfig)
+;; etc.
+;;
+
+(define (make-sheet-meta-if-needed fname)
+  (if (not (file-exists? fname))
+      (sxml->file sheet-meta fname)))
+
+(define (megatest->refdb)
+  (if (not (file-exists? "megatest.config")) ;; must be at top of Megatest area
+      (begin
+	(print "ERROR: Must be at top of Megatest area to edit")
+	(exit)))
+  (create-directory ".refdb/sxml" #t)
+  (if (not (file-exists? ".refdb/sxml/_workbook.sxml"))
+      (sxml->file workbook-meta  ".refdb/sxml/_workbook.sxml"))
+  (file-copy "megatest.config" ".refdb/megatest.dat" #t)
+  (make-sheet-meta-if-needed ".refdb/sxml/megatest.sxml")
+  (file-copy "runconfigs.config" ".refdb/runconfigs.dat" #t)
+  (make-sheet-meta-if-needed ".refdb/sxml/runconfigs.sxml")
+  (let ((testnames '()))
+    (for-each (lambda (tdir)
+		(let* ((testname (pathname-strip-directory tdir))
+		       (tconfig  (conc tdir "/testconfig"))
+		       (metafile (conc ".refdb/sxml/" testname ".sxml")))
+		  (if (file-exists? tconfig)
+		      (begin
+			(set! testnames (append testnames (list testname)))
+			(file-copy tconfig (conc ".refdb/" testname ".dat") #t)
+			(make-sheet-meta-if-needed metafile)))))
+	      (glob "tests/*"))
+    (let ((sheet-names (append (list "megatest" "runconfigs") testnames)))
+      (if (not (file-exists? ".refdb/sxml/_sheets.sxml"))
+	  (sxml->file (replace-sheet-name-index sheets-meta sheet-names) ".refdb/sxml/_sheets.sxml"))
+      (with-output-to-file ".refdb/sheet-names.cfg"
+	(lambda ()
+	  (map print sheet-names))))))
+  
+(let ((dotfile (conc (get-environment-variable "HOME") "/.txtdbrc")))
+  (if (file-exists? dotfile)
+      (load dotfile)))
+
 
 (main)
 

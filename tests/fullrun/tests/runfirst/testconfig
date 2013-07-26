@@ -8,7 +8,7 @@ runscript main.sh
 SPECIAL_ENV_VAR override with everything after the first space.
 
 [items]
-SEASON summer winter fall spring
+SEASON summer winter fall spring 
 
 [itemstable]
 BLOCK a  b
@@ -17,7 +17,7 @@ TOCK  1  2
 [test_meta]
 author matt
 owner  bob
-description This test must
+description This test must\
  be run before the other tests
 
 tags first,single
