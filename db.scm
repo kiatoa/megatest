@@ -2141,7 +2141,7 @@
 		      (else #f)))))
       res)))
 
-(define (db:get-compressed-steps test-id #!key (work-area #f))
+(define (:get-compressed-steps test-id #!key (work-area #f))
   (if (or (not work-area)
 	  (file-exists? (conc work-area "/testdat.db")))
       (let* ((comprsteps (open-run-close db:get-steps-table #f test-id work-area: work-area)))
