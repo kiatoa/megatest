@@ -102,6 +102,7 @@
 				 (cond
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "api"))
+				   (print "Got api request")
 				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain))))
 				  ;; This is the /ctrl path where data is handed to the server and
@@ -295,7 +296,7 @@
 				  (begin
 				    (debug:print 0 "WARNING: communication with the server timed out.")
 				    (mutex-unlock! *http-mutex*)
-				    (http-transport:client-api-send-receive serverdat cmd vars numretries: (- numretries 1))
+				    (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))
 				    (if (< numretries 3) ;; on last try just exit
 					(begin
 					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
