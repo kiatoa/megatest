@@ -584,7 +584,7 @@
 							  (let loop ((rownum  (+ max-row 1))
 								     (colnum  0)
 								     (deleted #f))
-							    (debug:print-info 0 "cleaning " rownum ":" colnum)
+							    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
 							    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
 								   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
 								   (mtrx-rc  (conc rownum ":" colnum))
