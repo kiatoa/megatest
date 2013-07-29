@@ -124,10 +124,15 @@ Misc
 (define *num-runs*      8)
 (define *tot-run-count* (cdb:remote-run db:get-num-runs #f "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
+
+;; Update management
+;;
 (define *last-update*   (current-seconds))
 (define *last-db-update-time* 0)
 (define *please-update-buttons* #t)
 (define *delayed-update* 0)
+(define *update-is-running* #f)
+(define *update-mutex* (make-mutex))
 
 (define *num-tests*     15)
 (define *start-run-offset*  0)
@@ -1371,7 +1376,18 @@ Misc
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
-		       (dashboard:run-update x)
+		       (let ((update-is-running #f))
+			 (mutex-lock! *update-mutex*)
+			 (set! update-is-running *update-is-running*)
+			 (if (not update-is-running)
+			     (set! *update-is-running* #t))
+			 (mutex-unlock! *update-mutex*)
+			 (if (not update-is-running)
+			   (begin
+			     (dashboard:run-update x)
+			     (mutex-lock! *update-mutex*)
+			     (set! *update-is-running* #f)
+			     (mutex-unlock! *update-mutex*))))
 		       1))))
 
 (iup:main-loop)

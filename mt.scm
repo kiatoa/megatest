@@ -50,7 +50,7 @@
 	   (runslst   (vector-ref runsdat 1))
 	   (full-list (append res runslst))
 	   (have-more (eq? (length runslst) limit)))
-      (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
+      ;; (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
 		(next-batch (cdb:remote-run db:get-runs-by-patt #f keys runnamepatt targpatt offset limit)))
