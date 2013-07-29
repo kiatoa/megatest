@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses rmt))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -207,7 +208,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(open-run-close db:test-set-state-status-by-id #f test-id #f #f b)
+					(rmt:test-set-state-status-by-id test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -217,7 +218,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id #f test-id state #f #f)
+								    (rmt:test-set-state-status-by-id test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
@@ -237,7 +238,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id #f test-id #f status #f)
+								    (rmt:test-set-state-status-by-id test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -252,12 +253,101 @@
 			       btns)))
 	       btns))))))
 
+;; get a pretty table to summarize steps
+;;
+(define (dashboard-tests:process-steps-table steps);; db test-id #!key (work-area #f))
+;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(db:step-get-stepname step) 
+			;;        stepname                start end status Duration  Logfile 
+			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))
+	   (case (string->symbol (db:step-get-state step))
+	     ((start)(vector-set! record 1 (db:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(db:step-get-status step)))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (db:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     (else
+	      (vector-set! record 2 (db:step-get-state step))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (db:step-get-event_time step))))
+	   (hash-table-set! res (db:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
+       (sort steps (lambda (a b)
+		     (cond
+		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
+		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
+		       (<   (db:step-get-id a)        (db:step-get-id b)))
+		      (else #f)))))
+      res))
+
+(define (dashboard-tests:get-compressed-steps test-id #!key (work-area #f))
+  (if (or (not work-area)
+	  (file-exists? (conc work-area "/testdat.db")))
+      (let* ((steps-data  (rmt:get-steps-for-test test-id work-area))
+	     (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+	(map (lambda (x)
+	       ;; take advantage of the \n on time->string
+	       (vector
+		(vector-ref x 0)
+		(let ((s (vector-ref x 1)))
+		  (if (number? s)(seconds->time-string s) s))
+		(let ((s (vector-ref x 2)))
+		  (if (number? s)(seconds->time-string s) s))
+		(vector-ref x 3)    ;; status
+		(vector-ref x 4)
+		(vector-ref x 5)))  ;; time delta
+	     (sort (hash-table-values comprsteps)
+		   (lambda (a b)
+		     (let ((time-a (vector-ref a 1))
+			   (time-b (vector-ref b 1)))
+		       (if (and (number? time-a)(number? time-b))
+			   (if (< time-a time-b)
+			       #t
+			       (if (eq? time-a time-b)
+				   (string<? (conc (vector-ref a 2))
+					     (conc (vector-ref b 2)))
+				   #f))
+			   (string<? (conc time-a)(conc time-b))))))))
+      '()))
 
 ;;======================================================================
 ;;
 ;;======================================================================
 (define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (open-run-close db:get-test-info-by-id #f test-id))
+  (let* ((testdat       (rmt:get-test-info-by-id test-id))
 	 (db-path       (conc *toppath* "/megatest.db"))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
@@ -268,8 +358,8 @@
 	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (open-run-close db:get-key-val-pairs #f run-id) #f))
-	       (rundat        (if testdat (open-run-close db:get-run-info #f run-id) #f))
+	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -277,11 +367,12 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
-	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
+	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found       
+	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (open-run-close db:testmeta-get-record #f testname)))
+				  (let ((tm (rmt:testmeta-get-record testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -312,28 +403,49 @@
 				   (system (conc "cd " rundir 
 						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				 (message-window  (conc "Directory " rundir " not found")))))
+	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
-			     (let* ((curr-mod-time (file-modification-time db-path))
+			     (let* ((curr-mod-time (max (file-modification-time db-path)
+							(if (file-exists? testdat-path)
+							    (file-modification-time testdat-path)
+							    (begin
+							      (set! testdat-path (conc rundir "/testdat.db"))
+							      0))))
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
-							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
+							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
+						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (open-run-close db:get-test-info-by-id #f test-id )))))
+						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (rmt:get-test-info-by-id test-id )))))
+			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (db:get-compressed-steps test-id work-area: rundir))
+				 (set! teststeps    (dashboard-tests:get-compressed-steps test-id work-area: rundir))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 (set! db-mod-time curr-mod-time)
+				 (set! last-update (current-milliseconds))
+				 (set! request-update #f) ;; met the need ...
 				 )
 				(need-update ;; if this was true and yet there is no data ....
-				 (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
-	       (widgets      (make-hash-table))
+				 (db:test-set-testname! testdat "DEAD OR DELETED TEST")))
+			       (if need-update
+				   (begin
+				     ;; update the gui elements here
+				     (for-each 
+				      (lambda (key)
+					;; (print "Updating " key)
+					((hash-table-ref widgets key) testdat))
+				      (hash-table-keys widgets))
+				     (update-state-status-buttons testdat)))
+			       ;; (iup:refresh self)
+			       )))
 	       (meta-widgets (make-hash-table))
 	       (self         #f)
 	       (store-label  (lambda (name lbl cmd)
@@ -452,19 +564,41 @@
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
 					 (let ((proc
 						(lambda (testdat)
-						  (if (not (null? teststeps))
-						      (let loop ((hed    (car teststeps))
-								 (tal    (cdr teststeps))
-								 (rownum 1)
-								 (colnum 1))
-							(let ((val     (vector-ref hed (- colnum 1)))
-							      (mtrx-rc (conc rownum ":" colnum)))
-							  (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
-							  (if (< colnum 6)
-							      (loop hed tal rownum (+ colnum 1))
-							      (if (not (null? tal))
-								  (loop (car tal)(cdr tal)(+ rownum 1) 1))))
-							(iup:attribute-set! steps-matrix "REDRAW" "ALL"))))))
+						  (let ((max-row 0))
+						    (if (not (null? teststeps))
+							(let loop ((hed    (car teststeps))
+								   (tal    (cdr teststeps))
+								   (rownum 1)
+								   (colnum 1))
+							  (if (> rownum max-row)(set! max-row rownum))
+							  (let ((val     (vector-ref hed (- colnum 1)))
+								(mtrx-rc (conc rownum ":" colnum)))
+							    (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
+							    (if (< colnum 6)
+								(loop hed tal rownum (+ colnum 1))
+								(if (not (null? tal))
+								    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
+						    (if (> max-row 0)
+							(begin
+							  ;; we are going to speculatively clear rows until we find a row that is already cleared
+							  (let loop ((rownum  (+ max-row 1))
+								     (colnum  0)
+								     (deleted #f))
+							    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
+							    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
+								   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
+								   (mtrx-rc  (conc rownum ":" colnum))
+								   (curr-val (iup:attribute steps-matrix mtrx-rc)))
+							      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
+							      (if (and (string? curr-val)
+								       (not (equal? curr-val "")))
+								  (begin
+								    (iup:attribute-set! steps-matrix mtrx-rc "")
+								    (loop next-row next-col #t))
+								  (if (eq? colnum 6) ;; not done, didn't get a full blank row
+								      (if deleted (loop next-row next-col #f)) ;; exit on this not met
+								      (loop next-row next-col deleted)))))
+							  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))))
 					   (hash-table-set! widgets "StepsMatrix" proc)
 					   (proc testdat))
 					 steps-matrix)
@@ -498,7 +632,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (open-run-close db:read-test-data #f test-id "%")))
+										    (rmt:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
@@ -514,14 +648,6 @@
 				 ;; Now start keeping the gui updated from the db
 				 (refreshdat) ;; update from the db here
 					;(thread-suspend! other-thread)
-				 ;; update the gui elements here
-				 (for-each 
-				  (lambda (key)
-				    ;; (print "Updating " key)
-				    ((hash-table-ref widgets key) testdat))
-				  (hash-table-keys widgets))
-				 (update-state-status-buttons testdat)
-					; (iup:refresh self)
 				 (if *exit-started*
 				     (set! *exit-started* 'ok))))))))))
 

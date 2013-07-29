@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb spiffy-directory-listing)
+(use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
 ;; Configurations for server
 (tcp-buffer-size 2048)
@@ -100,6 +100,13 @@
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
+				  ((equal? (uri-path (request-uri (current-request)))
+					   '(/ "api"))
+				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
+						  headers: '((content-type text/plain)))
+				   (mutex-lock! *heartbeat-mutex*)
+				   (set! *last-db-access* (current-seconds))
+				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
@@ -242,10 +249,74 @@
 	     (debug:print-info 11 "final=" final)
 	     final)))))))
 
+;; Send "cmd" with json payload "params" to serverdat and receive result
+;;
+(define (http-transport:client-api-send-receive serverdat cmd params #!key (numretries 30))
+  (let* ((fullurl    (if (list? serverdat)
+			 (cadddr serverdat) ;; this is the uri for /api
+			 (begin
+			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
+			   (exit 1))))
+	 (res        #f))
+    (handle-exceptions
+     exn
+     (begin
+       ;; TODO: Send this output to a log file so it isn't lost when running as daemon
+       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
+       (thread-sleep! 2)
+       (if (> numretries 0)
+	   (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))))
+     (begin
+       (debug:print-info 11 "fullurl=" fullurl "\n")
+       ;; set up the http-client here
+       (max-retry-attempts 5)
+       ;; consider all requests indempotent
+       (retry-request? (lambda (request)
+			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
+       ;; (set! numretries (- numretries 1))
+       ;;  		 #t))
+       ;; send the data and get the response
+       ;; extract the needed info from the http data and 
+       ;; process and return it.
+
+       ;; (with-input-from-request "http://localhost/echo-service"
+       ;;                  '((test . "value")) read-string)
+
+       (let* ((send-recieve (lambda ()
+			      (mutex-lock! *http-mutex*)
+			      (set! res (with-input-from-request 
+					 fullurl 
+					 (list (cons 'key "thekey")
+					       (cons 'cmd cmd)
+					       (cons 'params params))
+					 read-string))
+			      (close-all-connections!) 
+			      (mutex-unlock! *http-mutex*)))
+	      (time-out     (lambda ()
+			      (thread-sleep! 45)
+			      (if (not res)
+				  (begin
+				    (debug:print 0 "WARNING: communication with the server timed out.")
+				    (mutex-unlock! *http-mutex*)
+				    (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))
+				    (if (< numretries 3) ;; on last try just exit
+					(begin
+					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
+					  (exit 1)))))))
+	      (th1 (make-thread send-recieve "with-input-from-request"))
+	      (th2 (make-thread time-out     "time out")))
+	 (thread-start! th1)
+	 (thread-start! th2)
+	 (thread-join! th1)
+	 (thread-terminate! th2)
+	 (debug:print-info 11 "got res=" res)
+	 res)))))
+
 (define (http-transport:client-connect iface port)
   (let* ((login-res   #f)
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (serverdat   (list iface port uri-dat)))
+	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 (serverdat   (list iface port uri-dat uri-api-dat)))
     (set! login-res (client:login serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))
