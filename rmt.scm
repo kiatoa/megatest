@@ -17,8 +17,12 @@
 (declare (uses http-transport))
 
 ;;
-;; These are all called on the client side
+;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
 ;;
+
+;;======================================================================
+;;  S U P P O R T   F U N C T I O N S
+;;======================================================================
 
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
@@ -52,16 +56,26 @@
     (lambda ()
       (json-read))))
 
+;;======================================================================
 ;;
-;; Actual api calls 
+;; A C T U A L   A P I   C A L L S  
 ;;
+;;======================================================================
+
+;;======================================================================
+;;  K E Y S 
+;;======================================================================
+
+(define (rmt:get-key-val-pairs run-id)
+  (rmt:send-receive 'get-key-val-pairs (list run-id)))
+
+;;======================================================================
+;;  T E S T S
+;;======================================================================
 
 (define (rmt:get-test-info-by-id test-id)
   (list->vector
    (rmt:send-receive 'get-test-info-by-id (list test-id))))
-
-(define (rmt:get-key-val-pairs run-id)
-  (rmt:send-receive 'get-key-val-pairs (list run-id)))
 
 (define (rmt:test-get-rundir-from-test-id test-id)
   (rmt:send-receive 'test-get-rundir-from-test-id (list test-id)))
@@ -73,8 +87,21 @@
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
+(define (rmt:testmeta-get-record testname)
+  (list->vector
+   (rmt:send-receive 'testmeta-get-record (list testname))))
+
 ;;======================================================================
-;; S T E P S
+;;  R U N S
+;;======================================================================
+
+(define (rmt:get-run-info run-id)
+  (let ((res (rmt:send-receive 'get-run-info (list run-id))))
+    (vector (car res)
+	    (list->vector (cadr res)))))
+
+;;======================================================================
+;;  S T E P S
 ;;======================================================================
 
 ;; Getting steps is more complicated.
@@ -90,4 +117,14 @@
   (let* ((tdb (rmt:open-test-db-by-test-id test-id work-area: work-area)))
     (if tdb
 	(tdb:get-steps-data tdb test-id)
+	'())))
+
+;;======================================================================
+;;  T E S T   D A T A 
+;;======================================================================
+
+(define (rmt:read-test-data test-id categorypatt #!key (work-area #f)) 
+  (let ((tdb  (rmt:open-test-db-by-test-id test-id work-area: work-area)))
+    (if tdb
+	(tdb:read-test-data tdb test-id categorypatt)
 	'())))

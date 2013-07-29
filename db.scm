@@ -1917,20 +1917,6 @@
 	   csvlist)
 	  (sqlite3:finalize! tdb)))))
 
-;; get a list of test_data records matching categorypatt
-(define (db:read-test-data db test-id categorypatt #!key (work-area #f))
-  (let ((tdb  (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if tdb
-	(let ((res '()))
-	  (sqlite3:for-each-row 
-	   (lambda (id test_id category variable value expected tol units comment status type)
-	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-	   tdb
-	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-	  (sqlite3:finalize! tdb)
-	  (reverse res))
-	'())))
-
 ;; NOTE: Run this local with #f for db !!!
 (define (db:load-test-data db test-id #!key (work-area #f))
   (let loop ((lin (read-line)))

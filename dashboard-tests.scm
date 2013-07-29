@@ -359,7 +359,7 @@
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
-	       (rundat        (if testdat (cdb:remote-run db:get-run-info #f run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -371,7 +371,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (cdb:remote-run db:testmeta-get-record #f testname)))
+				  (let ((tm (rmt:testmeta-get-record testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -411,7 +411,7 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (cdb:remote-run db:get-test-info-by-id #f test-id )))))
+						     (rmt:get-test-info-by-id test-id )))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -588,7 +588,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (cdb:remote-run db:read-test-data #f test-id "%")))
+										    (rmt:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

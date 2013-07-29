@@ -52,3 +52,13 @@
      test-id)
     (sqlite3:finalize! tdb)
     (reverse res)))
+
+(define (tdb:read-test-data tdb test-id categorypatt)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test_id category variable value expected tol units comment status type)
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+     tdb
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+    (sqlite3:finalize! tdb)
+    (reverse res)))
