@@ -1509,9 +1509,15 @@
   (cdb:client-call serverdat 'numclients #t *default-numtries*))
 
 (define (cdb:test-set-status-state serverdat test-id status state msg)
+  (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+      (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
   (if msg
       (cdb:client-call serverdat 'state-status-msg #t *default-numtries* state status msg test-id)
       (cdb:client-call serverdat 'state-status #t *default-numtries* state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+
+;; Set the test event_time to current time. Call this when setting a test to LAUNCHED or REMOTEHOSTSTART
+;; (define (cdb:set-test-start-time! serverdat test-id)
+;;   (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
 
 (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
@@ -1562,6 +1568,7 @@
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
 	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
 	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
