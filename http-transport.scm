@@ -102,9 +102,11 @@
 				 (cond
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "api"))
-				   (print "Got api request")
 				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
-						  headers: '((content-type text/plain))))
+						  headers: '((content-type text/plain)))
+				   (mutex-lock! *heartbeat-mutex*)
+				   (set! *last-db-access* (current-seconds))
+				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))

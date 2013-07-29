@@ -91,6 +91,10 @@
   (list->vector
    (rmt:send-receive 'testmeta-get-record (list testname))))
 
+;; WARNING: This currently bypasses the transaction wrapped writes system
+(define (rmt:test-set-state-status-by-id test-id newstate newstatus newcomment)
+  (rmt:send-receive 'test-set-state-status-by-id (list test-id newstate newstatus newcomment)))
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================

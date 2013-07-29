@@ -1340,8 +1340,8 @@ Misc
 ;; The heavy lifting starts here
 ;;======================================================================
 
-;; ease debugging by loading ~/.megatestrc
-(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+;; ease debugging by loading ~/.dashboardrc
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 

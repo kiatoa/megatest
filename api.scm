@@ -17,6 +17,7 @@
 
 (define (api:execute-requests db cmd params)
   (debug:print-info 1 "api:execute-requests cmd=" cmd " params=" params)
+  (db:process-cached-writes db)
   (case (string->symbol cmd)
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs db params))
@@ -25,6 +26,7 @@
     ((get-test-info-by-id)	    (vector->list (apply db:get-test-info-by-id db params)))
     ((test-get-rundir-from-test-id) (apply db:test-get-rundir-from-test-id db params))
     ((testmeta-get-record)          (vector->list (apply db:testmeta-get-record db params)))
+    ((test-set-state-status-by-id)  (apply db:test-set-state-status-by-id db params))
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
 				      (list (vector-ref res 0)
