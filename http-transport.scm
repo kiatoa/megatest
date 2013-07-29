@@ -260,26 +260,30 @@
        ;; extract the needed info from the http data and 
        ;; process and return it.
        (let* ((send-recieve (lambda ()
-			      (let ((dat #f)
-				    (cleanup (http-transport:get-time-to-cleanup)))
-				(if cleanup 
-				    (begin
-				      (debug:print-info 0 "Running cleanup mode")
-				      (http-transport:inc-requests-and-prep-to-close-all-connections))
-				    (http-transport:inc-requests-count))
-				;; Do the actual data transfer
-				(set! dat (with-input-from-request 
+			      ;; (let ((dat #f)
+			      ;;       (cleanup (http-transport:get-time-to-cleanup)))
+			      ;;   (if cleanup 
+			      ;;       (begin
+			      ;;         (debug:print-info 0 "Running cleanup mode")
+			      ;;         (http-transport:inc-requests-and-prep-to-close-all-connections))
+			      ;;       (http-transport:inc-requests-count))
+			      ;;   ;; Do the actual data transfer
+			      (mutex-lock! *http-mutex*) ;; Hypothesis is that this was *not* the bottleneck
+			      (set! res (with-input-from-request ;; was set! dat
 					   fullurl 
 					   (list (cons 'dat msg)) 
 					   read-string))
-				(if cleanup
-				    ;; mutex already set
-				    (begin
-				      (set! res dat)
-				      (http-transport:dec-requests-count-and-close-all-connections))
-				    (http-transport:dec-requests-count
-				     (lambda ()
-				       (set! res dat)))))))
+			      (close-all-connections!)
+			      (mutex-unlock! *http-mutex*)
+			      ))
+			      ;;(if cleanup
+			      ;;      ;; mutex already set
+			      ;;      (begin
+			      ;;        (set! res dat)
+			      ;;        (http-transport:dec-requests-count-and-close-all-connections))
+			      ;;      (http-transport:dec-requests-count
+			      ;;       (lambda ()
+			      ;;         (set! res dat)))))))
 	      (time-out     (lambda ()
 			      (thread-sleep! 45)
 			      (if (not res)
@@ -338,26 +342,30 @@
        ;;                  '((test . "value")) read-string)
 
        (let* ((send-recieve (lambda ()
-			      (let ((dat #f)
-				    (cleanup (http-transport:get-time-to-cleanup)))
-				(if cleanup 
-				    (http-transport:inc-requests-and-prep-to-close-all-connections)
-				    (http-transport:inc-requests-count))
-				;; Do the actual data transfer NB// KEPP THIS IN SYNC WITH http-transport:client-send-receive
-				(set! dat (with-input-from-request 
+			;;       (let ((dat #f)
+			;; 	    (cleanup (http-transport:get-time-to-cleanup)))
+			;; 	(if cleanup 
+			;; 	    (http-transport:inc-requests-and-prep-to-close-all-connections)
+			;; 	    (http-transport:inc-requests-count))
+			;; 	;; Do the actual data transfer NB// KEPP THIS IN SYNC WITH http-transport:client-send-receive
+				 (mutex-lock! *http-mutex*)
+				 (set! res (with-input-from-request ;; was dat
 					   fullurl 
 					   (list (cons 'key "thekey")
 						 (cons 'cmd cmd)
 						 (cons 'params params))
 					   read-string))
-				(if cleanup
-				    ;; mutex already set
-				    (begin
-				      (set! res dat)
-				      (http-transport:dec-requests-count-and-close-all-connections))
-				    (http-transport:dec-requests-count
-				     (lambda ()
-				       (set! res dat)))))))
+				(close-all-connections)
+				(mutex-unlock! *http-mutex*)
+				))
+	                          ;; (if cleanup
+				  ;;   ;; mutex already set
+				  ;;   (begin
+				  ;;     (set! res dat)
+				  ;;     (http-transport:dec-requests-count-and-close-all-connections))
+				  ;;   (http-transport:dec-requests-count
+				  ;;    (lambda ()
+				  ;;      (set! res dat)))))))
 	      (time-out     (lambda ()
 			      (thread-sleep! 45)
 			      (if (not res)
