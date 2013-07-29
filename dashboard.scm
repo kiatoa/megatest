@@ -41,6 +41,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+(include "megatest-fossil-hash.scm")
 
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
@@ -65,6 +66,7 @@ Misc
 			"-test"
 			"-debug"
 			"-host" 
+			"-transport"
 			) 
 		 (list  "-h"
 			"-use-server"
@@ -92,8 +94,10 @@ Misc
     (begin
       (set! *runremote* (string-split (args:get-arg "-host" ":")))
       (client:launch))
-    (if (not (args:get-arg "-use-server"))
-	(set! *transport-type* 'fs) ;; force fs access
+    (if (args:get-arg "-transport")
+	(begin
+	  (set! *transport-type* (string->symbol (args:get-arg "-transport"))) ;; force fs access
+	  (client:launch))
 	(client:launch)))
 
 ;; HACK ALERT: this is a hack, please fix.
