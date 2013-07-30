@@ -15,18 +15,19 @@ Why Megatest?
 
 The Megatest project was started for two reasons, the first was an
 immediate and pressing need for a generalized tool to manage a suite
-of regression tests and the second was the fact that I had written or
-maintained several such tools at different companies over the years
-and it seemed a good thing to have a single open source tool, flexible
-enough to meet the needs of any team doing continuous integrating and
-or running a complex suite of tests for release qualification.
+of regression tests and the second was the fact that the author had
+written or maintained several such tools at different companies over
+the years and it seemed a good thing to have a single open source
+tool, flexible enough to meet the needs of any team doing continuous
+integrating and or running a complex suite of tests for release
+qualification.
 
 Megatest Design Philosophy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Megatest is intended to provide the minimum needed resources to make
-writing a suite of tests and implementing continuous build for
-software, design engineering or process control (via owlfs for
+writing a suite of tests and tasks for implementing continuous build
+for software, design engineering or process control (via owlfs for
 example) without being specialized for any specific problem
 space. Megatest in of itself does not know what constitutes a PASS or
 FAIL of a test. In most cases megatest is best used in conjunction
@@ -44,7 +45,9 @@ which can launch jobs on local and remote Linux hosts. Currently
 megatest uses the network filesystem to call home to your master
 sqlite3 database.
 
-include::getting_started.txt[] include::writing_tests.txt[]
+include::../plan.txt[]
+include::getting_started.txt[]
+include::writing_tests.txt[]
 include::reference.txt[]
 
 [appendix]
