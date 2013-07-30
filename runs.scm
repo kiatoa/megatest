@@ -520,10 +520,8 @@
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
-	    (debug:print-info 0 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-	    (debug:print-info 0 "   test is " hed ", prereqs-not-met is " prereqs-not-met)
-	    ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
-	    ;; we made new tal by sticking hed at the back of the list
+	    (debug:print-info 0 "Waiting for more work to do...")
+	    (thread-sleep! 1)
 	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))

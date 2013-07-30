@@ -2184,7 +2184,7 @@
 ;;
 ;; Note: mode 'normal means that tests must be COMPLETED and ok (i.e. PASS, WARN, CHECK, SKIP or WAIVED)
 ;;       mode 'toplevel means that tests must be COMPLETED only
-;;       mode 'itemmatch means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
+;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 (define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (if (or (not waitons)
@@ -2207,6 +2207,7 @@
 		       (status            (db:test-get-status test))
 		       (item-path         (db:test-get-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
+		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
 		       (same-itempath     (equal? ref-item-path item-path)))
@@ -2215,21 +2216,27 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 (or is-ok (member mode '(toplevel itemmatch))))
+			 (or is-ok (member mode '(toplevel itemmatch itemwait))))
 		    (set! parent-waiton-met #t))
 		   ;; Special case for toplevel and KILLED
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-killed
 			 (eq? mode 'toplevel))
 		    (set! parent-waiton-met #t))
-		   ((or (and (not same-itempath)
-			     (eq? mode 'itemmatch))  ;; in itemmatch mode we look only at the same itempath
-			(and same-itempath
-			     is-completed
-			     (or is-ok 
-				 (eq? mode 'toplevel)              ;; toplevel does not block on FAIL
-				 (and is-ok (eq? mode 'itemmatch)) ;; itemmatch blocks on not ok
-				 )))
+		   ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
+		   ((and (member mode '(itemmatch itemwait))
+			 ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
+			 same-itempath)
+		    (if (and is-completed is-ok)
+			(set! item-waiton-met #t))
+		    (if (and (equal? item-path "")
+			     (or is-completed is-running));; this is the parent, set it to run if completed or running
+			(set! parent-waiton-met #t)))
+		   ;; normal checking of parent items, any parent or parent item not ok blocks running
+		   ((and is-completed
+			 (or is-ok 
+			     (eq? mode 'toplevel))              ;; toplevel does not block on FAIL
+			     (and is-ok (eq? mode 'itemmatch))) ;; itemmatch blocks on not ok
 		    (set! item-waiton-met #t)))))
 	      tests)
              ;; both requirements, parent and item-waiton must be met to NOT add item to
