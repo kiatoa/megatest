@@ -322,7 +322,8 @@
 							      (set! testdat-path (conc rundir "/testdat.db"))
 							      0))))
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
-							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
+							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
+						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
 						    (handle-exceptions

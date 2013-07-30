@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb spiffy-directory-listing)
+(use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
 ;; Configurations for server
 (tcp-buffer-size 2048)
