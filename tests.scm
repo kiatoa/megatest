@@ -220,7 +220,8 @@
 ;; Check for waiver eligibility
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
-  (let* ((testconfig  (tests:get-testconfig (db:test-get-testname testdat) #f))
+  (let* ((test-registry (make-hash-table))
+	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
 	 (test-rundir (db:test-get-rundir testdat))
 	 (prev-rundir (db:test-get-rundir prev-testdat))
 	 (waivers     (configf:section-vars testconfig "waivers"))
