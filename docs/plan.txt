@@ -47,7 +47,7 @@ ww36
 . Refactor guis for resizeablity
 . Add filters to Run Summary view and Run Control view
 . Add to megatest.config or testconfig; rerunok STATE/STATUS,STATE/STATUS...
-. Launch gates for diskspace; /path/one>1G,/path/two>200M,/tmp>5G
+. Launch gates for diskspace; /path/one>1G,/path/two>200M,/tmp>5G,#{scheme *toppath*}>1G
 
 Bin List
 ~~~~~~~~
