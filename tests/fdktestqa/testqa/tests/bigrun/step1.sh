@@ -1,9 +1,9 @@
 #!/bin/sh
-if [ $NUMBER -lt 200 ];then 
-   sleep 20
-   sleep $NUMBER
+if [ $NUMBER -lt 15 ];then 
+   sleep 2
+   sleep `echo 2 * $NUMBER | bc`
 else
-   sleep 200
+   sleep 100
 fi
 
 exit 0
