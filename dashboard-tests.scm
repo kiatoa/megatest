@@ -277,6 +277,7 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
+           (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
@@ -312,10 +313,17 @@
 				   (system (conc "cd " rundir 
 						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				 (message-window  (conc "Directory " rundir " not found")))))
+	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
-			     (let* ((curr-mod-time (file-modification-time db-path))
+			     (let* ((curr-mod-time (max (file-modification-time db-path)
+							(if (file-exists? testdat-path)
+							    (file-modification-time testdat-path)
+							    (begin
+							      (set! testdat-path (conc rundir "/testdat.db"))
+							      0))))
 				    (need-update   (or (and (> curr-mod-time db-mod-time)
-							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
+							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
+						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
 						    (handle-exceptions
@@ -330,10 +338,23 @@
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 (set! db-mod-time curr-mod-time)
+				 (set! last-update (current-milliseconds))
+				 (set! request-update #f) ;; met the need ...
 				 )
 				(need-update ;; if this was true and yet there is no data ....
-				 (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
-	       (widgets      (make-hash-table))
+				 (db:test-set-testname! testdat "DEAD OR DELETED TEST")))
+			       (if need-update
+				   (begin
+				     ;; update the gui elements here
+				     (for-each 
+				      (lambda (key)
+					;; (print "Updating " key)
+					((hash-table-ref widgets key) testdat))
+				      (hash-table-keys widgets))
+				     (update-state-status-buttons testdat)))
+			       ;; (iup:refresh self)
+			       )))
 	       (meta-widgets (make-hash-table))
 	       (self         #f)
 	       (store-label  (lambda (name lbl cmd)
@@ -452,19 +473,41 @@
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
 					 (let ((proc
 						(lambda (testdat)
+						  (let ((max-row 0))
 						  (if (not (null? teststeps))
 						      (let loop ((hed    (car teststeps))
 								 (tal    (cdr teststeps))
 								 (rownum 1)
 								 (colnum 1))
+							  (if (> rownum max-row)(set! max-row rownum))
 							(let ((val     (vector-ref hed (- colnum 1)))
 							      (mtrx-rc (conc rownum ":" colnum)))
 							  (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
 							  (if (< colnum 6)
 							      (loop hed tal rownum (+ colnum 1))
 							      (if (not (null? tal))
-								  (loop (car tal)(cdr tal)(+ rownum 1) 1))))
-							(iup:attribute-set! steps-matrix "REDRAW" "ALL"))))))
+								    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
+						    (if (> max-row 0)
+							(begin
+							  ;; we are going to speculatively clear rows until we find a row that is already cleared
+							  (let loop ((rownum  (+ max-row 1))
+								     (colnum  0)
+								     (deleted #f))
+							    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
+							    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
+								   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
+								   (mtrx-rc  (conc rownum ":" colnum))
+								   (curr-val (iup:attribute steps-matrix mtrx-rc)))
+							      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
+							      (if (and (string? curr-val)
+								       (not (equal? curr-val "")))
+								  (begin
+								    (iup:attribute-set! steps-matrix mtrx-rc "")
+								    (loop next-row next-col #t))
+								  (if (eq? colnum 6) ;; not done, didn't get a full blank row
+								      (if deleted (loop next-row next-col #f)) ;; exit on this not met
+								      (loop next-row next-col deleted)))))
+							  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))))
 					   (hash-table-set! widgets "StepsMatrix" proc)
 					   (proc testdat))
 					 steps-matrix)
@@ -514,14 +557,6 @@
 				 ;; Now start keeping the gui updated from the db
 				 (refreshdat) ;; update from the db here
 					;(thread-suspend! other-thread)
-				 ;; update the gui elements here
-				 (for-each 
-				  (lambda (key)
-				    ;; (print "Updating " key)
-				    ((hash-table-ref widgets key) testdat))
-				  (hash-table-keys widgets))
-				 (update-state-status-buttons testdat)
-					; (iup:refresh self)
 				 (if *exit-started*
 				     (set! *exit-started* 'ok))))))))))
 

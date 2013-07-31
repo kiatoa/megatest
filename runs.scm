@@ -520,10 +520,8 @@
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
-	    (debug:print-info 0 "Shouldn't really get here, race condition? Unable to launch more tests at this moment, killing time ...")
-	    (debug:print-info 0 "   test is " hed ", prereqs-not-met is " prereqs-not-met)
-	    ;; (thread-sleep! (+ 0.01 *global-delta*)) ;; long sleep here - no resources, may as well be patient
-	    ;; we made new tal by sticking hed at the back of the list
+	    (debug:print-info 0 "Waiting for more work to do...")
+	    (thread-sleep! 1)
 	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))
@@ -910,6 +908,30 @@
     (conc "/" (string-intersperse 
 	       (take dparts (- (length dparts) count))
 	       "/"))))
+
+(define (runs:recursive-delete-with-error-msg real-dir)
+  (if (> (system (conc "rm -rf " real-dir)) 0)
+      (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f")))
+
+(define (runs:safe-delete-test-dir real-dir)
+  ;; first delete all sub-directories
+  (directory-fold 
+   (lambda (f x)
+     (let ((fullname (conc real-dir "/" f)))
+       (if (directory? fullname)(runs:recursive-delete-with-error-msg fullname)))
+     (+ 1 x))
+   0 real-dir)
+  ;; then files other than *testdat.db*
+  (directory-fold 
+   (lambda (f x)
+     (let ((fullname (conc real-dir "/" f)))
+       (if (not (string-search (regexp "testdat.db") f))
+	   (runs:recursive-delete-with-error-msg fullname)))
+     (+ 1 x))
+   0 real-dir)
+  ;; then the entire directory
+  (runs:recursive-delete-with-error-msg real-dir))
+
 ;; Remove runs
 ;; fields are passing in through 
 ;; action:
@@ -991,7 +1013,9 @@
 			      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
 				  (begin
 				    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
-					(hash-table-set! test-retry-time test-fulln (current-seconds)))
+					(begin
+					  ;; want to set to REMOVING BUT CANNOT do it here?
+					  (hash-table-set! test-retry-time test-fulln (current-seconds))))
 				    (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
 				      ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
 				      ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
@@ -1008,7 +1032,7 @@
 					(loop new-test-dat tal)
 					(loop (car tal)(append tal (list new-test-dat)))))
 				  (begin
-				    (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
+				    (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "REMOVING" "LOCKED" #f)
 				    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
 				    (if (and real-dir 
 					     (> (string-length real-dir) 5)
@@ -1016,8 +1040,7 @@
 					(begin ;; let* ((realpath (resolve-pathname run-dir)))
 					  (debug:print-info 1 "Recursively removing " real-dir)
 					  (if (file-exists? real-dir)
-					      (if (> (system (conc "rm -rf " real-dir)) 0)
-						  (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f"))
+					      (runs:safe-delete-test-dir real-dir)
 					      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
 					(if real-dir 
 					    (debug:print 0 "WARNING: directory " real-dir " does not exist")
@@ -1040,6 +1063,8 @@
 						(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
 						(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 					    ))
+				    ;; Only delete the records *after* removing the directory. If things fail we have a record 
+				    (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
 				    (if (not (null? tal))
 					(loop (car tal)(cdr tal))))))
 			     ((set-state-status)

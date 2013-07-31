@@ -120,10 +120,15 @@ Misc
 (define *num-runs*      8)
 (define *tot-run-count* (cdb:remote-run db:get-num-runs #f "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
+
+;; Update management
+;;
 (define *last-update*   (current-seconds))
 (define *last-db-update-time* 0)
 (define *please-update-buttons* #t)
 (define *delayed-update* 0)
+(define *update-is-running* #f)
+(define *update-mutex* (make-mutex))
 
 (define *num-tests*     15)
 (define *start-run-offset*  0)
@@ -1277,6 +1282,7 @@ Misc
 ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
 (define *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db")))
+(define *last-recalc-ended-time* 0)
 
 (define (dashboard:been-changed)
   (> (file-modification-time (conc *toppath* "/megatest.db")) *last-db-update-time*))
@@ -1286,7 +1292,8 @@ Misc
 
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
   (or please-update-buttons
-      (and (> modtime last-db-update-time)
+      (and (> (current-milliseconds)(+ *last-recalc-ended-time* 150))
+	   (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
 (define *monitor-db-path* (conc *toppath* "/monitor.db"))
@@ -1330,14 +1337,15 @@ Misc
 	       (if updater (updater)))))
 	  (set! *please-update-buttons* #f)
 	  (set! *last-db-update-time* modtime)
-	  (set! *last-update* run-update-time)))))
+	  (set! *last-update* run-update-time)
+	  (set! *last-recalc-ended-time* (current-milliseconds))))))
 
 ;;======================================================================
 ;; The heavy lifting starts here
 ;;======================================================================
 
-;; ease debugging by loading ~/.megatestrc
-(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
+;; ease debugging by loading ~/.dashboardrc
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
@@ -1367,7 +1375,18 @@ Misc
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
+		       (let ((update-is-running #f))
+			 (mutex-lock! *update-mutex*)
+			 (set! update-is-running *update-is-running*)
+			 (if (not update-is-running)
+			     (set! *update-is-running* #t))
+			 (mutex-unlock! *update-mutex*)
+			 (if (not update-is-running)
+			   (begin
 		       (dashboard:run-update x)
+			     (mutex-lock! *update-mutex*)
+			     (set! *update-is-running* #f)
+			     (mutex-unlock! *update-mutex*))))
 		       1))))
 
 (iup:main-loop)
