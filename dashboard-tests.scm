@@ -258,6 +258,8 @@
 	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
 	(iup:send-url lfilename))))
 
+(define (dashboard-tests:run-a-step 
+
 (define (dashboard-tests:step-run-control test-id stepname teststeps)
   (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
    #:title stepname
