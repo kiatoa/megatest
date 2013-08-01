@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses ezsteps))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -258,9 +259,10 @@
 	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
 	(iup:send-url lfilename))))
 
-(define (dashboard-tests:run-a-step 
+(define (dashboard-tests:run-a-step info)
+  #t)
 
-(define (dashboard-tests:step-run-control test-id stepname teststeps)
+(define (dashboard-tests:step-run-control testdat stepname testconfig)
   (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
    #:title stepname
    (iup:vbox ; #:expand "YES"
@@ -268,17 +270,11 @@
     (iup:button "Re-run"            
 		#:expand "HORIZONTAL" 
 		#:action (lambda (obj)
-			   (print "Rerun " stepname)))
+			   (ezsteps:run-from testdat stepname #f)))
     (iup:button "Re-run and continue"         
 		#:expand "HORIZONTAL" 
 		#:action (lambda (obj)
-			   (let ((inprocess #f))
-			     (for-each 
-			      (lambda (stepn)
-				(let ((curr-step-name (vector-ref stepn 0)))
-				  (if (equal? curr-step-name stepname)(set! inprocess #t))
-				  (if inprocess (print "Continue " curr-step-name))))
-			      teststeps))))
+			   (ezsteps:run-from testdat stepname #f)))
     ;; (iup:button "Refresh test data"
     ;;     	#:expand "HORIZONTAL"
     ;;     	#:action (lambda (obj)
@@ -309,7 +305,7 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
-           (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
+	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
@@ -491,7 +487,7 @@
 									       (view-a-log fname)
 									       (iup:show
 										(dashboard-tests:step-run-control 
-										 test-id 
+										 testdat
 										 (iup:attribute obj (conc lin ":" 1)) 
 										 teststeps))))))))
 					 ;; (let loop ((count 0))

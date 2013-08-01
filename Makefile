@@ -8,7 +8,7 @@ SRCFILES = common.scm items.scm launch.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm http-transport.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
-	   tree.scm
+	   tree.scm ezsteps.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 

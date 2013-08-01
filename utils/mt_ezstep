@@ -3,9 +3,13 @@
 usage="mt_ezstep stepname prevstepname command [args ...]"
 
 if [ "$MT_CMDINFO" == "" ];then
-  echo "ERROR: $0 should be run within a megatest test environment"
-  echo "Usage: $usage"
-  exit
+  if [ -e megatest.sh ];then
+    source megatest.sh
+  else
+    echo "ERROR: $0 should be run within a megatest test environment"
+    echo "Usage: $usage"
+    exit
+  fi
 fi
 
 # Purpose: This is for the [ezsteps] secton in your testconfig file.

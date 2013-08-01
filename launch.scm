@@ -114,6 +114,7 @@
 	  (setenv "MT_RUNNAME"   runname)
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
+	  (setenv "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  (if (not (setup-for-run))
