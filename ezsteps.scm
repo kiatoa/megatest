@@ -32,6 +32,7 @@
 	 (rollup-status 0)
 	 (exit-info     (vector #t #t #t))
 	 (test-id       (db:test-get-id testdat))
+	 (test-name     (db:test-get-testname testdat))
 	 (kill-job      #f)) ;; for future use (on re-factoring with launch.scm code
     (push-directory test-run-dir)
     (debug:print-info 0 "Running in directory " test-run-dir)

@@ -887,7 +887,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
 
-	  (debug:print-info 1 "Runing -runstep, first change to directory " work-area)
+	  (if (args:get-arg "-runstep")(debug:print-info 1 "Running -runstep, first change to directory " work-area))
 	  (change-directory work-area)
 	  ;; can setup as client for server mode now
 	  ;; (client:setup)

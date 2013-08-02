@@ -270,11 +270,17 @@
     (iup:button "Re-run"            
 		#:expand "HORIZONTAL" 
 		#:action (lambda (obj)
-			   (ezsteps:run-from testdat stepname #f)))
+			   (thread-start! 
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #f))
+					 (conc "ezstep run single step " stepname)))))
     (iup:button "Re-run and continue"         
 		#:expand "HORIZONTAL" 
 		#:action (lambda (obj)
-			   (ezsteps:run-from testdat stepname #f)))
+			   (thread-start!
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #f))
+					 (conc "ezstep run from step " stepname)))))
     ;; (iup:button "Refresh test data"
     ;;     	#:expand "HORIZONTAL"
     ;;     	#:action (lambda (obj)
@@ -438,7 +444,28 @@
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+	       (clean-run-execute  (lambda (x)
+				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
+						      "megatest -remove-runs -target " keystring " :runname " runname
+						      " -testpatt " (conc testname "/" (if (equal? item-path "")
+											   "%"
+											   item-path))
+						      ";megatest -target " keystring " :runname " runname 
+						      " -runtests " (conc testname "/" (if (equal? item-path "")
+											   "%" 
+											   item-path))
+						      " ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))
+				       (system (conc cmd " &")))))
+	       (remove-test (lambda (x)
+			      (iup:attribute-set!
+			       command-text-box "VALUE"
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+				     " -testpatt " (conc testname "/" (if (equal? item-path "")
+									  "%"
+									  item-path))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))
+			      )))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -462,6 +489,7 @@
 					    (iup:button "Start Xterm"   #:action xterm       #:size "80x")
 					    (iup:button "Run Test"      #:action run-test    #:size "80x")
 					    (iup:button "Clean Test"    #:action remove-test #:size "80x")
+					    (iup:button "CleanRunExecute!"    #:action clean-run-execute #:size "80x")
 					    (iup:button "Kill All Jobs" #:action kill-jobs   #:size "80x")
 					    (iup:button "Close"         #:action (lambda (x)(exit)) #:size "80x"))
 					   (apply 
