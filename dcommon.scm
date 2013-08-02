@@ -348,9 +348,9 @@
      key-vals)
     (iup:vbox
      (iup:label (if title title (conc "Settings from [" sectionname "]"))  
-		#:size   "5x"
-		#:expand "HORIZONTAL"
-		)
+         	;; #:size   "5x"
+         	#:expand "HORIZONTAL"
+         	)
      section-matrix)))
     
 ;; General data
@@ -438,7 +438,7 @@
     (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     (iup:vbox
-     (iup:label "Run statistics"  #:expand "HORIZONTAL")
+     ;; (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))
 
 (define (dcommon:servers-table)

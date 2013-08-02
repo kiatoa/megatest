@@ -802,7 +802,7 @@ Misc
 		    ;;           (lambda (cnv xadj yadj)
 		    ;;    	 ;; (print "cnv: " cnv " x: " x " y: " y)
 		    ;;    	 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    #:size "150x150"
+		    ;; #:size "50x50"
 		    #:expand "YES"
 		    #:scrollbar "YES"
 		    #:posx "0.5"

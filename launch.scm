@@ -461,7 +461,8 @@
 	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
     ;; create the directory for the tests dir links, this is needed no matter what...
-    (if (not (directory-exists? lnkbase))
+    (if (and (not (directory-exists? lnkbase))
+	     (not (file-exists? lnkbase)))
 	(create-directory lnkbase #t))
     
     ;; update the toptest record with its location rundir, cache the path
