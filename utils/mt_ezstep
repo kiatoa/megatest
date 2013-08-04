@@ -74,5 +74,5 @@ else
     exitstatus=0
 fi
 
-$MT_MEGATEST -env2file .ezsteps/${stepname}
+# $MT_MEGATEST -env2file .ezsteps/${stepname}
 exit $exitstatus

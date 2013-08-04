@@ -34,7 +34,14 @@
 	 (test-id       (db:test-get-id testdat))
 	 (test-name     (db:test-get-testname testdat))
 	 (kill-job      #f)) ;; for future use (on re-factoring with launch.scm code
-    (push-directory test-run-dir)
+    (let loop ((count 5))
+      (if (file-exists? test-run-dir)
+	  (push-directory test-run-dir)
+	  (if (> count 0)
+	      (begin
+		(debug:print 0 "WARNING: ezsteps attempting to run but test run directory " test-run-dir " is not there. Waiting and trying again " count " more times")
+		(sleep 3)
+		(loop (- count 1))))))
     (debug:print-info 0 "Running in directory " test-run-dir)
     (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
     ;; if ezsteps was defined then we are sure to have at least one step but check anyway

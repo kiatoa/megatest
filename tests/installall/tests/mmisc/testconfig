@@ -9,6 +9,8 @@ waiton eggs setup
 
 # Iteration for your tests are controlled by the items section
 [items]
+FSLPKG logpro stml megatest
+
 
 # test_meta is a section for storing additional data on your test
 [test_meta]

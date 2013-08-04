@@ -813,7 +813,11 @@
       (if (not testdat) ;; should NOT happen
 	  (debug:print 0 "ERROR: failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
-      (change-directory test-path)
+      (if (file-exists? test-path)
+	  (change-directory test-path)
+	  (begin
+	    (debug:print "ERROR: test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
+	    (change-directory *toppath*)))
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
 		(if testdat
