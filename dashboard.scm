@@ -476,7 +476,7 @@ Misc
 		   (if lb
 		       lb
 		       (iup:listbox 
-			;; #:size "x10" 
+			#:size "45x50" 
 			#:fontsize "10"
 			#:expand "YES" ;; "VERTICAL"
 			;; #:dropdown "YES"
@@ -751,6 +751,7 @@ Misc
 				  #:value (dboard:test-patt->lines
 					   (dboard:data-get-test-patts *data*))
 				  #:expand "YES"
+				  #:size "x50"
 				  #:multiline "YES")))
 	     (set! test-patterns-textbox tb)
 	     tb))
