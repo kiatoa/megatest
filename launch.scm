@@ -326,6 +326,7 @@
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
+	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
