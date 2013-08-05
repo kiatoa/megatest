@@ -256,10 +256,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define *didsomething* #f)
 
 ;; Force default transport to fs
-(if ;; (and (or (args:get-arg "-list-targets")
-    ;;          (args:get-arg "-list-db-targets"))
- (not (args:get-arg "-transport"))
- (hash-table-set! args:arg-hash "-transport" "fs"))
+;; (if ;; (and (or (args:get-arg "-list-targets")
+;;     ;;          (args:get-arg "-list-db-targets"))
+;;  (not (args:get-arg "-transport"))
+;;  (hash-table-set! args:arg-hash "-transport" "fs"))
 
 ;;======================================================================
 ;; Misc setup stuff
@@ -316,13 +316,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Not a server? This section will decide how to communicate
     ;;
-    (if (not (null? (lset-intersection 
+    ;;  Setup client for all expect listed here
+    (if (null? (lset-intersection 
 		     equal?
 		     (hash-table-keys args:arg-hash)
-		     '("-runtests"    "-list-runs"   "-rollup"
-		       "-remove-runs" "-lock"        "-unlock"
-		       "-update-meta" "-extract-ods" "-list-servers"
-		       "-stop-server" "-show-cmdinfo"))))
+		     '("-list-servers"
+		       "-stop-server"
+		       "-show-cmdinfo")))
 	(if (setup-for-run)
 	    (begin
 
@@ -331,37 +331,53 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 "Server connection not needed")
 		  ;; ok, so lets connect to the server
-		  (let ((transport-from-config   (configf:lookup *configdat* "setup" "transport"))
-			(transport-from-cmdln    (args:get-arg "-transport"))
-			(transport-from-cmdinfo  (if (getenv "MT_CMDINFO")
-						     (assoc 'transport 
-							    (read (open-input-string (base64:base64-decode
-										      (getenv "MT_CMDINFO")))))
-						     #f)))
-		    (cond
-		     ;; command line overrides other mechanisms
-		     (transport-from-cmdln
-		      (if (equal? transport-from-cmdln "fs")
-			  (set! *transport-type* 'fs)
-			  (begin
-			    (server:ensure-running)
-			    (client:launch))))
-		     ;; cmdinfo is second priority
-		     (transport-from-cmdinfo
-		      (if (equal? transport-from-cmdinfo "fs")
-			  (set! *transport-type* 'fs)
-			  (begin
-			    (server:ensure-running)
-			    (client:launch))))
-		     ;; config file is next highest priority for determinining transport
-		     (transport-from-config
-		      (if (equal? transport-from-config "fs")
-			  (set! *transport-type* 'fs)
-			  (begin
-			    (server:ensure-running)
-			    (client:launch))))
-		     (else
-		      (set! *transport-type* 'fs)))))))))
+		  (let* ((transport-from-config   (configf:lookup *configdat* "setup" "transport"))
+			 (transport-from-cmdln    (args:get-arg "-transport"))
+			 (transport-from-cmdinfo  (if (getenv "MT_CMDINFO")
+						      (let ((res (assoc 'transport 
+									(read
+									 (open-input-string 
+									  (base64:base64-decode
+									   (getenv "MT_CMDINFO")))))))
+							(if res (cadr res) #f))
+						      #f))
+			 (chosen-transport        (string->symbol (or transport-from-cmdln
+								      transport-from-cmdinfo
+								      transport-from-config
+								      "fs"))))
+		    (debug:print 0 "chosen-transport: " chosen-transport " have; config=" transport-from-config ", cmdln=" transport-from-cmdln ", cmdinfo=" transport-from-cmdinfo)
+		    (case chosen-transport
+		      ((http)
+		       (set! *transport-type 'http)
+		       (server:ensure-running)
+		       (client:launch))
+		      (else ;; (fs)
+		       (set! *transport-type* 'fs)
+		       (set! *megatest-db* (open-db))))))))))
+;; 		    (cond
+;; 		     ;; command line overrides other mechanisms
+;; 		     (transport-from-cmdln
+;; 		      (if (equal? transport-from-cmdln "fs")
+;; 			  (set! *transport-type* 'fs)
+;; 			  (begin
+;; 			    (server:ensure-running)
+;; 			    (client:launch))))
+;; 		     ;; cmdinfo is second priority
+;; 		     (transport-from-cmdinfo
+;; 		      (if (equal? transport-from-cmdinfo "fs")
+;; 			  (set! *transport-type* 'fs)
+;; 			  (begin
+;; 			    (server:ensure-running)
+;; 			    (client:launch))))
+;; 		     ;; config file is next highest priority for determinining transport
+;; 		     (transport-from-config
+;; 		      (if (equal? transport-from-config "fs")
+;; 			  (set! *transport-type* 'fs)
+;; 			  (begin
+;; 			    (server:ensure-running)
+;; 			    (client:launch))))
+;; 		     (else
+;; 		      (set! *transport-type* 'fs)))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -714,7 +730,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (toppath   (assoc/default 'toppath   cmdinfo)))
 	  (change-directory toppath)
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -765,7 +781,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (target    (args:get-arg "-target")))
 	  (change-directory testpath)
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -846,7 +862,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (db        #f))
 	(change-directory testpath)
 	;; (set! *runremote* runremote)
-	(set! *transport-type* (string->symbol transport))
+	;; The transport is handled earlier in the loading process of megatest.
+	;; (set! *transport-type* (string->symbol transport))
 	(if (not (setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
@@ -898,7 +915,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")

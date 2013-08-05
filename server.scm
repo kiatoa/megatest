@@ -131,7 +131,8 @@
 		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
 		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
 		;; if there is an existing server
-		(system "megatest -server - -daemonize")
+		(system (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
+			      " -server - -daemonize"))
 		(thread-sleep! 3)
 		;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
 		;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))

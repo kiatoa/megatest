@@ -92,7 +92,7 @@
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
