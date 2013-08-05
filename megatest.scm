@@ -345,7 +345,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 								      transport-from-cmdinfo
 								      transport-from-config
 								      "fs"))))
-		    (debug:print 0 "chosen-transport: " chosen-transport " have; config=" transport-from-config ", cmdln=" transport-from-cmdln ", cmdinfo=" transport-from-cmdinfo)
+		    (debug:print 2 "chosen-transport: " chosen-transport " have; config=" transport-from-config ", cmdln=" transport-from-cmdln ", cmdinfo=" transport-from-cmdinfo)
 		    (case chosen-transport
 		      ((http)
 		       (set! *transport-type 'http)
