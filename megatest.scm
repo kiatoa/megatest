@@ -305,7 +305,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    (let ((transport (args:get-arg "-transport" "http")))
+
+    ;; Server? Start up here.
+    ;;
+    (let ((tl        (setup-for-run))
+	  (transport (or (configf:lookup *configdat* "setup" "transport")
+			 (args:get-arg "-transport" "http"))))
       (debug:print 2 "Launching server using transport " transport)
       (server:launch (string->symbol transport)))
 
@@ -432,7 +437,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-config")
-    (let ((data *configdat*)) ;; (read-config "megatest.config" #f #t)))
+    (let ((tl   (setup-for-run))
+	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))

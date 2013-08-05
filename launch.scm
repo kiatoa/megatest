@@ -386,7 +386,7 @@
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(if *toppath*
 	    (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
-	    (debug:print 0 "ERROR: failed to find the top path to your run setup."))))
+	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
   *toppath*)
 
 (define (get-best-disk confdat)
