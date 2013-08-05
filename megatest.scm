@@ -331,15 +331,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 "Server connection not needed")
 		  ;; ok, so lets connect to the server
-		  (let ((transport-from-config (configf:lookup *configdat* "setup" "transport"))
-			(transport-from-cmdln  (args:get-arg "-transport")))
+		  (let ((transport-from-config   (configf:lookup *configdat* "setup" "transport"))
+			(transport-from-cmdln    (args:get-arg "-transport"))
+			(transport-from-cmdinfo  (if (getenv "MT_CMDINFO")
+						     (assoc 'transport 
+							    (read (open-input-string (base64:base64-decode
+										      (getenv "MT_CMDINFO")))))
+						     #f)))
 		    (cond
-		     ((and transport-from-config (not (equal? transport-from-config "fs")))
-		      (server:ensure-running)
-		      (client:launch))
-		     ((and transport-from-cmdln (not (equal? transport-from-cmdln "fs")))
-		      (server:ensure-running)
-		      (client:launch))
+		     ;; command line overrides other mechanisms
+		     (transport-from-cmdln
+		      (if (equal? transport-from-cmdln "fs")
+			  (set! *transport-type* 'fs)
+			  (begin
+			    (server:ensure-running)
+			    (client:launch))))
+		     ;; cmdinfo is second priority
+		     (transport-from-cmdinfo
+		      (if (equal? transport-from-cmdinfo "fs")
+			  (set! *transport-type* 'fs)
+			  (begin
+			    (server:ensure-running)
+			    (client:launch))))
+		     ;; config file is next highest priority for determinining transport
+		     (transport-from-config
+		      (if (equal? transport-from-config "fs")
+			  (set! *transport-type* 'fs)
+			  (begin
+			    (server:ensure-running)
+			    (client:launch))))
 		     (else
 		      (set! *transport-type* 'fs)))))))))
 
@@ -1072,8 +1092,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* db)
 	    (set! *client-non-blocking-mode* #t)
-	    ;; (client:setup)
-	    ;; (client:launch)
 	    (import readline)
 	    (import apropos)
 	    (gnu-history-install-file-manager
