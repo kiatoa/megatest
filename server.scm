@@ -53,7 +53,7 @@
   (debug:print-info 2 "Starting server using " transport " transport")
   (set! *transport-type* transport)
   (case transport
-    ((fs)   (exit)) ;; there is no "fs" transport
+    ((fs)   (exit)) ;; there is no "fs" server transport
     ((http) (http-transport:launch))
     ((zmq)  (zmq-transport:launch))
     (else
@@ -119,3 +119,32 @@
      (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
      result)))
 
+(define (server:ensure-running)
+  (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
+	     (trycount 0))
+    (if (or (not servers)
+	    (null? servers))
+	(begin
+	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
+	      (begin
+		(debug:print 0 "INFO: Starting server as none running ...")
+		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
+		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
+		;; if there is an existing server
+		(system "megatest -server - -daemonize")
+		(thread-sleep! 3)
+		;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
+		;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))
+		;; (process-fork (lambda ()
+		;;       	  (daemon:ize)
+		;;       	  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
+		)
+	      (begin
+		(debug:print-info 0 "Waiting for server to start")
+		(thread-sleep! 4)))
+	  (if (< trycount 10)
+	      (loop (open-run-close tasks:get-best-server tasks:open-db) 
+		    (+ trycount 1))
+	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
+	(debug:print 0 "INFO: Server(s) running " servers)
+	)))

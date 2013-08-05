@@ -56,7 +56,7 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup #!key (numtries 50))
+(define (client:setup #!key (numtries 3))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -78,16 +78,18 @@
     
     (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 
-      ((fs) ;; (if (not *megatest-db*)(set! *megatest-db* (open-db))))
-       ;; we are not doing fs any longer. let's cheat and start up a server
-       ;; if we are falling back on fs (not 100% supported) do an about face and start a server
-       (if (not (equal? (args:get-arg "-transport") "fs"))
-	   (begin
-	     (set! *transport-type* #f)
-	     (system (conc "megatest -list-servers | grep " megatest-version " | grep alive || megatest -server - -daemonize && sleep 3"))
-	     (thread-sleep! 1)
-	     (if (> numtries 0)
-		 (client:setup numtries: (- numtries 1))))))
+      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+      ;; NB// Going back to enabling fs and possibly even make it the default.
+       ;; ;; we are not doing fs any longer. let's cheat and start up a server
+       ;; ;; if we are falling back on fs (not 100% supported) do an about face and start a server
+       ;; (if (not (equal? (args:get-arg "-transport") "fs"))
+       ;;     (begin
+       ;;       (set! *transport-type* #f)
+       ;;       (system ;; (conc "megatest -list-servers | grep " (common:version-signature) " | grep alive || megatest -server - -daemonize && sleep 3"))
+       ;;        "megatest -server - -daemonize")
+       ;;       (thread-sleep! 1)
+       ;;       (if (> numtries 0)
+       ;;  	 (client:setup numtries: (- numtries 1))))))
       ((http)
        (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
 				      (tasks:hostinfo-get-port hostinfo)))

@@ -255,10 +255,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (define *didsomething* #f)
 
-(if (and (or (args:get-arg "-list-targets")
-	     (args:get-arg "-list-db-targets"))
-	 (not (args:get-arg "-transport")))
-    (hash-table-set! args:arg-hash "-transport" "fs"))
+;; Force default transport to fs
+(if ;; (and (or (args:get-arg "-list-targets")
+    ;;          (args:get-arg "-list-db-targets"))
+ (not (args:get-arg "-transport"))
+ (hash-table-set! args:arg-hash "-transport" "fs"))
 
 ;;======================================================================
 ;; Misc setup stuff
@@ -307,41 +308,35 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let ((transport (args:get-arg "-transport" "http")))
       (debug:print 2 "Launching server using transport " transport)
       (server:launch (string->symbol transport)))
+
+    ;; Not a server? This section will decide how to communicate
+    ;;
     (if (not (null? (lset-intersection 
 		     equal?
 		     (hash-table-keys args:arg-hash)
 		     '("-runtests"    "-list-runs"   "-rollup"
 		       "-remove-runs" "-lock"        "-unlock"
-		       "-update-meta" "-extract-ods"))))
+		       "-update-meta" "-extract-ods" "-list-servers"
+		       "-stop-server" "-show-cmdinfo"))))
 	(if (setup-for-run)
-	    (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
-		       (trycount 0))
-	      (if (or (not servers)
-		      (null? servers))
-		  (begin
-		    (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
-			(begin
-			  (debug:print 0 "INFO: Starting server as none running ...")
-			  ;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-			  ;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
-			  ;; if there is an existing server
-			  (system "megatest -server - -daemonize")
-			  (thread-sleep! 3)
-			  ;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-			  ;; (system (conc "megatest -list-servers | egrep '" megatest-version ".*alive' || megatest -server - -daemonize && sleep 3"))
-			  ;; (process-fork (lambda ()
-			  ;;       	  (daemon:ize)
-			  ;;       	  (server:launch (string->symbol (args:get-arg "-transport" "http")))))
-			  )
-			(begin
-			  (debug:print-info 0 "Waiting for server to start")
-			  (thread-sleep! 4)))
-		    (if (< trycount 10)
-			(loop (open-run-close tasks:get-best-server tasks:open-db) 
-			      (+ trycount 1))
-			(debug:print 0 "WARNING: Couldn't start or find a server.")))
-		  (debug:print 0 "INFO: Server(s) running " servers)
-		  )))))
+	    (begin
+
+	      ;; if not list or kill then start a client (if appropriate)
+	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+		      (eq? (length (hash-table-keys args:arg-hash)) 0))
+		  (debug:print-info 1 "Server connection not needed")
+		  ;; ok, so lets connect to the server
+		  (let ((transport-from-config (configf:lookup *configdat* "setup" "transport"))
+			(transport-from-cmdln  (args:get-arg "-transport")))
+		    (cond
+		     ((and transport-from-config (not (equal? transport-from-config "fs")))
+		      (server:ensure-running)
+		      (client:launch))
+		     ((and transport-from-cmdln (not (equal? transport-from-cmdln "fs")))
+		      (server:ensure-running)
+		      (client:launch))
+		     (else
+		      (set! *transport-type* 'fs)))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -390,13 +385,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print-info 1 "Done with listservers")
 	    (set! *didsomething* #t)
 	    (exit)) ;; must do, would have to add checks to many/all calls below
-	  (exit)))
-    ;; if not list or kill then start a client (if appropriate)
-    (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
-	    (eq? (length (hash-table-keys args:arg-hash)) 0))
-	(debug:print-info 1 "Server connection not needed")
-	;; ok, so lets connect to the server
-	(client:launch)))
+	  (exit))))
 
 ;;======================================================================
 ;; Weird special calls that need to run *after* the server has started?
@@ -455,11 +444,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-show-cmdinfo")
-    (let ((data (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO"))))))
-      (if (equal? (args:get-arg "-dumpmode") "json")
-	  (json-write data)
-	  (pp data))
-      (set! *didsomething* #t)))
+    (if (getenv "MT_CMDINFO")
+	(let ((data (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO"))))))
+	  (if (equal? (args:get-arg "-dumpmode") "json")
+	      (json-write data)
+	      (pp data))
+	  (set! *didsomething* #t))
+	(debug:print-info 0 "environment variable MT_CMDINFO is not set")))
 
 ;;======================================================================
 ;; Remove old run(s)
