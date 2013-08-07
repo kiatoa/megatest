@@ -4,7 +4,7 @@ step1 step1.sh
 
 # Test requirements are specified here
 [requirements]
-waiton bigrun
+waiton bigrun2
 priority 0
 mode itemwait
 

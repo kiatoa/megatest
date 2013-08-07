@@ -480,7 +480,7 @@ Misc
 		   (if lb
 		       lb
 		       (iup:listbox 
-			;; #:size "x10" 
+			#:size "45x50" 
 			#:fontsize "10"
 			#:expand "YES" ;; "VERTICAL"
 			;; #:dropdown "YES"
@@ -755,6 +755,7 @@ Misc
 				  #:value (dboard:test-patt->lines
 					   (dboard:data-get-test-patts *data*))
 				  #:expand "YES"
+				  #:size "x50"
 				  #:multiline "YES")))
 	     (set! test-patterns-textbox tb)
 	     tb))
@@ -806,7 +807,7 @@ Misc
 		    ;;           (lambda (cnv xadj yadj)
 		    ;;    	 ;; (print "cnv: " cnv " x: " x " y: " y)
 		    ;;    	 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    #:size "150x150"
+		    ;; #:size "50x50"
 		    #:expand "YES"
 		    #:scrollbar "YES"
 		    #:posx "0.5"
@@ -1367,10 +1368,11 @@ Misc
 	  (exit 1)))))
  ((args:get-arg "-test")
   (let ((testid (string->number (args:get-arg "-test"))))
-    (if testid
+    (if (and (number? testid)
+	     (>= testid 0))
 	(examine-test testid)
 	(begin
-	  (print "ERROR: testid is not a number " (args:get-arg "-test"))
+	  (debug:print 3 "INFO: tried to open test with invalid test-id. " (args:get-arg "-test"))
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))

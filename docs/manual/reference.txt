@@ -140,6 +140,14 @@ waiver_1         logpro        lookittmp.log
 # logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html
 -----------------
 
+Ezsteps
+~~~~~~~
+
+To transfer the environment to the next step you can do the following:
+
+----------------------------
+$MT_MEGATEST -env2file .ezsteps/${stepname}	  
+----------------------------
 
 :numbered!:
 

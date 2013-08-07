@@ -1,22 +1,20 @@
 # Add additional steps here. Format is "stepname script"
 [ezsteps]
-step1 step1.sh
+clone clone.sh
+install install.sh
 
 # Test requirements are specified here
 [requirements]
-waiton bigrun
-priority 0
-mode itemwait
-
+waiton eggs setup sqlite3
 
 # Iteration for your tests are controlled by the items section
 [items]
-NUMBER #{scheme (string-intersperse (map number->string (sort (let loop ((a 0)(res '()))(if (<= a (or (any->number (get-environment-variable "NUMTESTS")) 2500))(loop (+ a 1)(cons a res)) res)) <)) " ")}
+MODULE_NAME dbi margs qtree vcd xfig mutils
 
 # test_meta is a section for storing additional data on your test
 [test_meta]
 author matt
 owner  matt
-description An example test
+description Install the eggs from the opensrc fossil
 tags tagone,tagtwo
 reviewed never
