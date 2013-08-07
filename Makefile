@@ -8,7 +8,7 @@ SRCFILES = common.scm items.scm launch.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm http-transport.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
-	   tree.scm
+	   tree.scm ezsteps.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
@@ -92,6 +92,10 @@ $(DEPLOYHELPERS) : utils/mt_*
 	$(INSTALL) $< $@
 	chmod a+X $@
 
+$(PREFIX)/bin/mt_xterm : utils/mt_xterm
+	$(INSTALL) $< $@
+	chmod a+x $@
+
 $(PREFIX)/bin/nbfake : utils/nbfake
 	$(INSTALL) $< $@
 	chmod a+x $@
@@ -119,7 +123,8 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	utils/mk_wrapper $(PREFIX) dboard > $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
 
-install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake $(PREFIX)/bin/nbfind $(PREFIX)/bin/newdboard $(PREFIX)/bin/refdb
+install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
+          $(PREFIX)/bin/nbfind $(PREFIX)/bin/newdboard $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm
 
 deploytarg/apropos.so : Makefile
 	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \

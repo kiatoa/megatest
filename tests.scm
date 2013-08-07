@@ -228,51 +228,56 @@
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
-    (push-directory test-rundir)
-    (let ((result (if (null? waivers)
-		      #f
-		      (let loop ((hed (car waivers))
-				 (tal (cdr waivers)))
-			(debug:print 0 "INFO: Applying waiver rule \"" hed "\"")
-			(let* ((waiver      (configf:lookup testconfig "waivers" hed))
-			       (wparts      (if waiver (string-match waiver-rx waiver) #f))
-			       (waiver-rule (if wparts (cadr wparts)  #f))
-			       (waiver-glob (if wparts (caddr wparts) #f))
-			       (logpro-file (if waiver
-						(let ((fname (conc hed ".logpro")))
-						  (if (file-exists? fname)
-						      fname 
-						      (begin
-							(debug:print 0 "INFO: No logpro file " fname " falling back to diff")
-							#f)))
-						#f))
-			       ;; if rule by name of waiver-rule is found in testconfig - use it
-			       ;; else if waivername.logpro exists use logpro-rule
-			       ;; else default to diff-rule
-			       (rule-string (let ((rule (configf:lookup testconfig "waiver_rules" waiver-rule)))
-					      (if rule
-						  rule
-						  (if logpro-file
-						      logpro-rule
-						      (begin
-							(debug:print 0 "INFO: No logpro file " logpro-file " found, using diff rule")
-							diff-rule)))))
-			       ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
-			       (processed-cmd (string-substitute 
-					       "%file1%" (conc test-rundir "/" waiver-glob)
-					       (string-substitute
-						"%file2%" (conc prev-rundir "/" waiver-glob)
-						(string-substitute
-						 "%waivername%" hed rule-string #t) #t) #t))
-			       (res            #f))
-			  (debug:print 0 "INFO: waiver command is \"" processed-cmd "\"")
-			  (if (eq? (system processed-cmd) 0)
-			      (if (null? tal)
-				  #t
-				  (loop (car tal)(cdr tal)))
-			      #f))))))
-      (pop-directory)
-      result)))
+    (if (not (file-exists? test-rundir))
+	(begin
+	  (debug:print 0 "ERROR: test run directory is gone, cannot propagate waiver")
+	  #f)
+	(begin
+	  (push-directory test-rundir)
+	  (let ((result (if (null? waivers)
+			    #f
+			    (let loop ((hed (car waivers))
+				       (tal (cdr waivers)))
+			      (debug:print 0 "INFO: Applying waiver rule \"" hed "\"")
+			      (let* ((waiver      (configf:lookup testconfig "waivers" hed))
+				     (wparts      (if waiver (string-match waiver-rx waiver) #f))
+				     (waiver-rule (if wparts (cadr wparts)  #f))
+				     (waiver-glob (if wparts (caddr wparts) #f))
+				     (logpro-file (if waiver
+						      (let ((fname (conc hed ".logpro")))
+							(if (file-exists? fname)
+							    fname 
+							    (begin
+							      (debug:print 0 "INFO: No logpro file " fname " falling back to diff")
+							      #f)))
+						      #f))
+				     ;; if rule by name of waiver-rule is found in testconfig - use it
+				     ;; else if waivername.logpro exists use logpro-rule
+				     ;; else default to diff-rule
+				     (rule-string (let ((rule (configf:lookup testconfig "waiver_rules" waiver-rule)))
+						    (if rule
+							rule
+							(if logpro-file
+							    logpro-rule
+							    (begin
+							      (debug:print 0 "INFO: No logpro file " logpro-file " found, using diff rule")
+							      diff-rule)))))
+				     ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
+				     (processed-cmd (string-substitute 
+						     "%file1%" (conc test-rundir "/" waiver-glob)
+						     (string-substitute
+						      "%file2%" (conc prev-rundir "/" waiver-glob)
+						      (string-substitute
+						       "%waivername%" hed rule-string #t) #t) #t))
+				     (res            #f))
+				(debug:print 0 "INFO: waiver command is \"" processed-cmd "\"")
+				(if (eq? (system processed-cmd) 0)
+				    (if (null? tal)
+					#t
+					(loop (car tal)(cdr tal)))
+				    #f))))))
+	    (pop-directory)
+	    result)))))
 
 
 ;; Do not rpc this one, do the underlying calls!!!

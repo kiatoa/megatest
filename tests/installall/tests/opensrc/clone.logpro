@@ -1,8 +1,8 @@
 ;; You should have at least one expect:required. This ensures that your process ran
-(expect:required in "LogFileBody" > 0 "Put description here" #/put pattern here/)
+(expect:required in "LogFileBody" > 0 "Output from fossil" (list #/^repository:\s+/ #/comment:/))
 
 ;; You may need ignores to suppress false error or warning hits from the later expects
 ;; NOTE: Order is important here!
 (expect:ignore   in "LogFileBody"  < 99 "Ignore the word error in comments" #/^\/\/.*error/)
-(expect:warning  in "LogFileBody"  = 0 "Any warning" #/warn/)
+(expect:warning  in "LogFileBody"  = 0 "Any warning" #/warn/i)
 (expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/error/i)) ;; but disallow any other errors

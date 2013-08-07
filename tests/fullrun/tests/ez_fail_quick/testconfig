@@ -1,0 +1,14 @@
+[requirements]
+priority 10
+
+[ezsteps]
+# should fail on next step
+lookitnada  ls /nada
+
+[test_meta]
+author matt
+owner  bob
+description This test runs a single ezstep which fails immediately.
+
+tags first,single
+reviewed 09/10/2011, by Matt

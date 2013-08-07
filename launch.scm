@@ -92,7 +92,7 @@
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -114,6 +114,7 @@
 	  (setenv "MT_RUNNAME"   runname)
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
+	  (setenv "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  (if (not (setup-for-run))
@@ -325,6 +326,7 @@
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
+	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
@@ -374,16 +376,18 @@
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now
   ;; special case
-  (set! *configinfo* (find-and-read-config 
-		      (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-		      environ-patt: "env-override"
-		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-		      pathenvvar: "MT_RUN_AREA_HOME"))
-  (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-  (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-  (if *toppath*
-      (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
-      (debug:print 0 "ERROR: failed to find the top path to your run setup."))
+  (if (not (hash-table? *configdat*))  ;; no need to re-open on every call
+      (begin
+	(set! *configinfo* (find-and-read-config 
+			    (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+			    environ-patt: "env-override"
+			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+			    pathenvvar: "MT_RUN_AREA_HOME"))
+	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
+	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
+	(if *toppath*
+	    (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
+	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
   *toppath*)
 
 (define (get-best-disk confdat)

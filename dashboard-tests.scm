@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses ezsteps))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -252,6 +253,39 @@
 			       btns)))
 	       btns))))))
 
+(define (dashboard-tests:run-html-viewer lfilename)
+  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
+    (if htmlviewercmd
+	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
+	(iup:send-url lfilename))))
+
+(define (dashboard-tests:run-a-step info)
+  #t)
+
+(define (dashboard-tests:step-run-control testdat stepname testconfig)
+  (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
+   #:title stepname
+   (iup:vbox ; #:expand "YES"
+    (iup:label (conc "Step: " stepname "\nNB// These buttons only run the test step\nfor the purpose of debugging.\nNot all database updates are done."))
+    (iup:button "Re-run"            
+		#:expand "HORIZONTAL" 
+		#:action (lambda (obj)
+			   (thread-start! 
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #f))
+					 (conc "ezstep run single step " stepname)))))
+    (iup:button "Re-run and continue"         
+		#:expand "HORIZONTAL" 
+		#:action (lambda (obj)
+			   (thread-start!
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #f))
+					 (conc "ezstep run from step " stepname)))))
+    ;; (iup:button "Refresh test data"
+    ;;     	#:expand "HORIZONTAL"
+    ;;     	#:action (lambda (obj)
+    ;;     		   (print "Refresh test data " stepname))
+    )))
 
 ;;======================================================================
 ;;
@@ -277,7 +311,7 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
-           (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
+	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
@@ -296,14 +330,14 @@
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
-				 (iup:send-url logfile)
+				 (dashboard-tests:run-html-viewer logfile)
 				 (message-window (conc "File " logfile " not found")))))
-	       (view-a-log (lambda (lfile)
+	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
 			       (if (file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
-				   (iup:send-url lfilename)
+				   (dashboard-tests:run-html-viewer lfilename)
 				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)
@@ -311,7 +345,7 @@
 						  (conc "-e " (get-environment-variable "SHELL"))
 						  "")))
 				   (system (conc "cd " rundir 
-						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+						 ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				 (message-window  (conc "Directory " rundir " not found")))))
 	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
@@ -321,7 +355,7 @@
 							    (begin
 							      (set! testdat-path (conc rundir "/testdat.db"))
 							      0))))
-				    (need-update   (or (and (> curr-mod-time db-mod-time)
+				    (need-update   (or (and (>= curr-mod-time db-mod-time)
 							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
@@ -338,7 +372,9 @@
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
-				 (set! db-mod-time curr-mod-time)
+				 (if (eq? curr-mod-time db-mod-time) ;; do only once if same
+				     (set! db-mod-time (+ curr-mod-time 1))
+				     (set! db-mod-time curr-mod-time))
 				 (set! last-update (current-milliseconds))
 				 (set! request-update #f) ;; met the need ...
 				 )
@@ -408,7 +444,28 @@
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+	       (clean-run-execute  (lambda (x)
+				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
+						      "megatest -remove-runs -target " keystring " :runname " runname
+						      " -testpatt " (conc testname "/" (if (equal? item-path "")
+											   "%"
+											   item-path))
+						      ";megatest -target " keystring " :runname " runname 
+						      " -runtests " (conc testname "/" (if (equal? item-path "")
+											   "%" 
+											   item-path))
+						      " ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))
+				       (system (conc cmd " &")))))
+	       (remove-test (lambda (x)
+			      (iup:attribute-set!
+			       command-text-box "VALUE"
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+				     " -testpatt " (conc testname "/" (if (equal? item-path "")
+									  "%"
+									  item-path))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))
+			      )))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -432,6 +489,7 @@
 					    (iup:button "Start Xterm"   #:action xterm       #:size "80x")
 					    (iup:button "Run Test"      #:action run-test    #:size "80x")
 					    (iup:button "Clean Test"    #:action remove-test #:size "80x")
+					    (iup:button "CleanRunExecute!"    #:action clean-run-execute #:size "80x")
 					    (iup:button "Kill All Jobs" #:action kill-jobs   #:size "80x")
 					    (iup:button "Close"         #:action (lambda (x)(exit)) #:size "80x"))
 					   (apply 
@@ -453,9 +511,13 @@
 									 ;; (if (equal? col 6)
 									 (let* ((mtrx-rc (conc lin ":" 6))
 										(fname   (iup:attribute obj mtrx-rc))) ;; col))))
-									   (view-a-log fname)))
-									   ;; (print "obj: " obj " mtrx-rc: " mtrx-rc " fname: " fname " lin: " lin " col: " col " status: " status)))
-							    )))
+									   (if (eq? col 6)
+									       (view-a-log fname)
+									       (iup:show
+										(dashboard-tests:step-run-control 
+										 testdat
+										 (iup:attribute obj (conc lin ":" 1)) 
+										 teststeps))))))))
 					 ;; (let loop ((count 0))
 					 ;;   (iup:attribute-set! steps-matrix "FITTOTEXT" (conc "L" count))
 					 ;;   (if (< count 30)

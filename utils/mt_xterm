@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if [ -e megatest.sh ];then
+  source megatest.sh
+fi
+
+if [ x"$MT_XTERM_CMD" == "x" ];then
+  exec xterm "$@"
+else
+  exec $MT_XTERM_CMD
+fi
+
