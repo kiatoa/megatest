@@ -152,6 +152,7 @@
 		 (kill-job?    #f)
 		 (exit-info    (vector #t #t #t))
 		 (job-thread   #f)
+		 (keep-going   #t)
 		 (runit        (lambda ()
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
@@ -291,6 +292,9 @@
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
+					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
+					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
+					     ;;       between tries?
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
 						   (process-signal pid signal/kill)
@@ -318,15 +322,21 @@
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       ;; (sqlite3:finalize! db)
-				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
-				       (loop (calc-minutes)))))))
-		 (th1          (make-thread monitorjob))
-		 (th2          (make-thread runit)))
+				       (if keep-going
+					   (begin
+					     (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
+					     (if keep-going
+						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
+		 (th1          (make-thread monitorjob "monitor job"))
+		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
-	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed.
+	    (set! keep-going #f)
+	    (thread-sleep! 1)
+	    (thread-terminate! th1) ;; Not sure if this is a good idea
+	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
@@ -339,14 +349,14 @@
 			(new-status (cond
 				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				     ((eq? rollup-status 0)
-				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
 				     ((eq? rollup-status 1) "FAIL")
 				     ((eq? rollup-status 2)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
 		    (tests:test-set-status! test-id 
 					    new-state
 					    new-status
