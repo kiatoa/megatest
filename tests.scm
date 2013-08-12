@@ -681,38 +681,39 @@
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)
+(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
   ;; This is a good candidate for threading the requests to enable
   ;; transactionized write at the server
   (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
-  ;; (let ((db (open-db)))
-    ;; (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;"
-    ;;     	     cpuload
-    ;;     	     diskfree
-    ;;     	     test-id)
-    (if minutes 
-	(cdb:tests-update-run-duration *runremote* test-id minutes))
-	;; (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
-    (if (eq? num-records 0)
-	(cdb:tests-update-uname-host *runremote* test-id uname hostname))
-	;;(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;" uname hostname test-id))
-    ;;(sqlite3:finalize! db))
-    )
+  (if minutes 
+      (cdb:tests-update-run-duration *runremote* test-id minutes))
+  (if (and uname hostname)
+      (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
   
-(define (tests:set-meta-info db test-id run-id testname itemdat minutes work-area)
+(define (tests:set-full-meta-info db test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (num-records (test:tdb-get-rundat-count tdb))
+  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
+	 (diskfree (get-df (current-directory)))
+	 (uname    (get-uname "-srvpio"))
+	 (hostname (get-host-name)))
+    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
+	  
+(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
+  ;; DOES cdb:remote-run under the hood!
+  (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (if (eq? (modulo num-records 10) 0) ;; every ten records update central
-	(let ((uname    (get-uname "-srvpio"))
-	      (hostname (get-host-name)))
-	  (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)))
+    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    ;; Update central with uname and hostname = #f
+    (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)))
+	 
+(define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 		     cpuload diskfree minutes)
     (sqlite3:finalize! tdb)))
-	  
+ 
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================

@@ -137,7 +137,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 work-area)
+	  (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -172,7 +172,7 @@
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
-						(thread-sleep! 2)
+						(thread-sleep! 1)
 						(loop (+ i 1)))
 					      )))))
 				 ;; then, if runscript ran ok (or did not get called)
@@ -225,7 +225,7 @@
 								   (mutex-unlock! m)
 								   (if (eq? pid-val 0)
 								       (begin
-									 (thread-sleep! 2)
+									 (thread-sleep! 1)
 									 (processloop (+ i 1))))
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
@@ -277,6 +277,7 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
+				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
@@ -288,7 +289,7 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
+				       (tests:set-partial-meta-info #f test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

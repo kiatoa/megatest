@@ -1107,7 +1107,7 @@
   (cdb:client-call serverdat 'update-run-duration #t *default-numtries* minutes test-id))
 
 (define (cdb:tests-update-uname-host serverdat test-id uname hostname)
-  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* test-id uname hostname))
+  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
 
 ;; speed up for common cases with a little logic
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
