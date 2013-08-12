@@ -1,0 +1,48 @@
+
+How To Do Things
+================
+
+Tricks
+------
+
+This section is a compendium of a various useful tricks for debugging,
+configuring and generally getting the most out of Megatest.
+
+Debugging Tricks
+----------------
+
+Examining The Environment
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+During Config File Processing
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Organising Your Tests and Tasks
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/nfs/ch/disks/ch_unienv_disk005/qa_mrwellan/interim/src/megatest/tests/fdktestqa/testqa
+----------------------------
+[tests-paths]
+1 #{get misc parent}/simplerun/tests
+----------------------------
+
+-------------------
+[setup]
+-------------------
+
+The runscript method is a brute force way to run scripts where the
+user is responsible for setting STATE and STATUS
+
+-------------------
+runscript main.csh
+-------------------
+
+
+ww30.2
+cellname/LVS/cellname.LAYOUT_ERRORS
+
+Error: text open
+
+ww31.3
+cellname/LVS/cellname.LAYOUT_ERRORS
+
+Error: text open
