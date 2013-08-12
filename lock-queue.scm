@@ -68,28 +68,36 @@
   (let ((res       #f)
 	(lckqry    (sqlite3:prepare db "SELECT test_id,run_lock FROM runlocks WHERE run_lock='locked';"))
 	(mklckqry  (sqlite3:prepare db "INSERT INTO runlocks (test_id,run_lock) VALUES (?,'locked');")))
-    (handle-exceptions
-     exn
-     #f
-     (sqlite3:with-transaction
-      db
-      (lambda ()
-	(sqlite3:for-each-row (lambda (tid lockstate)
-				(set! res (list tid lockstate)))
-			      lckqry)
-	(if res
-	    (if (equal? (car res) test-id)
-		#t ;; already have the lock
-		#f)
-	    (begin
-	      (sqlite3:execute mklckqry test-id)
-	      ;; if no error handled then return #t for got the lock
-	      #t)))))))
+    (let ((result 
+	   (handle-exceptions
+	    exn
+	    #f
+	    (sqlite3:with-transaction
+	     db
+	     (lambda ()
+	       (sqlite3:for-each-row (lambda (tid lockstate)
+				       (set! res (list tid lockstate)))
+				     lckqry)
+	       (if res
+		   (if (equal? (car res) test-id)
+		       #t ;; already have the lock
+		       #f)
+		   (begin
+		     (sqlite3:execute mklckqry test-id)
+		     ;; if no error handled then return #t for got the lock
+		     #t)))))))
+      (sqlite3:finalize! lckqry)
+      (sqlite3:finalize! mklckqry)
+      result)))
 
 (define (lock-queue:release-lock fname test-id)
   (let ((db (lock-queue:open-db fname)))
     (sqlite3:execute db "DELETE FROM runlocks WHERE test_id=?;" test-id)
     (sqlite3:finalize! db)))
+
+(define (lock-queue:steal-lock db test-id)
+  (sqlite3:execute db "DELETE FROM runlocks WHERE run_lock='locked';")
+  (lock-queue:get-lock db test-it))
 
 ;; returns #f if ok to skip the task
 ;; returns #t if ok to proceed with task
@@ -103,23 +111,22 @@
      "INSERT OR REPLACE INTO queue (test_id,start_time,state) VALUES (?,?,'waiting');"
      test-id mystart)
     (thread-sleep! 1) ;; give other tests a chance to register
-    (let loop ((younger-waiting (lock-queue:any-younger? db mystart test-id)))
-      (if younger-waiting
-	  (begin
-	    ;; no need for us to wait. mark in the lock queue db as skipping
-	    (lock-queue:set-state db test-id "skipping")
-	    (begin
-	      ;; (sqlite3:finalize! db)
-	      #f)) ;; let the calling process know that nothing needs to be done
-	  (if (lock-queue:get-lock db test-id)
-	      (begin
-		;; (sqlite3:finalize! db)
-		#t)
-	      (if (> (- (current-seconds) mystart) 36000) ;; waited too long, steal the lock
-		  (lock-queue:steal-lock db test-id)
-		  (begin
-		    (thread-sleep! 1)
-		    (loop (lock-queue:any-younger? db mystart test-id)))))))))
+    (let ((result 
+	   (let loop ((younger-waiting (lock-queue:any-younger? db mystart test-id)))
+	     (if younger-waiting
+		 (begin
+		   ;; no need for us to wait. mark in the lock queue db as skipping
+		   (lock-queue:set-state db test-id "skipping")
+		   #f) ;; let the calling process know that nothing needs to be done
+		 (if (lock-queue:get-lock db test-id)
+		     #t
+		     (if (> (- (current-seconds) mystart) 36000) ;; waited too long, steal the lock
+			 (lock-queue:steal-lock db test-id)
+			 (begin
+			   (thread-sleep! 1)
+			   (loop (lock-queue:any-younger? db mystart test-id)))))))))
+      (sqlite3:finalize! db)
+      result)))
 	  
             
 ;; (use trace)
