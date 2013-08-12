@@ -17,6 +17,7 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit tests))
+(declare (uses lock-queue))
 (declare (uses db))
 (declare (uses common))
 (declare (uses items))
@@ -380,7 +381,7 @@
 (define (tests:test-set-toplog! db run-id test-name logf) 
   (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
 
-(define (tests:summarize-items db run-id test-name force)
+(define (tests:summarize-items db run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
@@ -401,8 +402,9 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-	      (print "Failed to obtain lock for " outputfilename)
+	  (if ;; (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+              (not (lock-queue:wait-turn outputfilename test-id))
+	      (print "Not updating " outputfilename " as another test item has signed up for the job")
 	      (begin
 		(print "Obtained lock for " outputfilename)
 		(let ((oup    (open-output-file outputfilename))
@@ -463,6 +465,7 @@
 			     outtxt "</table></body></html>")
 		      (release-dot-lock outputfilename)))
 		  (close-output-port oup)
+		  (lock-queue:release-lock outputfilename test-id)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
 		  (tests:test-set-toplog! db run-id test-name outputfilename)

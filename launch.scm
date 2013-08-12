@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -364,20 +364,15 @@
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
 		    (if (not (equal? item-path ""))
-			(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status))
-		    
-		    ))
+			(begin
+			  (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
+			  (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
-	      )
+		  (tests:summarize-items #f run-id test-id test-name #f))) ;; don't force - just update if no
 	    (mutex-unlock! m)
-	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
-	    ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    ;; (sqlite3:finalize! db)
-	    ;; (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
