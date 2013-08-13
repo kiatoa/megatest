@@ -130,6 +130,9 @@ test10 :
 	        (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$sys/$$fs/$$dpath :runname $(RUNNAME) &);\
 	     done;done;done
 
+test11 :
+	 cd fullrun;time (for a in 1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10 ;do   (megatest -test-paths -target %/%/% > /dev/null ) & done; wait; )
+
 minsetup : 
 	cd ..;make && make install
 	mkdir -p mintest/runs mintest/links
