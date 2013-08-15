@@ -793,7 +793,7 @@
 	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
 	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
       (if (not testdat)
-	  (begin
+	  (let loop ()
 	    ;; ensure that the path exists before registering the test
 	    ;; NOPE: Cannot! Don't know yet which disk area will be assigned....
 	    ;; (system (conc "mkdir -p " new-test-path))
@@ -809,7 +809,12 @@
 		  (cdb:tests-register-test *runremote* run-id test-name item-path)
 		  (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))))
+	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))
+	    (if (not testdat)
+		(begin
+		  (debug:print-info 0 "WARNING: server is overloaded, trying again in one second")
+		  (thread-sleep! 1)
+		  (loop)))))
       (if (not testdat) ;; should NOT happen
 	  (debug:print 0 "ERROR: failed to get test record for test-id " test-id))
       (set! test-id (db:test-get-id testdat))
