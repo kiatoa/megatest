@@ -46,6 +46,7 @@
               test_id    INTEGER,
               run_lock   TEXT,
               CONSTRAINT runlock_constraint UNIQUE (run_lock));")))
+    (sqlite3:set-busy-handler! db handler)
     db))
 
 (define (lock-queue:set-state db test-id newstate)
