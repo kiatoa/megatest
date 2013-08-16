@@ -368,7 +368,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path status))
+	(mt:roll-up-pass-fail-counts run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))

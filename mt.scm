@@ -87,3 +87,18 @@
 
 (define (mt:get-run-stats)
   (cdb:remote-run db:get-run-stats #f))
+
+;;======================================================================
+;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
+;;======================================================================
+
+(define (mt:roll-up-pass-fail-counts run-id test-name item-path status)
+  (if (and (not (equal? item-path ""))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
+      (begin
+	(cdb:update-pass-fail-counts *runremote* run-id test-name)
+	(if (equal? status "RUNNING")
+	    (cdb:top-test-set-running *runremote* run-id test-name)
+	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
+	#f)
+      #f))

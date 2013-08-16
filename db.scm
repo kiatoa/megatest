@@ -1539,6 +1539,7 @@
 (define (cdb:num-clients serverdat)
   (cdb:client-call serverdat 'numclients #t *default-numtries*))
 
+;; I think this would be more efficient if executed on client side FIXME???
 (define (cdb:test-set-status-state serverdat test-id status state msg)
   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
       (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
@@ -1554,6 +1555,18 @@
 
 (define (cdb:tests-register-test serverdat run-id test-name item-path)
   (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path))
+
+;; more transactioned calls, these for roll-up-pass-fail stuff
+(define (cdb:update-pass-fail-counts serverdat run-id test-name)
+  (cdb:client-call serverdat 'update-fail-pass-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
+
+(define (cdb:top-test-set-running serverdat run-id test-name)
+  (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
+
+(define (cdb:top-test-set-per-pf-counts serverdat run-id test-name)
+  (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
+
+;;=
 
 (define (cdb:flush-queue serverdat)
   (cdb:client-call serverdat 'flush #f *default-numtries*))
@@ -1617,11 +1630,33 @@
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
+	;; stuff for roll-up-pass-fail-counts
+	'(update-fail-pass-counts "UPDATE tests 
+             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
+                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
+             WHERE run_id=? AND testname=? AND item_path='';")
+	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE run_id=? AND testname=? AND item_path='';")
+	'(top-test-set-per-pf-counts "UPDATE tests
+                       SET state=CASE 
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE run_id=? AND testname=?
+                                                     AND item_path != '' 
+                                                     AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
+                                   ELSE 'COMPLETED' END,
+                            status=CASE 
+                                  WHEN fail_count > 0 THEN 'FAIL' 
+                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE run_id=? AND testname=?
+                                              AND item_path != ''
+                                              AND status = 'SKIP') > 0 THEN 'SKIP'
+                                  ELSE 'UNKNOWN' END
+                       WHERE run_id=? AND testname=? AND item_path='';")
 	))
 
 ;; do not run these as part of the transaction
 (define db:special-queries   '(rollup-tests-pass-fail
-			       db:roll-up-pass-fail-counts
+			       ;; db:roll-up-pass-fail-counts  ;; WHY NOT!?
 			       login
 			       immediate
 			       flush
@@ -1827,45 +1862,6 @@
      "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE run_id=? AND testname=? AND item_path != '';"
      run-id test-name)
     res))
-
-;; Rollup the pass/fail counts from itemized tests into fail_count and pass_count
-;; NOTE: Is this duplicating (db:test-data-rollup db test-id status) ????
-(define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
-  ;; (cdb:flush-queue *runremote*)
-  (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
-      (begin
-	(sqlite3:execute 
-	 db
-	 "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
-                 pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
-             WHERE run_id=? AND testname=? AND item_path='';"
-	 run-id test-name run-id test-name run-id test-name)
-	;; (thread-sleep! 0.1) ;; give other processes a chance here, no, better to be done ASAP?
-	(if (equal? status "RUNNING") ;; running takes priority over all other states, force the test state to RUNNING
-	    (sqlite3:execute db "UPDATE tests SET state=? WHERE run_id=? AND testname=? AND item_path='';" "RUNNING" run-id test-name)
-	    (sqlite3:execute
-	     db
-	     "UPDATE tests
-                       SET state=CASE 
-                                   WHEN (SELECT count(id) FROM tests 
-                                                WHERE run_id=? AND testname=?
-                                                     AND item_path != '' 
-                                                     AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
-                                   ELSE 'COMPLETED' END,
-                            status=CASE 
-                                  WHEN fail_count > 0 THEN 'FAIL' 
-                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
-                                  WHEN (SELECT count(id) FROM tests
-                                         WHERE run_id=? AND testname=?
-                                              AND item_path != ''
-                                              AND status = 'SKIP') > 0 THEN 'SKIP'
-                                  ELSE 'UNKNOWN' END
-                       WHERE run_id=? AND testname=? AND item_path='';"
-	     run-id test-name run-id test-name run-id test-name))
-	#f)
-      #f))
 
 ;;======================================================================
 ;; Tests meta data

@@ -363,10 +363,12 @@
 					    new-status
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
-		    (if (not (equal? item-path ""))
-			(begin
-			  (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
-			  (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))))
+		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; (if (not (equal? item-path ""))
+		    ;;     (begin
+		    ;;       (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
+		    ;;       (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))
+		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items #f run-id test-id test-name #f))) ;; don't force - just update if no
