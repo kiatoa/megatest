@@ -355,7 +355,8 @@
 						 (cons 'cmd cmd)
 						 (cons 'params params))
 					   read-string))
-				(close-all-connections)
+				 ;; Shouldn't this be a call to the managed call-all-connections stuff above?
+				(close-all-connections!)
 				(mutex-unlock! *http-mutex*)
 				))
 	                          ;; (if cleanup

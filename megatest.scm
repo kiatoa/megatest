@@ -940,7 +940,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      ;; DO NOT run remote
-	      (tests:summarize-items db run-id test-name #t)) ;; do force here
+	      (tests:summarize-items db run-id test-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin

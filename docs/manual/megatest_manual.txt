@@ -48,6 +48,7 @@ sqlite3 database.
 include::../plan.txt[]
 include::getting_started.txt[]
 include::writing_tests.txt[]
+include::howto.txt[]
 include::reference.txt[]
 
 [appendix]

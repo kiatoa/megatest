@@ -389,7 +389,7 @@
 	 (db             #f))
     (if (not testdat)
 	(begin
-	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
