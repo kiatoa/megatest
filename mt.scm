@@ -102,3 +102,16 @@
 	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
 	#f)
       #f))
+
+;; speed up for common cases with a little logic
+(define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
+  (cond
+   ((and newstate newstatus newcomment)
+    (cdb:client-call *runremote* 'state-status-msg #t *default-numtries* newstate newstatus newcomment test-id))
+   ((and newstate newstatus)
+    (cdb:client-call serverdat 'state-status #t *default-numtries* newstate newstatus test-id))
+   (else
+    (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
+    (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
+    (if newcomment (cdb:client-call *runremote* 'set-test-comment #t *default-numtries* newcomment test-id))))
+   (db:process-triggers test-id newstate newstatus))

@@ -1109,7 +1109,12 @@
 (define (cdb:tests-update-uname-host serverdat test-id uname hostname)
   (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
 
+(define (db:process-triggers test-id newstate newstatus)
+  #t)
+
 ;; speed up for common cases with a little logic
+;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
+;;
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
@@ -1119,11 +1124,13 @@
    (else
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
+  (db:process-triggers test-id newstate newstatus))
 
-(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-		   state status run-id test-name item-path))
+;; Never used
+;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+;;   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+;; 		   state status run-id test-name item-path))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
@@ -1607,9 +1614,14 @@
 
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+	;; Test state and status
+	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
+	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
-	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+	;; Test comment
+	'(set-test-comment       "UPDATE tests SET comment=? WHERE id=?;")
+	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
 	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
 	'(test_data-pf-rollup    "UPDATE tests

@@ -888,7 +888,7 @@
 		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists"))))))
 		 (if skip-test
 		     (begin
-		       (cdb:remote-run db:test-set-state-status-by-id #f test-id "COMPLETED" "SKIP" skip-test)
+		       (mt:test-set-state-status-by-id test-id "COMPLETED" "SKIP" skip-test)
 		       (debug:print-info 1 "SKIPPING Test " full-test-name " due to " skip-test))
 		     (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
 			 (begin
@@ -1031,17 +1031,17 @@
 				      ;; up and blow it away.
 				      (begin
 					(debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
-					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "FAILEDKILL" "n/a" #f)
+					(mt:test-set-state-status-by-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
 					(thread-sleep! 1))
 				      (begin
-					(cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "KILLREQ" "n/a" #f)
+					(mt:test-set-state-status-by-id (db:test-get-id test) "KILLREQ" "n/a" #f)
 					(thread-sleep! 1)))
 				    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
 				    (if (null? tal)
 					(loop new-test-dat tal)
 					(loop (car tal)(append tal (list new-test-dat)))))
 				  (begin
-				    (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) "REMOVING" "LOCKED" #f)
+				    (mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f)
 				    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
 				    (if (and real-dir 
 					     (> (string-length real-dir) 5)
@@ -1078,7 +1078,7 @@
 					(loop (car tal)(cdr tal))))))
 			     ((set-state-status)
 			      (debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-			      (cdb:remote-run db:test-set-state-status-by-id db (db:test-get-id test) (car state-status)(cadr state-status) #f)
+			      (mt:test-set-state-status-by-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
 			      (if (not (null? tal))
 				  (loop (car tal)(cdr tal))))
 			     ((run-wait)
