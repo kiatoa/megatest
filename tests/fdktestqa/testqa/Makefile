@@ -16,7 +16,7 @@ bigrun :
 	$(MEGATEST) -runtests bigrun -target a/bigrun :runname a
 
 bigrun2 :
-	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a
+	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a -transport http
 
 dashboard : 
 	$(DASHBOARD) -rows 20 &

@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -137,7 +137,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 work-area)
+	  (tests:set-full-meta-info #f test-id run-id 0 work-area)
 	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
@@ -152,6 +152,7 @@
 		 (kill-job?    #f)
 		 (exit-info    (vector #t #t #t))
 		 (job-thread   #f)
+		 (keep-going   #t)
 		 (runit        (lambda ()
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
@@ -171,7 +172,7 @@
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
-						(thread-sleep! 2)
+						(thread-sleep! 1)
 						(loop (+ i 1)))
 					      )))))
 				 ;; then, if runscript ran ok (or did not get called)
@@ -224,7 +225,7 @@
 								   (mutex-unlock! m)
 								   (if (eq? pid-val 0)
 								       (begin
-									 (thread-sleep! 2)
+									 (thread-sleep! 1)
 									 (processloop (+ i 1))))
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
@@ -276,6 +277,7 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
+				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
@@ -287,10 +289,13 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
+				       (tests:set-partial-meta-info #f test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
+					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
+					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
+					     ;;       between tries?
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
 						   (process-signal pid signal/kill)
@@ -318,15 +323,21 @@
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       ;; (sqlite3:finalize! db)
-				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
-				       (loop (calc-minutes)))))))
-		 (th1          (make-thread monitorjob))
-		 (th2          (make-thread runit)))
+				       (if keep-going
+					   (begin
+					     (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
+					     (if keep-going
+						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
+		 (th1          (make-thread monitorjob "monitor job"))
+		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
-	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed.
+	    (set! keep-going #f)
+	    (thread-sleep! 1)
+	    (thread-terminate! th1) ;; Not sure if this is a good idea
+	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
@@ -339,34 +350,31 @@
 			(new-status (cond
 				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				     ((eq? rollup-status 0)
-				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
 				     ((eq? rollup-status 1) "FAIL")
 				     ((eq? rollup-status 2)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
 		    (tests:test-set-status! test-id 
 					    new-state
 					    new-status
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
-		    (if (not (equal? item-path ""))
-			(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status))
-		    
+		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; (if (not (equal? item-path ""))
+		    ;;     (begin
+		    ;;       (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
+		    ;;       (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
-	      )
+		  (tests:summarize-items #f run-id test-id test-name #f))) ;; don't force - just update if no
 	    (mutex-unlock! m)
-	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
-	    ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    ;; (sqlite3:finalize! db)
-	    ;; (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 

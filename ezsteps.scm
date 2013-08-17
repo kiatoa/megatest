@@ -167,7 +167,7 @@
 		      (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status))))
 	    ;; for automated creation of the rollup html file this is a good place...
 	    (if (not (equal? item-path ""))
-		(tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
+		(tests:summarize-items #f run-id test-id test-name #f)) ;; don't force - just update if no
 	    )))
     (pop-directory)
     rollup-status))
