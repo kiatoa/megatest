@@ -109,7 +109,7 @@
    ((and newstate newstatus newcomment)
     (cdb:client-call *runremote* 'state-status-msg #t *default-numtries* newstate newstatus newcomment test-id))
    ((and newstate newstatus)
-    (cdb:client-call serverdat 'state-status #t *default-numtries* newstate newstatus test-id))
+    (cdb:client-call *runremote* 'state-status #t *default-numtries* newstate newstatus test-id))
    (else
     (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
     (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
