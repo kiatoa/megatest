@@ -89,6 +89,29 @@
   (cdb:remote-run db:get-run-stats #f))
 
 ;;======================================================================
+;;  T R I G G E R S
+;;======================================================================
+
+(define (mt:process-triggers test-id newstate newstatus)
+  (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
+	 (test-rundir   (db:test-get-rundir test-dat))
+	 (tconfig       #f))
+    (if (and (file-exists? test-rundir)
+	     (directory? test-rundir))
+	(begin
+	  (push-directory test-rundir)
+	  (set! tconfig (mt:lazy-read-test-config test-dat))
+	  (pop-directory)
+	  (for-each (lambda (trigger)
+		      (let ((cmd  (configf:lookup tconfig "triggers" trigger)))
+			(if cmd
+			    (system (conc cmd " " test-id " " test-rundir " " trigger " 2&>1 " test-rundir "/last-trigger.log")))))
+		    (list
+		     (conc newstate "/" newstatus)
+		     (conc newstate "/")
+		     (conc "/" newstatus)))))))
+    
+;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
 ;;======================================================================
 
@@ -114,4 +137,23 @@
     (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
     (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
     (if newcomment (cdb:client-call *runremote* 'set-test-comment #t *default-numtries* newcomment test-id))))
-   (db:process-triggers test-id newstate newstatus))
+   (mt:process-triggers test-id newstate newstatus)
+   #t)
+
+(define (mt:lazy-get-test-info-by-id test-id)
+  (let ((tdat (hash-table-ref/default *test-info* test-id #f)))
+    (if tdat 
+	tdat
+	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
+	(cdb:get-test-info-by-id *runremote* test-id))))
+
+(define (mt:lazy-read-test-config test-dat)
+  (let* ((test-id     (db:test-get-id test-dat))
+	 (test-rundir (db:test-get-rundir test-dat))
+	 (tconfig     (hash-table-ref/default *testconfigs* test-id #f)))
+    (if tconfig 
+	tconfig
+	(let ((newtcfg (read-config (conc test-rundir "/testconfig") #f #f))) ;; NOTE: Does NOT run [system ...]
+	  (hash-table-set! *testconfigs* test-id newtcfg)
+	  newtcfg))))
+

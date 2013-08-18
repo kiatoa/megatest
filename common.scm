@@ -73,6 +73,10 @@
 (define *env-vars-by-run-id* (make-hash-table))
 (define *current-run-name*   #f)
 
+;; Testconfig and runconfig caches. 
+(define *testconfigs*       (make-hash-table)) ;; test-id => testconfig
+(define *runconfigs*        (make-hash-table)) ;; target  => runconfig
+
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))

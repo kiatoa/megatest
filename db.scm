@@ -1109,9 +1109,6 @@
 (define (cdb:tests-update-uname-host serverdat test-id uname hostname)
   (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
 
-(define (db:process-triggers test-id newstate newstatus)
-  #t)
-
 ;; speed up for common cases with a little logic
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
 ;;
@@ -1125,7 +1122,7 @@
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
-  (db:process-triggers test-id newstate newstatus))
+  (mt:process-triggers test-id newstate newstatus))
 
 ;; Never used
 ;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
@@ -1588,7 +1585,9 @@
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
 
 (define (cdb:get-test-info-by-id serverdat test-id)
-  (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id))
+  (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
+    (hash-table-set! *test-info* test-id test-dat) ;; cached for use where up-to-date info is not needed
+    test-dat))
 
 ;; db should be db open proc or #f
 (define (cdb:remote-run proc db . params)
