@@ -1586,7 +1586,7 @@
 
 (define (cdb:get-test-info-by-id serverdat test-id)
   (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
-    (hash-table-set! *test-info* test-id test-dat) ;; cached for use where up-to-date info is not needed
+    (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
     test-dat))
 
 ;; db should be db open proc or #f

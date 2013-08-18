@@ -95,7 +95,9 @@
 (define (mt:process-triggers test-id newstate newstatus)
   (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
 	 (test-rundir   (db:test-get-rundir test-dat))
-	 (tconfig       #f))
+	 (tconfig       #f)
+	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
+	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
     (if (and (file-exists? test-rundir)
 	     (directory? test-rundir))
 	(begin
@@ -106,12 +108,14 @@
 		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
 			    (logf (conc  test-rundir "/last-trigger.log")))
 			(if cmd
-			    (system (conc "(" cmd " " test-id " " test-rundir " " trigger ") >> " logf " 2>&1")))))
+			    (let ((fullcmd (conc "(" cmd " " test-id " " test-rundir " " trigger ") >> " logf " 2>&1")))
+			      (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
+			      (process-run fullcmd)))))
 		    (list
-		     (conc newstate "/" newstatus)
-		     (conc newstate "/")
-		     (conc "/" newstatus)))))))
-    
+		     (conc state "/" status)
+		     (conc state "/")
+		     (conc "/" status)))))))
+
 ;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
 ;;======================================================================
@@ -142,9 +146,10 @@
    #t)
 
 (define (mt:lazy-get-test-info-by-id test-id)
-  (let ((tdat (hash-table-ref/default *test-info* test-id #f)))
-    (if tdat 
-	tdat
+  (let* ((tdat (hash-table-ref/default *test-info* test-id #f)))
+    (if (and tdat 
+	     (< (current-seconds)(+ (vector-ref tdat 0) 10)))
+	(vector-ref tdat 1)
 	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
 	(cdb:get-test-info-by-id *runremote* test-id))))
 
