@@ -1220,13 +1220,9 @@
   (let ((test-names (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
-       (let* ((test-path    (conc *toppath* "/tests/" test-name))
-	      (test-configf (conc test-path "/testconfig"))
-	      (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
-	      ;; read configs with tricks turned off (i.e. no system)
-	      (test-conf    (if testexists (read-config test-configf #f #f)(make-hash-table))))
+       (let* ((test-conf    (mt:lazy-read-test-config test-name)))
 	 ;; use the cdb:remote-run instead of passing in db
-	 (runs:update-test_meta test-name test-conf)))
+	 (if test-conf (runs:update-test_meta test-name test-conf))))
      test-names)))
 
 ;; This could probably be refactored into one complex query ...

@@ -490,12 +490,14 @@
 (define (tests:get-testconfig test-name test-registry system-allowed)
   (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
-    (if testexists
-	(read-config test-configf #f system-allowed environ-patt: (if system-allowed
-								      "pre-launch-env-vars"
-								      #f))
-	#f)))
+	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	 (tcfg         (if testexists
+			   (read-config test-configf #f system-allowed environ-patt: (if system-allowed
+											 "pre-launch-env-vars"
+											 #f))
+			   #f)))
+    (hash-table-set! *testconfigs* test-name tcfg)
+    tcfg))
   
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days

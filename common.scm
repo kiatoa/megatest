@@ -74,8 +74,8 @@
 (define *current-run-name*   #f)
 
 ;; Testconfig and runconfig caches. 
-(define *testconfigs*       (make-hash-table)) ;; test-id => testconfig
-(define *runconfigs*        (make-hash-table)) ;; target  => runconfig
+(define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
+(define *runconfigs*        (make-hash-table)) ;; target    => runconfig
 
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))

@@ -95,6 +95,7 @@
 (define (mt:process-triggers test-id newstate newstatus)
   (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
 	 (test-rundir   (db:test-get-rundir test-dat))
+	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
@@ -102,7 +103,7 @@
 	     (directory? test-rundir))
 	(begin
 	  (push-directory test-rundir)
-	  (set! tconfig (mt:lazy-read-test-config test-dat))
+	  (set! tconfig (mt:lazy-read-test-config test-name))
 	  (pop-directory)
 	  (for-each (lambda (trigger)
 		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
@@ -153,13 +154,22 @@
 	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
 	(cdb:get-test-info-by-id *runremote* test-id))))
 
-(define (mt:lazy-read-test-config test-dat)
-  (let* ((test-id     (db:test-get-id test-dat))
-	 (test-rundir (db:test-get-rundir test-dat))
-	 (tconfig     (hash-table-ref/default *testconfigs* test-id #f)))
-    (if tconfig 
-	tconfig
-	(let ((newtcfg (read-config (conc test-rundir "/testconfig") #f #f))) ;; NOTE: Does NOT run [system ...]
-	  (hash-table-set! *testconfigs* test-id newtcfg)
-	  newtcfg))))
+(define (mt:lazy-read-test-config test-name)
+  (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))
+    (if tconf
+	tconf
+	(let ((test-dirs (tests:get-tests-search-path *configdat*)))
+	  (let loop ((hed (car test-dirs))
+		     (tal (cdr test-dirs)))
+	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
+	      (if (and (file-exists? tconfig-file)
+		       (file-read-access? tconfig-file))
+		  (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
+		    (hash-table-set! *testconfigs* test-name newtcfg)
+		    newtcfg)
+		  (if (null? tal)
+		      (begin
+			(debug:print 0 "ERROR: No readable testconfig found for " test-name)
+			#f)
+		      (loop (car tal)(cdr tal))))))))))
 
