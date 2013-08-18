@@ -598,7 +598,12 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell        (config-lookup *configdat* "jobtools"     "useshell"))
+  (let* ((useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+			    (if ush 
+				(if (equal? ush "no") ;; must use "no" to NOT use shell
+				    #f
+				    ush)
+				#t)))     ;; default is yes
 	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
 	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
@@ -711,7 +716,10 @@
 				      cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
-				      (string-intersperse fullcmd " ")
+				      (let ((cmdstr (string-intersperse fullcmd " ")))
+					(if launchwait
+					    cmdstr
+					    (conc cmdstr " >> mt_launch.log 2>&1")))
 				      (car fullcmd))
 				  (if useshell
 				      '()
