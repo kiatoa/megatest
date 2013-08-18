@@ -103,9 +103,10 @@
 	  (set! tconfig (mt:lazy-read-test-config test-dat))
 	  (pop-directory)
 	  (for-each (lambda (trigger)
-		      (let ((cmd  (configf:lookup tconfig "triggers" trigger)))
+		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
+			    (logf (conc  test-rundir "/last-trigger.log")))
 			(if cmd
-			    (system (conc cmd " " test-id " " test-rundir " " trigger " 2&>1 " test-rundir "/last-trigger.log")))))
+			    (system (conc "(" cmd " " test-id " " test-rundir " " trigger ") >> " logf " 2>&1")))))
 		    (list
 		     (conc newstate "/" newstatus)
 		     (conc newstate "/")

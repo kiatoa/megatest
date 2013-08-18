@@ -323,7 +323,9 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment)))
+	(begin
+	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
+	  (mt:process-triggers test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
