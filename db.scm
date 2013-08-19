@@ -263,7 +263,7 @@
 	 (begin
 	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
-	   #f)
+	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
 	 (set! db (sqlite3:open-database dbpath)))
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
@@ -2180,10 +2180,10 @@
 		      (else #f)))))
       res)))
 
-(define (db:get-compressed-steps test-id #!key (work-area #f))
+(define (db:get-compressed-steps test-id #!key (work-area #f)(tdb #f))
   (if (or (not work-area)
 	  (file-exists? (conc work-area "/testdat.db")))
-      (let* ((comprsteps (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+      (let* ((comprsteps (open-run-close db:get-steps-table tdb test-id work-area: work-area)))
 	(map (lambda (x)
 	       ;; take advantage of the \n on time->string
 	       (vector
