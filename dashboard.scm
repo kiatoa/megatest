@@ -140,7 +140,17 @@ Misc
 
 (define *db-file-path* (conc *toppath* "/megatest.db"))
 
-(define *tests-sort-reverse* #f)
+(define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
+				     (vector "Sort -a" 'testname   "DESC")
+				     (vector "Sort +t" 'event_time "ASC")
+				     (vector "Sort -t" 'event_time "DESC")))
+(define (next-sort-option)
+  (if (>= *tests-sort-reverse* 3)
+      (set! *tests-sort-reverse* 0)
+      (set! *tests-sort-reverse* (+ *tests-sort-reverse* 1)))
+  *tests-sort-reverse*)
+
+(define *tests-sort-reverse* 0)
 (define *hide-empty-runs* #f)
 
 (define *current-tab-number* 0)
@@ -197,10 +207,12 @@ Misc
     ;; trim runs to only those that are changing often here
     ;; 
     (for-each (lambda (run)
-		(let* ((run-id   (db:get-value-by-header run header "id"))
-		       (tests    (let ((tsts (mt:get-tests-for-run run-id testnamepatt states statuses)))
-				   (if *tests-sort-reverse* (reverse tsts) tsts)))
-		       (key-vals (cdb:remote-run db:get-key-vals #f run-id)))
+		(let* ((run-id     (db:get-value-by-header run header "id"))
+		       (sort-info  (vector-ref *tests-sort-options* *tests-sort-reverse*))
+		       (sort-by    (vector-ref sort-info 1))
+		       (sort-order (vector-ref sort-info 2))
+		       (tests      (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
+		       (key-vals   (cdb:remote-run db:get-key-vals #f run-id)))
 		  ;; Not sure this is needed?
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
 		  (if (> (length tests) maxtests)
@@ -270,13 +282,31 @@ Misc
 				     (bstr (vector-ref b 1)))
 				 (if (string=? astr "") #f #t)))))
 			;; (>= (string-length (vector-ref a 1))(string-length (vector-ref b 1))))))
-	 (vlst-s2 (sort vlst-s1 (lambda (a b)
-			   	  (string>= (vector-ref a 0)(vector-ref b 0))))))
+	 (vlst-s2 (sort vlst-s1
+			(lambda (a b)
+			  (string>= (vector-ref a 0)(vector-ref b 0)))))
+	 (vlst-s3 (sort vlst
+	 		(lambda (a b)
+	 		  (let ((tname-a (vector-ref a 0))
+	 			(tname-b (vector-ref b 0))
+	 			(ipath-a (vector-ref a 1))
+	 			(ipath-b (vector-ref b 1)))
+	 		    (cond
+			     ((and (equal? tname-a tname-b)
+				   (equal? ipath-a ""))
+			      #t)
+			     ((and (not (equal? tname-a tname-b))
+				   (equal? ipath-b "")
+				   (not (equal? ipath-a "")))
+	 			#t)
+			     (else #f)))))))
+	 ;; (parents-first (bubble-up vlst)))
     (map (lambda (x)
 	   (if (equal? (vector-ref x 1) "")
 	       (vector-ref x 0)
 	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
-	 vlst-s2)))
+	 vlst-s2
+	 )))
     
 (define (update-labels uidat)
   (let* ((rown    0)
@@ -303,6 +333,30 @@ Misc
 	(iup:attribute-set! lbl "FGCOLOR" (if (hash-table-ref/default *collapsed* newval #f) "0 112 112" "0 0 0"))
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
+
+;; ;; inlst is list of vectors < testname itempath >
+;; ;;
+;; (define (bubble-up inlst)
+;;   (let ((tnames (delete-duplicates (map (lambda (x)(vector-ref x 0)) inlst))))
+;;     (if (null? inlst)
+;; 	inlst
+;; 	(let loop ((hed (car inlst))
+;; 		   (tal (cdr inlst))
+;; 		   (res '())
+;; 		   (cur (car tnames))
+;; 		   (rem (cdr tnames)))
+;; 	  (let ((tname (vector-ref hed 0))
+;; 		(ipath (vector-ref hed 1)))
+;; 	    (if (equal? tname cur)
+;; 		(if (null? tal)
+;; 		    (append res (list hed))
+;; 		    (loop (car tal)
+;; 			  (cdr tal)
+;; 			  (append res (list hed))
+;; 			  cur
+;; 			  rem))
+;; 		(if (null? tal)
+;; 		    (
 
 (define (update-buttons uidat numruns numtests)
   (let* ((runs        (if (> (length *allruns*) numruns)
@@ -1093,19 +1147,19 @@ Misc
 	      ))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort" #:action (lambda (obj)
-					    (set! *tests-sort-reverse* (not *tests-sort-reverse*))
-					    (iup:attribute-set! obj "TITLE" (if *tests-sort-reverse* "+Sort" "-Sort"))
-					    (mark-for-update)))
+	      (iup:button "Sort +a "   #:action (lambda (obj)
+						 (next-sort-option)
+						 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+						 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
 						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
-						 (mark-for-update)))
-	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update))))
 	     (iup:hbox
-	      (iup:button "Quit" #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
-	      (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
+	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
+	      (iup:button "Refresh"   #:action (lambda (obj)
+						 (mark-for-update))))
+	     ;; (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
 	     ))
 	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
 	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))

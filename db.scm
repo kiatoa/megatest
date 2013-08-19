@@ -907,11 +907,10 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by
+(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order
 			      #!key
 			      (qryvals #f)
 			      )
-  (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
@@ -946,11 +945,13 @@
 				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
-				  ((rundir)     " ORDER BY length(rundir) DESC ")
-				  ((event_time) " ORDER BY event_time ASC ")
+				  ((rundir)     " ORDER BY length(rundir) ")
+				  ((testname)   " ORDER BY testname,item_path ")
+				  ((event_time) " ORDER BY event_time ")
 				  (else         (if (string? sort-by)
-						    (conc " ORDER BY " sort-by) 
+						    (conc " ORDER BY " sort-by)
 						    "")))
+				(if sort-order sort-order "")
 				(if limit  (conc " LIMIT " limit)   "")
 				(if offset (conc " OFFSET " offset) "")
 				";"
@@ -963,7 +964,6 @@
      qry
      run-id
      )
-    (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
@@ -982,7 +982,6 @@
 			       #!key (not-in #t)
 			       (sort-by #f)
 			       (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
-  (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
@@ -1015,14 +1014,13 @@
 				  ((event_time) " ORDER BY event_time ASC;")
 				  (else         ";"))
 				)))
-    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
+    (debug:print-info 8 "db:get-tests-for-runs qry=" qry)
     (sqlite3:for-each-row 
      (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
        (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
      qry
      )
-    (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; this one is a bit broken BUG FIXME
