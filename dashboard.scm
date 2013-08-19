@@ -130,6 +130,7 @@ Misc
 (define *update-is-running* #f)
 (define *update-mutex* (make-mutex))
 
+(define *all-item-test-names* '())
 (define *num-tests*     15)
 (define *start-run-offset*  0)
 (define *start-test-offset* 0)
@@ -211,7 +212,9 @@ Misc
 		       (sort-info  (vector-ref *tests-sort-options* *tests-sort-reverse*))
 		       (sort-by    (vector-ref sort-info 1))
 		       (sort-order (vector-ref sort-info 2))
-		       (tests      (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
+		       (tmptests   (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
+		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
+		       (tests      (bubble-up tmptests))
 		       (key-vals   (cdb:remote-run db:get-key-vals #f run-id)))
 		  ;; Not sure this is needed?
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
@@ -275,38 +278,12 @@ Misc
 			      #f)
 			     (else #t))))
 			inlst))
-	 (vlst  (run-item-name->vectors newlst))
-	 ;; sort by second field
-	 (vlst-s1 (sort vlst (lambda (a b)
-			       (let ((astr (vector-ref a 1))
-				     (bstr (vector-ref b 1)))
-				 (if (string=? astr "") #f #t)))))
-			;; (>= (string-length (vector-ref a 1))(string-length (vector-ref b 1))))))
-	 (vlst-s2 (sort vlst-s1
-			(lambda (a b)
-			  (string>= (vector-ref a 0)(vector-ref b 0)))))
-	 (vlst-s3 (sort vlst
-	 		(lambda (a b)
-	 		  (let ((tname-a (vector-ref a 0))
-	 			(tname-b (vector-ref b 0))
-	 			(ipath-a (vector-ref a 1))
-	 			(ipath-b (vector-ref b 1)))
-	 		    (cond
-			     ((and (equal? tname-a tname-b)
-				   (equal? ipath-a ""))
-			      #t)
-			     ((and (not (equal? tname-a tname-b))
-				   (equal? ipath-b "")
-				   (not (equal? ipath-a "")))
-	 			#t)
-			     (else #f)))))))
-	 ;; (parents-first (bubble-up vlst)))
+	 (vlst  (run-item-name->vectors newlst)))
     (map (lambda (x)
 	   (if (equal? (vector-ref x 1) "")
 	       (vector-ref x 0)
 	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
-	 vlst-s2
-	 )))
+	 vlst)))
     
 (define (update-labels uidat)
   (let* ((rown    0)
@@ -334,29 +311,35 @@ Misc
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
-;; ;; inlst is list of vectors < testname itempath >
-;; ;;
-;; (define (bubble-up inlst)
-;;   (let ((tnames (delete-duplicates (map (lambda (x)(vector-ref x 0)) inlst))))
-;;     (if (null? inlst)
-;; 	inlst
-;; 	(let loop ((hed (car inlst))
-;; 		   (tal (cdr inlst))
-;; 		   (res '())
-;; 		   (cur (car tnames))
-;; 		   (rem (cdr tnames)))
-;; 	  (let ((tname (vector-ref hed 0))
-;; 		(ipath (vector-ref hed 1)))
-;; 	    (if (equal? tname cur)
-;; 		(if (null? tal)
-;; 		    (append res (list hed))
-;; 		    (loop (car tal)
-;; 			  (cdr tal)
-;; 			  (append res (list hed))
-;; 			  cur
-;; 			  rem))
-;; 		(if (null? tal)
-;; 		    (
+;; Bubble up the top tests to above the items, collect the items underneath
+;; all while preserving the sort order from the SQL query as best as possible.
+;;
+(define (bubble-up test-dats)
+  (let* ((tnames '())                ;; list of names used to reserve order
+	 (tests  (make-hash-table))) ;; hash of lists, used to build as we go
+    (for-each 
+     (lambda (testdat)
+       (let* ((tname (db:test-get-testname testdat))
+	      (ipath (db:test-get-item-path testdat))
+	      (seen  (hash-table-ref/default tests tname #f)))
+	 (if (not seen)(set! tnames (append tnames (list tname))))
+	 (if (equal? ipath "")
+	      ;; This a top level, prepend it
+	     (hash-table-set! tests tname (cons testdat (hash-table-ref/default tests tname '())))
+	     ;; This is item, append it
+	     (hash-table-set! tests tname (append (hash-table-ref/default tests tname '())(list testdat))))))
+     test-dats)
+    ;; Set all tests with items 
+    (set! *all-item-test-names* (filter (lambda (tname)
+				     (> (length (hash-table-ref tests tname)) 1))
+				   tnames))
+    (let loop ((hed (car tnames))
+	       (tal (cdr tnames))
+	       (res '()))
+      (let ((newres (append res (hash-table-ref tests hed))))
+	(if (null? tal)
+	    newres
+	    (loop (car tal)(cdr tal) newres))))))
 
 (define (update-buttons uidat numruns numtests)
   (let* ((runs        (if (> (length *allruns*) numruns)
@@ -1158,13 +1141,21 @@ Misc
 	     (iup:hbox
 	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
-						 (mark-for-update))))
-	     ;; (iup:button "Monitor" #:action (lambda (obj)(system (conc (car (argv))" -guimonitor &")))))
-	     ))
-	   ;; (iup:button "<-  Left" #:action (lambda (obj)(set! *start-run-offset*  (+ *start-run-offset* 1))))
-	   ;; (iup:button "Up     ^" #:action (lambda (obj)(set! *start-test-offset* (if (> *start-test-offset* 0)(- *start-test-offset* 1) 0))))
-	   ;; (iup:button "Down   v" #:action (lambda (obj)(set! *start-test-offset* (if (>= *start-test-offset* (length *alltestnamelst*))(length *alltestnamelst*)(+ *start-test-offset* 1)))))
-	   ;; (iup:button "Right ->" #:action (lambda (obj)(set! *start-run-offset*  (if (> *start-run-offset* 0)(- *start-run-offset* 1) 0))))
+						 (mark-for-update)))
+	      (iup:button "Collapse"  #:action (lambda (obj)
+						 (let ((myname (iup:attribute obj "TITLE")))
+						   (if (equal? myname "Collapse")
+						       (begin
+							 (for-each (lambda (tname)
+								     (hash-table-set! *collapsed* tname #t))
+								   *all-item-test-names*)
+							 (iup:attribute-set! obj "TITLE" "Expand"))
+						       (begin
+							 (for-each (lambda (tname)
+								     (hash-table-delete! *collapsed* tname))
+								   (hash-table-keys *collapsed*))
+							 (iup:attribute-set! obj "TITLE" "Collapse"))))
+						 (mark-for-update))))))
 	   (iup:frame 
 	    #:title "hide"
 	    (iup:vbox
