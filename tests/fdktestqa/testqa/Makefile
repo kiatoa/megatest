@@ -22,6 +22,7 @@ dashboard :
 	$(DASHBOARD) -rows 20 &
 
 compile :
+	$(MEGATEST) -stop-server 0
 	(cd ../../..;make && make install)
 
 clean :

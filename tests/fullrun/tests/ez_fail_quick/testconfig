@@ -5,6 +5,9 @@ priority 10
 # should fail on next step
 lookitnada  ls /nada
 
+[triggers]
+COMPLETED/FAIL xterm;echo
+
 [test_meta]
 author matt
 owner  bob

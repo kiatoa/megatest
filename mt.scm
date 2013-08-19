@@ -66,8 +66,8 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by #f) (qryvals #f))
-  (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by qryvals: qryvals))
+(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
+  (let loop ((testsdat (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status 0 500 not-in sort-by sort-order qryvals: qryvals))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -76,7 +76,7 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status new-offset limit not-in sort-by qryvals: qryvals)
+	    (loop (cdb:remote-run db:get-tests-for-run #f run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals: qryvals)
 		  full-list
 		  new-offset
 		  limit))
@@ -87,6 +87,35 @@
 
 (define (mt:get-run-stats)
   (cdb:remote-run db:get-run-stats #f))
+
+;;======================================================================
+;;  T R I G G E R S
+;;======================================================================
+
+(define (mt:process-triggers test-id newstate newstatus)
+  (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
+	 (test-rundir   (db:test-get-rundir test-dat))
+	 (test-name     (db:test-get-testname test-dat))
+	 (tconfig       #f)
+	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
+	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
+    (if (and (file-exists? test-rundir)
+	     (directory? test-rundir))
+	(begin
+	  (push-directory test-rundir)
+	  (set! tconfig (mt:lazy-read-test-config test-name))
+	  (pop-directory)
+	  (for-each (lambda (trigger)
+		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
+			    (logf (conc  test-rundir "/last-trigger.log")))
+			(if cmd
+			    (let ((fullcmd (conc "(" cmd " " test-id " " test-rundir " " trigger ") >> " logf " 2>&1")))
+			      (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
+			      (process-run fullcmd)))))
+		    (list
+		     (conc state "/" status)
+		     (conc state "/")
+		     (conc "/" status)))))))
 
 ;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
@@ -102,3 +131,45 @@
 	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
 	#f)
       #f))
+
+;; speed up for common cases with a little logic
+(define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
+  (cond
+   ((and newstate newstatus newcomment)
+    (cdb:client-call *runremote* 'state-status-msg #t *default-numtries* newstate newstatus newcomment test-id))
+   ((and newstate newstatus)
+    (cdb:client-call *runremote* 'state-status #t *default-numtries* newstate newstatus test-id))
+   (else
+    (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
+    (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
+    (if newcomment (cdb:client-call *runremote* 'set-test-comment #t *default-numtries* newcomment test-id))))
+   (mt:process-triggers test-id newstate newstatus)
+   #t)
+
+(define (mt:lazy-get-test-info-by-id test-id)
+  (let* ((tdat (hash-table-ref/default *test-info* test-id #f)))
+    (if (and tdat 
+	     (< (current-seconds)(+ (vector-ref tdat 0) 10)))
+	(vector-ref tdat 1)
+	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
+	(cdb:get-test-info-by-id *runremote* test-id))))
+
+(define (mt:lazy-read-test-config test-name)
+  (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))
+    (if tconf
+	tconf
+	(let ((test-dirs (tests:get-tests-search-path *configdat*)))
+	  (let loop ((hed (car test-dirs))
+		     (tal (cdr test-dirs)))
+	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
+	      (if (and (file-exists? tconfig-file)
+		       (file-read-access? tconfig-file))
+		  (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
+		    (hash-table-set! *testconfigs* test-name newtcfg)
+		    newtcfg)
+		  (if (null? tal)
+		      (begin
+			(debug:print 0 "ERROR: No readable testconfig found for " test-name)
+			#f)
+		      (loop (car tal)(cdr tal))))))))))
+

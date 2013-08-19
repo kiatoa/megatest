@@ -159,7 +159,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -200,7 +200,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -323,7 +323,9 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment)))
+	(begin
+	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
+	  (mt:process-triggers test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
@@ -488,12 +490,14 @@
 (define (tests:get-testconfig test-name test-registry system-allowed)
   (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
-    (if testexists
-	(read-config test-configf #f system-allowed environ-patt: (if system-allowed
-								      "pre-launch-env-vars"
-								      #f))
-	#f)))
+	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	 (tcfg         (if testexists
+			   (read-config test-configf #f system-allowed environ-patt: (if system-allowed
+											 "pre-launch-env-vars"
+											 #f))
+			   #f)))
+    (hash-table-set! *testconfigs* test-name tcfg)
+    tcfg))
   
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days

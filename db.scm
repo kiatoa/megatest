@@ -263,7 +263,7 @@
 	 (begin
 	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
-	   #f)
+	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
 	 (set! db (sqlite3:open-database dbpath)))
 	(sqlite3:set-busy-handler! db handler)
 	(if (not dbexists)
@@ -907,11 +907,10 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by
+(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order
 			      #!key
 			      (qryvals #f)
 			      )
-  (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
@@ -946,11 +945,13 @@
 				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
-				  ((rundir)     " ORDER BY length(rundir) DESC ")
-				  ((event_time) " ORDER BY event_time ASC ")
+				  ((rundir)     " ORDER BY length(rundir) ")
+				  ((testname)   " ORDER BY testname,item_path ")
+				  ((event_time) " ORDER BY event_time ")
 				  (else         (if (string? sort-by)
-						    (conc " ORDER BY " sort-by) 
+						    (conc " ORDER BY " sort-by)
 						    "")))
+				(if sort-order sort-order "")
 				(if limit  (conc " LIMIT " limit)   "")
 				(if offset (conc " OFFSET " offset) "")
 				";"
@@ -963,7 +964,6 @@
      qry
      run-id
      )
-    (debug:print-info 11 "db:get-tests-for-run START run-id=" run-id ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
@@ -982,7 +982,6 @@
 			       #!key (not-in #t)
 			       (sort-by #f)
 			       (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
-  (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
   (let* ((res '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
@@ -1015,14 +1014,13 @@
 				  ((event_time) " ORDER BY event_time ASC;")
 				  (else         ";"))
 				)))
-    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
+    (debug:print-info 8 "db:get-tests-for-runs qry=" qry)
     (sqlite3:for-each-row 
      (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
        (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
      db 
      qry
      )
-    (debug:print-info 11 "db:get-tests-for-run START run-ids=" run-ids ", testpatt=" testpatt ", states=" states ", statuses=" statuses ", not-in=" not-in ", sort-by=" sort-by)
     res))
 
 ;; this one is a bit broken BUG FIXME
@@ -1110,6 +1108,8 @@
   (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
 
 ;; speed up for common cases with a little logic
+;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
+;;
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
@@ -1119,11 +1119,13 @@
    (else
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id)))))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
+  (mt:process-triggers test-id newstate newstatus))
 
-(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-		   state status run-id test-name item-path))
+;; Never used
+;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+;;   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+;; 		   state status run-id test-name item-path))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
@@ -1581,7 +1583,9 @@
   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
 
 (define (cdb:get-test-info-by-id serverdat test-id)
-  (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id))
+  (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
+    (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
+    test-dat))
 
 ;; db should be db open proc or #f
 (define (cdb:remote-run proc db . params)
@@ -1607,9 +1611,14 @@
 
 (define db:queries 
   (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+	;; Test state and status
+	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
+	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
-	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
+	;; Test comment
+	'(set-test-comment       "UPDATE tests SET comment=? WHERE id=?;")
+	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
 	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
 	'(test_data-pf-rollup    "UPDATE tests
@@ -2169,10 +2178,10 @@
 		      (else #f)))))
       res)))
 
-(define (db:get-compressed-steps test-id #!key (work-area #f))
+(define (db:get-compressed-steps test-id #!key (work-area #f)(tdb #f))
   (if (or (not work-area)
 	  (file-exists? (conc work-area "/testdat.db")))
-      (let* ((comprsteps (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+      (let* ((comprsteps (open-run-close db:get-steps-table tdb test-id work-area: work-area)))
 	(map (lambda (x)
 	       ;; take advantage of the \n on time->string
 	       (vector
