@@ -879,7 +879,7 @@
 		  ;; currently running
 		  ((and skip-check
 			(configf:lookup test-conf "skip" "prevrunning"))
-		   (let ((running-tests (cdb:remote-run db:get-tests-for-runs-mindata #f #f full-test-name '("RUNNING") '() #f)))
+		   (let ((running-tests (cdb:remote-run db:get-tests-for-runs-mindata #f #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f)))
 		     (if (not (null? running-tests)) ;; have to skip 
 			 (set! skip-test "Skipping due to previous tests running"))))
 		  ((and skip-check
