@@ -315,32 +315,40 @@ Misc
 ;; all while preserving the sort order from the SQL query as best as possible.
 ;;
 (define (bubble-up test-dats)
-  (let* ((tnames '())                ;; list of names used to reserve order
-	 (tests  (make-hash-table))) ;; hash of lists, used to build as we go
-    (for-each 
-     (lambda (testdat)
-       (let* ((tname (db:test-get-testname testdat))
-	      (ipath (db:test-get-item-path testdat))
-	      (seen  (hash-table-ref/default tests tname #f)))
-	 (if (not seen)(set! tnames (append tnames (list tname))))
-	 (if (equal? ipath "")
-	      ;; This a top level, prepend it
-	     (hash-table-set! tests tname (cons testdat (hash-table-ref/default tests tname '())))
-	     ;; This is item, append it
-	     (hash-table-set! tests tname (append (hash-table-ref/default tests tname '())(list testdat))))))
-     test-dats)
-    ;; Set all tests with items 
-    (set! *all-item-test-names* (filter (lambda (tname)
-				     (> (length (hash-table-ref tests tname)) 1))
-				   tnames))
-    (let loop ((hed (car tnames))
-	       (tal (cdr tnames))
-	       (res '()))
-      (let ((newres (append res (hash-table-ref tests hed))))
-	(if (null? tal)
-	    newres
-	    (loop (car tal)(cdr tal) newres))))))
-
+  (if (null? test-dats)
+      test-dats
+      (begin
+	(let* ((tnames '())                ;; list of names used to reserve order
+	       (tests  (make-hash-table))) ;; hash of lists, used to build as we go
+	  (for-each 
+	   (lambda (testdat)
+	     (let* ((tname (db:test-get-testname testdat))
+		    (ipath (db:test-get-item-path testdat))
+		    (seen  (hash-table-ref/default tests tname #f)))
+	       (if (not seen)(set! tnames (append tnames (list tname))))
+	       (if (equal? ipath "")
+		   ;; This a top level, prepend it
+		   (hash-table-set! tests tname (cons testdat (hash-table-ref/default tests tname '())))
+		   ;; This is item, append it
+		   (hash-table-set! tests tname (append (hash-table-ref/default tests tname '())(list testdat))))))
+	   test-dats)
+	;; Set all tests with items 
+	  (set! *all-item-test-names* (append (if (null? tnames)
+						  '()
+						  (filter (lambda (tname)
+							    (let ((tlst (hash-table-ref tests tname)))
+							      (and (list tlst)
+								   (> (length tlst) 1))))
+							  tnames))
+					      *all-item-test-names*))
+	  (let loop ((hed (car tnames))
+		     (tal (cdr tnames))
+		     (res '()))
+	    (let ((newres (append res (hash-table-ref tests hed))))
+	      (if (null? tal)
+		  newres
+		  (loop (car tal)(cdr tal) newres))))))))
+      
 (define (update-buttons uidat numruns numtests)
   (let* ((runs        (if (> (length *allruns*) numruns)
 			  (take-right *allruns* numruns)
