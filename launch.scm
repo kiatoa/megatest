@@ -247,7 +247,13 @@
 									       ((eq? overall-status 'pass) this-step-status)
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
-									       (else 'fail))))
+									       (else 'fail)))
+							    (next-state       "RUNNING") 
+							                      ;;  (cond
+									      ;;  ((null? tal) ;; more to run?
+									      ;;   "COMPLETED")
+									      ;;  (else "RUNNING"))
+							    )
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
 								    " next-status: " next-status " rollup-status: " rollup-status)
@@ -255,14 +261,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! test-id "RUNNING" "WARN" 
+							  (tests:test-set-status! test-id next-state "WARN" 
 									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									  #f))
 							 ((pass)
-							  (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
+							  (tests:test-set-status! test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! test-id next-state "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
