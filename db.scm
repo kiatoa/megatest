@@ -946,8 +946,8 @@
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
 				(case sort-by
 				  ((rundir)      " ORDER BY length(rundir) ")
-				  ((testname)    " ORDER BY testname,item_path ")
-				  ((statestatus) " ORDER BY state,status ")
+				  ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
+				  ((statestatus) (conc " ORDER BY state " (if  sort-order (conc sort-order ",") "") " status "))
 				  ((event_time)  " ORDER BY event_time ")
 				  (else          (if (string? sort-by)
 						     (conc " ORDER BY " sort-by)

@@ -155,6 +155,9 @@ Misc
       (set! *tests-sort-reverse* (+ *tests-sort-reverse* 1)))
   *tests-sort-reverse*)
 
+(define (get-curr-sort)
+  (vector-ref *tests-sort-options* *tests-sort-reverse*))
+
 (define *tests-sort-reverse* 0)
 (define *hide-empty-runs* #f)
 
@@ -213,12 +216,16 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id     (db:get-value-by-header run header "id"))
-		       (sort-info  (vector-ref *tests-sort-options* *tests-sort-reverse*))
+		       (sort-info  (get-curr-sort))
 		       (sort-by    (vector-ref sort-info 1))
 		       (sort-order (vector-ref sort-info 2))
 		       (tmptests   (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
-		       (tests      (bubble-up tmptests))
+		       (bubble-type (if (member sort-order '(testname))
+					'testname
+					'itempath
+					))
+		       (tests      (bubble-up tmptests priority: bubble-type))
 		       (key-vals   (cdb:remote-run db:get-key-vals #f run-id)))
 		  ;; Not sure this is needed?
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
@@ -315,6 +322,17 @@ Misc
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
+
+(define (get-itemized-tests test-dats)
+  (let ((tnames '()))
+    (for-each (lambda (tdat)
+		(let ((tname (db:test-get-testname tdat))
+		      (ipath (db:test-get-item-path tdat)))
+		  (if (not (equal? ipath ""))
+		      (if (not (member tname tnames))
+			  (set! tnames (append tnames (list tname)))))))
+	      test-dats)))
+
 ;; Bubble up the top tests to above the items, collect the items underneath
 ;; all while preserving the sort order from the SQL query as best as possible.
 ;;
@@ -323,19 +341,20 @@ Misc
       test-dats
       (begin
 	(let* ((tnames '())                ;; list of names used to reserve order
-	       (tests  (make-hash-table))) ;; hash of lists, used to build as we go
+	       (tests  (make-hash-table))  ;; hash of lists, used to build as we go
+	       (itemized (get-itemized-tests test-dats)))
 	  (for-each 
 	   (lambda (testdat)
 	     (let* ((tname (db:test-get-testname testdat))
-		    (ipath (db:test-get-item-path testdat))
-		    (seen  (hash-table-ref/default tests tname #f)))
-	       (if (not seen)
-		   (set! tnames (append tnames (list tname))))
-;;		   (if (or (and (eq? priority 'itempath)
-;;				(not (equal? ipath "")))
-;;			   (and (eq? priority 'testname)
-;;				(equal? ipath "")))
-;;		       (set! tnames (append tnames (list tname)))))
+		    (ipath (db:test-get-item-path testdat)))
+	       ;;   (seen  (hash-table-ref/default tests tname #f)))
+	       (if (not (member tname tnames))
+		   (if (or (and (eq? priority 'itempath)
+				(not (equal? ipath "")))
+			   (and (eq? priority 'testname)
+				(equal? ipath ""))
+			   (not (member tname itemized)))
+		       (set! tnames (append tnames (list tname)))))
 	       (if (equal? ipath "")
 		   ;; This a top level, prepend it
 		   (hash-table-set! tests tname (cons testdat (hash-table-ref/default tests tname '())))
