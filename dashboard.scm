@@ -144,9 +144,13 @@ Misc
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
 				     (vector "Sort +t" 'event_time "ASC")
-				     (vector "Sort -t" 'event_time "DESC")))
+				     (vector "Sort -t" 'event_time "DESC")
+				     (vector "Sort +s" 'statestatus "ASC")
+				     (vector "Sort -s" 'statestatus "DESC")))
+
+;; Don't forget to adjust the >= below if you add to the sort-options above
 (define (next-sort-option)
-  (if (>= *tests-sort-reverse* 3)
+  (if (>= *tests-sort-reverse* 5)
       (set! *tests-sort-reverse* 0)
       (set! *tests-sort-reverse* (+ *tests-sort-reverse* 1)))
   *tests-sort-reverse*)
@@ -314,7 +318,7 @@ Misc
 ;; Bubble up the top tests to above the items, collect the items underneath
 ;; all while preserving the sort order from the SQL query as best as possible.
 ;;
-(define (bubble-up test-dats)
+(define (bubble-up test-dats #!key (priority 'itempath))
   (if (null? test-dats)
       test-dats
       (begin
@@ -325,7 +329,13 @@ Misc
 	     (let* ((tname (db:test-get-testname testdat))
 		    (ipath (db:test-get-item-path testdat))
 		    (seen  (hash-table-ref/default tests tname #f)))
-	       (if (not seen)(set! tnames (append tnames (list tname))))
+	       (if (not seen)
+		   (set! tnames (append tnames (list tname))))
+;;		   (if (or (and (eq? priority 'itempath)
+;;				(not (equal? ipath "")))
+;;			   (and (eq? priority 'testname)
+;;				(equal? ipath "")))
+;;		       (set! tnames (append tnames (list tname)))))
 	       (if (equal? ipath "")
 		   ;; This a top level, prepend it
 		   (hash-table-set! tests tname (cons testdat (hash-table-ref/default tests tname '())))
