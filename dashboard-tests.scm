@@ -223,7 +223,7 @@
 								    (open-run-close db:test-set-state-status-by-id db test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
-				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
+				*common:std-states*))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
 	       (vector-set! *state-status* 0
 			    (lambda (state color)
 			      (for-each 
@@ -243,7 +243,7 @@
 								    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
-				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
+				*common:std-statuses*))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
 			    (lambda (status color)
 			      (for-each 

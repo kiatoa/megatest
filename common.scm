@@ -89,7 +89,20 @@
   (set! *env-vars-by-run-id* (make-hash-table))
   (set! *test-id-cache*      (make-hash-table)))
 
-;; Debugging stuff
+;;======================================================================
+;; S T A T E S   A N D   S T A T U S E S
+;;======================================================================
+
+(define *common:std-states*   
+  (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ" "STUCK"))
+
+(define *common:std-statuses*
+  (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD"))
+
+;;======================================================================
+;; D E B U G G I N G   S T U F F 
+;;======================================================================
+
 (define *verbosity*         1)
 (define *logging*           #f)
 

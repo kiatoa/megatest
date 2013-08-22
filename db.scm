@@ -820,8 +820,8 @@
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
   ;; First set any related tests to DELETED
-  (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED' WHERE run_id=?;"))
-	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted' WHERE id=?;")))
+  (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;"))
+	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted',comment='' WHERE id=?;")))
     (sqlite3:with-transaction
      db (lambda ()
 	  (sqlite3:execute stmt1 run-id)
@@ -1049,7 +1049,7 @@
 	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
 	(if force
 	    (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id)
-	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE id=?;" test-id)))))
+	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))))
 
 (define (db:delete-tests-for-run db run-id)
   (common:clear-caches)
