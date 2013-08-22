@@ -143,7 +143,8 @@
   (if (not (file-exists? path))
       (begin 
 	(debug:print-info 1 "read-config - file not found " path " current path: " (current-directory))
-	(if (not ht)(make-hash-table) ht))
+	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
+	#f) ;; (if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
 	(let loop ((inl               (configf:read-line inp res allow-system)) ;; (read-line inp))

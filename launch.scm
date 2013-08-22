@@ -180,6 +180,7 @@
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
+				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -247,7 +248,13 @@
 									       ((eq? overall-status 'pass) this-step-status)
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
-									       (else 'fail))))
+									       (else 'fail)))
+							    (next-state       "RUNNING") 
+							                      ;;  (cond
+									      ;;  ((null? tal) ;; more to run?
+									      ;;   "COMPLETED")
+									      ;;  (else "RUNNING"))
+							    )
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
 								    " next-status: " next-status " rollup-status: " rollup-status)
@@ -255,14 +262,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! test-id "RUNNING" "WARN" 
+							  (tests:test-set-status! test-id next-state "WARN" 
 									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									  #f))
 							 ((pass)
-							  (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
+							  (tests:test-set-status! test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! test-id next-state "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -597,7 +604,12 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell        (config-lookup *configdat* "jobtools"     "useshell"))
+  (let* ((useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+			    (if ush 
+				(if (equal? ush "no") ;; must use "no" to NOT use shell
+				    #f
+				    ush)
+				#t)))     ;; default is yes
 	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
 	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
@@ -710,7 +722,10 @@
 				      cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
-				      (string-intersperse fullcmd " ")
+				      (let ((cmdstr (string-intersperse fullcmd " ")))
+					(if launchwait
+					    cmdstr
+					    (conc cmdstr " >> mt_launch.log 2>&1")))
 				      (car fullcmd))
 				  (if useshell
 				      '()

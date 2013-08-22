@@ -823,8 +823,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
-	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvalalist: " keyvals)
-	 (cdb:remote-run db:extract-ods-file db outputfile keyvalalist (if runspatt runspatt "%") pathmod)))))
+	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
+	 (cdb:remote-run db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)))))
 
 ;;======================================================================
 ;; execute the test
