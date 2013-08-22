@@ -158,7 +158,7 @@ Misc
 (define (get-curr-sort)
   (vector-ref *tests-sort-options* *tests-sort-reverse*))
 
-(define *tests-sort-reverse* 0)
+(define *tests-sort-reverse* 3)
 (define *hide-empty-runs* #f)
 
 (define *current-tab-number* 0)
@@ -172,7 +172,6 @@ Misc
 (define-inline (dboard:uidat-get-lftcol  vec)(vector-ref vec 1))
 (define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
 (define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
-
 
 (define (message-window msg)
   (iup:show
@@ -195,8 +194,8 @@ Misc
 (define (pad-list l n)(append l (make-list (- n (length l)))))
 
 (define (colors-similar? color1 color2)
-  (let* ((c1 (map string->number (string-split color1)))
-	 (c2 (map string->number (string-split color2)))
+  (let* ((c1    (map string->number (string-split color1)))
+	 (c2    (map string->number (string-split color2)))
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
@@ -210,23 +209,22 @@ Misc
 	 (result      '())
 	 (maxtests    0)
 	 (states      (hash-table-keys *state-ignore-hash*))
-	 (statuses    (hash-table-keys *status-ignore-hash*)))
+	 (statuses    (hash-table-keys *status-ignore-hash*))
+	 (sort-info   (get-curr-sort))
+	 (sort-by     (vector-ref sort-info 1))
+	 (sort-order  (vector-ref sort-info 2))
+	 (bubble-type (if (member sort-order '(testname))
+			  'testname
+			  'itempath)))
     ;; 
     ;; trim runs to only those that are changing often here
     ;; 
     (for-each (lambda (run)
-		(let* ((run-id     (db:get-value-by-header run header "id"))
-		       (sort-info  (get-curr-sort))
-		       (sort-by    (vector-ref sort-info 1))
-		       (sort-order (vector-ref sort-info 2))
-		       (tmptests   (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
+		(let* ((run-id      (db:get-value-by-header run header "id"))
+		       (tests    (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
-		       (bubble-type (if (member sort-order '(testname))
-					'testname
-					'itempath
-					))
-		       (tests      (bubble-up tmptests priority: bubble-type))
-		       (key-vals   (cdb:remote-run db:get-key-vals #f run-id)))
+		       ;; (tests       (bubble-up tmptests priority: bubble-type))
+		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
 		  ;; Not sure this is needed?
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
 		  (if (> (length tests) maxtests)
@@ -277,24 +275,31 @@ Misc
        lst))
 
 (define (collapse-rows inlst)
-  (let* ((newlst (filter (lambda (x)
-			  (let* ((tparts    (string-split x "("))
-				 (basetname (if (null? tparts) x (car tparts))))
+  (let* ((sort-info   (get-curr-sort))
+	 (sort-by     (vector-ref sort-info 1))
+	 (sort-order  (vector-ref sort-info 2))
+	 (bubble-type (if (member sort-order '(testname))
+			  'testname
+			  'itempath))
+	 (newlst      (filter (lambda (x)
+				(let* ((tparts    (string-split x "("))
+				       (basetname (if (null? tparts) x (car tparts))))
 					;(print "x " x " tparts: " tparts " basetname: " basetname)
-			    (cond
-			     ((string-match blank-line-rx x) #f)
-			     ((equal? x basetname) #t)
-			     ((hash-table-ref/default *collapsed* basetname #f) 
+				  (cond
+				   ((string-match blank-line-rx x) #f)
+				   ((equal? x basetname) #t)
+				   ((hash-table-ref/default *collapsed* basetname #f) 
 					;(print "Removing " basetname " from items")
-			      #f)
-			     (else #t))))
-			inlst))
-	 (vlst  (run-item-name->vectors newlst)))
+				    #f)
+				   (else #t))))
+			      inlst))
+	 (vlst         (run-item-name->vectors newlst))
+	 (vlst2        (bubble-up vlst priority: bubble-type)))
     (map (lambda (x)
 	   (if (equal? (vector-ref x 1) "")
 	       (vector-ref x 0)
 	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
-	 vlst)))
+	 vlst2)))
     
 (define (update-labels uidat)
   (let* ((rown    0)
@@ -322,12 +327,12 @@ Misc
 	(if (< i maxn)
 	    (loop (+ i 1)))))))
 
-
+;; 
 (define (get-itemized-tests test-dats)
   (let ((tnames '()))
     (for-each (lambda (tdat)
-		(let ((tname (db:test-get-testname tdat))
-		      (ipath (db:test-get-item-path tdat)))
+		(let ((tname (vector-ref tdat 0))  ;; (db:test-get-testname tdat))
+		      (ipath (vector-ref tdat 1))) ;; (db:test-get-item-path tdat)))
 		  (if (not (equal? ipath ""))
 		      (if (not (member tname tnames))
 			  (set! tnames (append tnames (list tname)))))))
@@ -340,13 +345,13 @@ Misc
   (if (null? test-dats)
       test-dats
       (begin
-	(let* ((tnames '())                ;; list of names used to reserve order
-	       (tests  (make-hash-table))  ;; hash of lists, used to build as we go
+	(let* ((tnames   '())                ;; list of names used to reserve order
+	       (tests    (make-hash-table))  ;; hash of lists, used to build as we go
 	       (itemized (get-itemized-tests test-dats)))
 	  (for-each 
 	   (lambda (testdat)
-	     (let* ((tname (db:test-get-testname testdat))
-		    (ipath (db:test-get-item-path testdat)))
+	     (let* ((tname (vector-ref testdat 0))  ;; db:test-get-testname testdat))
+		    (ipath (vector-ref testdat 1))) ;; db:test-get-item-path testdat)))
 	       ;;   (seen  (hash-table-ref/default tests tname #f)))
 	       (if (not (member tname tnames))
 		   (if (or (and (eq? priority 'itempath)
@@ -361,7 +366,7 @@ Misc
 		   ;; This is item, append it
 		   (hash-table-set! tests tname (append (hash-table-ref/default tests tname '())(list testdat))))))
 	   test-dats)
-	;; Set all tests with items 
+	  ;; Set all tests with items 
 	  (set! *all-item-test-names* (append (if (null? tnames)
 						  '()
 						  (filter (lambda (tname)
@@ -1167,7 +1172,7 @@ Misc
 	      ))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort +a "   #:action (lambda (obj)
+	      (iup:button "Sort -t"   #:action (lambda (obj)
 						 (next-sort-option)
 						 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
 						 (mark-for-update)))
@@ -1222,8 +1227,10 @@ Misc
 						 (mark-for-update)
 						 (debug:print 6 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
-			   #:expand "YES"
-			   #:max (* 10 (length *allruns*)))))
+			   #:expand "HORIZONTAL"
+			   #:max (* 10 (length *allruns*))
+			   #:min 0
+			   #:step 0.01)))
 					;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
 	   )
@@ -1260,7 +1267,9 @@ Misc
 											     (iup:attribute-set! obj "MAX" newmax))
 											 ))
 								   #:expand "VERTICAL" 
-								   #:orientation "VERTICAL")
+								   #:orientation "VERTICAL"
+								   #:min 0
+								   #:step 0.01)
 						     (apply iup:vbox (reverse res)))))))
        (else
 	(let ((labl  (iup:button "" 
