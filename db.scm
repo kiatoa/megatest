@@ -484,7 +484,7 @@
 	       ;; delete all tests that are 'DELETED'
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ;; delete all tests that have no run
-	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT run_id FROM runs);"
+	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT id FROM runs);"
 	       ;; delete all runs that are state='deleted'
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
