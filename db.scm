@@ -1155,7 +1155,7 @@
 	   (set! res count))
 	 db
 	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
-             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?;"
+             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
 	 jobgroup)
 	res)))
 
