@@ -18,6 +18,8 @@
 (use json)
 (use csv)
 
+(include "../megatest-fossil-hash.scm")
+
 ;; Read a non-compressed gnumeric file
 (define (refdb:read-gnumeric-xml fname)
   (with-input-from-file fname
@@ -355,7 +357,9 @@ Note: refdbdir is a path to the directory containg sheet-names.cfg
   getrownames refdb sheetname         : Get a list of row titles
   getcolnames refdb sheetname         : Get a list of column titles  
 
-Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest"))
+Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
+
+Version: " megatest-fossil-hash))
 
 (define (list-sheets path)
   ;; (cond
