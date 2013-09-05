@@ -79,7 +79,8 @@
 				      'http://www.gnumeric.org/v10.dtd:Cells))
 	 (rownums     (make-hash-table))  ;; num -> name
 	 (colnums     (make-hash-table))  ;; num -> name
-	 (cols        (make-hash-table))) ;; name -> ( (name val) ... )
+	 (cols        (make-hash-table))  ;; name -> ( (name val) ... )
+	 (col0title   ""))
     (for-each (lambda (cell)
 		(let ((rownum  (string->number (car (find-section cell 'Row))))
 		      (colnum  (string->number (car (find-section cell 'Col))))
@@ -89,14 +90,19 @@
 				 (if (null? res) "" (car res)))))
 		  ;; If colnum is 0 Then this is a row name, if rownum is 0 then this is a col name
 		  (cond
-		   ((eq? 0 colnum) ;; a blank in column zero is handled with the special name "row-N"
+		   ((and (not (eq? 0 rownum))
+			 (eq? 0 colnum)) ;; a blank in column zero is handled with the special name "row-N"
 		    (hash-table-set! rownums rownum (if (equal? value "")
 							(conc "row-" rownum)
 							value)))
-		   ((eq? 0 rownum)
+		   ((and (not (eq? 0 colnum))
+			 (eq? 0 rownum))
 		    (hash-table-set! colnums colnum (if (equal? value "")
 							(conc "col-" colnum)
 							value)))
+		   ((and (eq? 0 rownum)
+			 (eq? 0 colnum))
+		    (set! col0title value))
 		   (else
 		    (let ((colname (hash-table-ref/default colnums colnum (conc "col-" colnum)))
 			  (rowname (hash-table-ref/default rownums rownum (conc "row-" rownum))))
@@ -108,6 +114,7 @@
 			    (hash-table->alist colnums))))
       (with-output-to-file (conc targdir "/" sheet-name ".dat")
 	(lambda ()
+	  (print "[" col0title "]")
 	  (for-each (lambda (colname)
 		      (print "[" colname "]")
 		      (for-each (lambda (row)
@@ -217,14 +224,16 @@
 	(var-no-val-rx (regexp "^(\\S+)\\s*$"))
 	(inp         (open-input-file fname))
 	(cmnt-indx   (make-hash-table))
-	(blnk-indx   (make-hash-table)))
+	(blnk-indx   (make-hash-table))
+	(first-section #f)) ;; used for zeroth title
     (let loop ((inl     (read-line inp))
 	       (section ".............")
 	       (res     '()))
       (if (eof-object? inl)
 	  (begin
 	    (close-input-port inp)
-	    (reverse res))
+	    (cons (list first-section first-section first-section)
+		  (reverse res)))
 	  (regex-case
 	   inl 
 	   (continue-rx _         (loop (conc inl (read-line inp)) section res))
@@ -238,9 +247,12 @@
 				    (loop (read-line inp)
 					  section
 					  (cons (list (conc "#BLNK" curr-indx) section " ") res))))
-	   (section-rx (x sname)  (loop (read-line inp) 
-					sname 
-					res))
+	   (section-rx (x sname)  (begin
+				    (if (not first-section)
+					(set! first-section sname))
+				    (loop (read-line inp) 
+					  sname 
+					  res)))
 	   (cell-rx   (x k v)     (loop (read-line inp)
 					section
 					(cons (list k section v) res)))
@@ -266,7 +278,7 @@
    (else '(ValueType "60"))))
 
 (define (dat->cells dat)
-  (let* ((indx     (common:sparse-list-generate-index dat))
+  (let* ((indx     (common:sparse-list-generate-index (cdr dat)))
 	 (row-indx (car indx))
 	 (col-indx (cadr indx))
 	 (rowdat   (map (lambda (row)(list (car row) "    " (car row))) row-indx))
@@ -543,6 +555,9 @@ Version: " megatest-fossil-hash))
   (if (file-exists? dotfile)
       (load dotfile)))
 
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.refdbrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
 
 (main)
 
