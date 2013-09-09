@@ -224,10 +224,10 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests    (mt:get-tests-for-run run-id testnamepatt states statuses
-						       not-in: *hide-not-hide*
-						       sort-by: sort-by
-						       sort-order: sort-order))
+		       (tests       (mt:get-tests-for-run run-id testnamepatt states statuses
+							  not-in: *hide-not-hide*
+							  sort-by: sort-by
+							  sort-order: sort-order))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
 		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
@@ -1510,7 +1510,7 @@ Misc
 			 (mutex-unlock! *update-mutex*)
 			 (if (not update-is-running)
 			   (begin
-		       (dashboard:run-update x)
+			     (dashboard:run-update x)
 			     (mutex-lock! *update-mutex*)
 			     (set! *update-is-running* #f)
 			     (mutex-unlock! *update-mutex*))))

@@ -5,6 +5,9 @@ runscript main.sh
 THESTATE UNKNOWN INCOMPLETE KILLED KILLREQ STUCK BOZZLEBLONKED STUCK/DEAD
 THESTATUS PASS FAIL STUCK/DEAD SKIP
 
+[requirements]
+waiton sqlitespeed
+
 [test_meta]
 author matt
 owner  bob

@@ -138,6 +138,15 @@
 (define (runs:shrink-can-run-more-tests-count) ;; the db is a dummy var so we can use cdb:remote-run
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
+;; Temporary globals. Move these into the logic or into common
+;;
+(define *seen-cant-run-tests* (make-hash-table)) ;; use to track tests that we suspect cannot be run
+(define (runs:inc-cant-run-tests testname)
+  (hash-table-set! *seen-cant-run-tests* testname
+		   (+ (hash-table-ref/default *seen-cant-run-tests* testname 0) 1)))
+(define (runs:can-keep-running? testname n)
+  (< (hash-table-ref/default *seen-cant-run-tests* testname 0) n))
+
 (define (runs:can-run-more-tests jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
@@ -363,6 +372,7 @@
 		      "\n reruns:          " reruns
 		      "\n items:           " items
 		      "\n can-run-more:    " can-run-more)
+
     (cond
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
@@ -383,11 +393,57 @@
 		(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
 		(exit 1))))))
 
-     ((null? fails)
-      (debug:print-info 4 "fails is null, moving on in the queue but keeping " hed " for now")
+     ((and (null? fails)
+	   (not (null? non-completed)))
+      (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
+			(string-intersperse (map (lambda (x)
+						   (if (string? x)
+						       x
+						       (runs:make-full-test-name (db:test-get-testname x)
+										 (db:test-get-item-path x))))
+						 non-completed) ", ")
+			", delay launching " hed)
       ;; num-retries code was here
       ;; we use this opportunity to move contents of reg to tal
-      (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
+      ;; but also lets check that the prerequisites are all in the newtal or reruns lists
+      
+
+
+      ;; (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+      ;;   		      (append newtal reruns)))
+      ;;        (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+      ;;   		      prereqs-not-met))
+      ;;        (notinqueue (filter (lambda (x)
+      ;;   			   (not (member x allinqueue)))
+      ;;   			 prereqstrs)))
+      ;;   (if (null? notinqueue)
+      ;;       (if (runs:can-keep-running? hed 5)
+      ;;   	(begin
+      ;;   	  (runs:inc-cant-run-tests hed)
+      ;;   	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
+      ;;   	(begin
+      ;;   	  (debug:print 0 "WARNING: dropping " hed " from queue as it has prerequisites missing from the queue: " (string-intersperse notinqueue ", "))
+      ;;   	  (list (runs:queue-next-hed tal reg reglen regfull)
+      ;;   		(runs:queue-next-tal tal reg reglen regfull)
+      ;;   		(runs:queue-next-reg tal reg reglen regfull)
+      ;;   		reruns)))
+	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; )) ;; an issue with prereqs not yet met?
+
+     ((and (null? fails)
+	   (null? non-completed))
+      (if  (runs:can-keep-running? hed 5)
+	  (begin
+	    (runs:inc-cant-run-tests hed)
+	    (debug:print-info 1 "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    ;; num-retries code was here
+	    ;; we use this opportunity to move contents of reg to tal
+	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
+	  (begin
+	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
+	    (list (runs:queue-next-hed tal reg reglen regfull)
+		  (runs:queue-next-tal tal reg reglen regfull)
+		  (runs:queue-next-reg tal reg reglen regfull)
+		  reruns))))
 
      ((and (not (null? fails))(eq? testmode 'normal))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
@@ -401,14 +457,14 @@
 	  #f)) ;; #f flags do not loop
 
      (else
-      (debug:print 4 "ERROR: No handler for this condition.")
+      (debug:print 1 "ERROR: No handler for this condition.")
       (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
-	 (num-running-in-jobgroup (list-ref run-limits-info 2))
+	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
 	 (prereqs-not-met         (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
@@ -423,6 +479,9 @@
 				  (conc " WARNING: t is not a vector=" t )))
 			    prereqs-not-met) ", ") ") fails: " fails)
     
+    (if (not (null? prereqs-not-met))
+	(debug:print-info 1 "waiting on tests; " (string-intersperse prereqs-not-met ", ")))
+
     ;; Don't know at this time if the test have been launched at some time in the past
     ;; i.e. is this a re-launch?
     (debug:print-info 4 "run-limits-info = " run-limits-info)
@@ -446,19 +505,23 @@
      ;;
      ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-      (let ((th (make-thread (lambda ()
-			       (mutex-lock! registry-mutex)
-			       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
-			       (mutex-unlock! registry-mutex)
-			       ;; If haven't done it before register a top level test if this is an itemized test
-			       (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
-				   (cdb:tests-register-test *runremote* run-id test-name ""))
-			       (cdb:tests-register-test *runremote* run-id test-name item-path)
-			       (mutex-lock! registry-mutex)
-			       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
-			       (mutex-unlock! registry-mutex))
-			     (conc test-name "/" item-path))))
-	(thread-start! th))
+      (if (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
+	  (begin
+	    (cdb:tests-register-test *runremote* run-id test-name item-path)
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
+	  (let ((th (make-thread (lambda ()
+				   (mutex-lock! registry-mutex)
+				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
+				   (mutex-unlock! registry-mutex)
+				   ;; If haven't done it before register a top level test if this is an itemized test
+				   (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
+				       (cdb:tests-register-test *runremote* run-id test-name ""))
+				   (cdb:tests-register-test *runremote* run-id test-name item-path)
+				   (mutex-lock! registry-mutex)
+				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+				   (mutex-unlock! registry-mutex))
+				 (conc test-name "/" item-path))))
+	    (thread-start! th)))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)
@@ -517,6 +580,10 @@
       (debug:print 4 "FAILS: " fails)
       ;; If one or more of the prereqs-not-met are FAIL then we can issue
       ;; a message and drop hed from the items to be processed.
+
+      (if (not (null? prereqs-not-met))
+	  (debug:print-info 1 "waiting on tests; " (string-intersperse prereqs-not-met ", ")))
+      
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
@@ -841,7 +908,7 @@
 	    ((and (or (not rerun)
 		      keepgoing)
 		  ;; Require to force re-run for COMPLETED or *anything* + PASS,WARN or CHECK
-		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP"))
+		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP" "WAIVED"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (debug:print-info 2 "running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
 	     (hash-table-set! test-registry full-test-name 'COMPLETED)
