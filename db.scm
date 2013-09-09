@@ -647,7 +647,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=?;" state status res)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
 	  (debug:print 0 "ERROR: Called without all necessary keys")

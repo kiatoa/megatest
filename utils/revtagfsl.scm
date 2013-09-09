@@ -33,51 +33,46 @@
 (define mt (vector->list (revtag:get-timeline fname 10000)))
 (define tl (map vector->list (cdr (assoc "timeline" (vector->list (cdr (assoc "payload" mt)))))))
 
-(define nodes    (make-hash-table)) ;; look up for the nodes
-(define parents  (make-hash-table)) ;; node-uuid -> (list parent ...)
-(define children (make-hash-table)) ;; node-uuid -> (list child ...)
 (define tagged   (make-hash-table))
 (define usedtags (make-hash-table))
 
-(define noparents '())
-
 (for-each (lambda (node)
-	    (let ((uuid      (cdr (assoc "uuid" node)))
-		  (myparents (assoc "parents" node)))
-	      (hash-table-set! nodes uuid node)
-	      (if myparents
-		  (begin
-		    (hash-table-set! parents uuid (cdr myparents))
-		    (for-each (lambda (parent)
-				(hash-table-set! children parent (cons uuid (hash-table-ref/default children parent '()))))
-			      myparents))
-		  (set! noparents (cons node noparents)))))
+	    (let* ((uuid      (cdr (assoc "uuid" node)))
+		   (tags-dat  (assoc "tags" node))
+		   (tags      (if tags-dat (cdr tags-dat) '())))
+	      (for-each (lambda (tag)
+			  (hash-table-set! usedtags tag #t))
+			tags)))
 	  tl)
 
 (define ord-tl (sort tl (lambda (a b)(let ((ta (cdr (assoc "timestamp" a)))(tb (cdr (assoc "timestamp" b))))(< ta tb)))))
 
+(define (make-tag branch)
+  (let* ((nextnum (+ 1 (hash-table-ref/default tagged branch 0))))
+    (hash-table-set! tagged branch nextnum)
+    (conc branch "-r" nextnum)))
+
+(define (get-next-revtag branch)
+  (let loop ((tag (make-tag branch)))
+    (if (hash-table-ref/default usedtags tag #f)
+	(loop (make-tag branch))
+	tag)))
+
 (print "branch, uuid, newtag")
+
 (let loop ((hed (car ord-tl))
 	   (tal (cdr ord-tl)))
   (let* ((tags    (let ((t (assoc "tags" hed)))
 		    (if t (cdr t) '())))
 	 (uuid    (cdr (assoc "uuid" hed)))
 	 (branch  (if (null? tags) "nobranch" (car tags)))
-	 (nextnum (+ 1 (hash-table-ref/default tagged branch 0)))
-	 (tagpatt (regexp (conc "^" branch "\\(\\d+\\)")))
-	 (currtag (filter (lambda (x)(string-match tagpatt x)) tags))
-	 (newtag  (conc branch "(" nextnum ")")))
+	 (tagpatt (regexp (conc "^" branch "-r\\d+$")))
+	 (currtag (filter (lambda (x)(string-match tagpatt x)) tags)))
     (if (and (not (equal? branch "nobranch"))
 	     (null? currtag))
-	(begin
-	  (hash-table-set! tagged branch nextnum)
+	(let ((newtag (get-next-revtag branch)))
 	  (print branch ", " uuid ", " newtag)
 	  (system (conc "fossil tag add \"" newtag "\" " uuid " -R " fname)) ;; ?--raw? ?--propagate? TAGNAME CHECK-IN ?VALUE?
-	  (hash-table-set! usedtags currtag #t))
-	(for-each (lambda (t)
-		    (hash-table-set! usedtags t #t))
-		  currtag))
+	  (hash-table-set! usedtags currtag #t)))
     (if (not (null? tal))
 	(loop (car tal)(cdr tal)))))
-    
-	 
