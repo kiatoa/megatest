@@ -147,6 +147,17 @@
 (define (runs:can-keep-running? testname n)
   (< (hash-table-ref/default *seen-cant-run-tests* testname 0) n))
 
+(define *runs:denoise* (make-hash-table)) ;; key => last-time-ran
+
+(define (runs:lownoise key waitval)
+  (let ((lasttime (hash-table-ref/default *runs:denoise* key 0))
+	(currtime (current-seconds)))
+    (if (> (- currtime lasttime) waitval)
+	(begin
+	  (hash-table-set! *runs:denoise* key currtime)
+	  #t)
+	#f)))
+
 (define (runs:can-run-more-tests jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
@@ -166,8 +177,9 @@
 				 ;; if max-concurrent-jobs is set and the number running is greater 
 				 ;; than it than cannot run more jobs
 				 ((and max-concurrent-jobs (>= num-running max-concurrent-jobs))
-				  (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
-					       ", max_concurrent_jobs: " max-concurrent-jobs)
+				  (if (runs:lownoise "mcj msg" 60)
+				      (debug:print 0 "WARNING: Max running jobs exceeded, current number running: " num-running 
+						   ", max_concurrent_jobs: " max-concurrent-jobs))
 				  #t)
 				 ;; if job-group-limit is set and number of jobs in the group is greater
 				 ;; than the limit then cannot run more jobs of this kind
@@ -355,7 +367,7 @@
 	  '()
 	  reg)))
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
@@ -376,6 +388,16 @@
     (cond
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
+     
+     ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
+	      '(COMPLETED INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
+      (debug:print-info 1 "Test " hed " is " (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) ". Removing it from the queue")
+      (list (runs:queue-next-hed tal reg reglen regfull)
+	    (runs:queue-next-tal tal reg reglen regfull)
+	    (runs:queue-next-reg tal reg reglen regfull)
+	    reruns))
+
+     ;; 
      ((or (null? prereqs-not-met)
 	  (and (eq? testmode 'toplevel)
 	       (null? non-completed)))
@@ -395,39 +417,42 @@
 
      ((and (null? fails)
 	   (not (null? non-completed)))
-      (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
-			(string-intersperse (map (lambda (x)
-						   (if (string? x)
-						       x
-						       (runs:make-full-test-name (db:test-get-testname x)
-										 (db:test-get-item-path x))))
-						 non-completed) ", ")
-			", delay launching " hed)
+
       ;; num-retries code was here
       ;; we use this opportunity to move contents of reg to tal
       ;; but also lets check that the prerequisites are all in the newtal or reruns lists
-      
 
-
-      ;; (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
-      ;;   		      (append newtal reruns)))
-      ;;        (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
-      ;;   		      prereqs-not-met))
-      ;;        (notinqueue (filter (lambda (x)
-      ;;   			   (not (member x allinqueue)))
-      ;;   			 prereqstrs)))
-      ;;   (if (null? notinqueue)
-      ;;       (if (runs:can-keep-running? hed 5)
-      ;;   	(begin
-      ;;   	  (runs:inc-cant-run-tests hed)
-      ;;   	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
-      ;;   	(begin
-      ;;   	  (debug:print 0 "WARNING: dropping " hed " from queue as it has prerequisites missing from the queue: " (string-intersperse notinqueue ", "))
-      ;;   	  (list (runs:queue-next-hed tal reg reglen regfull)
-      ;;   		(runs:queue-next-tal tal reg reglen regfull)
-      ;;   		(runs:queue-next-reg tal reg reglen regfull)
-      ;;   		reruns)))
-	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; )) ;; an issue with prereqs not yet met?
+      (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+        		      (append newtal reruns)))
+             (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+        		      prereqs-not-met))
+             (notinqueue (filter (lambda (x)
+        			   (not (member x allinqueue)))
+        			 prereqstrs)))
+        (if (null? notinqueue)
+            (if (runs:can-keep-running? hed 5) ;; try five times
+        	(begin
+        	  (runs:inc-cant-run-tests hed)
+        	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
+        	(begin
+		  (if (runs:lownoise (conc "no fails prereq, null notinqueue " hed) 30)
+		      (debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", ")))
+        	  (list (runs:queue-next-hed tal reg reglen regfull)
+        		(runs:queue-next-tal tal reg reglen regfull)
+        		(runs:queue-next-reg tal reg reglen regfull)
+        		reruns)))
+	    ;; have prereqs in queue, keep going.
+	    (begin
+	      (if (runs:lownoise (conc "no fails prereq " hed) 30)
+		  (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
+				    (string-intersperse (map (lambda (x)
+							       (if (string? x)
+								   x
+								   (runs:make-full-test-name (db:test-get-testname x)
+											     (db:test-get-item-path x))))
+							     non-completed) ", ")
+				    ". Delaying launch of " hed "."))
+	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))) ;; an issue with prereqs not yet met?
 
      ((and (null? fails)
 	   (null? non-completed))
@@ -455,10 +480,27 @@
 		(runs:queue-next-reg tal reg reglen regfull)
 		(cons hed reruns))
 	  #f)) ;; #f flags do not loop
-
+     ((and (not (null? fails))(eq? testmode 'toplevel))
+      (if (or (not (null? reg))(not (null? tal)))
+	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
+	  #f)) 
      (else
-      (debug:print 1 "ERROR: No handler for this condition.")
-      (list (car newtal)(cdr newtal) reg reruns)))))
+      (debug:print 1 "WARNING: FAILS or incomplete tests are preventing completion of this run. Dropping test " hed " from the run queue")
+      (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		(runs:queue-next-reg tal reg reglen regfull)
+		reruns))))) ;; (list (car newtal)(cdr newtal) reg reruns)))))
+
+(define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
+  (map (lambda (t)
+	 (cond
+	  ((vector? t)
+	   (conc (db:test-get-state t) "/" (db:test-get-status t)))
+	  ((string? t)
+	   t)
+	  (else 
+	   (conc t))))
+       inlst))
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
@@ -480,7 +522,7 @@
 			    prereqs-not-met) ", ") ") fails: " fails)
     
     (if (not (null? prereqs-not-met))
-	(debug:print-info 1 "waiting on tests; " (string-intersperse prereqs-not-met ", ")))
+	(debug:print-info 1 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
 
     ;; Don't know at this time if the test have been launched at some time in the past
     ;; i.e. is this a re-launch?
@@ -550,7 +592,8 @@
      ;; If no resources are available just kill time and loop again
      ;;
      ((not have-resources) ;; simply try again after waiting a second
-      (debug:print-info 1 "no resources to run new tests, waiting ...")
+      (if (runs:lownoise "no resources" 60)
+	  (debug:print-info 1 "no resources to run new tests, waiting ..."))
       ;; Have gone back and forth on this but db starvation is an issue.
       ;; wait one second before looking again to run jobs.
       (thread-sleep! 1)
@@ -759,7 +802,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
@@ -972,7 +1015,9 @@
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
 	       (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
-	(else       (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat)))))))
+	(else      
+	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
+	 (hash-table-set! test-registry (runs:make-full-test-name test-name test-path)(string->symbol (test:get-state testdat))))))))
 
 ;;======================================================================
 ;; END OF NEW STUFF
