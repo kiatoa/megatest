@@ -99,6 +99,10 @@
 (define *common:std-statuses*
   (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD"))
 
+;; These are stopping conditions that prevent a test from being run
+(define *common:cant-run-states-sym* 
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
+
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
 ;;======================================================================

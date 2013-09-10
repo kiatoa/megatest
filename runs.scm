@@ -367,6 +367,8 @@
 	  '()
 	  reg)))
 
+(define runs:nothing-left-in-queue-count 0)
+
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
@@ -390,12 +392,25 @@
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
      
      ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
-	      '(COMPLETED INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
-      (debug:print-info 1 "Test " hed " is " (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) ". Removing it from the queue")
-      (list (runs:queue-next-hed tal reg reglen regfull)
-	    (runs:queue-next-tal tal reg reglen regfull)
-	    (runs:queue-next-reg tal reg reglen regfull)
-	    reruns))
+	      '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
+      (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
+      (if (or (not (null? tal))
+	      (not (null? reg)))
+	  (list (runs:queue-next-hed tal reg reglen regfull)
+		(runs:queue-next-tal tal reg reglen regfull)
+		(runs:queue-next-reg tal reg reglen regfull)
+		reruns)
+	  (begin
+	    (debug:print-info 0 "Nothing left in the queue!")
+	    ;; If get here twice then we know we've tried to expand all items
+	    ;; since there must be a logic issue with the handling of loops in the 
+	    ;; items expand phase we will brute force an exit here.
+	    (if (> runs:nothing-left-in-queue-count 2)
+		(begin
+		  (debug:print 0 "WARNING: this condition is triggered when there were no items to expand and nothing to run. Please check your run for completeness")
+		  (exit 0))
+		(set! runs:nothing-left-in-queue-count (+ runs:nothing-left-in-queue-count 1)))
+	    #f)))
 
      ;; 
      ((or (null? prereqs-not-met)
@@ -703,11 +718,12 @@
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen)))
 
-	;; Fast skip of tests that are already "COMPLETED"
+	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
 	;;
-	(if (equal? (hash-table-ref/default test-registry tfullname #f) 'COMPLETED)
+	(if (member (hash-table-ref/default test-registry tfullname #f) 
+		    '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
 	    (begin
-	      (debug:print-info 0 "Skipping COMPLETED test " tfullname)
+	      (debug:print-info 0 "Skipping test " tfullname " as it has been marked do not run due to being completed or not runnable")
 	      (if (or (not (null? tal))(not (null? reg)))
 		  (loop (runs:queue-next-hed tal reg reglen regfull)
 			(runs:queue-next-tal tal reg reglen regfull)
@@ -954,7 +970,7 @@
 		  (or (member (test:get-status testdat) '("PASS" "WARN" "CHECK" "SKIP" "WAIVED"))
 		      (member (test:get-state  testdat) '("COMPLETED")))) 
 	     (debug:print-info 2 "running test " test-name "/" item-path " suppressed as it is " (test:get-state testdat) " and " (test:get-status testdat))
-	     (hash-table-set! test-registry full-test-name 'COMPLETED)
+	     (hash-table-set! test-registry full-test-name 'DONOTRUN) ;; COMPLETED)
 	     (set! runflag #f))
 	    ;; -rerun and status is one of the specifed, run it
 	    ((and rerun
@@ -1006,7 +1022,8 @@
 			   (set! *globalexitstatus* 1) ;; 
 			   (process-signal (current-process-id) signal/kill))))))))
 	((KILLED) 
-	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it."))
+	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it.")
+	 (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN)) ;; KILLED))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
 				       (db:test-get-run_duration testdat)))
@@ -1017,7 +1034,11 @@
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else      
 	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
-	 (hash-table-set! test-registry (runs:make-full-test-name test-name test-path)(string->symbol (test:get-state testdat))))))))
+	 (case (string->symbol (test:get-state testdat)) 
+	   ((COMPLETED INCOMPLETE)
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN))
+	   (else
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN))))))))
 
 ;;======================================================================
 ;; END OF NEW STUFF
