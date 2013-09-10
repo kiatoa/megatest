@@ -393,7 +393,8 @@
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (if (directory? path)
+    (if (and (string? path)
+	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
 	(begin
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))

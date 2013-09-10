@@ -274,7 +274,7 @@
 		#:action (lambda (obj)
 			   (thread-start! 
 			    (make-thread (lambda ()
-					   (ezsteps:run-from testdat stepname #f))
+					   (ezsteps:run-from testdat stepname #t))
 					 (conc "ezstep run single step " stepname)))))
     (iup:button "Re-run and continue"         
 		#:expand "HORIZONTAL" 

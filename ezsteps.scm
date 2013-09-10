@@ -92,7 +92,7 @@
 				  (mutex-unlock! run-mutex)
 				  (if (eq? pid-val 0)
 				      (begin
-					(thread-sleep! 2)
+					(thread-sleep! 1)
 					(processloop (+ i 1))))
 				  ))
 		    (let ((exinfo (vector-ref exit-info 2))
