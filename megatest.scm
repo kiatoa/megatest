@@ -36,6 +36,24 @@
 (include "run_records.scm")
 (include "megatest-fossil-hash.scm")
 
+;; Overall exit handling setup immediately
+;;
+(let ((original-exit (exit-handler)))
+  (exit-handler (lambda (#!optional (exit-code 0))
+		  (printf "Preparing to exit with exit code ~A ...\n" exit-code)
+		  (children
+		   (lambda (pid)
+		     (handle-exceptions
+		      exn
+		      #t
+		      (let-values (((pid-val exit-status exit-code) (process-wait pid #t)))
+				  (if (or (eq? pid-val pid)
+					  (eq? pid-val 0))
+				      (begin
+					(printf "Sending signal/term to ~A\n" pid)
+					(process-signal pid signal/term)))))))
+		  (original-exit exit-code))))
+
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.megatestrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))

@@ -111,3 +111,19 @@
 	       (loop (+ i 1)))
 	     (values pid-val exit-status exit-code))))))
   
+;;======================================================================
+;; MISC PROCESS RELATED STUFF
+;;======================================================================
+
+(define (children proc)
+  (with-input-from-pipe
+   (conc "ps h --ppid " (current-process-id) " -o pid")
+   (lambda ()
+     (let loop ((inl (read-line))
+		(res '()))
+       (if (eof-object? inl)
+	   (reverse res)
+	   (let ((pid (string->number inl)))
+	     (if proc (proc pid))
+	     (loop (read-line) (cons pid res))))))))
+       
