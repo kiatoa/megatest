@@ -693,7 +693,8 @@
 		      (tn (db:test-get-testname  trec))
 		      (ip (db:test-get-item-path trec))
 		      (st (db:test-get-state     trec)))
-		  (hash-table-set! test-registry (runs:make-full-test-name tn ip) (string->symbol st))))
+		  (if (not (equal? st "DELETED"))
+		      (hash-table-set! test-registry (runs:make-full-test-name tn ip) (string->symbol st)))))
 	      tests-info)
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
@@ -702,6 +703,7 @@
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
+
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
@@ -718,6 +720,13 @@
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen)))
 
+	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
+	;; and it is clear they *should* have run but did not.
+	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name hed "") #f))
+	    (begin
+	      (cdb:tests-register-test *runremote* run-id hed "")
+	      (hash-table-set! test-registry (runs:make-full-test-name hed "") 'done)))
+	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
 	;;
 	(if (member (hash-table-ref/default test-registry tfullname #f) 
