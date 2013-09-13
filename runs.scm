@@ -722,10 +722,10 @@
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
 	;; and it is clear they *should* have run but did not.
-	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name hed "") #f))
+	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f))
 	    (begin
-	      (cdb:tests-register-test *runremote* run-id hed "")
-	      (hash-table-set! test-registry (runs:make-full-test-name hed "") 'done)))
+	      (cdb:tests-register-test *runremote* run-id test-name "")
+	      (hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
 	;;
