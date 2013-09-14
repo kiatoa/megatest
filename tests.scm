@@ -280,6 +280,9 @@
 	    (pop-directory)
 	    result)))))
 
+(define (tests:test-force-state-status! test-id state status)
+  (cdb:test-set-status-state *runremote* test-id status state #f)
+  (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))

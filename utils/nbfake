@@ -6,7 +6,7 @@
 CURRWD=`pwd`
 
 if [[ $TARGETHOST == ""  ]]; then
-  exec sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &"
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &"
 else
-  exec ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+  ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
 fi

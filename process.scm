@@ -115,7 +115,7 @@
 ;; MISC PROCESS RELATED STUFF
 ;;======================================================================
 
-(define (children proc)
+(define (process:children proc)
   (with-input-from-pipe
    (conc "ps h --ppid " (current-process-id) " -o pid")
    (lambda ()

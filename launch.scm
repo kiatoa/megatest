@@ -138,7 +138,11 @@
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
 	  (tests:set-full-meta-info #f test-id run-id 0 work-area)
-	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+
+	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (tests:test-force-state-status! test-id "REMOTEHOSTSTART" "n/a")
+	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -157,7 +161,16 @@
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+				 ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+				 ;; Since we should have a clean slate at this time there is no need to do 
+				 ;; any of the other stuff that tests:test-set-status! does. Let's just 
+				 ;; force RUNNING/n/a
+				 
+
+				 (thread-sleep! 0.3)
+				 (tests:test-force-state-status! test-id "RUNNING" "n/a")
+				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
@@ -172,7 +185,7 @@
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
-						(thread-sleep! 1)
+						(thread-sleep! 2)
 						(loop (+ i 1)))
 					      )))))
 				 ;; then, if runscript ran ok (or did not get called)
@@ -226,7 +239,7 @@
 								   (mutex-unlock! m)
 								   (if (eq? pid-val 0)
 								       (begin
-									 (thread-sleep! 1)
+									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
@@ -332,7 +345,7 @@
 				       ;; (sqlite3:finalize! db)
 				       (if keep-going
 					   (begin
-					     (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
+					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 					     (if keep-going
 						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
@@ -343,13 +356,13 @@
 	    (thread-join! th2)
 	    (set! keep-going #f)
 	    (thread-sleep! 1)
-	    (thread-terminate! th1) ;; Not sure if this is a good idea
-	    (thread-sleep! 0.1) ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
+	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
+	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
-	      (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
+	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
 				                                        ;; "COMPLETED"
 							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test

@@ -15,7 +15,9 @@ else
   max_load=$MAX_ALLOWED_LOAD
 fi 
 if [[ $lperc -lt $max_load ]];then
-  nbfake "$@"
+  echo "$@" | at now + 0 minutes
+elif [[ "x$NBLAUNCHER" == "x" ]];then
+  echo "nbfind $@" | at now + 2 minutes
 else
   $NBLAUNCHER "$@"
 fi
