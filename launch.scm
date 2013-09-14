@@ -355,7 +355,8 @@
 	    (thread-start! th2)
 	    (thread-join! th2)
 	    (set! keep-going #f)
-	    (thread-sleep! 1)
+	    (thread-join! th1)
+	    ;; (thread-sleep! 1)
 	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
 	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
