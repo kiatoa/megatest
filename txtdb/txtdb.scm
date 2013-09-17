@@ -433,7 +433,7 @@ Version: " megatest-fossil-hash))
   ;; TEMPORARY, REMOVE IN 2014
   (if (not (file-exists? path)) ;; Create new 
       (begin
-	(print "INFO: Creating new txtdb at " path)
+	(print "\nINFO: Creating new txtdb at " path "\n")
 	(create-new-db path)))
   (if (not (file-exists? (conc path "/sxml/_sheets.sxml")))
       (begin
@@ -452,6 +452,10 @@ Version: " megatest-fossil-hash))
       (process-wait pid)
       (import-gnumeric-file tmpf path))))
 
+;;======================================================================
+;; This routine dispaches or executes most of the commands for refdb
+;;======================================================================
+;;
 (define (process-action action-str . param)
   (let ((num-params (length param))
 	(action     (string->symbol action-str)))

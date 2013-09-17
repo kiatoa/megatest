@@ -432,42 +432,71 @@
 
      ((and (null? fails)
 	   (not (null? non-completed)))
-
-      ;; num-retries code was here
-      ;; we use this opportunity to move contents of reg to tal
-      ;; but also lets check that the prerequisites are all in the newtal or reruns lists
-
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
+	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
              (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      prereqs-not-met))
+	     ;; a prereq that is not found in allinqueue will be put in the notinqueue list
+	     ;; 
              (notinqueue (filter (lambda (x)
         			   (not (member x allinqueue)))
         			 prereqstrs)))
-        (if (null? notinqueue)
-            (if (runs:can-keep-running? hed 5) ;; try five times
-        	(begin
-        	  (runs:inc-cant-run-tests hed)
-        	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
-        	(begin
-		  (if (runs:lownoise (conc "no fails prereq, null notinqueue " hed) 30)
-		      (debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", ")))
-        	  (list (runs:queue-next-hed tal reg reglen regfull)
-        		(runs:queue-next-tal tal reg reglen regfull)
-        		(runs:queue-next-reg tal reg reglen regfull)
-        		reruns)))
-	    ;; have prereqs in queue, keep going.
-	    (begin
-	      (if (runs:lownoise (conc "no fails prereq " hed) 30)
-		  (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
-				    (string-intersperse (map (lambda (x)
-							       (if (string? x)
-								   x
-								   (runs:make-full-test-name (db:test-get-testname x)
-											     (db:test-get-item-path x))))
-							     non-completed) ", ")
-				    ". Delaying launch of " hed "."))
-	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))) ;; an issue with prereqs not yet met?
+	(debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", "))
+	(debug:print-info 1 "allinqueue: " allinqueue)
+	(debug:print-info 1 "prereqstrs: " prereqstrs)
+	(debug:print-info 1 "notinqueue: " notinqueue)
+	(debug:print-info 1 "tal:        " tal)
+	(debug:print-info 1 "newtal:     " newtal)
+	(debug:print-info 1 "reg:        " reg)
+	(list (car newtal)(append (cdr newtal) reg) '() reruns)))
+
+;; == ==       ;; num-retries code was here
+;; == ==       ;; we use this opportunity to move contents of reg to tal
+;; == ==       ;; but also lets check that the prerequisites are all in the newtal or reruns lists
+;; == == 
+;; == ==       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+;; == ==         		      (append newtal reruns)))
+;; == == 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
+;; == ==              (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+;; == ==         		      prereqs-not-met))
+;; == == 	     ;; a prereq that is not found in allinqueue will be put in the notinqueue list
+;; == == 	     ;; 
+;; == ==              (notinqueue (filter (lambda (x)
+;; == ==         			   (not (member x allinqueue)))
+;; == ==         			 prereqstrs)))
+;; == ==         (if (not (null? notinqueue))
+;; == ==             (if (runs:can-keep-running? hed 5) ;; try five times
+;; == ==         	(begin
+;; == == 		  (debug:print-info 4 "increment cant-run-tests for " hed)
+;; == ==         	  (runs:inc-cant-run-tests hed)
+;; == ==         	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
+;; == ==         	(begin
+;; == == 		  
+;; == == 		  (if (runs:lownoise (conc "no fails prereq, null notinqueue " hed) 30)
+;; == == 		      (begin
+;; == == 			(debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", "))
+;; == == 			(debug:print-info 4 "allinqueue: " allinqueue)
+;; == == 			(debug:print-info 4 "prereqstrs: " prereqstrs)
+;; == == 			(debug:print-info 4 "notinqueue: " notinqueue)))
+;; == == 		  (if (and (null? tal)(null? reg))
+;; == == 		      (list (car newtal)(append (cdr newtal) reg) '() reruns)
+;; == == 		      (list (runs:queue-next-hed tal reg reglen regfull)
+;; == == 			    (runs:queue-next-tal tal reg reglen regfull)
+;; == == 			    (runs:queue-next-reg tal reg reglen regfull)
+;; == == 			    reruns))))
+;; == == 	    ;; have prereqs in queue, keep going.
+;; == == 	    (begin
+;; == == 	      (if (runs:lownoise (conc "no fails prereq " hed) 30)
+;; == == 		  (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
+;; == == 				    (string-intersperse (map (lambda (x)
+;; == == 							       (if (string? x)
+;; == == 								   x
+;; == == 								   (runs:make-full-test-name (db:test-get-testname x)
+;; == == 											     (db:test-get-item-path x))))
+;; == == 							     non-completed) ", ")
+;; == == 				    ". Delaying launch of " hed "."))
+;; == == 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))) ;; an issue with prereqs not yet met?
 
      ((and (null? fails)
 	   (null? non-completed))
