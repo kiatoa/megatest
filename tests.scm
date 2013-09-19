@@ -562,10 +562,11 @@
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
-	       (if (or (member (db:test-get-status tdat) 
-			       '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+	       (if (or (and (member (db:test-get-status tdat) 
+				    '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+			    (equal? (db:test-get-state tdat) "COMPLETED"))
 		       (member (db:test-get-state tdat)
-			       '("INCOMPLETE" "KILLED")))
+				    '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))
 
 	       ;; examine waitons for any fails. If it is FAIL or INCOMPLETE then eliminate this test
@@ -574,11 +575,15 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-				      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
-				 (if (or (member (db:test-get-status wtdat)
-						 '("FAIL" "KILLED"))
-					 (member (db:test-get-state wtdat)
-						 '("INCOMPETE")))
+       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
+					      (member (db:test-get-status wtdat) '("FAIL")))
+					 (member (db:test-get-status wtdat)  '("KILLED"))
+					 (member (db:test-get-state wtdat)   '("INCOMPETE")))
+				 ;; (if (or (member (db:test-get-status wtdat)
+				 ;;        	 '("FAIL" "KILLED"))
+				 ;;         (member (db:test-get-state wtdat)
+				 ;;        	 '("INCOMPETE")))
 				     (set! keep-test #f)))) ;; no point in running this one again
 			     waitons))))
 	 (if keep-test (set! runnables (cons testkeyname runnables)))))

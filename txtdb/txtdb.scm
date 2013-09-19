@@ -363,12 +363,20 @@
 Note: refdbdir is a path to the directory containg sheet-names.cfg
 
   import filename.gnumeric refdbdir   : Import a gnumeric file into a txt db directory
+  export refdbdir filename.gnumeric   : Export a refdb to a gnumeric file
   edit   refdbdir                     : Edit a refdbdir using gnumeric.
   ls refdbdir                         : List the keys for specified level 
   lookup refdbdir sheetname row col   : Look up a value in the text db   
   getrownames refdb sheetname         : Get a list of row titles
-  getcolnames refdb sheetname         : Get a list of column titles  
+  getcolnames refdb sheetname         : Get a list of column titles
 
+To export to other formats; first export to gnumeric then use ssconvert.
+
+e.g. 
+
+refdb export mydata mydata.gnumeric
+ssconvert -T Gnumeric_html:html40 mydata.gnumeric mydata.html 
+  
 Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
 
 Version: " megatest-fossil-hash))
@@ -467,13 +475,14 @@ Version: " megatest-fossil-hash))
 	((ls)
 	 (map print (list-sheets (car param))))))
      ((eq? num-params 2)
-      (case action
-	((getrownames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) car)  " ")))
-	((getcolnames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) cadr) " ")))
-	((import)
-	 (let ((fname     (car param))
-	       (targname  (cadr param)))
-	   (import-gnumeric-file fname targname)))))
+      (let ((param1 (car param))
+	    (param2 (cadr param)))
+	(case action
+	  ((getrownames) (print (string-intersperse (get-rowcol-names param1 param2 car)  " ")))
+	  ((getcolnames) (print (string-intersperse (get-rowcol-names param1 param2 cadr) " ")))
+	  ((import)      (import-gnumeric-file param1 param2)) ;; fname targname
+	  ((export)      (refdb-export param1 param2))
+	  (else (print "Unrecognised command " action)(print help)))))
      ((eq? num-params 4)
       (case action
 	((lookup)               ;; path    section     row          col 

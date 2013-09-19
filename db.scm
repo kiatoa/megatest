@@ -1651,7 +1651,7 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE run_id=? AND testname=?
                                                      AND item_path != '' 
-                                                     AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
                             status=CASE 
                                   WHEN fail_count > 0 THEN 'FAIL' 

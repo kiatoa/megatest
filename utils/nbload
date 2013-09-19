@@ -1,8 +1,3 @@
-
-WARNING WARNING WARNING!!! 
- you may not be in a fossil repo area or fossil remote-url is not set to current known repository path
- use "fsl remote-url " and / or call Justin Gedge 480/552-3393 for help to correct.
-
 #!/bin/bash 
 
 # load=`uptime|awk '{print $10}'|cut -d, -f1`
@@ -20,7 +15,9 @@ else
   max_load=$MAX_ALLOWED_LOAD
 fi 
 if [[ $lperc -lt $max_load ]];then
-  nbfake "$@"
+  echo "$@" | at now + 0 minutes
+elif [[ "x$NBLAUNCHER" == "x" ]];then
+  echo "nbfind $@" | at now + 2 minutes
 else
   $NBLAUNCHER "$@"
 fi
