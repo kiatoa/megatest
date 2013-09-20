@@ -435,21 +435,38 @@
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
-             (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
-        		      prereqs-not-met))
+             (prereqstrs (delete-duplicates (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
+						 prereqs-not-met)))
 	     ;; a prereq that is not found in allinqueue will be put in the notinqueue list
 	     ;; 
-             (notinqueue (filter (lambda (x)
-        			   (not (member x allinqueue)))
-        			 prereqstrs)))
-	(debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", "))
-	(debug:print-info 1 "allinqueue: " allinqueue)
-	(debug:print-info 1 "prereqstrs: " prereqstrs)
-	(debug:print-info 1 "notinqueue: " notinqueue)
-	(debug:print-info 1 "tal:        " tal)
-	(debug:print-info 1 "newtal:     " newtal)
-	(debug:print-info 1 "reg:        " reg)
-	(list (car newtal)(append (cdr newtal) reg) '() reruns)))
+             ;; (notinqueue (filter (lambda (x)
+             ;;    		   (not (member x allinqueue)))
+             ;;    		 prereqstrs))
+	     (give-up    #f))
+
+	;; We can get here when a prereq has not been run due to *it* having a prereq that failed.
+	;; We need to use this to dequeue this item as CANNOTRUN
+	(for-each (lambda (prereq)
+		    (if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
+			(set! give-up #t)))
+		  prereqstrs)
+	(if (and give-up
+		 (not (and (null? tal)(null? reg))))
+	    (begin
+	      (debug:print 1 "WARNING: test " hed " has no discarded prerequisites, removing it from the queue")
+	      (list (runs:queue-next-hed tal reg reglen regfull)
+		    (runs:queue-next-tal tal reg reglen regfull)
+		    (runs:queue-next-reg tal reg reglen regfull)
+		    reruns))
+	    (list (car newtal)(append (cdr newtal) reg) '() reruns))))
+
+
+     ;; (debug:print-info 1 "allinqueue: " allinqueue)
+     ;; (debug:print-info 1 "prereqstrs: " prereqstrs)
+     ;; (debug:print-info 1 "notinqueue: " notinqueue)
+     ;; (debug:print-info 1 "tal:        " tal)
+     ;; (debug:print-info 1 "newtal:     " newtal)
+     ;; (debug:print-info 1 "reg:        " reg)
 
 ;; == ==       ;; num-retries code was here
 ;; == ==       ;; we use this opportunity to move contents of reg to tal
@@ -519,11 +536,14 @@
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
       (if (or (not (null? reg))(not (null? tal)))
-	  (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		(cons hed reruns))
+	  (begin
+	    (hash-table-set! test-registry hed 'CANNOTRUN)
+	    (list (runs:queue-next-hed tal reg reglen regfull)
+		  (runs:queue-next-tal tal reg reglen regfull)
+		  (runs:queue-next-reg tal reg reglen regfull)
+		  (cons hed reruns)))
 	  #f)) ;; #f flags do not loop
+
      ((and (not (null? fails))(eq? testmode 'toplevel))
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
