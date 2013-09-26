@@ -1,0 +1,14 @@
+#!/bin/bash
+
+MT_TMPDISPLAY=$DISPLAY
+if [ -e megatest.sh ];then
+  source megatest.sh
+fi
+export DISPLAY=$MT_TMPDISPLAY
+
+if [ x"$MT_XTERM_CMD" == "x" ];then
+  exec xterm "$@"
+else
+  exec $MT_XTERM_CMD
+fi
+

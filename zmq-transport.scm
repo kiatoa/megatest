@@ -56,7 +56,7 @@
       #f
       (conc "tcp://" (car hostport) ":" (cadr hostport))))
 
-(define  *server-loop-heart-beat* (current-seconds))
+(define *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
 
 ;;======================================================================

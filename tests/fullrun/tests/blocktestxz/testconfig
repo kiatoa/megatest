@@ -1,0 +1,20 @@
+[setup]
+runscript main.sh
+
+[items]
+THESTATE UNKNOWN INCOMPLETE KILLED KILLREQ STUCK BOZZLEBLONKED STUCK/DEAD
+THESTATUS PASS FAIL STUCK/DEAD SKIP
+
+[requirements]
+waiton sqlitespeed
+
+[test_meta]
+author matt
+owner  bob
+description This test will fail causing the dependent test "testxz"\
+ to never run. This triggers the code that must determine\
+ that a test will never be run and thus remove it from\
+ the queue of tests to be run.
+
+tags first,single
+reviewed 1/1/1965

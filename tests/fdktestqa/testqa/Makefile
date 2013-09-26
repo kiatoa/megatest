@@ -7,6 +7,7 @@ all :
 	$(MEGATEST) -runtests % -target a/b :runname c
 
 bigbig :
+	$(MEGATEST) -server - -daemonize ; sleep 3
 	for tn in a b c d;do \
 	   ($(MEGATEST) -runtests % -target a/b :runname $tn & ) ; \
 	done
@@ -15,12 +16,13 @@ bigrun :
 	$(MEGATEST) -runtests bigrun -target a/bigrun :runname a
 
 bigrun2 :
-	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a
+	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a -transport http
 
 dashboard : 
 	$(DASHBOARD) -rows 20 &
 
 compile :
+	$(MEGATEST) -stop-server 0
 	(cd ../../..;make && make install)
 
 clean :

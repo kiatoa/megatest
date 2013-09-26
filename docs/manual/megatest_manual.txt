@@ -15,18 +15,19 @@ Why Megatest?
 
 The Megatest project was started for two reasons, the first was an
 immediate and pressing need for a generalized tool to manage a suite
-of regression tests and the second was the fact that I had written or
-maintained several such tools at different companies over the years
-and it seemed a good thing to have a single open source tool, flexible
-enough to meet the needs of any team doing continuous integrating and
-or running a complex suite of tests for release qualification.
+of regression tests and the second was the fact that the author had
+written or maintained several such tools at different companies over
+the years and it seemed a good thing to have a single open source
+tool, flexible enough to meet the needs of any team doing continuous
+integrating and or running a complex suite of tests for release
+qualification.
 
 Megatest Design Philosophy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Megatest is intended to provide the minimum needed resources to make
-writing a suite of tests and implementing continuous build for
-software, design engineering or process control (via owlfs for
+writing a suite of tests and tasks for implementing continuous build
+for software, design engineering or process control (via owlfs for
 example) without being specialized for any specific problem
 space. Megatest in of itself does not know what constitutes a PASS or
 FAIL of a test. In most cases megatest is best used in conjunction
@@ -44,36 +45,11 @@ which can launch jobs on local and remote Linux hosts. Currently
 megatest uses the network filesystem to call home to your master
 sqlite3 database.
 
-include::getting_started.txt[] include::writing_tests.txt[]
+include::../plan.txt[]
+include::getting_started.txt[]
+include::writing_tests.txt[]
+include::howto.txt[]
 include::reference.txt[]
-
-
-Controlled waiver propagation
-=============================
-If test is FAIL and previous test in run with same MT_TARGET is WAIVED then apply the following rules from the testconfig:
-If a waiver check is specified in the testconfig apply the check and if it passes then set this FAIL to WAIVED
-
-Waiver check has two parts, 1) a list of waiver, rulename, filepatterns and 2) the rulename script spec (note that "diff" and "logpro" are predefined)
-
-=========================================================
-###### EXAMPLE FROM testconfig #########
-# matching file(s) will be diff'd with previous run and logpro applied
-# if PASS or WARN result from logpro then WAIVER state is set
-#
-[waivers]
-# logpro_file    rulename      input_glob
-waiver_1         logpro        lookittmp.log
-
-[waiver_rules]
-
-# This builtin rule is the default if there is no <waivername>.logpro file
-# diff   diff %file1% %file2%
-
-# This builtin rule is applied if a <waivername>.logpro file exists
-# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html
-=========================================================
-
-
 
 [appendix]
 Example Appendix

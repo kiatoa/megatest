@@ -16,6 +16,7 @@ example/runs
 *.backup
 mkdeploy/linktree
 mkdeploy/site.config
+deploytarg/*
 mtest
 newdboard
 *.log
@@ -29,3 +30,14 @@ simplerun/*.scm
 simplerun/simpleruns
 tests/mintest/runs/*
 tests/mintest/linktree/*
+tests/installall/stdrel/*
+tests/installall/runs/*
+tests/installall/links/*
+tests/fdktestqa/simpleruns/*
+tests/installall/megatest.db
+tests/installall/monitor.db
+tests/megatest.db
+tests/fdktestqa/simplelinks/*
+tests/fdktestqa/testqa/megatest.db
+tests/fdktestqa/testqa/monitor.db
+megatest-fossil-hash.scm

@@ -6,7 +6,7 @@ step1 step1.sh
 [requirements]
 waiton bigrun
 priority 0
-mode itemmatch
+mode itemwait
 
 
 # Iteration for your tests are controlled by the items section

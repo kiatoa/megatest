@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars  uri-common intarweb spiffy-directory-listing)
+(use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
 ;; Configurations for server
 (tcp-buffer-size 2048)
@@ -185,7 +185,11 @@
 ;; Send msg to serverdat and receive result
 (define (http-transport:client-send-receive serverdat msg #!key (numretries 30))
   (let* (;; (url        (http-transport:make-server-url serverdat))
-	 (fullurl    (caddr serverdat)) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
+	 (fullurl    (if (list? serverdat)
+			 (caddr serverdat)
+			 (begin
+			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
+			   (exit 1)))) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
 	 (res        #f))
     (handle-exceptions
      exn

@@ -1,0 +1,34 @@
+[2]
+V2 X
+V6 Y
+V8 Z
+V12 E
+V15 B
+V17 +
+
+[A1]
+V8 Z
+V17 =
+
+# Just a test really
+#
+V1 X
+V3 X
+V5 Y
+V7 Y
+V10 Z
+V11 E
+V13 E
+V14 B
+V16 B
+[3]
+V2 John,
+V6 Tom
+V8 Fred
+V17 ~
+
+# a deeply held belief is a danger to sanity
+#
+V4 X
+row-11 Z
+row-18 B

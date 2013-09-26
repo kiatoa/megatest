@@ -56,6 +56,7 @@
 (define configf:blank-l-rx (regexp "^\\s*$"))
 (define configf:key-sys-pr (regexp "^(\\S+)\\s+\\[system\\s+(\\S+.*)\\]\\s*$"))
 (define configf:key-val-pr (regexp "^(\\S+)(\\s+(.*)|())$"))
+(define configf:key-no-val (regexp "^(\\S+)(\\s*)$"))
 (define configf:comment-rx (regexp "^\\s*#.*"))
 (define configf:cont-ln-rx (regexp "^(\\s+)(\\S+.*)$"))
 
@@ -142,7 +143,8 @@
   (if (not (file-exists? path))
       (begin 
 	(debug:print-info 1 "read-config - file not found " path " current path: " (current-directory))
-	(if (not ht)(make-hash-table) ht))
+	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
+	#f) ;; (if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
 	(let loop ((inl               (configf:read-line inp res allow-system)) ;; (read-line inp))
@@ -208,18 +210,22 @@
 							    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
 							  (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
-							     (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
-							     (realval (if envar
-									  (config:eval-string-in-environment val)
-									  val)))
-							(debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
-							(if envar
-							    (begin
-							      ;; (debug:print-info 4 "read-config key=" key ", val=" val ", realval=" realval)
-							      (setenv key realval)))
-							(hash-table-set! res curr-section-name 
-									 (config:assoc-safe-add alist key realval))
-							(loop (configf:read-line inp res allow-system) curr-section-name key #f)))
+								  (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
+								  (realval (if envar
+									       (config:eval-string-in-environment val)
+									       val)))
+							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
+							     (if envar
+								 (begin
+								   ;; (debug:print-info 4 "read-config key=" key ", val=" val ", realval=" realval)
+								   (setenv key realval)))
+							     (hash-table-set! res curr-section-name 
+									      (config:assoc-safe-add alist key realval))
+							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
+	       (configf:key-no-val ( x key val)             (let* ((alist   (hash-table-ref/default res curr-section-name '())))
+							      (hash-table-set! res curr-section-name 
+									       (config:assoc-safe-add alist key #t))
+							      (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(if var-flag             ;; if set to a string then we have a continued var

@@ -348,9 +348,9 @@
      key-vals)
     (iup:vbox
      (iup:label (if title title (conc "Settings from [" sectionname "]"))  
-		#:size   "5x"
-		#:expand "HORIZONTAL"
-		)
+         	;; #:size   "5x"
+         	#:expand "HORIZONTAL"
+         	)
      section-matrix)))
     
 ;; General data
@@ -386,14 +386,16 @@
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))
 				(max-row      (if (null? row-indices) 1 (apply max (map cadr row-indices))))
-				(max-col      (if (null? col-indices) 1 (apply max (map cadr col-indices))))
+				(max-col      (if (null? col-indices) 1 
+						  (apply max (map cadr col-indices))))
 				(max-visible  (max (- *num-tests* 15) 3))
+				(max-col-vis  (if (> max-col 10) 10 max-col))
 				(numrows      1)
 				(numcols      1))
 			   (iup:attribute-set! stats-matrix "CLEARVALUE" "CONTENTS")
 			   (iup:attribute-set! stats-matrix "NUMCOL" max-col )
 			   (iup:attribute-set! stats-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
-			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col)
+			   (iup:attribute-set! stats-matrix "NUMCOL_VISIBLE" max-col-vis)
 			   (iup:attribute-set! stats-matrix "NUMLIN_VISIBLE" (if (> max-row max-visible) max-visible max-row))
 
 			   ;; Row labels
@@ -436,7 +438,7 @@
     (set! dashboard:update-summary-tab updater)
     (iup:attribute-set! stats-matrix "WIDTHDEF" "40")
     (iup:vbox
-     (iup:label "Run statistics"  #:expand "HORIZONTAL")
+     ;; (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))
 
 (define (dcommon:servers-table)

@@ -17,6 +17,7 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit tests))
+(declare (uses lock-queue))
 (declare (uses db))
 (declare (uses common))
 (declare (uses items))
@@ -28,15 +29,38 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; Call this one to do all the work and get a standardized list of tests
+(define (tests:get-all)
+  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
+				   (tests:get-tests-search-path *configdat*))))
+    (tests:get-valid-tests (make-hash-table) test-search-path)))
+
+(define (tests:get-tests-search-path cfgdat)
+  (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
+    (cons (conc *toppath* "/tests") paths)))
+
+(define (tests:get-valid-tests test-registry tests-paths)
+  (if (null? tests-paths) 
+      test-registry
+      (let loop ((hed (car tests-paths))
+		 (tal (cdr tests-paths)))
+	(if (file-exists? hed)
+	    (for-each (lambda (test-path)
+			(let* ((tname   (last (string-split test-path "/")))
+			       (tconfig (conc test-path "/testconfig")))
+			  (if (and (not (hash-table-ref/default test-registry tname #f))
+				   (file-exists? tconfig))
+			      (hash-table-set! test-registry tname test-path))))
+		      (glob (conc hed "/*"))))
+	(if (null? tal)
+	    test-registry
+	    (loop (car tal)(cdr tal))))))
+
+(define (tests:filter-test-names test-names test-patts)
+  (delete-duplicates
+   (filter (lambda (testname)
+	     (tests:match test-patts testname #f))
+	   test-names)))
 
 ;; tests:glob-like-match
 (define (tests:glob-like-match patt str) 
@@ -135,7 +159,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -176,7 +200,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -197,59 +221,68 @@
 ;; Check for waiver eligibility
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
-  (let* ((testconfig  (tests:get-testconfig (db:test-get-testname testdat) #f))
+  (let* ((test-registry (make-hash-table))
+	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
 	 (test-rundir (db:test-get-rundir testdat))
 	 (prev-rundir (db:test-get-rundir prev-testdat))
 	 (waivers     (configf:section-vars testconfig "waivers"))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))
-    (push-directory test-rundir)
-    (let ((result (if (null? waivers)
-		      #f
-		      (let loop ((hed (car waivers))
-				 (tal (cdr waivers)))
-			(debug:print 0 "INFO: Applying waiver rule \"" hed "\"")
-			(let* ((waiver      (configf:lookup testconfig "waivers" hed))
-			       (wparts      (if waiver (string-match waiver-rx waiver) #f))
-			       (waiver-rule (if wparts (cadr wparts)  #f))
-			       (waiver-glob (if wparts (caddr wparts) #f))
-			       (logpro-file (if waiver
-						(let ((fname (conc hed ".logpro")))
-						  (if (file-exists? fname)
-						      fname 
-						      (begin
-							(debug:print 0 "INFO: No logpro file " fname " falling back to diff")
-							#f)))
-						#f))
-			       ;; if rule by name of waiver-rule is found in testconfig - use it
-			       ;; else if waivername.logpro exists use logpro-rule
-			       ;; else default to diff-rule
-			       (rule-string (let ((rule (configf:lookup testconfig "waiver_rules" waiver-rule)))
-					      (if rule
-						  rule
-						  (if logpro-file
-						      logpro-rule
-						      (begin
-							(debug:print 0 "INFO: No logpro file " logpro-file " found, using diff rule")
-							diff-rule)))))
-			       ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
-			       (processed-cmd (string-substitute 
-					       "%file1%" (conc test-rundir "/" waiver-glob)
-					       (string-substitute
-						"%file2%" (conc prev-rundir "/" waiver-glob)
-						(string-substitute
-						 "%waivername%" hed rule-string #t) #t) #t))
-			       (res            #f))
-			  (debug:print 0 "INFO: waiver command is \"" processed-cmd "\"")
-			  (if (eq? (system processed-cmd) 0)
-			      (if (null? tal)
-				  #t
-				  (loop (car tal)(cdr tal)))
-			      #f))))))
-      (pop-directory)
-      result)))
+    (if (not (file-exists? test-rundir))
+	(begin
+	  (debug:print 0 "ERROR: test run directory is gone, cannot propagate waiver")
+	  #f)
+	(begin
+	  (push-directory test-rundir)
+	  (let ((result (if (null? waivers)
+			    #f
+			    (let loop ((hed (car waivers))
+				       (tal (cdr waivers)))
+			      (debug:print 0 "INFO: Applying waiver rule \"" hed "\"")
+			      (let* ((waiver      (configf:lookup testconfig "waivers" hed))
+				     (wparts      (if waiver (string-match waiver-rx waiver) #f))
+				     (waiver-rule (if wparts (cadr wparts)  #f))
+				     (waiver-glob (if wparts (caddr wparts) #f))
+				     (logpro-file (if waiver
+						      (let ((fname (conc hed ".logpro")))
+							(if (file-exists? fname)
+							    fname 
+							    (begin
+							      (debug:print 0 "INFO: No logpro file " fname " falling back to diff")
+							      #f)))
+						      #f))
+				     ;; if rule by name of waiver-rule is found in testconfig - use it
+				     ;; else if waivername.logpro exists use logpro-rule
+				     ;; else default to diff-rule
+				     (rule-string (let ((rule (configf:lookup testconfig "waiver_rules" waiver-rule)))
+						    (if rule
+							rule
+							(if logpro-file
+							    logpro-rule
+							    (begin
+							      (debug:print 0 "INFO: No logpro file " logpro-file " found, using diff rule")
+							      diff-rule)))))
+				     ;; (string-substitute "%file1%" "foofoo.txt" "This is %file1% and so is this %file1%." #t)
+				     (processed-cmd (string-substitute 
+						     "%file1%" (conc test-rundir "/" waiver-glob)
+						     (string-substitute
+						      "%file2%" (conc prev-rundir "/" waiver-glob)
+						      (string-substitute
+						       "%waivername%" hed rule-string #t) #t) #t))
+				     (res            #f))
+				(debug:print 0 "INFO: waiver command is \"" processed-cmd "\"")
+				(if (eq? (system processed-cmd) 0)
+				    (if (null? tal)
+					#t
+					(loop (car tal)(cdr tal)))
+				    #f))))))
+	    (pop-directory)
+	    result)))))
 
+(define (tests:test-force-state-status! test-id state status)
+  (cdb:test-set-status-state *runremote* test-id status state #f)
+  (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
@@ -293,7 +326,9 @@
 
     ;; update the primary record IF state AND status are defined
     (if (and state status)
-	(cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment)))
+	(begin
+	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
+	  (mt:process-triggers test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
@@ -338,7 +373,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path status))
+	(mt:roll-up-pass-fail-counts run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -351,7 +386,7 @@
 (define (tests:test-set-toplog! db run-id test-name logf) 
   (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
 
-(define (tests:summarize-items db run-id test-name force)
+(define (tests:summarize-items db run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
@@ -361,7 +396,8 @@
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (if (directory? path)
+    (if (and (string? path)
+	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
 	(begin
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
@@ -372,8 +408,9 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-	      (print "Failed to obtain lock for " outputfilename)
+	  (if ;; (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
+              (not (lock-queue:wait-turn outputfilename test-id))
+	      (print "Not updating " outputfilename " as another test item has signed up for the job")
 	      (begin
 		(print "Obtained lock for " outputfilename)
 		(let ((oup    (open-output-file outputfilename))
@@ -434,6 +471,7 @@
 			     outtxt "</table></body></html>")
 		      (release-dot-lock outputfilename)))
 		  (close-output-port oup)
+		  (lock-queue:release-lock outputfilename test-id)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
 		  (tests:test-set-toplog! db run-id test-name outputfilename)
@@ -443,25 +481,27 @@
 ;; Gather data from test/task specifications
 ;;======================================================================
 
-(define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
-  (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
-    (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
-    (delete-duplicates
-     (filter (lambda (testname)
-	       (tests:match test-patts testname #f))
-	     (map (lambda (testp)
-		    (last (string-split testp "/")))
-		  tests)))))
+;; (define (tests:get-valid-tests testsdir test-patts) ;;  #!key (test-names '()))
+;;   (let ((tests (glob (conc testsdir "/tests/*")))) ;; " (string-translate patt "%" "*")))))
+;;     (set! tests (filter (lambda (test)(file-exists? (conc test "/testconfig"))) tests))
+;;     (delete-duplicates
+;;      (filter (lambda (testname)
+;; 	       (tests:match test-patts testname #f))
+;; 	     (map (lambda (testp)
+;; 		    (last (string-split testp "/")))
+;; 		  tests)))))
 
-(define (tests:get-testconfig test-name system-allowed)
-  (let* ((test-path    (conc *toppath* "/tests/" test-name))
+(define (tests:get-testconfig test-name test-registry system-allowed)
+  (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
-	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf))))
-    (if testexists
-	(read-config test-configf #f system-allowed environ-patt: (if system-allowed
-								      "pre-launch-env-vars"
-								      #f))
-	#f)))
+	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	 (tcfg         (if testexists
+			   (read-config test-configf #f system-allowed environ-patt: (if system-allowed
+											 "pre-launch-env-vars"
+											 #f))
+			   #f)))
+    (hash-table-set! *testconfigs* test-name tcfg)
+    tcfg))
   
 ;; sort tests by priority and waiton
 ;; Move test specific stuff to a test unit FIXME one of these days
@@ -522,10 +562,11 @@
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
-	       (if (or (member (db:test-get-status tdat) 
-			       '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+	       (if (or (and (member (db:test-get-status tdat) 
+				    '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+			    (equal? (db:test-get-state tdat) "COMPLETED"))
 		       (member (db:test-get-state tdat)
-			       '("INCOMPLETE" "KILLED")))
+				    '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))
 
 	       ;; examine waitons for any fails. If it is FAIL or INCOMPLETE then eliminate this test
@@ -534,11 +575,15 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-				      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
-				 (if (or (member (db:test-get-status wtdat)
-						 '("FAIL" "KILLED"))
-					 (member (db:test-get-state wtdat)
-						 '("INCOMPETE")))
+       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
+					      (member (db:test-get-status wtdat) '("FAIL")))
+					 (member (db:test-get-status wtdat)  '("KILLED"))
+					 (member (db:test-get-state wtdat)   '("INCOMPETE")))
+				 ;; (if (or (member (db:test-get-status wtdat)
+				 ;;        	 '("FAIL" "KILLED"))
+				 ;;         (member (db:test-get-state wtdat)
+				 ;;        	 '("INCOMPETE")))
 				     (set! keep-test #f)))) ;; no point in running this one again
 			     waitons))))
 	 (if keep-test (set! runnables (cons testkeyname runnables)))))
@@ -550,12 +595,12 @@
 ;;======================================================================
 ;; hed is the test name
 ;; test-records is a hash of test-name => test record
-(define (tests:get-full-data test-names test-records required-tests)
+(define (tests:get-full-data test-names test-records required-tests all-tests-registry)
   (if (not (null? test-names))
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	(debug:print-info 4 "hed=" hed " at top of loop")
-	(let* ((config  (tests:get-testconfig hed 'return-procs))
+	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test
@@ -652,38 +697,39 @@
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)
+(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
   ;; This is a good candidate for threading the requests to enable
   ;; transactionized write at the server
   (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
-  ;; (let ((db (open-db)))
-    ;; (sqlite3:execute db "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;"
-    ;;     	     cpuload
-    ;;     	     diskfree
-    ;;     	     test-id)
-    (if minutes 
-	(cdb:tests-update-run-duration *runremote* test-id minutes))
-	;; (sqlite3:execute db "UPDATE tests SET run_duration=? WHERE id=?;" minutes test-id))
-    (if (eq? num-records 0)
-	(cdb:tests-update-uname-host *runremote* test-id uname hostname))
-	;;(sqlite3:execute db "UPDATE tests SET uname=?,host=? WHERE id=?;" uname hostname test-id))
-    ;;(sqlite3:finalize! db))
-    )
+  (if minutes 
+      (cdb:tests-update-run-duration *runremote* test-id minutes))
+  (if (and uname hostname)
+      (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
   
-(define (tests:set-meta-info db test-id run-id testname itemdat minutes work-area)
+(define (tests:set-full-meta-info db test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (num-records (test:tdb-get-rundat-count tdb))
+  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
+	 (diskfree (get-df (current-directory)))
+	 (uname    (get-uname "-srvpio"))
+	 (hostname (get-host-name)))
+    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
+	  
+(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
+  ;; DOES cdb:remote-run under the hood!
+  (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (if (eq? (modulo num-records 10) 0) ;; every ten records update central
-	(let ((uname    (get-uname "-srvpio"))
-	      (hostname (get-host-name)))
-	  (tests:update-central-meta-info test-id cpuload diskfree minutes num-records uname hostname)))
+    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    ;; Update central with uname and hostname = #f
+    (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)))
+	 
+(define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
     (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 		     cpuload diskfree minutes)
     (sqlite3:finalize! tdb)))
-	  
+ 
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================

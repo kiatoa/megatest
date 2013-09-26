@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses ezsteps))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -195,10 +196,12 @@
     ((vector-ref *state-status* 0) state color)
     ((vector-ref *state-status* 1) status color)))
 
+(define *dashboard-test-db* #t)
+
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
-(define (set-fields-panel test-id testdat)
+(define (set-fields-panel test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
 	(newstate   #f))
@@ -207,7 +210,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(open-run-close db:test-set-state-status-by-id #f test-id #f #f b)
+					(open-run-close db:test-set-state-status-by-id db test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -217,10 +220,10 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id #f test-id state #f #f)
+								    (open-run-close db:test-set-state-status-by-id db test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
-				(list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "KILLED" "KILLREQ"))))
+				*common:std-states*))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
 	       (vector-set! *state-status* 0
 			    (lambda (state color)
 			      (for-each 
@@ -237,10 +240,10 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id #f test-id #f status #f)
+								    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
-				(list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
+				*common:std-statuses*))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
 			    (lambda (status color)
 			      (for-each 
@@ -252,24 +255,57 @@
 			       btns)))
 	       btns))))))
 
+(define (dashboard-tests:run-html-viewer lfilename)
+  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
+    (if htmlviewercmd
+	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
+	(iup:send-url lfilename))))
+
+(define (dashboard-tests:run-a-step info)
+  #t)
+
+(define (dashboard-tests:step-run-control testdat stepname testconfig)
+  (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
+   #:title stepname
+   (iup:vbox ; #:expand "YES"
+    (iup:label (conc "Step: " stepname "\nNB// These buttons only run the test step\nfor the purpose of debugging.\nNot all database updates are done."))
+    (iup:button "Re-run"            
+		#:expand "HORIZONTAL" 
+		#:action (lambda (obj)
+			   (thread-start! 
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #t))
+					 (conc "ezstep run single step " stepname)))))
+    (iup:button "Re-run and continue"         
+		#:expand "HORIZONTAL" 
+		#:action (lambda (obj)
+			   (thread-start!
+			    (make-thread (lambda ()
+					   (ezsteps:run-from testdat stepname #f))
+					 (conc "ezstep run from step " stepname)))))
+    ;; (iup:button "Refresh test data"
+    ;;     	#:expand "HORIZONTAL"
+    ;;     	#:action (lambda (obj)
+    ;;     		   (print "Refresh test data " stepname))
+    )))
 
 ;;======================================================================
 ;;
 ;;======================================================================
 (define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (open-run-close db:get-test-info-by-id #f test-id))
-	 (db-path       (conc *toppath* "/megatest.db"))
+  (let* ((db-path       (conc *toppath* "/megatest.db"))
+	 (db            (open-db))
+	 (testdat       (open-run-close db:get-test-info-by-id db test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
-	 (request-update #t)
-	 (db             #f))
+	 (request-update #t))
     (if (not testdat)
 	(begin
-	  (debug:print 0 "ERROR: No test data found for test " test-id ", exiting")
+	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (open-run-close db:get-key-val-pairs #f run-id) #f))
-	       (rundat        (if testdat (open-run-close db:get-run-info #f run-id) #f))
+	       (keydat        (if testdat (open-run-close db:get-key-val-pairs db run-id) #f))
+	       (rundat        (if testdat (open-run-close db:get-run-info db run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -277,11 +313,12 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
+	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (open-run-close db:testmeta-get-record #f testname)))
+				  (let ((tm (open-run-close db:testmeta-get-record db testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -295,14 +332,14 @@
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
-				 (iup:send-url logfile)
+				 (dashboard-tests:run-html-viewer logfile)
 				 (message-window (conc "File " logfile " not found")))))
-	       (view-a-log (lambda (lfile)
+	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
 			       (if (file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
-				   (iup:send-url lfilename)
+				   (dashboard-tests:run-html-viewer lfilename)
 				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)
@@ -310,18 +347,25 @@
 						  (conc "-e " (get-environment-variable "SHELL"))
 						  "")))
 				   (system (conc "cd " rundir 
-						 ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+						 ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 				 (message-window  (conc "Directory " rundir " not found")))))
+	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
-			     (let* ((curr-mod-time (file-modification-time db-path))
-				    (need-update   (or (and (> curr-mod-time db-mod-time)
-							    (> (current-seconds) (+ last-update 2))) ;; every two seconds if db touched
+			     (let* ((curr-mod-time (max (file-modification-time db-path)
+							(if (file-exists? testdat-path)
+							    (file-modification-time testdat-path)
+							    (begin
+							      (set! testdat-path (conc rundir "/testdat.db"))
+							      0))))
+				    (need-update   (or (and (>= curr-mod-time db-mod-time)
+							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
+						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (open-run-close db:get-test-info-by-id #f test-id )))))
+						     (open-run-close db:get-test-info-by-id db test-id )))))
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -330,10 +374,25 @@
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
+				 (if (eq? curr-mod-time db-mod-time) ;; do only once if same
+				     (set! db-mod-time (+ curr-mod-time 1))
+				     (set! db-mod-time curr-mod-time))
+				 (set! last-update (current-milliseconds))
+				 (set! request-update #f) ;; met the need ...
 				 )
 				(need-update ;; if this was true and yet there is no data ....
-				 (db:test-set-testname! testdat "DEAD OR DELETED TEST"))))))
-	       (widgets      (make-hash-table))
+				 (db:test-set-testname! testdat "DEAD OR DELETED TEST")))
+			       (if need-update
+				   (begin
+				     ;; update the gui elements here
+				     (for-each 
+				      (lambda (key)
+					;; (print "Updating " key)
+					((hash-table-ref widgets key) testdat))
+				      (hash-table-keys widgets))
+				     (update-state-status-buttons testdat)))
+			       ;; (iup:refresh self)
+			       )))
 	       (meta-widgets (make-hash-table))
 	       (self         #f)
 	       (store-label  (lambda (name lbl cmd)
@@ -387,7 +446,28 @@
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+	       (clean-run-execute  (lambda (x)
+				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
+						      "megatest -remove-runs -target " keystring " :runname " runname
+						      " -testpatt " (conc testname "/" (if (equal? item-path "")
+											   "%"
+											   item-path))
+						      ";megatest -target " keystring " :runname " runname 
+						      " -runtests " (conc testname "/" (if (equal? item-path "")
+											   "%" 
+											   item-path))
+						      " ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))
+				       (system (conc cmd " &")))))
+	       (remove-test (lambda (x)
+			      (iup:attribute-set!
+			       command-text-box "VALUE"
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+				     " -testpatt " (conc testname "/" (if (equal? item-path "")
+									  "%"
+									  item-path))
+				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))
+			      )))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
 	   ((not rundat)(begin (print "ERROR: found test info but there is a problem with the run info for " run-id)(exit 1)))
@@ -411,6 +491,7 @@
 					    (iup:button "Start Xterm"   #:action xterm       #:size "80x")
 					    (iup:button "Run Test"      #:action run-test    #:size "80x")
 					    (iup:button "Clean Test"    #:action remove-test #:size "80x")
+					    (iup:button "CleanRunExecute!"    #:action clean-run-execute #:size "80x")
 					    (iup:button "Kill All Jobs" #:action kill-jobs   #:size "80x")
 					    (iup:button "Close"         #:action (lambda (x)(exit)) #:size "80x"))
 					   (apply 
@@ -432,9 +513,13 @@
 									 ;; (if (equal? col 6)
 									 (let* ((mtrx-rc (conc lin ":" 6))
 										(fname   (iup:attribute obj mtrx-rc))) ;; col))))
-									   (view-a-log fname)))
-									   ;; (print "obj: " obj " mtrx-rc: " mtrx-rc " fname: " fname " lin: " lin " col: " col " status: " status)))
-							    )))
+									   (if (eq? col 6)
+									       (view-a-log fname)
+									       (iup:show
+										(dashboard-tests:step-run-control 
+										 testdat
+										 (iup:attribute obj (conc lin ":" 1)) 
+										 teststeps))))))))
 					 ;; (let loop ((count 0))
 					 ;;   (iup:attribute-set! steps-matrix "FITTOTEXT" (conc "L" count))
 					 ;;   (if (< count 30)
@@ -452,19 +537,41 @@
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
 					 (let ((proc
 						(lambda (testdat)
+						  (let ((max-row 0))
 						  (if (not (null? teststeps))
 						      (let loop ((hed    (car teststeps))
 								 (tal    (cdr teststeps))
 								 (rownum 1)
 								 (colnum 1))
+							  (if (> rownum max-row)(set! max-row rownum))
 							(let ((val     (vector-ref hed (- colnum 1)))
 							      (mtrx-rc (conc rownum ":" colnum)))
 							  (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
 							  (if (< colnum 6)
 							      (loop hed tal rownum (+ colnum 1))
 							      (if (not (null? tal))
-								  (loop (car tal)(cdr tal)(+ rownum 1) 1))))
-							(iup:attribute-set! steps-matrix "REDRAW" "ALL"))))))
+								    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
+						    (if (> max-row 0)
+							(begin
+							  ;; we are going to speculatively clear rows until we find a row that is already cleared
+							  (let loop ((rownum  (+ max-row 1))
+								     (colnum  0)
+								     (deleted #f))
+							    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
+							    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
+								   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
+								   (mtrx-rc  (conc rownum ":" colnum))
+								   (curr-val (iup:attribute steps-matrix mtrx-rc)))
+							      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
+							      (if (and (string? curr-val)
+								       (not (equal? curr-val "")))
+								  (begin
+								    (iup:attribute-set! steps-matrix mtrx-rc "")
+								    (loop next-row next-col #t))
+								  (if (eq? colnum 6) ;; not done, didn't get a full blank row
+								      (if deleted (loop next-row next-col #f)) ;; exit on this not met
+								      (loop next-row next-col deleted)))))
+							  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))))
 					   (hash-table-set! widgets "StepsMatrix" proc)
 					   (proc testdat))
 					 steps-matrix)
@@ -498,7 +605,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (open-run-close db:read-test-data #f test-id "%")))
+										    (open-run-close db:read-test-data db test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
@@ -514,14 +621,6 @@
 				 ;; Now start keeping the gui updated from the db
 				 (refreshdat) ;; update from the db here
 					;(thread-suspend! other-thread)
-				 ;; update the gui elements here
-				 (for-each 
-				  (lambda (key)
-				    ;; (print "Updating " key)
-				    ((hash-table-ref widgets key) testdat))
-				  (hash-table-keys widgets))
-				 (update-state-status-buttons testdat)
-					; (iup:refresh self)
 				 (if *exit-started*
 				     (set! *exit-started* 'ok))))))))))
 

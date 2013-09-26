@@ -1,5 +1,5 @@
 
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2013, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -92,7 +92,7 @@
 	  ;; Setup the *runremote* global var
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  ;; (set! *runremote* runremote)
-	  (set! *transport-type* (string->symbol transport))
+	  ;; (set! *transport-type* (string->symbol transport))
 	  (set! keys       (cdb:remote-run db:get-keys #f))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -114,6 +114,7 @@
 	  (setenv "MT_RUNNAME"   runname)
 	  (setenv "MT_MEGATEST"  megatest)
 	  (setenv "MT_TARGET"    target)
+	  (setenv "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  (if (not (setup-for-run))
@@ -136,8 +137,12 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-meta-info #f test-id run-id test-name itemdat 0 work-area)
-	  (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (tests:set-full-meta-info #f test-id run-id 0 work-area)
+
+	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
+	  (tests:test-force-state-status! test-id "REMOTEHOSTSTART" "n/a")
+	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -151,11 +156,21 @@
 		 (kill-job?    #f)
 		 (exit-info    (vector #t #t #t))
 		 (job-thread   #f)
+		 (keep-going   #t)
 		 (runit        (lambda ()
 				 ;; (let-values
 				 ;;  (((pid exit-status exit-code)
 				 ;;    (run-n-wait fullrunscript)))
-				 (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+				 ;; (tests:test-set-status! test-id "RUNNING" "n/a" #f #f)
+				 ;; Since we should have a clean slate at this time there is no need to do 
+				 ;; any of the other stuff that tests:test-set-status! does. Let's just 
+				 ;; force RUNNING/n/a
+				 
+
+				 (thread-sleep! 0.3)
+				 (tests:test-force-state-status! test-id "RUNNING" "n/a")
+				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
@@ -178,6 +193,7 @@
 				 (if ezsteps
 				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
+				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -245,7 +261,13 @@
 									       ((eq? overall-status 'pass) this-step-status)
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
-									       (else 'fail))))
+									       (else 'fail)))
+							    (next-state       "RUNNING") 
+							                      ;;  (cond
+									      ;;  ((null? tal) ;; more to run?
+									      ;;   "COMPLETED")
+									      ;;  (else "RUNNING"))
+							    )
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
 								    " next-status: " next-status " rollup-status: " rollup-status)
@@ -253,14 +275,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! test-id "RUNNING" "WARN" 
+							  (tests:test-set-status! test-id next-state "WARN" 
 									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									  #f))
 							 ((pass)
-							  (tests:test-set-status! test-id "RUNNING" "PASS" #f #f))
+							  (tests:test-set-status! test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail
-							  (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! test-id next-state "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -275,6 +297,7 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
+				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
@@ -286,10 +309,13 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-meta-info #f test-id run-id test-name itemdat minutes work-area)
+				       (tests:set-partial-meta-info #f test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
+					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
+					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
+					     ;;       between tries?
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
 						   (process-signal pid signal/kill)
@@ -317,45 +343,59 @@
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       ;; (sqlite3:finalize! db)
-				       (thread-sleep! (+ 10 (random 10))) ;; add some jitter to the call home time to spread out the db accesses
-				       (loop (calc-minutes)))))))
-		 (th1          (make-thread monitorjob))
-		 (th2          (make-thread runit)))
+				       (if keep-going
+					   (begin
+					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
+					     (if keep-going
+						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
+		 (th1          (make-thread monitorjob "monitor job"))
+		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
+	    (set! keep-going #f)
+	    (thread-join! th1)
+	    ;; (thread-sleep! 1)
+	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
+	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
-	      (if (not (equal? (db:test-get-state testinfo) "COMPLETED"))
-		  (begin
-		    (debug:print 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
-		    (tests:test-set-status! test-id 
-				    (if kill-job? "KILLED" "COMPLETED")
-				    (cond
+	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
+		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
+				                                        ;; "COMPLETED"
+							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
+				    )
+			(new-status (cond
 				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				     ((eq? rollup-status 0)
-				      ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
+				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
 				     ((eq? rollup-status 1) "FAIL")
 				     ((eq? rollup-status 2)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				     (else "FAIL"))
-				    (args:get-arg "-m") #f)))
+				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
+		    (tests:test-set-status! test-id 
+					    new-state
+					    new-status
+					    (args:get-arg "-m") #f)
+		    ;; need to update the top test record if PASS or FAIL and this is a subtest
+		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
+		    ;; (if (not (equal? item-path ""))
+		    ;;     (begin
+		    ;;       (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
+		    ;;       (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))
+		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items #f run-id test-name #f)) ;; don't force - just update if no
-	      )
+		  (tests:summarize-items #f run-id test-id test-name #f))) ;; don't force - just update if no
 	    (mutex-unlock! m)
-	    ;; (exec-results (cmd-run->list fullrunscript)) ;;  (list ">" (conc test-name "-run.log"))))
-	    ;; (success      exec-results)) ;; (eq? (cadr exec-results) 0)))
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    ;; (sqlite3:finalize! db)
-	    ;; (sqlite3:finalize! tdb)
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
@@ -365,16 +405,18 @@
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now
   ;; special case
-  (set! *configinfo* (find-and-read-config 
-		      (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-		      environ-patt: "env-override"
-		      given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-		      pathenvvar: "MT_RUN_AREA_HOME"))
-  (set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-  (set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-  (if *toppath*
-      (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
-      (debug:print 0 "ERROR: failed to find the top path to your run setup."))
+  (if (not (hash-table? *configdat*))  ;; no need to re-open on every call
+      (begin
+	(set! *configinfo* (find-and-read-config 
+			    (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+			    environ-patt: "env-override"
+			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+			    pathenvvar: "MT_RUN_AREA_HOME"))
+	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
+	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
+	(if *toppath*
+	    (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
+	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
   *toppath*)
 
 (define (get-best-disk confdat)
@@ -452,7 +494,8 @@
 	  (debug:print 0 "WARNING: linktree did not exist! Creating it now at " linktree)
 	  (create-directory linktree #t))) ;; (system (conc "mkdir -p " linktree))))
     ;; create the directory for the tests dir links, this is needed no matter what...
-    (if (not (directory-exists? lnkbase))
+    (if (and (not (directory-exists? lnkbase))
+	     (not (file-exists? lnkbase)))
 	(create-directory lnkbase #t))
     
     ;; update the toptest record with its location rundir, cache the path
@@ -575,7 +618,12 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell        (config-lookup *configdat* "jobtools"     "useshell"))
+  (let* ((useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+			    (if ush 
+				(if (equal? ush "no") ;; must use "no" to NOT use shell
+				    #f
+				    ush)
+				#t)))     ;; default is yes
 	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
 	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
@@ -610,6 +658,7 @@
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
+    (setenv "MT_ITEMPATH" item-path)
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
     (if (not remote-megatest)(set! remote-megatest local-megatest)) ;; "megatest"))
@@ -678,6 +727,7 @@
 					  (list "MT_ITEM_INFO" (conc itemdat)) 
 					  (list "MT_RUNNAME"   runname)
 					  (list "MT_TARGET"    mt_target)
+					  (list "MT_ITEMPATH"  item-path)
 					  )
 				    itemdat)))
 	   ;; Launchwait defaults to true, must override it to turn off wait
@@ -686,7 +736,10 @@
 				      cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
-				      (string-intersperse fullcmd " ")
+				      (let ((cmdstr (string-intersperse fullcmd " ")))
+					(if launchwait
+					    cmdstr
+					    (conc cmdstr " >> mt_launch.log 2>&1")))
 				      (car fullcmd))
 				  (if useshell
 				      '()

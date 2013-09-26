@@ -11,6 +11,6 @@ else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
-fullcmd="$prefix/bin/$cmd"
+fullcmd="exec $prefix/bin/$cmd"
 
 echo "$fullcmd \"\$@\""

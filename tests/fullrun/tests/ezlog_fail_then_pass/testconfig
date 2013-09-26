@@ -6,8 +6,8 @@ firststep main.sh
 [test_meta]
 author matt
 owner  bob
-description This test runs a single ezstep which is logpro clean
-    but fails based on -test-data loaded.
+description This test runs a single ezstep which is logpro clean\
+ but fails based on -test-data loaded.
 
 tags first,single
 reviewed 09/10/2011, by Matt

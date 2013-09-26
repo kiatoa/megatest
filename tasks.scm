@@ -201,7 +201,11 @@
 ;; remove any others. will not necessarily remove all!
 (define (tasks:get-best-server mdb)
   (let ((res '())
-	(best #f))
+	(best #f)
+	(transport (if (and *transport-type*
+			    (not (eq? *transport-type* 'fs)))
+		       (conc *transport-type*)
+		       "%")))
     (sqlite3:for-each-row
      (lambda (id interface port pubport transport pid hostname)
        (set! res (cons (vector id interface port pubport transport pid hostname) res))
@@ -211,7 +215,8 @@
      
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
           WHERE strftime('%s','now')-heartbeat < 10 
-          AND mt_version=? ORDER BY start_time DESC LIMIT 1;" (common:version-signature))
+          AND mt_version=? AND transport LIKE ? 
+          ORDER BY start_time DESC LIMIT 1;" (common:version-signature) transport)
     ;; for now we are keeping only one server registered in the db, return #f or first server found
     (if (null? res) #f (car res))))
 

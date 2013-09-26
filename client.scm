@@ -19,7 +19,7 @@
 
 (import (prefix sqlite3 sqlite3:))
 
-(use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb)
+(use spiffy uri-common intarweb http-client spiffy-request-vars uri-common intarweb directory-utils)
 
 (declare (unit client))
 
@@ -52,41 +52,26 @@
 ;;
 ;; There are two scenarios. 
 ;;   1. We are a test manager and we received *transport-type* and *runremote* via cmdline
-;;   2. We are a run tests, list runs or other interactive process and we mush figure out
+;;   2. We are a run tests, list runs or other interactive process and we must figure out
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup #!key (numtries 50))
+(define (client:setup #!key (numtries 3))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
+  (push-directory *toppath*) ;; This is probably NOT needed 
   (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
-  (let* ((hostinfo  (if (not *transport-type*) ;; If we dont' already have transport type set then figure it out
-			(open-run-close tasks:get-best-server tasks:open-db)
-			#f)))
-    ;; if have hostinfo then extract the transport type 
-    ;; else fall back to fs
+  (let* ((hostinfo  (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
     (set! *transport-type* (if hostinfo 
     			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			       'fs))
-    ;; ;; DEBUG STUFF
-    ;; (if (eq? *transport-type* 'fs)(begin (print "ERROR!!!!!!! refusing to run with transport " *transport-type*)(exit 99)))
-    
     (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 
-      ((fs) ;; (if (not *megatest-db*)(set! *megatest-db* (open-db))))
-       ;; we are not doing fs any longer. let's cheat and start up a server
-       ;; if we are falling back on fs (not 100% supported) do an about face and start a server
-       (if (not (equal? (args:get-arg "-transport") "fs"))
-	   (begin
-	     (set! *transport-type* #f)
-	     (system (conc "megatest -list-servers | grep " megatest-version " | grep alive || megatest -server - -daemonize && sleep 3"))
-	     (thread-sleep! 1)
-	     (if (> numtries 0)
-		 (client:setup numtries: (- numtries 1))))))
+      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
       ((http)
        (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
 				      (tasks:hostinfo-get-port hostinfo)))
@@ -97,7 +82,8 @@
       (else  ;; default to fs
        (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " attempting to continue with fs")
        (set! *transport-type* 'fs)
-       (set! *megatest-db*    (open-db))))))
+       (set! *megatest-db*    (open-db))))
+    (pop-directory)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
