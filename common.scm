@@ -89,7 +89,24 @@
   (set! *env-vars-by-run-id* (make-hash-table))
   (set! *test-id-cache*      (make-hash-table)))
 
-;; Debugging stuff
+;;======================================================================
+;; S T A T E S   A N D   S T A T U S E S
+;;======================================================================
+
+(define *common:std-states*   
+  (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ" "STUCK"))
+
+(define *common:std-statuses*
+  (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD"))
+
+;; These are stopping conditions that prevent a test from being run
+(define *common:cant-run-states-sym* 
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
+
+;;======================================================================
+;; D E B U G G I N G   S T U F F 
+;;======================================================================
+
 (define *verbosity*         1)
 (define *logging*           #f)
 
@@ -302,22 +319,24 @@
 	"unknown"
 	(caar uname-res))))
 	      
-(define (save-environment-as-files fname)
+(define (save-environment-as-files fname #!key (ignorevars (list "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (key)
-                      (let* ((val (cdr key))
-                             (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-                        (print "setenv " (car key) " " sval)))
-                     envvars)))
+		      (if (not (member key ignorevars))
+			  (let* ((val (cdr key))
+				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
+			    (print "setenv " (car key) " " sval))))
+		      envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
           (for-each (lambda (key)
-                      (let* ((val (cdr key))
-                             (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-                         (print "export " (car key) "=" sval)))
+		      (if (not (member key ignorevars))
+			  (let* ((val (cdr key))
+				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
+			    (print "export " (car key) "=" sval))))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values

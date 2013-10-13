@@ -1,3 +1,15 @@
+# FROM andyjpg on #chicken
+
+(let ((original-exit (exit-handler)))
+  (exit-handler (lambda (#!optional (exit-code 0))
+		  (printf "Preparing to exit...\n" exit-code)
+		  (for-each (lambda (pid)
+			      (printf "Sending signal/term to ~A\n" pid)
+			      (process-signal pid signal/term)) (children))
+		  (original-exit exit-code))))
+
+
+
 1. All run control access to db is direct.
 2. All test machines must have megatest available
 3. Tests may or may not have file system access to the originating

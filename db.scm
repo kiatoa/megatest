@@ -261,7 +261,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
+	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
 	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
 	 (set! db (sqlite3:open-database dbpath)))
@@ -484,7 +484,7 @@
 	       ;; delete all tests that are 'DELETED'
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ;; delete all tests that have no run
-	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT run_id FROM runs);"
+	       "DELETE FROM tests WHERE run_id NOT IN (SELECT DISTINCT id FROM runs);"
 	       ;; delete all runs that are state='deleted'
 	       "DELETE FROM runs WHERE state='deleted';"
 	       ;; delete empty runs
@@ -647,7 +647,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
-	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=?;" state status res)
+	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
 	  (debug:print 0 "ERROR: Called without all necessary keys")
@@ -820,8 +820,8 @@
 (define (db:delete-run db run-id)
   (common:clear-caches) ;; don't trust caches after doing any deletion
   ;; First set any related tests to DELETED
-  (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED' WHERE run_id=?;"))
-	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted' WHERE id=?;")))
+  (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;"))
+	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted',comment='' WHERE id=?;")))
     (sqlite3:with-transaction
      db (lambda ()
 	  (sqlite3:execute stmt1 run-id)
@@ -1049,7 +1049,7 @@
 	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
 	(if force
 	    (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id)
-	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a' WHERE id=?;" test-id)))))
+	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))))
 
 (define (db:delete-tests-for-run db run-id)
   (common:clear-caches)
@@ -1155,7 +1155,7 @@
 	   (set! res count))
 	 db
 	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
-             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?;"
+             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
 	 jobgroup)
 	res)))
 
@@ -1651,7 +1651,7 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE run_id=? AND testname=?
                                                      AND item_path != '' 
-                                                     AND state in ('RUNNING','NOT_STARTED')) > 0 THEN 'RUNNING'
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
                             status=CASE 
                                   WHEN fail_count > 0 THEN 'FAIL' 

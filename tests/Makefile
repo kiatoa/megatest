@@ -139,7 +139,7 @@ minsetup :
 	cd mintest;megatest -stop-server 0
 	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3
-	cd mintest;dashboard -rows 20 &
+	cd mintest;dashboard -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links

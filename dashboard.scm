@@ -160,6 +160,9 @@ Misc
 
 (define *tests-sort-reverse* 3)
 (define *hide-empty-runs* #f)
+(define *hide-not-hide* #t) ;; toggle for hide/not hide
+(define *hide-not-hide-button* #f)
+(define *hide-not-hide-tabs* #f)
 
 (define *current-tab-number* 0)
 (define *updaters* (make-hash-table))
@@ -221,7 +224,10 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests    (mt:get-tests-for-run run-id testnamepatt states statuses sort-by: sort-by sort-order: sort-order))
+		       (tests       (mt:get-tests-for-run run-id testnamepatt states statuses
+							  not-in: *hide-not-hide*
+							  sort-by: sort-by
+							  sort-order: sort-order))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
 		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
@@ -479,9 +485,23 @@ Misc
 (define (mkstr . x)
   (string-intersperse (map conc x) ","))
 
+(define (set-bg-on-filter)
+  (let ((search-changed (not (null? (filter (lambda (key)
+					      (not (equal? (hash-table-ref *searchpatts* key) "%")))
+					    (hash-table-keys *searchpatts*)))))
+	(state-changed  (not (null? (hash-table-keys *state-ignore-hash*))))
+	(status-changed (not (null? (hash-table-keys *status-ignore-hash*)))))
+    (iup:attribute-set! *hide-not-hide-tabs* "BGCOLOR"
+			(if (or search-changed
+				state-changed
+				status-changed)
+			    "190 180 190"
+			    "190 190 190"
+			    ))))
+
 (define (update-search x val)
-  ;; (print "Setting search for " x " to " val)
-  (hash-table-set! *searchpatts* x val))
+  (hash-table-set! *searchpatts* x val)
+  (set-bg-on-filter))
 
 (define (mark-for-update)
   (set! *last-db-update-time* 0)
@@ -849,7 +869,7 @@ Misc
 	    #:title "States"
 	    (dashboard:text-list-toggle-box 
 	     ;; Move these definitions to common and find the other useages and replace!
-	     '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+	     *common:std-states* ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
 	     (lambda (all)
 	       (dboard:data-set-states! *data* all)
 	       (dashboard:update-run-command))))
@@ -857,7 +877,7 @@ Misc
 	   (iup:frame
 	    #:title "Statuses"
 	    (dashboard:text-list-toggle-box 
-	     '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+	     *common:std-statuses* ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
 	     (lambda (all)
 	       (dboard:data-set-statuses! *data* all)
 	       (dashboard:update-run-command))))))))
@@ -1024,7 +1044,11 @@ Misc
 		     (let* ((runs-dat     (mt:get-runs-by-patt *keys* "%" #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
-			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id "%" '() '()
+			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id 
+									    (hash-table-ref/default *searchpatts* "test-name" "%/%")
+									    (hash-table-keys *state-ignore-hash*) ;; '()
+									    (hash-table-keys *status-ignore-hash*) ;; '()
+									    not-in: *hide-not-hide*
 									    qryvals: "id,testname,item_path,state,status"))) ;; get 'em all
 					    (sort tdat (lambda (a b)
 							 (let* ((aval (vector-ref a 2))
@@ -1178,8 +1202,14 @@ Misc
 						 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
-						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+Hide" "-Hide"))
-						 (mark-for-update))))
+						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+HideE" "-HideE"))
+						 (mark-for-update)))
+	      (let ((hideit (iup:button "HideTests" #:action (lambda (obj)
+							       (set! *hide-not-hide* (not *hide-not-hide*))
+							       (iup:attribute-set! obj "TITLE" (if *hide-not-hide* "HideTests" "NotHide"))
+							       (mark-for-update)))))
+		(set! *hide-not-hide-button* hideit)
+		hideit))
 	     (iup:hbox
 	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
@@ -1199,7 +1229,7 @@ Misc
 							 (iup:attribute-set! obj "TITLE" "Collapse"))))
 						 (mark-for-update))))))
 	   (iup:frame 
-	    #:title "hide"
+	    #:title "state/status filter"
 	    (iup:vbox
 	     (apply 
 	      iup:hbox
@@ -1208,8 +1238,9 @@ Misc
 						      (mark-for-update)
 						      (if (eq? val 1)
 							  (hash-table-set! *status-ignore-hash* status #t)
-							  (hash-table-delete! *status-ignore-hash* status)))))
-		   '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+							  (hash-table-delete! *status-ignore-hash* status))
+						      (set-bg-on-filter))))
+		   *common:std-statuses*)) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
@@ -1217,8 +1248,9 @@ Misc
 						      (mark-for-update)
 						      (if (eq? val 1)
 							  (hash-table-set! *state-ignore-hash* state #t)
-							  (hash-table-delete! *state-ignore-hash* state)))))
-		   '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
+							  (hash-table-delete! *state-ignore-hash* state))
+						      (set-bg-on-filter))))
+		   *common:std-states*)) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
@@ -1227,8 +1259,10 @@ Misc
 						 (mark-for-update)
 						 (debug:print 6 "*start-run-offset* " *start-run-offset* " maxruns: " maxruns ", val: " val " oldmax: " oldmax)
 						 (iup:attribute-set! obj "MAX" (* maxruns 10))))
-			   #:expand "YES"
-			   #:max (* 10 (length *allruns*)))))
+			   #:expand "HORIZONTAL"
+			   #:max (* 10 (length *allruns*))
+			   #:min 0
+			   #:step 0.01)))
 					;(iup:button "inc rows" #:action (lambda (obj)(set! *num-tests* (+ *num-tests* 1))))
 					;(iup:button "dec rows" #:action (lambda (obj)(set! *num-tests* (if (> *num-tests* 0)(- *num-tests* 1) 0))))
 	   )
@@ -1265,7 +1299,9 @@ Misc
 											     (iup:attribute-set! obj "MAX" newmax))
 											 ))
 								   #:expand "VERTICAL" 
-								   #:orientation "VERTICAL")
+								   #:orientation "VERTICAL"
+								   #:min 0
+								   #:step 0.01)
 						     (apply iup:vbox (reverse res)))))))
        (else
 	(let ((labl  (iup:button "" 
@@ -1351,6 +1387,8 @@ Misc
 	(iup:attribute-set! tabs "TABTITLE1" "Runs")
 	(iup:attribute-set! tabs "TABTITLE2" "Run Summary")
 	(iup:attribute-set! tabs "TABTITLE3" "Run Control")
+	(iup:attribute-set! tabs "BGCOLOR" "190 190 190")
+	(set! *hide-not-hide-tabs* tabs)
 	tabs)))
     (vector keycol lftcol header runsvec)))
 
@@ -1472,7 +1510,7 @@ Misc
 			 (mutex-unlock! *update-mutex*)
 			 (if (not update-is-running)
 			   (begin
-		       (dashboard:run-update x)
+			     (dashboard:run-update x)
 			     (mutex-lock! *update-mutex*)
 			     (set! *update-is-running* #f)
 			     (mutex-unlock! *update-mutex*))))

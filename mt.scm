@@ -109,7 +109,10 @@
 		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
 			    (logf (conc  test-rundir "/last-trigger.log")))
 			(if cmd
-			    (let ((fullcmd (conc "(" cmd " " test-id " " test-rundir " " trigger ") >> " logf " 2>&1")))
+			    ;; Putting the commandline into ( )'s means no control over the shell. 
+			    ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
+			    ;; or equivalent. No need to do this. Just run it?
+			    (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
 			      (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
 			      (process-run fullcmd)))))
 		    (list

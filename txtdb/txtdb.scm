@@ -18,6 +18,8 @@
 (use json)
 (use csv)
 
+(include "../megatest-fossil-hash.scm")
+
 ;; Read a non-compressed gnumeric file
 (define (refdb:read-gnumeric-xml fname)
   (with-input-from-file fname
@@ -77,7 +79,8 @@
 				      'http://www.gnumeric.org/v10.dtd:Cells))
 	 (rownums     (make-hash-table))  ;; num -> name
 	 (colnums     (make-hash-table))  ;; num -> name
-	 (cols        (make-hash-table))) ;; name -> ( (name val) ... )
+	 (cols        (make-hash-table))  ;; name -> ( (name val) ... )
+	 (col0title   ""))
     (for-each (lambda (cell)
 		(let ((rownum  (string->number (car (find-section cell 'Row))))
 		      (colnum  (string->number (car (find-section cell 'Col))))
@@ -87,14 +90,19 @@
 				 (if (null? res) "" (car res)))))
 		  ;; If colnum is 0 Then this is a row name, if rownum is 0 then this is a col name
 		  (cond
-		   ((eq? 0 colnum) ;; a blank in column zero is handled with the special name "row-N"
+		   ((and (not (eq? 0 rownum))
+			 (eq? 0 colnum)) ;; a blank in column zero is handled with the special name "row-N"
 		    (hash-table-set! rownums rownum (if (equal? value "")
 							(conc "row-" rownum)
 							value)))
-		   ((eq? 0 rownum)
+		   ((and (not (eq? 0 colnum))
+			 (eq? 0 rownum))
 		    (hash-table-set! colnums colnum (if (equal? value "")
 							(conc "col-" colnum)
 							value)))
+		   ((and (eq? 0 rownum)
+			 (eq? 0 colnum))
+		    (set! col0title value))
 		   (else
 		    (let ((colname (hash-table-ref/default colnums colnum (conc "col-" colnum)))
 			  (rowname (hash-table-ref/default rownums rownum (conc "row-" rownum))))
@@ -106,6 +114,7 @@
 			    (hash-table->alist colnums))))
       (with-output-to-file (conc targdir "/" sheet-name ".dat")
 	(lambda ()
+	  (print "[" col0title "]")
 	  (for-each (lambda (colname)
 		      (print "[" colname "]")
 		      (for-each (lambda (row)
@@ -215,14 +224,16 @@
 	(var-no-val-rx (regexp "^(\\S+)\\s*$"))
 	(inp         (open-input-file fname))
 	(cmnt-indx   (make-hash-table))
-	(blnk-indx   (make-hash-table)))
+	(blnk-indx   (make-hash-table))
+	(first-section #f)) ;; used for zeroth title
     (let loop ((inl     (read-line inp))
 	       (section ".............")
 	       (res     '()))
       (if (eof-object? inl)
 	  (begin
 	    (close-input-port inp)
-	    (reverse res))
+	    (cons (list first-section first-section first-section)
+		  (reverse res)))
 	  (regex-case
 	   inl 
 	   (continue-rx _         (loop (conc inl (read-line inp)) section res))
@@ -236,9 +247,12 @@
 				    (loop (read-line inp)
 					  section
 					  (cons (list (conc "#BLNK" curr-indx) section " ") res))))
-	   (section-rx (x sname)  (loop (read-line inp) 
-					sname 
-					res))
+	   (section-rx (x sname)  (begin
+				    (if (not first-section)
+					(set! first-section sname))
+				    (loop (read-line inp) 
+					  sname 
+					  res)))
 	   (cell-rx   (x k v)     (loop (read-line inp)
 					section
 					(cons (list k section v) res)))
@@ -264,7 +278,7 @@
    (else '(ValueType "60"))))
 
 (define (dat->cells dat)
-  (let* ((indx     (common:sparse-list-generate-index dat))
+  (let* ((indx     (common:sparse-list-generate-index (cdr dat)))
 	 (row-indx (car indx))
 	 (col-indx (cadr indx))
 	 (rowdat   (map (lambda (row)(list (car row) "    " (car row))) row-indx))
@@ -349,13 +363,23 @@
 Note: refdbdir is a path to the directory containg sheet-names.cfg
 
   import filename.gnumeric refdbdir   : Import a gnumeric file into a txt db directory
+  export refdbdir filename.gnumeric   : Export a refdb to a gnumeric file
   edit   refdbdir                     : Edit a refdbdir using gnumeric.
   ls refdbdir                         : List the keys for specified level 
   lookup refdbdir sheetname row col   : Look up a value in the text db   
   getrownames refdb sheetname         : Get a list of row titles
-  getcolnames refdb sheetname         : Get a list of column titles  
+  getcolnames refdb sheetname         : Get a list of column titles
 
-Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest"))
+To export to other formats; first export to gnumeric then use ssconvert.
+
+e.g. 
+
+refdb export mydata mydata.gnumeric
+ssconvert -T Gnumeric_html:html40 mydata.gnumeric mydata.html 
+  
+Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
+
+Version: " megatest-fossil-hash))
 
 (define (list-sheets path)
   ;; (cond
@@ -417,7 +441,7 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
   ;; TEMPORARY, REMOVE IN 2014
   (if (not (file-exists? path)) ;; Create new 
       (begin
-	(print "INFO: Creating new txtdb at " path)
+	(print "\nINFO: Creating new txtdb at " path "\n")
 	(create-new-db path)))
   (if (not (file-exists? (conc path "/sxml/_sheets.sxml")))
       (begin
@@ -436,6 +460,10 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
       (process-wait pid)
       (import-gnumeric-file tmpf path))))
 
+;;======================================================================
+;; This routine dispaches or executes most of the commands for refdb
+;;======================================================================
+;;
 (define (process-action action-str . param)
   (let ((num-params (length param))
 	(action     (string->symbol action-str)))
@@ -447,13 +475,14 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
 	((ls)
 	 (map print (list-sheets (car param))))))
      ((eq? num-params 2)
-      (case action
-	((getrownames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) car)  " ")))
-	((getcolnames)(print (string-intersperse (get-rowcol-names (car param)(cadr param) cadr) " ")))
-	((import)
-	 (let ((fname     (car param))
-	       (targname  (cadr param)))
-	   (import-gnumeric-file fname targname)))))
+      (let ((param1 (car param))
+	    (param2 (cadr param)))
+	(case action
+	  ((getrownames) (print (string-intersperse (get-rowcol-names param1 param2 car)  " ")))
+	  ((getcolnames) (print (string-intersperse (get-rowcol-names param1 param2 cadr) " ")))
+	  ((import)      (import-gnumeric-file param1 param2)) ;; fname targname
+	  ((export)      (refdb-export param1 param2))
+	  (else (print "Unrecognised command " action)(print help)))))
      ((eq? num-params 4)
       (case action
 	((lookup)               ;; path    section     row          col 
@@ -539,6 +568,9 @@ Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/meg
   (if (file-exists? dotfile)
       (load dotfile)))
 
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.refdbrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
 
 (main)
 

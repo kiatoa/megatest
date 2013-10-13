@@ -280,6 +280,9 @@
 	    (pop-directory)
 	    result)))))
 
+(define (tests:test-force-state-status! test-id state status)
+  (cdb:test-set-status-state *runremote* test-id status state #f)
+  (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
@@ -393,7 +396,8 @@
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
-    (if (directory? path)
+    (if (and (string? path)
+	     (directory? path)) ;; can get #f here under some wierd conditions. why, unknown ...
 	(begin
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
@@ -558,10 +562,11 @@
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
-	       (if (or (member (db:test-get-status tdat) 
-			       '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+	       (if (or (and (member (db:test-get-status tdat) 
+				    '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
+			    (equal? (db:test-get-state tdat) "COMPLETED"))
 		       (member (db:test-get-state tdat)
-			       '("INCOMPLETE" "KILLED")))
+				    '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))
 
 	       ;; examine waitons for any fails. If it is FAIL or INCOMPLETE then eliminate this test
@@ -570,11 +575,15 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-				      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
-				 (if (or (member (db:test-get-status wtdat)
-						 '("FAIL" "KILLED"))
-					 (member (db:test-get-state wtdat)
-						 '("INCOMPETE")))
+       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
+					      (member (db:test-get-status wtdat) '("FAIL")))
+					 (member (db:test-get-status wtdat)  '("KILLED"))
+					 (member (db:test-get-state wtdat)   '("INCOMPETE")))
+				 ;; (if (or (member (db:test-get-status wtdat)
+				 ;;        	 '("FAIL" "KILLED"))
+				 ;;         (member (db:test-get-state wtdat)
+				 ;;        	 '("INCOMPETE")))
 				     (set! keep-test #f)))) ;; no point in running this one again
 			     waitons))))
 	 (if keep-test (set! runnables (cons testkeyname runnables)))))

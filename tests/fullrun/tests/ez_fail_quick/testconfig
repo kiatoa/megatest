@@ -6,6 +6,7 @@ priority 10
 lookitnada  ls /nada
 
 [triggers]
+# run like this: cmd test-id test-rundir trigger
 COMPLETED/FAIL xterm;echo
 
 [test_meta]

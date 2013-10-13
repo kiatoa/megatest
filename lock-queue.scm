@@ -27,7 +27,7 @@
   (let* ((actualfname (conc fname ".lockdb"))
 	 (dbexists (file-exists? actualfname))
 	 (db       (sqlite3:open-database actualfname))
-	 (handler  (make-busy-timeout 3600)))
+	 (handler  (make-busy-timeout 136000)))
     (if dbexists
 	db
 	(begin
