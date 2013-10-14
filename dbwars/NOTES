@@ -1,0 +1,31 @@
+Before using prepare:
+
+matt@xena:/tmp/megatest/dbwars$ ./sqlite3-test insert
+Adding 1047 test3 item/39 host0-0.3-200000-240-this one sucks eh? (added 51886 records so far)
+Adding 1122 test5 item/52 host2-0.2-200000-120-this is a good one eh? (added 78889 records so far)
+Adding 1050 test7 item/31 host1-0.1-100000-120-this is a good one eh? (added 110641 records so far)
+create-tests ran register-test 144000 times in 41.0 seconds
+
+After using prepare:
+
+matt@xena:/tmp/megatest/dbwars$ csc sqlite3-test.scm && ./sqlite3-test insert
+Adding 1082 test4 item/74 host1-0.3-100000-120-this is a good one eh? (added 61281 records so far)
+Adding 1138 test7 item/43 host2-0.3-200000-120-this is a good one eh? (added 109001 records so far)
+Adding 1023 test9 item/00 host0-0.2-100000-240-this one sucks eh? (added 143878 records so far)
+create-tests ran register-test 144000 times in 38.0 seconds
+
+After moving the prepare outside the call (so it isn't done each time):
+
+matt@xena:/tmp/megatest/dbwars$ ./sqlite3-test insert
+Adding 1042 test4 item/59 host0-0.3-200000-120-this is a good one eh? (added 63401 records so far)
+Adding 1011 test6 item/40 host0-0.1-200000-120-this one sucks eh? (added 94906 records so far)
+Adding 1076 test9 item/34 host1-0.2-200000-120-just eh, eh? (added 139035 records so far)
+create-tests ran register-test 144000 times in 33.0 seconds
+
+Using sql-de-lite with very similar code:
+
+matt@xena:/tmp/megatest/dbwars$ ./sql-de-lite-test insert
+Adding 1029 test4 item/53 host0-0.2-200000-240- (added 64252 records so far)
+Adding 1134 test7 item/64 host2-0.3-100000-240-this is a good one eh? (added 105973 records so far)
+create-tests ran register-test 144000 times in 31.0 seconds
+

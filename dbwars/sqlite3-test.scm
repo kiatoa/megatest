@@ -7,13 +7,14 @@
 (execute db test-table-defn)
 (execute db syncsetup)
 
-(define (register-test db run-id testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time)
-  (execute db
-	   test-insert
+
+(define (register-test stmth run-id testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time)
+  (execute stmth
 	   run-id
 	   testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time))
 
-
-(create-tests db)
+(let ((stmth (prepare db test-insert)))
+  (create-tests stmth)
+  (finalize! stmth))
 
 (finalize! db)

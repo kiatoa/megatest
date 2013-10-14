@@ -4,11 +4,16 @@
 
 (define db (open-database "test.db"))
 
-(execute db (sql db test-table-defn))
+(exec (sql db test-table-defn))
+(exec (sql db syncsetup))
 
-(define (register-test db  run-id testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time)
+(define (register-test stmth  run-id testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time)
     (exec 
-     (sql db test-insert)
+     stmth ;; (sql db test-insert)
      run-id
      testname host cpuload diskfree uname rundir shortdir item-path state status final-logf run-duration comment event-time))
 
+(let ((stmth (sql db test-insert)))
+  (create-tests stmth))
+
+(close-database db)

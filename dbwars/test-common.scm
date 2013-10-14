@@ -1,4 +1,4 @@
-(use srfi-18 srfi-69)
+(use srfi-18 srfi-69 apropos)
 
 (define args (argv))
 
@@ -73,7 +73,7 @@
 	  (list new-id factor)))))
 	  
 
-(define (create-tests db)
+(define (create-tests stmth)
   (let ((num-created 0)
 	(last-print  (current-seconds))
 	(start-time  (current-seconds)))
@@ -100,7 +100,7 @@
 				 (print "Adding " run-id " " test " " item " " factor " (added " num-created " records so far)")
 				 (set! last-print curr-time)))
 			   (set! num-created (+ num-created 1))
-			   (register-test db  
+			   (register-test stmth ;; db  
 					  run-id
 					  test  ;; testname
 					  host
