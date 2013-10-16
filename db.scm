@@ -789,64 +789,65 @@
 
 
 
-
-
-;; get a useful subset of the tests data (used in dashboard
-;; use db:mintests-get-{id ,run_id,testname ...}
-(define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)
-  (db:get-tests-for-runs db run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
-
-;; NB // This is get tests for "runs" (note the plural!!)
+;; Convert calling routines to get list of run-ids and loop, do not use the get-tests-for-runs
 ;;
-;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
-;; i.e. these lists define what to NOT show.
-;; states and statuses are required to be lists, empty is ok
-;; not-in #t = above behaviour, #f = must match
-;; run-ids is a list of run-ids or a single number or #f for all runs
-(define (db:get-tests-for-runs db run-ids testpatt states statuses 
-			       #!key (not-in #t)
-			       (sort-by #f)
-			       (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
-  (let* ((res '())
-	 ;; if states or statuses are null then assume match all when not-in is false
-	 (states-qry      (if (null? states) 
-			      #f
-			      (conc " state "  
-				    (if not-in "NOT" "") 
-				    " IN ('" 
-				    (string-intersperse states   "','")
-				    "')")))
-	 (statuses-qry    (if (null? statuses)
-			      #f
-			      (conc " status "
-				    (if not-in "NOT" "") 
-				    " IN ('" 
-				    (string-intersperse statuses "','")
-				    "')")))
-	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT " qryvals 
-				" FROM tests WHERE state != 'DELETED' "
-				(if run-ids
-				    (if (list? run-ids)
-					(conc "AND run_id IN (" (string-intersperse (map conc run-ids) ",") ") ")
-					(conc "AND run_id=" run-ids " "))
-				    " ") ;; #f => run-ids don't filter on run-ids
-				(if states-qry   (conc " AND " states-qry)   "")
-				(if statuses-qry (conc " AND " statuses-qry) "")
-				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
-				(case sort-by
-				  ((rundir)     " ORDER BY length(rundir) DESC;")
-				  ((event_time) " ORDER BY event_time ASC;")
-				  (else         ";"))
-				)))
-    (debug:print-info 8 "db:get-tests-for-runs qry=" qry)
-    (sqlite3:for-each-row 
-     (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-       (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
-     db 
-     qry
-     )
-    res))
+
+;; ;; ;; get a useful subset of the tests data (used in dashboard
+;; ;; ;; use db:mintests-get-{id ,run_id,testname ...}
+;; ;; (define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states status not-in)
+;; ;;   (db:get-tests-for-runs dbstruct run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+;; ;; 
+;; ;; ;; NB // This is get tests for "runs" (note the plural!!)
+;; ;; ;;
+;; ;; ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
+;; ;; ;; i.e. these lists define what to NOT show.
+;; ;; ;; states and statuses are required to be lists, empty is ok
+;; ;; ;; not-in #t = above behaviour, #f = must match
+;; ;; ;; run-ids is a list of run-ids or a single number or #f for all runs
+;; ;; (define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses 
+;; ;; 			       #!key (not-in #t)
+;; ;; 			       (sort-by #f)
+;; ;; 			       (qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")) ;; 'rundir 'event_time
+;; ;;   (let* ((res '())
+;; ;; 	 ;; if states or statuses are null then assume match all when not-in is false
+;; ;; 	 (states-qry      (if (null? states) 
+;; ;; 			      #f
+;; ;; 			      (conc " state "  
+;; ;; 				    (if not-in "NOT" "") 
+;; ;; 				    " IN ('" 
+;; ;; 				    (string-intersperse states   "','")
+;; ;; 				    "')")))
+;; ;; 	 (statuses-qry    (if (null? statuses)
+;; ;; 			      #f
+;; ;; 			      (conc " status "
+;; ;; 				    (if not-in "NOT" "") 
+;; ;; 				    " IN ('" 
+;; ;; 				    (string-intersperse statuses "','")
+;; ;; 				    "')")))
+;; ;; 	 (tests-match-qry (tests:match->sqlqry testpatt))
+;; ;; 	 (qry             (conc "SELECT " qryvals 
+;; ;; 				" FROM tests WHERE state != 'DELETED' "
+;; ;; 				(if run-ids
+;; ;; 				    (if (list? run-ids)
+;; ;; 					(conc "AND run_id IN (" (string-intersperse (map conc run-ids) ",") ") ")
+;; ;; 					(conc "AND run_id=" run-ids " "))
+;; ;; 				    " ") ;; #f => run-ids don't filter on run-ids
+;; ;; 				(if states-qry   (conc " AND " states-qry)   "")
+;; ;; 				(if statuses-qry (conc " AND " statuses-qry) "")
+;; ;; 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+;; ;; 				(case sort-by
+;; ;; 				  ((rundir)     " ORDER BY length(rundir) DESC;")
+;; ;; 				  ((event_time) " ORDER BY event_time ASC;")
+;; ;; 				  (else         ";"))
+;; ;; 				)))
+;; ;;     (debug:print-info 8 "db:get-tests-for-runs qry=" qry)
+;; ;;     (sqlite3:for-each-row 
+;; ;;      (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+;; ;;        (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+;; ;;      db 
+;; ;;      qry
+;; ;;      )
+;; ;;     res))
 
 ;; this one is a bit broken BUG FIXME
 (define (db:delete-test-step-records db test-id #!key (work-area #f))
