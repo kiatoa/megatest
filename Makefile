@@ -8,7 +8,7 @@ SRCFILES = common.scm items.scm launch.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
 	   fs-transport.scm http-transport.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
-	   tree.scm ezsteps.scm lock-queue.scm
+	   tree.scm ezsteps.scm lock-queue.scm filedb.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
@@ -61,8 +61,9 @@ tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-
 tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm
-runs.o : test_records.scm
+runs.o     : test_records.scm
 megatest.o : megatest-fossil-hash.scm
+filedb.o   : fdb_records.scm
 
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm

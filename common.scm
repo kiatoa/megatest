@@ -29,7 +29,7 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
-;; global gletches
+;; GLOBAL GLETCHES
 (define *db-keys* #f)
 (define *configinfo* #f)
 (define *configdat*  #f)
@@ -43,7 +43,7 @@
 (define *last-global-delta-printed* 0)
 
 ;; DATABASE
-(define *open-dbs* (make-hash-table))
+(define *open-dbs* (vector #f (make-hash-table))) ;; megatestdb run-id-dbs
 
 ;; SERVER
 (define *my-client-signature* #f)
