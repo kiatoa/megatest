@@ -39,6 +39,11 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
+(define *global-delta* 0)
+(define *last-global-delta-printed* 0)
+
+;; DATABASE
+(define *open-dbs* (make-hash-table))
 
 ;; SERVER
 (define *my-client-signature* #f)

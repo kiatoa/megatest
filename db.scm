@@ -63,28 +63,49 @@
 	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
-(define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+;; Create megatest.db if run-id is #f
+;; Otherwise create db/<run-id>.db
+;;
+(define (open-db run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
 	    (exit))))
-  (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
-	 (write-access (file-write-access? dbpath))
-	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (if (and dbexists
-	     (not write-access))
-	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
-    (sqlite3:set-busy-handler! db handler)
-    (if (not dbexists)
-	(db:initialize db))
-    (db:set-sync db)
-    db))
+  (let ((existing-db (hash-table-ref/default *open-dbs* (if run-id run-id "megatest") #f)))
+    (if existing-db
+	existing-db
+	(let* ((dbpath       (if run-id 
+				 (conc *toppath* "/db/" run-id ".db")
+				 (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
+				   (if (not (directory-exists? dbdir))
+				       (create-direcory dbdir))
+				   (conc *toppath* "/megatest.db"))))
+	       (dbexists     (file-exists? dbpath))
+	       (write-access (file-write-access? dbpath))
+	       (db           (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	       (handler      (make-busy-timeout (if (args:get-arg "-override-timeout")
+						    (string->number (args:get-arg "-override-timeout"))
+						    136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+	  (if (and dbexists
+		   (not write-access))
+	      (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+	  (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
+	  (sqlite3:set-busy-handler! db handler)
+	  (if (not dbexists)
+	      (if (not run-id) ;; do the megatest.db
+		  (db:initialize-megatest-db db)
+		  (db:initialize-run-id-db   db run-id)))
+	  (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (hash-table-set! *open-dbs* (if run-id run-id "megatest") db)
+	  db))))
+
+;; close all opened run-id dbs
+(define (db:close-all-db)
+  (for-each
+   (lambda (db)
+     (finalize! db))
+   (hash-table-values *open-dbs*)))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -112,35 +133,14 @@
      (apply open-run-close-no-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
-;; (define open-run-close open-run-close-exception-handling)
-(define open-run-close open-run-close-no-exception-handling)
+;; (define open-run-close 
+(define open-run-close (if (debug:debug-mode 2)
+			   open-run-close-no-exception-handling
+			   open-run-close-exception-handling))
 
-(define *global-delta* 0)
-(define *last-global-delta-printed* 0)
-
-(define (open-run-close-measure  proc idb . params)
-  (debug:print-info 11 "open-run-close-measure START, idb=" idb ", params=" params)
-  (let* ((start-ms (current-milliseconds))
-	 (db       (if idb idb (open-db)))
-         (throttle (string->number (config-lookup *configdat* "setup" "throttle"))))
-    ;; (db:set-sync db)
-    (set! res      (apply proc db params))
-    (if (not idb)(sqlite3:finalize! db))
-    ;; scale by 10, average with current value.
-    (set! *global-delta* (/ (+ *global-delta* (* (- (current-milliseconds) start-ms)
-						 (if throttle throttle 0.01)))
-			    2))
-    (if (> (abs (- *last-global-delta-printed* *global-delta*)) 0.08) ;; don't print all the time, only if it changes a bit
-	(begin
-	  (debug:print-info 1 "launch throttle factor=" *global-delta*)
-	  (set! *last-global-delta-printed* *global-delta*)))
-    (debug:print-info 11 "open-run-close-measure END" )
-    res))
-
-(define (db:initialize db)
-  (debug:print-info 11 "db:initialize START")
+(define (db:initialize-megatest-db db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
-	 (keys     (keys:config-get-fields configdat))
+	 (keys     (keys:configq-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys)))
@@ -154,8 +154,6 @@
 			(system (conc "rm -f " dbpath))
 			(exit 1)))))
 	      keys)
-    ;; (sqlite3:execute db "PRAGMA synchronous = OFF;")
-    (db:set-sync db)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
     (for-each (lambda (key)
 		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
@@ -173,8 +171,19 @@
 			 "pass_count INTEGER DEFAULT 0,"
 			 "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
     (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
-    (sqlite3:execute db 
-		     "CREATE TABLE IF NOT EXISTS tests 
+    ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+                                  CONSTRAINT metadat_constraint UNIQUE (var));")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+    ;; Must do this *after* running patch db !! No more. 
+    (db:set-var db "MEGATEST_VERSION" megatest-version)
+    (debug:print-info 11 "db:initialize END")
+    ))
+
+(define (db:initialized-run-id-db db run-id)
+  (sqlite3:execute db 
+		   "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
@@ -198,9 +207,8 @@
                      archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
-    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
-    (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+  (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
+  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -210,10 +218,6 @@
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
-                                  CONSTRAINT metadat_constraint UNIQUE (var));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (id INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
@@ -238,10 +242,8 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-    ;; Must do this *after* running patch db !! No more. 
-    (db:set-var db "MEGATEST_VERSION" megatest-version)
-    (debug:print-info 11 "db:initialize END")
-    ))
+    db)
+
 
 ;;======================================================================
 ;; T E S T   S P E C I F I C   D B 
