@@ -2048,15 +2048,17 @@
   (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (res '()))
     (if tdb
-	(begin
-	  (sqlite3:for-each-row 
-	   (lambda (id test-id stepname state status event-time logfile)
-	     (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-	   tdb
-	   "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-	   test-id)
-	  (sqlite3:finalize! tdb)
-	  (reverse res))
+	(handle-exceptions
+	 exn
+	 '()
+	 (sqlite3:for-each-row 
+	  (lambda (id test-id stepname state status event-time logfile)
+	    (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	  tdb
+	  "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	  test-id)
+	 (sqlite3:finalize! tdb)
+	 (reverse res))
 	'())))
 
 ;; get a pretty table to summarize steps

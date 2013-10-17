@@ -1,3 +1,4 @@
+#
 # run some tests
 
 BINPATH=$(shell readlink -m $(PWD)/../bin)
