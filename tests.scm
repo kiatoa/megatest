@@ -134,8 +134,8 @@
 ;; 
 ;; Run this server-side
 ;;
-(define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+(define (test:get-previous-test-run-record dbstruct run-id test-name item-path)
+  (let* ((keys    (db:get-keys dbstruct))
 	 (selstr  (string-intersperse  keys ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
@@ -159,7 +159,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct run-id hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -173,8 +173,8 @@
 ;;
 ;; Run this remotely!!
 ;;
-(define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+(define (test:get-matching-previous-test-run-records dbstruct run-id test-name item-path)
+  (let* ((keys    (db:get-keys dbstruct))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -200,7 +200,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct run-id hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -280,19 +280,17 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! test-id state status)
-  (cdb:test-set-status-state *runremote* test-id status state #f)
+(define (tests:test-force-state-status! dbstruct run-id test-id state status)
+  (db:test-set-status-state dbstruct run-id test-id status state #f)
   (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
-  (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
-  (let* ((db          #f)
-	 (real-status status)
+(define (tests:test-set-status! dbstruct run-id test-id state status comment dat)
+  (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (cdb:get-test-info-by-id *runremote* test-id))
-	 (run-id      (db:test-get-run_id testdat))
-	 (test-name   (db:test-get-testname   testdat))
+	 (testdat     (db:get-test-info-by-id dbstruct run-id test-id))
+	 (run-id      (db:test-get-run_id    testdat))
+	 (test-name   (db:test-get-testname  testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
@@ -302,7 +300,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (cdb:remote-run test:get-previous-test-run-record #f run-id test-name item-path)
+			  (test:get-previous-test-run-record dbstruct run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -327,13 +325,13 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
-	  (mt:process-triggers test-id state real-status)))
+	  (db:test-set-status-state dbstruct run-id test-id real-status state (if waived waived comment))
+	  (mt:process-triggers dbstruct run-id test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status work-area: work-area))
+	(db:test-data-rollup dbstruct run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -368,31 +366,32 @@
 			   dcomment ",," ;; extra comma for status
 			   type     )))
 	    ;; This was run remote, don't think that makes sense.
-	    (db:csv->test-data #f test-id
+	    (db:csv->test-data dbstruct run-id test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(mt:roll-up-pass-fail-counts run-id test-name item-path status))
+	(mt:roll-up-pass-fail-counts dbstruct run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (cdb:remote-run db:test-set-comment #f test-id cmt)))
-    ))
+	  (db:test-set-comment dbstruct run-id test-id (db:save-string dbstruct cmt))))))
 
+(define (tests:test-set-toplog! dbstruct run-id test-name logf) 
+  (sqlite3:execute (db:get-db dbstruct run-id)
+		   (db:get-query 'tests:test-set-toplog)
+		   (db:save-string dbstruct logf)
+		   test-name))
 
-(define (tests:test-set-toplog! db run-id test-name logf) 
-  (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
-
-(define (tests:summarize-items db run-id test-id test-name force)
+(define (tests:summarize-items dbstruct run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	 (orig-dir       (current-directory))
-	 (logf-info      (cdb:remote-run db:test-get-logfile-info #f run-id test-name))
+	 (logf-info      (db:test-get-logfile-info dbstruct run-id test-name))
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
@@ -413,12 +412,12 @@
 	      (print "Not updating " outputfilename " as another test item has signed up for the job")
 	      (begin
 		(print "Obtained lock for " outputfilename)
-		(let ((oup    (open-output-file outputfilename))
-		      (counts (make-hash-table))
+		(let ((oup         (open-output-file outputfilename))
+		      (counts      (make-hash-table))
 		      (statecounts (make-hash-table))
 		      (outtxt "")
 		      (tot    0)
-		      (testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
+		      (testdat (db:test-get-records-for-index-file dbstruct run-id test-name)))
 		  (with-output-to-port
 		      oup
 		    (lambda ()
@@ -474,7 +473,7 @@
 		  (lock-queue:release-lock outputfilename test-id)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! db run-id test-name outputfilename)
+		  (tests:test-set-toplog! dbstruct run-id test-name outputfilename)
 		  )))))))
 
 ;;======================================================================
@@ -547,7 +546,7 @@
 
 ;; for each test:
 ;;   
-(define (tests:filter-non-runnable run-id testkeynames testrecordshash)
+(define (tests:filter-non-runnable dbstruct run-id testkeynames testrecordshash)
   (let ((runnables '()))
     (for-each
      (lambda (testkeyname)
@@ -557,8 +556,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	      (tdat        (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (db:get-test-id dbstruct run-id test-name item-path))
+	      (tdat        (db:get-test-info-by-id dbstruct run-id test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -574,8 +573,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (db:get-test-id         dbstruct run-id waiton ""))
+				      (wtdat          (db:get-test-info-by-id dbstruct run-id test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -681,42 +680,44 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+(define (test-get-kill-request dbstruct run-id test-id) ;; run-id test-name itemdat)
+  (let* ((testdat   (db:get-test-info-by-id run-id test-id))) ;; run-id test-name item-path)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
-(define (test:tdb-get-rundat-count tdb)
+(define (test:tdb-get-rundat-count dbstruct run-id)
   (if tdb
       (let ((res 0))
 	(sqlite3:for-each-row
 	 (lambda (count)
 	   (set! res count))
-	 tdb
+	 (db:get-db dbstruct run-id)
 	 "SELECT count(id) FROM test_rundat;")
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
+(define (tests:update-central-meta-info dbstruct run-id test-id cpuload diskfree minutes uname hostname)
   ;; This is a good candidate for threading the requests to enable
   ;; transactionized write at the server
-  (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
+  (db:tests-update-cpuload-diskfree dbstruct run-id test-id cpuload diskfree)
   (if minutes 
-      (cdb:tests-update-run-duration *runremote* test-id minutes))
+      (db:tests-update-run-duration dbstruct run-id test-id minutes))
   (if (and uname hostname)
-      (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
+      (db:tests-update-uname-host dbstruct run-id test-id uname hostname)))
   
-(define (tests:set-full-meta-info db test-id run-id minutes work-area)
+;; OPTIMIZE THESE!!! They are redundant!!
+
+(define (tests:set-full-meta-info dbstruct test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
   (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
+    ;; (tests:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)
+    (tests:update-central-meta-info dbstruct run-id test-id cpuload diskfree minutes uname hostname)))
 	  
-(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
+(define (tests:set-partial-meta-info dbstruct test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
@@ -724,11 +725,9 @@
     ;; Update central with uname and hostname = #f
     (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)))
 	 
-(define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-		     cpuload diskfree minutes)
-    (sqlite3:finalize! tdb)))
+(define (tests:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)
+  (sqlite3:execute (db:get-db dbstruct run-id "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+		   cpuload diskfree minutes)))
  
 ;;======================================================================
 ;; A R C H I V I N G
