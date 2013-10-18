@@ -1840,6 +1840,7 @@
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test dbstruct run-id test-id)
   (let ((res '()))
+
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
        (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))

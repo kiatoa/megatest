@@ -369,7 +369,7 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
@@ -452,14 +452,17 @@
 		  prereqstrs)
 	(if (and give-up
 		 (not (and (null? tal)(null? reg))))
-	    (begin
-	      (debug:print 1 "WARNING: test " hed " has no discarded prerequisites, removing it from the queue")
-	      (list (runs:queue-next-hed tal reg reglen regfull)
-		    (runs:queue-next-tal tal reg reglen regfull)
-		    (runs:queue-next-reg tal reg reglen regfull)
-		    reruns))
-	    (list (car newtal)(append (cdr newtal) reg) '() reruns))))
-
+	    (let ((trimmed-tal (mt:discard-blocked-tests run-id hed tal test-records))
+		  (trimmed-reg (mt:discard-blocked-tests run-id hed reg test-records)))
+	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
+	      (if (and (null? trimmed-tal)
+		       (null? trimmed-reg))
+		  #f
+		  (list (runs:queue-next-hed trimmed-tal trimmed-reg reglen regfull)
+			(runs:queue-next-tal trimmed-tal trimmed-reg reglen regfull)
+			(runs:queue-next-reg trimmed-tal trimmed-reg reglen regfull)
+			reruns)))
+	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
      ;; (debug:print-info 1 "allinqueue: " allinqueue)
      ;; (debug:print-info 1 "prereqstrs: " prereqstrs)
@@ -876,7 +879,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
