@@ -100,6 +100,13 @@
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
+				  ((equal? (uri-path (request-uri (current-request)))
+					   '(/ "api"))
+				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
+						  headers: '((content-type text/plain)))
+				   (mutex-lock! *heartbeat-mutex*)
+				   (set! *last-db-access* (current-seconds))
+				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
@@ -176,6 +183,48 @@
 ;;======================================================================
 
 (define *http-mutex* (make-mutex))
+(define *http-requests-in-progress* 0)
+(define *http-connections-next-cleanup* (current-seconds))
+
+(define (http-transport:get-time-to-cleanup)
+  (let ((res #f))
+    (mutex-lock! *http-mutex*)
+    (set! res (> (current-seconds) *http-connections-next-cleanup*))
+    (mutex-unlock! *http-mutex*)
+    res))
+
+(define (http-transport:inc-requests-count)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*))
+  ;; Use this opportunity to slow things down iff there are too many requests in flight
+  (if (> *http-requests-in-progress* 5)
+      (begin
+	(debug:print-info 0 "Whoa there buddy, ease up...")
+	(thread-sleep! 1)))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count proc) 
+  (mutex-lock! *http-mutex*)
+  (proc)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count-and-close-all-connections)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (let loop ((etime (+ (current-seconds) 5))) ;; give up in five seconds
+    (if (> *http-requests-in-progress* 0)
+	(if (> etime (current-seconds))
+	    (begin
+	      (thread-sleep! 0.05)
+	      (loop etime))
+	    (debug:print 0 "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
+	(close-all-connections!)))
+  (set! *http-connections-next-cleanup* (+ (current-seconds) 10))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:inc-requests-and-prep-to-close-all-connections)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*)))
 
 ;; (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 4")
 
@@ -211,13 +260,30 @@
        ;; extract the needed info from the http data and 
        ;; process and return it.
        (let* ((send-recieve (lambda ()
-			      (mutex-lock! *http-mutex*)
-			      (set! res (with-input-from-request 
-					 fullurl 
-					 (list (cons 'dat msg)) 
-					 read-string))
-			      (close-all-connections!) 
-			      (mutex-unlock! *http-mutex*)))
+			      ;; (let ((dat #f)
+			      ;;       (cleanup (http-transport:get-time-to-cleanup)))
+			      ;;   (if cleanup 
+			      ;;       (begin
+			      ;;         (debug:print-info 0 "Running cleanup mode")
+			      ;;         (http-transport:inc-requests-and-prep-to-close-all-connections))
+			      ;;       (http-transport:inc-requests-count))
+			      ;;   ;; Do the actual data transfer
+			      (mutex-lock! *http-mutex*) ;; Hypothesis is that this was *not* the bottleneck
+			      (set! res (with-input-from-request ;; was set! dat
+					   fullurl 
+					   (list (cons 'dat msg)) 
+					   read-string))
+			      (close-all-connections!)
+			      (mutex-unlock! *http-mutex*)
+			      ))
+			      ;;(if cleanup
+			      ;;      ;; mutex already set
+			      ;;      (begin
+			      ;;        (set! res dat)
+			      ;;        (http-transport:dec-requests-count-and-close-all-connections))
+			      ;;      (http-transport:dec-requests-count
+			      ;;       (lambda ()
+			      ;;         (set! res dat)))))))
 	      (time-out     (lambda ()
 			      (thread-sleep! 45)
 			      (if (not res)
@@ -242,10 +308,90 @@
 	     (debug:print-info 11 "final=" final)
 	     final)))))))
 
+;; Send "cmd" with json payload "params" to serverdat and receive result
+;;
+(define (http-transport:client-api-send-receive serverdat cmd params #!key (numretries 30))
+  (let* ((fullurl    (if (list? serverdat)
+			 (cadddr serverdat) ;; this is the uri for /api
+			 (begin
+			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
+			   (exit 1))))
+	 (res        #f))
+    (handle-exceptions
+     exn
+     (begin
+       ;; TODO: Send this output to a log file so it isn't lost when running as daemon
+       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
+       (thread-sleep! 2)
+       (if (> numretries 0)
+	   (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))))
+     (begin
+       (debug:print-info 11 "fullurl=" fullurl "\n")
+       ;; set up the http-client here
+       (max-retry-attempts 5)
+       ;; consider all requests indempotent
+       (retry-request? (lambda (request)
+			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
+       ;; (set! numretries (- numretries 1))
+       ;;  		 #t))
+       ;; send the data and get the response
+       ;; extract the needed info from the http data and 
+       ;; process and return it.
+
+       ;; (with-input-from-request "http://localhost/echo-service"
+       ;;                  '((test . "value")) read-string)
+
+       (let* ((send-recieve (lambda ()
+			;;       (let ((dat #f)
+			;; 	    (cleanup (http-transport:get-time-to-cleanup)))
+			;; 	(if cleanup 
+			;; 	    (http-transport:inc-requests-and-prep-to-close-all-connections)
+			;; 	    (http-transport:inc-requests-count))
+			;; 	;; Do the actual data transfer NB// KEPP THIS IN SYNC WITH http-transport:client-send-receive
+				 (mutex-lock! *http-mutex*)
+				 (set! res (with-input-from-request ;; was dat
+					   fullurl 
+					   (list (cons 'key "thekey")
+						 (cons 'cmd cmd)
+						 (cons 'params params))
+					   read-string))
+				 ;; Shouldn't this be a call to the managed call-all-connections stuff above?
+				(close-all-connections!)
+				(mutex-unlock! *http-mutex*)
+				))
+	                          ;; (if cleanup
+				  ;;   ;; mutex already set
+				  ;;   (begin
+				  ;;     (set! res dat)
+				  ;;     (http-transport:dec-requests-count-and-close-all-connections))
+				  ;;   (http-transport:dec-requests-count
+				  ;;    (lambda ()
+				  ;;      (set! res dat)))))))
+	      (time-out     (lambda ()
+			      (thread-sleep! 45)
+			      (if (not res)
+				  (begin
+				    (debug:print 0 "WARNING: communication with the server timed out.")
+				    (mutex-unlock! *http-mutex*)
+				    (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))
+				    (if (< numretries 3) ;; on last try just exit
+					(begin
+					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
+					  (exit 1)))))))
+	      (th1 (make-thread send-recieve "with-input-from-request"))
+	      (th2 (make-thread time-out     "time out")))
+	 (thread-start! th1)
+	 (thread-start! th2)
+	 (thread-join! th1)
+	 (thread-terminate! th2)
+	 (debug:print-info 11 "got res=" res)
+	 res)))))
+
 (define (http-transport:client-connect iface port)
   (let* ((login-res   #f)
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (serverdat   (list iface port uri-dat)))
+	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 (serverdat   (list iface port uri-dat uri-api-dat)))
     (set! login-res (client:login serverdat))
     (if (and (not (null? login-res))
 	     (car login-res))

@@ -747,8 +747,8 @@
 ;; get key vals for a given run-id
 (define (db:get-key-vals dbstruct run-id)
   (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
-    (if mykeyvals 
-	mykeyvals
+     (if mykeyvals 
+	 mykeyvals
 	(let* ((keys (db:get-keys dbstruct))
 	       (res  '()))
 	  (for-each 
@@ -759,9 +759,9 @@
 		  (set! res (cons key-val res)))
 		(db:get-db dbstruct #f) qry run-id)))
 	   keys)
-	  (let ((final-res (reverse res)))
-	    (hash-table-set! *keyvals* run-id final-res)
-	    final-res)))))
+	   (let ((final-res (reverse res)))
+	     (hash-table-set! *keyvals* run-id final-res)
+	     final-res)))))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target dbstruct run-id)
@@ -987,7 +987,8 @@
       (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
       (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
-    (mt:process-triggers run-id test-id newstate newstatus)))
+  (db:process-triggers test-id newstate newstatus)
+  #t) ;; retrun something to keep the remote calls happy
 
 ;; Never used
 ;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
@@ -1368,6 +1369,8 @@
 
 (define (db:test-rollup-test_data-pass-fail dbstruct run-id test-id)
   (sqlite3:execute (db:get-db dbstruct run-id) 'test_data-pf-rollup test-id test-id test-id test-id))
+;;   (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
+
 
 (define (db:pass-fail-counts dbstruct run-id test-id fail-count pass-count)
   (sqlite3:execute (db:get-db dbstruct run-id) 'pass-fail-counts fail-count pass-count test-id))
@@ -1782,7 +1785,6 @@
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
-;; get a list of test_data records matching categorypatt
 (define (db:read-test-data dbstruct run-id test-id categorypatt)
   (let ((res '()))
     (sqlite3:for-each-row 
@@ -1791,7 +1793,6 @@
      (db:get-db dbstruct run-id)
      "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
     (reverse res)))
-
 ;; NOTE: Run this local with #f for db !!!
 (define (db:load-test-data dbstruct run-id test-id)
   (let loop ((lin (read-line)))
@@ -1837,7 +1838,6 @@
 (define (db:step-get-time-as-string vec)
   (seconds->time-string (db:step-get-event_time vec)))
 
-;; db-get-test-steps-for-run
 (define (db:get-steps-for-test dbstruct run-id test-id)
   (let ((res '()))
 
@@ -1848,67 +1848,8 @@
      "SELECT id,test_id,stepname,state,status,event_time,logfile_id FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
     (reverse res)))
-
-;; get a pretty table to summarize steps
-;;
 (define (db:get-steps-table dbstruct run-id test-id)
   (let ((steps   (db:get-steps-for-test dbstruct run-id test-id)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(db:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))
-	   (case (string->symbol (db:step-get-state step))
-	     ((start)(vector-set! record 1 (db:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(db:step-get-status step)))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (db:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (db:step-get-state step))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (db:step-get-event_time step))))
-	   (hash-table-set! res (db:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
-		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
-		       (<   (db:step-get-id a)        (db:step-get-id b)))
-		      (else #f)))))
-      res)))
-
 ;; ;; get a pretty table to summarize steps
 ;; ;;
 ;; (define (db:get-steps-table-list dbstruct run-id test-id #!key (work-area #f))

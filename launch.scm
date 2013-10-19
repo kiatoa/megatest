@@ -143,6 +143,7 @@
 	  (tests:test-force-state-status! test-id "REMOTEHOSTSTART" "n/a")
 	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
+	  ;; (cdb:set-test-start-time!  *runremote* test-id)
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
 	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
@@ -702,6 +703,7 @@
     ;; (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    ;; (cdb:set-test-start-time!  *runremote* test-id)
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

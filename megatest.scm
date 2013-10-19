@@ -27,6 +27,8 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
+(declare (uses mt))
+(declare (uses api))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
