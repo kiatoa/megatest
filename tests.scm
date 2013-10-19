@@ -29,6 +29,7 @@
 (include "run_records.scm")
 (include "test_records.scm")
 
+
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all)
   (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
@@ -708,7 +709,6 @@
 ;; OPTIMIZE THESE!!! They are redundant!!
 
 (define (tests:set-full-meta-info dbstruct test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
   (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
@@ -718,7 +718,6 @@
     (tests:update-central-meta-info dbstruct run-id test-id cpuload diskfree minutes uname hostname)))
 	  
 (define (tests:set-partial-meta-info dbstruct test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
