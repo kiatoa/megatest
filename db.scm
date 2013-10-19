@@ -988,7 +988,7 @@
       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
       (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
   (db:process-triggers test-id newstate newstatus)
-  #t) ;; retrun something to keep the remote calls happy
+  #t)) ;; retrun something to keep the remote calls happy
 
 ;; Never used
 ;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
@@ -1840,7 +1840,6 @@
 
 (define (db:get-steps-for-test dbstruct run-id test-id)
   (let ((res '()))
-
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
        (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
@@ -1848,8 +1847,9 @@
      "SELECT id,test_id,stepname,state,status,event_time,logfile_id FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
      test-id)
     (reverse res)))
-(define (db:get-steps-table dbstruct run-id test-id)
-  (let ((steps   (db:get-steps-for-test dbstruct run-id test-id)))
+
+;;(define (db:get-steps-table dbstruct run-id test-id)
+;;  (let ((steps   (db:get-steps-for-test dbstruct run-id test-id)))
 ;; ;; get a pretty table to summarize steps
 ;; ;;
 ;; (define (db:get-steps-table-list dbstruct run-id test-id #!key (work-area #f))

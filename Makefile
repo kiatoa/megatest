@@ -9,8 +9,7 @@ SRCFILES = common.scm items.scm launch.scm \
 	   fs-transport.scm http-transport.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
 	   tree.scm ezsteps.scm lock-queue.scm filedb.scm \
-	   rmt.scm api.scm tdb.scm \
-	   ezsteps.scm lock-queue.scm
+	   rmt.scm api.scm tdb.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
