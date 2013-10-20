@@ -462,6 +462,34 @@
       ((< mver megatest-version)
        (db:set-var db "MEGATEST_VERSION" megatest-version))))))
 
+;;======================================================================
+;; M A I N T E N A N C E
+;;======================================================================
+
+(define (db:find-and-mark-incomplete db)
+  (let ((incompleted '()))
+    (sqlite3:for-each-row 
+     (lambda (test-id)
+       (set! incompleted (cons test-id incompleted)))
+     db
+     "SELECT id FROM tests WHERE event_time<? AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     (- (current-seconds) 600)) ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+    (sqlite3:for-each-row
+     (lambda (test-id)
+       (set! incompleted (cons test-id incompleted)))
+     db
+     "SELECT id FROM tests WHERE event_time<? AND state IN ('LAUNCHED');"
+     (- (current-seconds)(* 60 60 24))) ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+    ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
+    (if (> (length incompleted) 0)
+	(begin
+	  (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc incompleted) ", ") " as INCOMPLETE")
+	  (sqlite3:execute 
+	   db
+	   (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
+		 (string-intersperse (map conc incompleted) ",")
+		 ");"))))))
+		     
 ;; Clean out old junk and vacuum the database
 ;;
 ;; Ultimately do something like this:
@@ -502,6 +530,7 @@
 			     count-stmt)))
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
+    (db:find-and-mark-incomplete db)
     (sqlite3:execute db "VACUUM;")))
 
 ;; (define (db:report-junk-records db)

@@ -736,7 +736,8 @@
 				 (if (and mcj (string->number mcj))
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
-	(reglen                (if (number? reglen-in) reglen-in 1)))
+	(reglen                (if (number? reglen-in) reglen-in 1))
+	(last-time-incomplete  (- (current-seconds) 610)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -755,6 +756,12 @@
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
+
+      ;; Here we mark any old defunct tests as incomplete. Do this every five minutes
+      (if (> (current-seconds)(+ last-time-incomplete 300))
+	  (begin
+	    (set! last-time-incomplete (current-seconds))
+	    (cdb:remote-run db:find-and-mark-incomplete #f)))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
