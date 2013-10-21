@@ -631,7 +631,8 @@
 	 (memory          (config-lookup test-conf   "requirements" "memory"))
 	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
-	 (run-time-limit  (configf:lookup  test-conf   "requirements" "runtimelim"))
+	 (run-time-limit  (or (configf:lookup  test-conf   "requirements" "runtimelim")
+			      (configf:lookup  *configdat* "setup" "runtimelim")))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard
