@@ -467,13 +467,18 @@
 ;;======================================================================
 
 (define (db:find-and-mark-incomplete db)
-  (let ((incompleted '()))
+  (let* ((incompleted '())
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime     (if (and deadtime-str
+				(string->number deadtime-str))
+			   (string->number deadtime-str)
+			   1800)))
     (sqlite3:for-each-row 
      (lambda (test-id)
        (set! incompleted (cons test-id incompleted)))
      db
      "SELECT id FROM tests WHERE event_time<? AND state IN ('RUNNING','REMOTEHOSTSTART');"
-     (- (current-seconds) 600)) ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+     (- (current-seconds) deadtime)) ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
     (sqlite3:for-each-row
      (lambda (test-id)
        (set! incompleted (cons test-id incompleted)))
