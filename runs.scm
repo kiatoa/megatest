@@ -725,6 +725,11 @@
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
+
+  ;; Do mark-and-find clean up of db before starting runing of quue
+  ;;
+  (cdb:remote-run db:find-and-mark-incomplete #f)
+
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
@@ -737,7 +742,7 @@
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
 	(reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (- (current-seconds) 610)))
+	(last-time-incomplete  (current-seconds)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -757,8 +762,8 @@
 	       (reruns      '()))
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
-      ;; Here we mark any old defunct tests as incomplete. Do this every five minutes
-      (if (> (current-seconds)(+ last-time-incomplete 300))
+      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+      (if (> (current-seconds)(+ last-time-incomplete 900))
 	  (begin
 	    (set! last-time-incomplete (current-seconds))
 	    (cdb:remote-run db:find-and-mark-incomplete #f)))

@@ -466,26 +466,45 @@
 ;; M A I N T E N A N C E
 ;;======================================================================
 
-(define (db:find-and-mark-incomplete db)
+;;  select end_time-now from
+;;      (select testname,item_path,event_time+run_duration as
+;;                          end_time,strftime('%s','now') as now from tests where state in
+;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
+
+
+(define (db:find-and-mark-incomplete db #!key (ovr-deadtime #f))
   (let* ((incompleted '())
 	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
-			   1800)))
-    (sqlite3:for-each-row 
-     (lambda (test-id)
-       (set! incompleted (cons test-id incompleted)))
-     db
-     "SELECT id FROM tests WHERE event_time<? AND state IN ('RUNNING','REMOTEHOSTSTART');"
-     (- (current-seconds) deadtime)) ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
-    (sqlite3:for-each-row
-     (lambda (test-id)
-       (set! incompleted (cons test-id incompleted)))
-     db
-     "SELECT id FROM tests WHERE event_time<? AND state IN ('LAUNCHED');"
-     (- (current-seconds)(* 60 60 24))) ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+			   7200)) ;; two hours
+	 (run-ids      (db:get-run-ids db))) ;; iterate over runs to divy up the calls
+    (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
+    (for-each
+     (lambda (run-id)
+
+       ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+       ;;
+       (sqlite3:for-each-row 
+	(lambda (test-id)
+	  (set! incompleted (cons test-id incompleted)))
+	db
+	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('RUNNING','REMOTEHOSTSTART');"
+	run-id deadtime)
+
+       ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+       ;;
+       (sqlite3:for-each-row
+	(lambda (test-id)
+	  (set! incompleted (cons test-id incompleted)))
+	db
+	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('LAUNCHED');"
+	run-id (* 60 60 24)))
+     run-ids)
+       
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
+    ;;
     (if (> (length incompleted) 0)
 	(begin
 	  (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc incompleted) ", ") " as INCOMPLETE")
@@ -878,6 +897,14 @@
     (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
+
+(define (db:get-run-ids db)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res (cons id res)))
+     db 
+     "SELECT id FROM runs;")))
 
 ;;======================================================================
 ;; K E Y S
