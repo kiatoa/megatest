@@ -728,7 +728,7 @@
 
   ;; Do mark-and-find clean up of db before starting runing of quue
   ;;
-  (cdb:remote-run db:find-and-mark-incomplete #f)
+  ;; (cdb:remote-run db:find-and-mark-incomplete #f)
 
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
@@ -763,10 +763,10 @@
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
-      (if (> (current-seconds)(+ last-time-incomplete 900))
-	  (begin
-	    (set! last-time-incomplete (current-seconds))
-	    (cdb:remote-run db:find-and-mark-incomplete #f)))
+      ;; (if (> (current-seconds)(+ last-time-incomplete 900))
+      ;;     (begin
+      ;;       (set! last-time-incomplete (current-seconds))
+      ;;       (cdb:remote-run db:find-and-mark-incomplete #f)))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
