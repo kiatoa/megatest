@@ -1423,7 +1423,7 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (tests:get-valid-tests)))
+  (let ((test-names (tests:get-all))) ;; (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))

@@ -1129,7 +1129,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       ;; now can find our db
       ;; keep this one local
-      (open-run-close runs:update-all-test_meta db)
+      (open-run-close runs:update-all-test_meta #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
