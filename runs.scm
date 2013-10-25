@@ -229,6 +229,9 @@
 	  (cdb:delete-tests-in-state *runremote* run-id "NOT_STARTED")
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
+    ;; Ensure all tests are registered in the test_meta table
+    (open-run-close runs:update-all-test_meta #f)
+
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
     ;; refactoring this block into tests:get-full-data
@@ -982,6 +985,11 @@
 
     ;; Here is where the test_meta table is best updated
     ;; Yes, another use of a global for caching. Need a better way?
+    ;;
+    ;; There is now a single call to runs:update-all-test_meta and this 
+    ;; per-test call is not needed. Given the delicacy of the move to 
+    ;; v1.55 this code is being left in place for the time being.
+    ;;
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
 	   (hash-table-set! *test-meta-updated* test-name #t)
