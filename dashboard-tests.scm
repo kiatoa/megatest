@@ -46,7 +46,8 @@
 			      "Current state: "
 			      "Current status: "
 			      "Test comment: "
-			      "Test id: "))
+			      "Test id: "
+			      "Test date: "))
 		   (list (iup:label "" #:expand "VERTICAL"))))
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
@@ -81,6 +82,11 @@
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
 			   (db:test-get-id testdat)))
+	    (store-label "testdate" 
+			 (iup:label "TestDate                           "
+				    #:expand "HORIZONTAL")
+			 (lambda (testdat)
+			   (seconds->work-week/day-time (db:test-get-event_time testdat))))
 	    )))))
 
 ;;======================================================================
@@ -130,22 +136,30 @@
 ;; Run info panel
 ;;======================================================================
 (define (run-info-panel keydat testdat runname)
-  (iup:frame 
-   #:title "Megatest Run Info" ; #:expand "YES"
-   (iup:hbox ; #:expand "YES"
-    (apply iup:vbox ; #:expand "YES"
-	   (append (map (lambda (keyval)
-			  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
-				     ))
-			keydat)
-		   (list (iup:label "runname ")(iup:label "run-id"))))
-    (apply iup:vbox
-	   (append (map (lambda (keyval)
-			  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
-			keydat)
-		   (list (iup:label runname)
-			 (iup:label (conc (db:test-get-run_id testdat)))
-			 (iup:label "" #:expand "VERTICAL")))))))
+  (let* ((run-id     (db:test-get-run_id testdat))
+	 (rundat     (cdb:remote-run db:get-run-info #f run-id))
+	 (header     (db:get-header rundat))
+	 (event_time (db:get-value-by-header (db:get-row rundat)
+					     (db:get-header rundat)
+					     "event_time")))
+    (iup:frame 
+     #:title "Megatest Run Info" ; #:expand "YES"
+     (iup:hbox ; #:expand "YES"
+      (apply iup:vbox ; #:expand "YES"
+	     (append (map (lambda (keyval)
+			    (iup:label (conc (car keyval) " ")))
+			  keydat)
+		     (list (iup:label "runname ")
+			   (iup:label "run-id")
+			   (iup:label "run-date"))))
+      (apply iup:vbox
+	     (append (map (lambda (keyval)
+			    (iup:label (cadr keyval) #:expand "HORIZONTAL"))
+			  keydat)
+		     (list (iup:label runname)
+			   (iup:label (conc run-id))
+			   (iup:label (seconds->year-work-week/day-time event_time))
+			   (iup:label "" #:expand "VERTICAL"))))))))
   
 ;;======================================================================
 ;; Host info panel

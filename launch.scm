@@ -570,7 +570,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to re-create link " linktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print 0 "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
@@ -632,7 +632,8 @@
 	 (memory          (config-lookup test-conf   "requirements" "memory"))
 	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
-	 (run-time-limit  (configf:lookup  test-conf   "requirements" "runtimelim"))
+	 (run-time-limit  (or (configf:lookup  test-conf   "requirements" "runtimelim")
+			      (configf:lookup  *configdat* "setup" "runtimelim")))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard

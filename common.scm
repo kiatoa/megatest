@@ -392,9 +392,21 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
+(define (seconds->work-week/day-time sec)
+  (time->string
+   (seconds->local-time sec) "ww%V.%u %H:%M"))
+
 (define (seconds->work-week/day sec)
   (time->string
-   (seconds->local-time sec) "%V.%u"))
+   (seconds->local-time sec) "ww%V.%u"))
+
+(define (seconds->year-work-week/day sec)
+  (time->string
+   (seconds->local-time sec) "%yww%V.%w"))
+
+(define (seconds->year-work-week/day-time sec)
+  (time->string
+   (seconds->local-time sec) "%yww%V.%w %H:%M"))
 
 ;;======================================================================
 ;; Colors

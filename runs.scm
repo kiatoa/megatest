@@ -725,6 +725,11 @@
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
+
+  ;; Do mark-and-find clean up of db before starting runing of quue
+  ;;
+  ;; (cdb:remote-run db:find-and-mark-incomplete #f)
+
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
@@ -736,7 +741,8 @@
 				 (if (and mcj (string->number mcj))
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
-	(reglen                (if (number? reglen-in) reglen-in 1)))
+	(reglen                (if (number? reglen-in) reglen-in 1))
+	(last-time-incomplete  (current-seconds)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -755,6 +761,12 @@
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
+
+      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+      ;; (if (> (current-seconds)(+ last-time-incomplete 900))
+      ;;     (begin
+      ;;       (set! last-time-incomplete (current-seconds))
+      ;;       (cdb:remote-run db:find-and-mark-incomplete #f)))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
@@ -1411,13 +1423,13 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (tests:get-valid-tests)))
+  (let ((test-names (tests:get-all))) ;; (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))
 	 ;; use the cdb:remote-run instead of passing in db
 	 (if test-conf (runs:update-test_meta test-name test-conf))))
-     test-names)))
+     (hash-table-keys test-names))))
 
 ;; This could probably be refactored into one complex query ...
 (define (runs:rollup-run keys runname user keyvals)

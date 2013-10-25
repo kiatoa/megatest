@@ -126,6 +126,7 @@ Misc
                             0 to kill all
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
+  -mark-incompletes       : find and mark incomplete tests
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -237,6 +238,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-rollup"
 			"-update-meta"
 			"-gen-megatest-area"
+			"-mark-incompletes"
 
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -1095,6 +1097,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (open-run-close db:clean-up #f)
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-mark-incompletes")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      (open-run-close db:find-and-mark-incomplete #f)
+      (set! *didsomething* #t)))
+
 ;;======================================================================
 ;; Wait on a run to complete
 ;;======================================================================
@@ -1120,7 +1131,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       ;; now can find our db
       ;; keep this one local
-      (open-run-close runs:update-all-test_meta db)
+      (open-run-close runs:update-all-test_meta #f)
       (set! *didsomething* #t)))
 
 ;;======================================================================
