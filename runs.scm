@@ -1429,7 +1429,7 @@
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))
 	 ;; use the cdb:remote-run instead of passing in db
 	 (if test-conf (runs:update-test_meta test-name test-conf))))
-     test-names)))
+     (hash-table-keys test-names))))
 
 ;; This could probably be refactored into one complex query ...
 (define (runs:rollup-run keys runname user keyvals)
