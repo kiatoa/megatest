@@ -693,9 +693,11 @@
       (debug:print 4 "FAILS: " fails)
       ;; If one or more of the prereqs-not-met are FAIL then we can issue
       ;; a message and drop hed from the items to be processed.
-
+      ;; (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met)
       (if (not (null? prereqs-not-met))
-	  (debug:print-info 1 "waiting on tests; " (string-intersperse prereqs-not-met ", ")))
+	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
+						    (runs:mixed-list-testname-and-testrec->list-of-strings 
+						     prereqs-not-met) ", ")))
       
       (if (null? fails)
 	  (begin
