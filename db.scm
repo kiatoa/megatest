@@ -104,7 +104,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "EXCEPTION: database probably overloaded?")
+     (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
      (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
      (print-call-chain)
      (thread-sleep! (random 120))
@@ -2111,6 +2111,7 @@
     (if tdb
 	(handle-exceptions
 	 exn
+	 (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
 	 '()
 	 (sqlite3:for-each-row 
 	  (lambda (id test-id stepname state status event-time logfile)
