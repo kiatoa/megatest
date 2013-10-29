@@ -84,14 +84,19 @@
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
+      (if (not sdb)(set! sdb (sdb:open)))
       (case cmd
-	((init)      (set! sdb (sdb:open)))
-	((finalize!) (sqlite3:finalize! sdb))
+	((init)      (if (not sdb)(set! sdb (sdb:open))))
+	((finalize!) (if sdb (sqlite3:finalize! sdb)))
 	((getid)     (let ((id (sdb:string->id sdb scache var)))
 		       (if id
 			   id
 			   (begin
 			     (sdb:register-string sdb var)
 			     (sdb:string->id sdb scache var)))))
-	((getstr)    (sdb:id->string sdb icache var))
+	((getstr)    (if (or (number? var)
+			     (string->number var))
+			 (sdb:id->string sdb icache var)
+			 var))
 	(else #f)))))
+
