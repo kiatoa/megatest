@@ -178,9 +178,9 @@
                     (id INTEGER PRIMARY KEY,
                      run_id     INTEGER,
                      testname   TEXT,
-                     rundir     TEXT DEFAULT 'n/a',
-                     shortdir   TEXT DEFAULT '',
                      item_path  TEXT DEFAULT '',
+                     rundir_id  INTEGER DEFAULT -1,
+                     linkdir_id INTEGER DEFAULT -1,
                      event_time TIMESTAMP,
                      fail_count INTEGER DEFAULT 0,
                      pass_count INTEGER DEFAULT 0,
@@ -188,18 +188,6 @@
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
     (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
-    (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
-                              (id INTEGER PRIMARY KEY,
-                               test_id INTEGER, 
-                               stepname TEXT, 
-                               state TEXT DEFAULT 'NOT_STARTED', 
-                               status TEXT DEFAULT 'n/a',
-                               event_time TIMESTAMP,
-                               comment TEXT DEFAULT '',
-                               logfile TEXT DEFAULT '',
-                               CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
@@ -215,22 +203,9 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
-                                test_id INTEGER,
-                                category TEXT DEFAULT '',
-                                variable TEXT,
-	                        value REAL,
-	                        expected REAL,
-	                        tol REAL,
-                                units TEXT,
-                                comment TEXT DEFAULT '',
-                                status TEXT DEFAULT 'n/a',
-                                type TEXT DEFAULT '',
-                              CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
     ;; Must do this *after* running patch db !! No more. 
     (db:set-var db "MEGATEST_VERSION" megatest-version)
-    (debug:print-info 11 "db:initialize END")
-    ))
+    (debug:print-info 11 "db:initialize END")))
 
 ;;======================================================================
 ;; T E S T   S P E C I F I C   D B 
@@ -976,14 +951,34 @@
 ;;  T E S T S
 ;;======================================================================
 
+;; Get minimal list of tests data from central db
+;;
+;;   fields are: id, run_id, testname, item_path, rundir_id, linkdir_id, event_time, fail_count, pass_count
+;; 
+(define (db:get-central-test-data-for-run-id db run-id testpatt)
+  (let ((res            '())
+	(tests-match-qry (tests:match->sqlqry testpatt)))
+    (sqlite3:for-each-row
+     (lambda (a . b)
+       (set! res (cons (apply vector a b)) res))
+     db 
+     (conc 
+      "SELECT id,run_id,testname,item_path,rundir_id,linkdir_id,event_time,fail_count,pass_count WHERE run_id=? "
+      (if tests-match-query (conc " AND " tests-match-qry) "")
+      ";"))
+    (reverse res)))
+	
+
 ;; states and statuses are lists, turn them into ("PASS","FAIL"...) and use NOT IN
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order
 			      #!key
-			      (qryvals #f)
-			      )
+			      (qryvals #f))
+  (let* ((tests           (db:get-central-test-data-for-run-id db run-id testpatt))
+	 (res             '()))
+    
   (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
