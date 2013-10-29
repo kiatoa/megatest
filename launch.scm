@@ -258,7 +258,7 @@
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
 						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: work-area))
 						     (if logpro-used
-							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
+							 (cdb:test-set-log! *runremote*  test-id (sdb:qry 'getid (conc stepname ".html"))))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)

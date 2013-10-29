@@ -89,6 +89,9 @@
   (set! *env-vars-by-run-id* (make-hash-table))
   (set! *test-id-cache*      (make-hash-table)))
 
+;; Generic string database (normalization of sorts)
+(define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
+
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
 ;;======================================================================

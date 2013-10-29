@@ -86,6 +86,7 @@
     (if (not dbexists)
 	(db:initialize db))
     (db:set-sync db)
+    (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
     db))
 
 ;; keeping it around for debugging purposes only
@@ -1369,8 +1370,8 @@
     ;; (hash-table-set! *test-paths* test-id res)
     res)) ;; ))
 
-(define (cdb:test-set-log! serverdat test-id logf)
-  (if (string? logf)(cdb:client-call serverdat 'test-set-log #f *default-numtries* logf test-id)))
+(define (cdb:test-set-log! serverdat test-id logf-id)
+  (if (or (string? logf-id)(number? logf-id))(cdb:client-call serverdat 'test-set-log #f *default-numtries* logf-id test-id)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1656,12 +1657,14 @@
 (define (db:test-get-logfile-info db run-id test-name)
   (let ((res #f))
     (sqlite3:for-each-row 
-     (lambda (path final_logf)
-       (set! logf final_logf)
-       (set! res (list path final_logf))
-       (if (directory? path)
-	   (debug:print 2 "Found path: " path)
-	   (debug:print 2 "No such path: " path)))
+     (lambda (path-id final_logf-id)
+       (let ((path       (sdb:qry 'getstr path-id))
+	     (final_logf (sdb:qry 'getstr final_logf-id)))
+	 (set! logf final_logf)
+	 (set! res (list path final_logf))
+	 (if (directory? path)
+	     (debug:print 2 "Found path: " path)
+	     (debug:print 2 "No such path: " path))))
      db
      "SELECT rundir,final_logf FROM tests WHERE run_id=? AND testname=? AND item_path='';"
      run-id test-name)

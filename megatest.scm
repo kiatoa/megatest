@@ -239,6 +239,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-gen-megatest-area"
 			"-mark-incompletes"
 
+			"-convert-to-norm"
+			"-convert-to-old"
+
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
 			"-q" ;; quiet 0, errors/warnings only
@@ -293,7 +296,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (debug:setup)
-(sdb:qry 'init #f)
 
 (if (args:get-arg "-logging")(set! *logging* #t))
 
@@ -960,7 +962,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (db:load-test-data db test-id work-area: work-area))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(cdb:test-set-log! *runremote* test-id logfname)))
+		(cdb:test-set-log! *runremote* test-id (sdb:qry 'getid logfname))))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
 	      (tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
@@ -1006,7 +1008,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
+			  (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid htmllogfile))))
 		    (let ((msg (args:get-arg "-m")))
 		      ;; DO NOT run remote
 		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile work-area: work-area))
@@ -1156,6 +1158,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(repl)
 		(load (args:get-arg "-load"))))
 	  (exit))
+      (set! *didsomething* #t)))
+
+(if (args:get-arg "-convert-to-norm")
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (for-each 
+       (lambda (field)
+	 (let ((dat '()))
+	   (debug:print-info 0 "Getting data for field " field)
+	   (sqlite3:for-each-row
+	    (lambda (id val)
+	      (set! dat (cons (list id val) dat)))
+	    db
+	    (conc "SELECT id," field " FROM tests;"))
+	   (debug:print-info 0 "found " (length dat) " items for field " field)
+	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
+	     (for-each
+	      (lambda (item)
+		(let ((newval (sdb:qry 'getid (cadr item))))
+		  (if (not (equal? newval (cadr item)))
+		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
+		  (sqlite3:execute qry newval (car item))))
+	      dat)
+	     (sqlite3:finalize! qry))))
+       (list "uname" "rundir" "final_logf" "comment"))
       (set! *didsomething* #t)))
 
 ;;======================================================================

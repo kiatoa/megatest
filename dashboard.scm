@@ -88,6 +88,8 @@ Misc
 
 (define *db* #f) ;; (open-db))
 
+;; (define sdb:qry (make-sdb:qry)) ;;  'init #f)
+
 (if (args:get-arg "-host")
     (begin
       (set! *runremote* (string-split (args:get-arg "-host" ":")))
