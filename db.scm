@@ -30,6 +30,7 @@
 (declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
+(declare (uses sdb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -62,6 +63,7 @@
 	(begin
 	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
+;;	(sqlite3:execute db "PRAGMA synchronous = normal;")))) ;; need a default?
 
 (define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (if (not *toppath*)
@@ -865,9 +867,7 @@
       finalres)))
 
 (define (db:set-comment-for-run db run-id comment)
-  (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
-  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id)
-  (debug:print-info 11 "db:set-comment-for-run END run-id: " run-id " comment: " comment))
+  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" (sdb:qry 'getid comment) run-id))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
@@ -1167,7 +1167,7 @@
   (cdb:client-call serverdat 'update-run-duration #t *default-numtries* minutes test-id))
 
 (define (cdb:tests-update-uname-host serverdat test-id uname hostname)
-  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
+  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* (sdb:qry 'getid uname)(sdb:qry 'getid  hostname) test-id))
 
 ;; speed up for common cases with a little logic
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
@@ -1175,13 +1175,13 @@
 (define (db:test-set-state-status-by-id db test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus (sdb:qry 'getid newcomment) test-id))
    ((and newstate newstatus)
     (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
    (else
     (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
     (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" (sdb:qry 'getid newcomment) test-id))))
   (mt:process-triggers test-id newstate newstatus))
 
 ;; Never used
@@ -1347,7 +1347,7 @@
   (sqlite3:execute 
    db
    "UPDATE tests SET comment=? WHERE id=?;"
-   comment test-id))
+   (sdb:qry 'getid comment) test-id))
 
 (define (cdb:test-set-rundir! serverdat run-id test-name item-path rundir)
   (cdb:client-call serverdat 'test-set-rundir #t *default-numtries* rundir run-id test-name item-path))

@@ -27,6 +27,7 @@
 (declare (uses db))
 (declare (uses gutils))
 (declare (uses ezsteps))
+(declare (uses sdb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -75,7 +76,7 @@
 			 (iup:label "TestComment                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (db:test-get-comment testdat)))
+			   (sdb:qry 'getstr (db:test-get-comment testdat))))
 	    (store-label "testid"
 			 (iup:label "TestId                             "
 				    #:expand "HORIZONTAL")
@@ -182,11 +183,11 @@
 	   (list
 	    ;; NOTE: Yes, the host can change!
 	    (store-label "HostName"
-			 (iup:label (db:test-get-host testdat) #:expand "HORIZONTAL")
+			 (iup:label (sdb:qry 'getstr (db:test-get-host testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(db:test-get-host testdat)))
 	    (store-label "Uname"
 			 (iup:label "                                                   " #:expand "HORIZONTAL")
-			 (lambda (testdat)(db:test-get-uname testdat)))
+			 (lambda (testdat)(sdb:qry 'getstr (db:test-get-uname testdat))))
 	    (store-label "DiskFree"
 			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))

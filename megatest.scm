@@ -27,6 +27,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
+(declare (uses sdb))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -292,6 +293,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (debug:setup)
+(sdb:qry 'init #f)
 
 (if (args:get-arg "-logging")(set! *logging* #t))
 
@@ -1166,6 +1168,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; (if (and *runremote*
 ;; 	 (socket? *runremote*))
 ;;     (close-socket *runremote*))
+
+(sdb:qry 'finalize! #f)
 
 (if (not *didsomething*)
     (debug:print 0 help))
