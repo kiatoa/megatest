@@ -114,7 +114,7 @@
 
 (define (mt:process-triggers test-id newstate newstatus)
   (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
-	 (test-rundir   (db:test-get-rundir test-dat))
+	 (test-rundir   (sdb:qry 'getstr (db:test-get-rundir test-dat)))
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))

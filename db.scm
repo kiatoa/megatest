@@ -294,7 +294,7 @@
 (define (db:open-test-db-by-test-id db test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(cdb:remote-run db:test-get-rundir-from-test-id db test-id))))
+			(sdb:qry 'getstr (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -1349,11 +1349,11 @@
    "UPDATE tests SET comment=? WHERE id=?;"
    (sdb:qry 'getid comment) test-id))
 
-(define (cdb:test-set-rundir! serverdat run-id test-name item-path rundir)
-  (cdb:client-call serverdat 'test-set-rundir #t *default-numtries* rundir run-id test-name item-path))
+(define (cdb:test-set-rundir! serverdat run-id test-name item-path rundir-id)
+  (cdb:client-call serverdat 'test-set-rundir #t *default-numtries* rundir-id run-id test-name item-path))
 
-(define (cdb:test-set-rundir-by-test-id serverdat test-id rundir)
-  (cdb:client-call serverdat 'test-set-rundir-by-test-id #t *default-numtries* rundir test-id))
+(define (cdb:test-set-rundir-by-test-id serverdat test-id rundir-id)
+  (cdb:client-call serverdat 'test-set-rundir-by-test-id #t *default-numtries* rundir-id test-id))
 
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res #f)) ;; (hash-table-ref/default *test-paths* test-id #f)))

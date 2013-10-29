@@ -626,8 +626,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (begin
 			      (print "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
-				     "\n         uname:    " (db:test-get-uname test)
-				     "\n         rundir:   " (db:test-get-rundir test)
+				     "\n         uname:    " (sdb:qry 'getstr (db:test-get-uname test))
+				     "\n         rundir:   " (sdb:qry 'getstr (db:test-get-rundir test))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run

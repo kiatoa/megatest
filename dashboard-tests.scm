@@ -386,7 +386,7 @@
 				 (set! testdat newtestdat)
 				 (set! teststeps    (db:get-compressed-steps test-id work-area: rundir))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
-				 (set! rundir       (db:test-get-rundir testdat))
+				 (set! rundir       (sdb:qry 'getstr (db:test-get-rundir testdat)))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 (if (eq? curr-mod-time db-mod-time) ;; do only once if same
