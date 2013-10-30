@@ -21,6 +21,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses mt))
+(declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -1213,8 +1214,8 @@
 		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
-		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira (sdb:qry 'getstr (db:test-get-rundir a)))
-									(dirb (sdb:qry 'getstr (db:test-get-rundir b))))
+		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira (filedb:get-path *fdb* (db:test-get-rundir a)))
+									(dirb (filedb:get-path *fdb* (db:test-get-rundir b))))
 								    (if (and (string? dira)(string? dirb))
 									(> (string-length dira)(string-length dirb))
 									#f)))))
@@ -1231,7 +1232,7 @@
 				 (loop (car tal)(cdr tal))))
 			   (let* ((item-path     (db:test-get-item-path new-test-dat))
 				  (test-name     (db:test-get-testname new-test-dat))
-				  (run-dir       (sdb:qry 'getstr (db:test-get-rundir new-test-dat)))    ;; run dir is from the link tree
+				  (run-dir       (filedb:get-path *fdb* (db:test-get-rundir new-test-dat)))    ;; run dir is from the link tree
 				  (real-dir      (if (file-exists? run-dir)
 						     (resolve-pathname run-dir)
 						     #f))

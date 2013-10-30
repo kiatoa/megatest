@@ -28,6 +28,7 @@
 (declare (uses daemon))
 (declare (uses db))
 (declare (uses sdb))
+(declare (uses filedb))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -629,7 +630,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (print "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
 				     "\n         uname:    " (sdb:qry 'getstr (db:test-get-uname test))
-				     "\n         rundir:   " (sdb:qry 'getstr (db:test-get-rundir test))
+				     "\n         rundir:   " (filedb:get-path *fdb* (db:test-get-rundir test))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
@@ -1196,7 +1197,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; 	 (socket? *runremote*))
 ;;     (close-socket *runremote*))
 
-(sdb:qry 'finalize! #f)
+(if sdb:qry (sdb:qry 'finalize #f))
+(if *fdb*   (filedb:finalize-db! *fdb*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

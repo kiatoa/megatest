@@ -25,7 +25,7 @@
     (filedb:fdb-set-pathcache! fdb (make-hash-table))
     (filedb:fdb-set-idcache!   fdb (make-hash-table))
     (filedb:fdb-set-partcache! fdb (make-hash-table))
-    ;(sqlite3:set-busy-timeout! db 1000000)
+    (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))
     (if (not dbexists)
 	(begin
 	  (sqlite3:execute db "PRAGMA synchronous = OFF;")
@@ -44,6 +44,11 @@
 	  (sqlite3:execute db "CREATE TABLE bases (id INTEGER PRIMARY KEY,base TEXT,                  updated TIMESTAMP);")))
     fdb))
 
+(define (filedb:reopen-db fdb)
+  (let ((db (sqlite3:open-database (filedb:fdb-get-dbpath fdb))))
+    (filedb:fdb-set-db! fdb db)
+    (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))))
+  
 (define (filedb:finalize-db! fdb)
   (sqlite3:finalize! (filedb:fdb-get-db fdb)))
 

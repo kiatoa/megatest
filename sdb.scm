@@ -36,9 +36,7 @@
 			    (create-directory (conc *toppath* "/db") #t)
 			    #f))))
 	 (sdb        (sqlite3:open-database dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   136000))))
+	 (handler   (make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! sdb handler)
     (if (not dbexists)
 	(sdb:initialize sdb))
@@ -82,14 +80,16 @@
 ;; Numbers get passed though in both directions
 ;;
 (define (make-sdb:qry #!key (fname #f))
-  (let ((sdb    (sdb:open fname: fname))
+  (let ((sdb    #f) ;; (sdb:open fname: fname))
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
-      ;; (if (not sdb)(set! sdb (sdb:open)))
+      (if (not sdb)(set! sdb (sdb:open fname: fname)))
       (case cmd
-	;; ((init)      (if (not sdb)(set! sdb (sdb:open))))
-	((finalize!) (if sdb (sqlite3:finalize! sdb)))
+	((finalize) (if sdb
+			(begin
+			  (sqlite3:finalize! sdb)
+			  (set! sdb #f))))
 	((getid)     (let ((id (if (or (number? var)
 				       (string->number var))
 				   var

@@ -31,6 +31,7 @@
 (declare (uses client))
 (declare (uses mt))
 (declare (uses sdb))
+(declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -87,6 +88,7 @@
 	(db:initialize db))
     (db:set-sync db)
     (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
+    (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     db))
 
 ;; keeping it around for debugging purposes only
@@ -295,7 +297,7 @@
 (define (db:open-test-db-by-test-id db test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(sdb:qry 'getstr (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))))
+			(filedb:get-path *fdb* (cdb:remote-run db:test-get-rundir-from-test-id db test-id)))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 

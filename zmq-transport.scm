@@ -1,4 +1,4 @@
-
+;;======================================================================
 ;; Copyright 2006-2012, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -7,6 +7,7 @@
 ;;  This program is distributed WITHOUT ANY WARRANTY; without even the
 ;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 ;;  PURPOSE.
+;;======================================================================
 
 (require-extension (srfi 18) extras tcp s11n)
 

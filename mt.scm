@@ -19,6 +19,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses runs))
+(declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -114,7 +115,7 @@
 
 (define (mt:process-triggers test-id newstate newstatus)
   (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
-	 (test-rundir   (sdb:qry 'getstr (db:test-get-rundir test-dat)))
+	 (test-rundir   (filedb:get-path *fdb* (db:test-get-rundir test-dat)))
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
