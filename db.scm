@@ -1219,7 +1219,8 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND testname=? AND item_path !='';")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND testname=? AND item_path !='';"
+     run-id testname)
     res))
 
 ;; For an itemized test get the count of items matching status
@@ -1229,7 +1230,8 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE status=? AND run_id=? AND testname=? AND item_path !='';")
+     "SELECT count(id) FROM tests WHERE status=? AND run_id=? AND testname=? AND item_path !='';"
+     status run-id testname)
     res))
 
 (define (db:get-running-stats db)
@@ -1645,8 +1647,8 @@
       (cdb:client-call serverdat 'state-status-msg #t *default-numtries* state status msg test-id)
       (cdb:client-call serverdat 'state-status #t *default-numtries* state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
-(define (cdb:test-set-state-status-by-name serverdat state status testname item-path)
-  (cdb:client-call serverdat 'state-status-by-name state status testname item-path))
+(define (cdb:test-set-state-status-by-name serverdat state status run-id testname item-path)
+  (cdb:client-call serverdat 'state-status-by-name #t *default-numtries* state status run-id testname item-path))
 
 (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
@@ -1714,7 +1716,7 @@
 	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
 	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
-	'(state-status-by-name   "UPDATE tests SET state=?,status=? WHERE testname=? AND item_path=?;")
+	'(state-status-by-name   "UPDATE tests SET state=?,status=? WHERE run_id=? AND testname=? AND item_path=?;")
 	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
 	;; Test comment
 	'(set-test-comment       "UPDATE tests SET comment=? WHERE id=?;")
@@ -2145,7 +2147,7 @@
     (sqlite3:for-each-row
      (lambda (id state status pcount fcount)
        ;;          0   1      2      3     4      5
-       (set! res (id vector state status pcount fcount)))
+       (set! res (vector id state status pcount fcount)))
      db
      "SELECT id,state,status,pass_count,fail_count FROM tests WHERE testname=? AND item_path=?;" 
      testname item-path)
@@ -2156,7 +2158,7 @@
     ;; First get the pass count
     (sqlite3:for-each-row
      (lambda (testname item-path state status pcount fcount)
-       (set! res (testname item-path vector state status pcount fcount)))
+       (set! res (vector testname item-path vector state status pcount fcount)))
      db
      "SELECT testname,item_path,state,status,pass_count,fail_count FROM tests WHERE id=?;" 
      test-id)

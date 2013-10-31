@@ -151,7 +151,7 @@
 	(cdb:update-pass-fail-counts *runremote* run-id test-name)
 	(if (equal? status "RUNNING")
 	    ;; This test is RUNNING, if the top test is not set to RUNNING then set it to RUNNING
-	    (let ((state-status (cdb:remote-run db:test-get-state-status #f run-id test-name '')))
+	    (let ((state-status (cdb:remote-run db:test-get-state-status #f run-id test-name "")))
 	      (if (not (equal? (vector-ref state-status 1) "RUNNING"))
 		  (cdb:top-test-set-running *runremote* run-id test-name)))
 	    ;; This following is a "big" query. Replace it with the multi-step sequence
@@ -161,20 +161,20 @@
 		   (num-items-running (cdb:remote-run db:get-count-test-items-running #f run-id test-name))
 		   (num-items-skip    (cdb:remote-run db:get-count-test-items-matching-status #f run-id test-name "SKIP"))
 		   (new-state         (if (> num-items-running 0) "RUNNING" "COMPLETED"))
-		   (testinfo          (cdb:remote-run db:test-get-id-state-status-pass-fail-count #f testname ''))
-		   (curr-state        (vector-ref testinfo 2))
-		   (curr-status       (vector-ref testinfo 3))
-		   (pcount            (vector-ref testinfo 4))
-		   (fcount            (vector-ref testinfo 5))
-		   (newstatus         #f))
-	      (set! newstatus
+		   (testinfo          (cdb:remote-run db:test-get-id-state-status-pass-fail-count #f test-name ""))
+		   (curr-state        (vector-ref testinfo 1))
+		   (curr-status       (vector-ref testinfo 2))
+		   (pcount            (vector-ref testinfo 3))
+		   (fcount            (vector-ref testinfo 4))
+		   (new-status        #f))
+	      (set! new-status
 		    (cond
 		     ((> fcount 0)         "FAIL")
 		     ((> num-items-skip 0) "SKIP")
-		     ((> pass-count 0)     "PASS")))
+		     ((> pcount 0)         "PASS")))
 	      (if (or (not (equal? curr-state new-state))
 		      (not (equal? curr-status new-status)))
-		  (cdb:test-set-state-status-by-name serverdat  status state msg)))))
+		  (cdb:test-set-state-status-by-name *runremote* new-state new-status run-id test-name "")))))
 	#f)
       #f)
 
