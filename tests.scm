@@ -722,7 +722,8 @@
 	 (diskfree (get-df (current-directory))))
     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
     ;; Update central with uname and hostname = #f
-    (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)))
+    ;(tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
+    ))
 	 
 (define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
