@@ -198,7 +198,7 @@
                      archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
-    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
+    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path, state, status);")
     (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
@@ -1135,7 +1135,6 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
-
 (define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
   ;; Convert #f to wildcard %
   (if (null? testnames)
@@ -1155,6 +1154,18 @@
 		 (lambda (th)
 		   (if th (thread-join! th)))
 		 thr)))))))
+
+;; Minimal get of state,status from a test-id
+(define (db:test-get-state-status db run-id test-name item-path)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (state status)
+       (set! res (vector test-id state status)))
+     db 
+     "SELECT state,status FROM tests WHERE run_id=? AND testname=? AND item_path=?;"
+     run-id test-name item-path)
+    res))
+
 
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (common:clear-caches)
@@ -1184,6 +1195,8 @@
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
   (mt:process-triggers test-id newstate newstatus))
 
+;;
+
 ;; Never used
 ;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
 ;;   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
@@ -1196,6 +1209,27 @@
        (set! res count))
      db
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
+    res))
+
+;; For an itemized test get the count of running items
+;;
+(define (db:get-count-test-items-running db run-id testname)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND testname=? AND item_path !='';")
+    res))
+
+;; For an itemized test get the count of items matching status
+(define (db:get-count-test-items-matching-status db run-id testname status)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM tests WHERE status=? AND run_id=? AND testname=? AND item_path !='';")
     res))
 
 (define (db:get-running-stats db)
@@ -1611,6 +1645,9 @@
       (cdb:client-call serverdat 'state-status-msg #t *default-numtries* state status msg test-id)
       (cdb:client-call serverdat 'state-status #t *default-numtries* state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
 
+(define (cdb:test-set-state-status-by-name serverdat state status testname item-path)
+  (cdb:client-call serverdat 'state-status-by-name state status testname item-path))
+
 (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
 
@@ -1677,12 +1714,15 @@
 	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
 	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
 	'(state-status           "UPDATE tests SET state=?,status=? WHERE id=?;")
+	'(state-status-by-name   "UPDATE tests SET state=?,status=? WHERE testname=? AND item_path=?;")
 	'(state-status-msg       "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;")
 	;; Test comment
 	'(set-test-comment       "UPDATE tests SET comment=? WHERE id=?;")
 	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
 	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+
 	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
+	;; tentatively replaced with db:test-rollup-test_data-pass-fail-multi-query
 	'(test_data-pf-rollup    "UPDATE tests
                                     SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
                                       THEN 'FAIL'
@@ -1691,6 +1731,7 @@
                                     THEN 'PASS'
                                     ELSE status
                                     END WHERE id=?;")
+
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")
 	'(test-set-rundir         "UPDATE tests SET rundir=? WHERE run_id=? AND testname=? AND item_path=?;")
@@ -2079,7 +2120,12 @@
 	  ;; (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
+	  
+	  ;; Previous method
+	  ;;(cdb:test-rollup-test_data-pass-fail *runremote* test-id)
+	  
+	  (cdb:remote-run db:test-rollup-test_data-pass-fail-multi-query #f test-id)
+
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
@@ -2092,6 +2138,47 @@
 	  ;;         END WHERE id=?;"
 	  ;;  test-id test-id test-id test-id)
 	  ))))
+
+(define (db:test-get-id-state-status-pass-fail-count db testname item-path)
+  (let ((res #f))
+    ;; First get the pass count
+    (sqlite3:for-each-row
+     (lambda (id state status pcount fcount)
+       ;;          0   1      2      3     4      5
+       (set! res (id vector state status pcount fcount)))
+     db
+     "SELECT id,state,status,pass_count,fail_count FROM tests WHERE testname=? AND item_path=?;" 
+     testname item-path)
+    res))
+
+(define (db:test-get-testname-item_patt-state-status-pass-fail-count db test-id)
+  (let ((res #f))
+    ;; First get the pass count
+    (sqlite3:for-each-row
+     (lambda (testname item-path state status pcount fcount)
+       (set! res (testname item-path vector state status pcount fcount)))
+     db
+     "SELECT testname,item_path,state,status,pass_count,fail_count FROM tests WHERE id=?;" 
+     test-id)
+    res))
+
+;; This is NON-ACID compliant, does it matter?
+;;
+(define (db:test-rollup-test_data-pass-fail-multi-query db test-id)
+  (let* ((resvec (db:test-get-testname-item_patt-state-status-pass-fail-count db test-id))
+	 (fail-count  (vector-ref resvec 6))
+	 (pass-count  (vector-ref resvec 5))
+	 (curr-status (vector-ref resvec 4))
+	 (curr-state  (vector-ref resvec 3))
+	 (next-status #f))
+    (set! next-status
+	  (cond
+	   ((> fail-count 0) "FAIL")
+	   ((and (> pass-count 0)
+		 (not (member curr-status '("WARN" "FAIL"))))
+	    "PASS")))
+    (if (not (equal? curr-status next-status))
+	(sqlite3:execute db "UPDATE tests SET status=? WHERE id=?;" next-status test-id))))
 
 (define (db:get-prev-tol-for-test db test-id category variable)
   ;; Finish me?

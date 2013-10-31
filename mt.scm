@@ -150,10 +150,33 @@
       (begin
 	(cdb:update-pass-fail-counts *runremote* run-id test-name)
 	(if (equal? status "RUNNING")
-	    (cdb:top-test-set-running *runremote* run-id test-name)
-	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
+	    ;; This test is RUNNING, if the top test is not set to RUNNING then set it to RUNNING
+	    (let ((state-status (cdb:remote-run db:test-get-state-status #f run-id test-name '')))
+	      (if (not (equal? (vector-ref state-status 1) "RUNNING"))
+		  (cdb:top-test-set-running *runremote* run-id test-name)))
+	    ;; This following is a "big" query. Replace it with the multi-step sequence
+	    ;; The fact that the replacement is not ACID may be a concern.
+	    ;; (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
+	    (let* ((num-running       0)
+		   (num-items-running (cdb:remote-run db:get-count-test-items-running #f run-id test-name))
+		   (num-items-skip    (cdb:remote-run db:get-count-test-items-matching-status #f run-id test-name "SKIP"))
+		   (new-state         (if (> num-items-running 0) "RUNNING" "COMPLETED"))
+		   (testinfo          (cdb:remote-run db:test-get-id-state-status-pass-fail-count #f testname ''))
+		   (curr-state        (vector-ref testinfo 2))
+		   (curr-status       (vector-ref testinfo 3))
+		   (pcount            (vector-ref testinfo 4))
+		   (fcount            (vector-ref testinfo 5))
+		   (newstatus         #f))
+	      (set! newstatus
+		    (cond
+		     ((> fcount 0)         "FAIL")
+		     ((> num-items-skip 0) "SKIP")
+		     ((> pass-count 0)     "PASS")))
+	      (if (or (not (equal? curr-state new-state))
+		      (not (equal? curr-status new-status)))
+		  (cdb:test-set-state-status-by-name serverdat  status state msg)))))
 	#f)
-      #f))
+      #f)
 
 ;; speed up for common cases with a little logic
 (define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
