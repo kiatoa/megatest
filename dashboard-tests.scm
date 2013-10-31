@@ -371,7 +371,7 @@
 							    (begin
 							      (set! testdat-path (conc rundir "/testdat.db"))
 							      0))))
-				    (need-update   (or (and (>= curr-mod-time db-mod-time)
+				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
@@ -379,7 +379,23 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (open-run-close db:get-test-info-by-id db test-id )))))
+						     (let* ((newdat (open-run-close db:get-test-info-by-id db test-id ))
+							    (tstdat (if newdat
+									(open-run-close tests:testdat-get-testinfo db test-id #f)
+									'())))
+						       (if (and newdat 
+								(not (null? tstdat))) ;; (update-time cpuload diskfree run-duration)
+							   (let* ((rec      (car tstdat))
+								  (cpuload  (vector-ref rec 1))
+								  (diskfree (vector-ref rec 2))
+								  (run-dur  (vector-ref rec 3)))
+							     (db:test-set-run_duration! newdat run-dur)
+							     (db:test-set-diskfree!     newdat diskfree)
+							     (db:test-set-cpuload!      newdat cpuload)))
+						       ;; (debug:print 0 "newdat=" newdat)
+						       newdat))
+						    #f)))
+			       ;; (debug:print 0 "newtestdat=" newtestdat)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -388,8 +404,13 @@
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
-				 (if (eq? curr-mod-time db-mod-time) ;; do only once if same
-				     (set! db-mod-time (+ curr-mod-time 1))
+				 
+				 ;; I don't see why this was implemented this way. Please comment it ...
+				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
+				 ;;     (set! db-mod-time (+ curr-mod-time 1))
+				 ;;     (set! db-mod-time curr-mod-time))
+
+				 (if (not (eq? curr-mod-time db-mod-time))
 				     (set! db-mod-time curr-mod-time))
 				 (set! last-update (current-milliseconds))
 				 (set! request-update #f) ;; met the need ...

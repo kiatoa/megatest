@@ -349,7 +349,8 @@
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
 								     (args:get-arg "-m") #f)
 						     (sqlite3:finalize! tdb)
-						     (exit 1))))
+						     (exit 1) ;; IS THIS NECESSARY OR WISE???
+						     )))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       ;; (sqlite3:finalize! db)
@@ -357,7 +358,8 @@
 					   (begin
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 					     (if keep-going
-						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
+						 (loop (calc-minutes)))))))
+				   (tests:update-central-meta-info test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
@@ -369,6 +371,7 @@
 	    ;; (thread-sleep! 1)
 	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
 	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
+	    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
