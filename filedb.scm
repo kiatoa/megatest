@@ -42,6 +42,9 @@
                                                    mtime     INTEGER DEFAULT -1);")
 	  (sqlite3:execute db "CREATE INDEX path_index ON paths (path,parent_id);")
 	  (sqlite3:execute db "CREATE TABLE bases (id INTEGER PRIMARY KEY,base TEXT,                  updated TIMESTAMP);")))
+    ;; close the sqlite3 db and open it as needed
+    (filedb:finalize-db! fdb)
+    (filedb:fdb-set-db! fdb #f)
     fdb))
 
 (define (filedb:reopen-db fdb)
@@ -115,6 +118,7 @@
 	 (pathcache (filedb:fdb-get-pathcache fdb))
 	 (stat      (if save-stat (file-stat path #t)))
 	 (id        (hash-table-ref/default pathcache path #f)))
+    (if (not db)(filedb:reopen-db fdb))
     (if id id 
         (let ((plist (string-split path "/")))
           (let loop ((head (car plist))
@@ -221,6 +225,7 @@
   (let* ((db      (filedb:fdb-get-db      fdb))
 	 (idcache (filedb:fdb-get-idcache fdb))
 	 (path    (hash-table-ref/default idcache id #f)))
+    (if (not db)(filedb:reopen-db fdb))
     (if path path
         (let loop ((curr-id id)
                    (path    ""))
