@@ -207,6 +207,9 @@
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+    ;; Update the synchronous setting in the db based on the default or what is set by the user
+    (cdb:remote-run db:set-sync #f)
+
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
@@ -230,7 +233,7 @@
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; Ensure all tests are registered in the test_meta table
-    (open-run-close runs:update-all-test_meta #f)
+    (cdb:remote-run runs:update-all-test_meta #f)
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================

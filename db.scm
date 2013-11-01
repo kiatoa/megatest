@@ -83,7 +83,8 @@
     (sqlite3:set-busy-handler! db handler)
     (if (not dbexists)
 	(db:initialize db))
-    (db:set-sync db)
+    ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
+    ;; (db:set-sync db)
     db))
 
 ;; keeping it around for debugging purposes only
