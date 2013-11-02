@@ -377,7 +377,7 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
@@ -582,7 +582,7 @@
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
 	 (loop-list               (list hed tal reg reruns)))

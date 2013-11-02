@@ -1029,10 +1029,24 @@
      )
     res))
 
+(define (db:get-tests-for-run-state-status db run-id testpatt)
+  (let ((res            '())
+	(tests-match-qry (tests:match->sqlqry testpatt)))
+    (sqlite3:for-each-row
+     (lambda (id testname item-path state status)
+       ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+       (set! res (cons (vector id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-") res)))
+     db 
+     (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
+	   (if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))
+     run-id)
+    res))
+
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
 (define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)
   (db:get-tests-for-runs db run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+
 
 ;; NB // This is get tests for "runs" (note the plural!!)
 ;;
@@ -2296,7 +2310,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
-	   (let ((tests             (mt:get-tests-for-run run-id waitontest-name '() '()))
+	   (let ((tests             (cdb:remote-run db:get-tests-for-run-state-status #f run-id waitontest-name)) ;; (mt:get-tests-for-run run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))

@@ -137,13 +137,13 @@
 	  ;; (client:setup)
 
 	  (change-directory *toppath*) 
-	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
 	  (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (set-megatest-env-vars run-id)
+	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
@@ -272,11 +272,11 @@
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
 									       (else 'fail)))
-							    (next-state       "RUNNING") 
-							                      ;;  (cond
-									      ;;  ((null? tal) ;; more to run?
-									      ;;   "COMPLETED")
-									      ;;  (else "RUNNING"))
+							    (next-state       ;; "RUNNING") 
+							                       (cond
+									       ((null? tal) ;; more to run?
+									        "COMPLETED")
+									       (else "RUNNING")))
 							    )
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
