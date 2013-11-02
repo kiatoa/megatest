@@ -1042,6 +1042,17 @@
      run-id)
     res))
 
+(define (db:get-testinfo-state-status db test-id)
+  (let ((res            #f))
+    (sqlite3:for-each-row
+     (lambda (run-id testname item-path state status)
+       ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+       (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
+     db 
+     "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
+     test-id)
+    res))
+
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
 (define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)

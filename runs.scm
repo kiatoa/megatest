@@ -116,7 +116,10 @@
      vals
      (lambda (key val)
        (debug:print 2 "setenv " key " " val)
-       (setenv key val)))
+       (if (and (string? key)
+		(string? val))
+	   (setenv key val)
+	   (debug:print 0 "ERROR: Malformed environment variable definition: var=" var ", val=" val))))
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
@@ -1002,8 +1005,8 @@
     
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
-	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
+	   (test-id       (cdb:remote-run db:get-test-id-cached #f  run-id test-name item-path))
+	   (testdat       (if test-id (cdb:get-test-info-by-id *runremote* test-id) #f)))
       (if (not testdat)
 	  (let loop ()
 	    ;; ensure that the path exists before registering the test
@@ -1014,12 +1017,12 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	    (if (not test-id)(set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
 		  (cdb:tests-register-test *runremote* run-id test-name item-path)
-		  (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))))
+		  (set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))
 	    (if (not testdat)

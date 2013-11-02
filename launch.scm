@@ -272,7 +272,7 @@
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
 									       (else 'fail)))
-							    (next-state       ;; "RUNNING") 
+							    (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
 							                       (cond
 									       ((null? tal) ;; more to run?
 									        "COMPLETED")
@@ -291,8 +291,8 @@
 							 ((pass)
 							  (tests:test-set-status! test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
-							  (set! rollup-status 1) ;; force fail
-							  (tests:test-set-status! test-id next-state "FAIL" (conc "Failed at step " stepname) #f)
+							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
+							  (tests:test-set-status! test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -374,7 +374,8 @@
 	    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   ;; only state and status needed - use lazy routine
+		   (testinfo  (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status

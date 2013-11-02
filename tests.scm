@@ -557,8 +557,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	      (tdat        (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))
+	      (tdat        (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -574,8 +574,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (cdb:remote-run db:get-test-id-cached #f run-id waiton ""))
+				      (wtdat          (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -682,7 +682,7 @@
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+  (let* ((testdat   (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
