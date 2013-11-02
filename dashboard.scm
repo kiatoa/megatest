@@ -227,7 +227,8 @@ Misc
 		       (tests       (mt:get-tests-for-run run-id testnamepatt states statuses
 							  not-in: *hide-not-hide*
 							  sort-by: sort-by
-							  sort-order: sort-order))
+							  sort-order: sort-order
+							  qryvals: 'shortlist))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
 		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
@@ -463,7 +464,7 @@ Misc
 			   (testfullname (test:test-get-fullname test))
 			   (teststatus (db:test-get-status   test))
 			   (teststate  (db:test-get-state    test))
-			   (teststart  (db:test-get-event_time test))
+			   ;;(teststart  (db:test-get-event_time test))
 			   (runtime    (db:test-get-run_duration test))
 			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			   (button     (vector-ref columndat rown))

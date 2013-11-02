@@ -558,9 +558,6 @@
     (db:find-and-mark-incomplete db)
     (sqlite3:execute db "VACUUM;")))
 
-;; (define (db:report-junk-records db)
-
-
 ;;======================================================================
 ;; meta get and set vars
 ;;======================================================================
@@ -971,9 +968,11 @@
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order
 			      #!key
-			      (qryvals #f)
-			      )
-  (let* ((qryvals         (if qryvals qryvals "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment"))
+			      (qryvals #f))
+  (let* ((qryvalstr       (case qryvals
+			    ((shortlist) "id,run_id,testname,item_path,state,status")
+			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
+			    (else        qryvals)))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
 	 (states-qry      (if (null? states) 
@@ -1002,7 +1001,7 @@
 	    (conc " AND " statuses-qry))
 	   (else "")))
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT " qryvals
+	 (qry             (conc "SELECT " qryvalstr
 				" FROM tests WHERE run_id=? AND state != 'DELETED' "
 				states-statuses-qry
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
@@ -1027,7 +1026,23 @@
      qry
      run-id
      )
-    res))
+    (case qryvals
+      ((shortlist)(map db:test-short-record->norm res))
+      ((#f)       res)
+      (else       res))))
+
+(define (db:test-short-record->norm inrec)
+  ;;  "id,run_id,testname,item_path,state,status"
+  ;;  "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+  (vector (vector-ref inrec 0) ;; id
+	  (vector-ref inrec 1) ;; run_id
+	  (vector-ref inrec 2) ;; testname
+	  (vector-ref inrec 4) ;; state
+	  (vector-ref inrec 5) ;; status
+	  -1 "" -1 -1 "" "-" 
+	  (vector-ref inrec 3) ;; item-path
+	  -1 "-" "-"))
+
 
 (define (db:get-tests-for-run-state-status db run-id testpatt)
   (let ((res            '())
@@ -1210,10 +1225,10 @@
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
   (mt:process-triggers test-id newstate newstatus))
 
-;; Never used
-;; (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-;;   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
-;; 		   state status run-id test-name item-path))
+;; Never used, but should be?
+(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
+ 		   state status run-id test-name item-path))
 
 (define (db:get-count-tests-running db)
   (let ((res 0))
