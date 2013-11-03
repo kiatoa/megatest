@@ -90,16 +90,19 @@
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
   (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
-  (let* ((db   (if idb 
-		   (if (procedure? idb)
-		       (idb)
-		       idb)
-		   (open-db)))
-	 (res #f))
-    (set! res (apply proc db params))
-    (if (not idb)(sqlite3:finalize! db))
-    (debug:print-info 11 "open-run-close-no-exception-handling END" )
-    res))
+  (if (or *db-write-access*
+	  (not (member proc *db:all-write-procs*)))
+      (let* ((db   (if idb 
+		       (if (procedure? idb)
+			   (idb)
+			   idb)
+		       (open-db)))
+	     (res #f))
+	(set! res (apply proc db params))
+	(if (not idb)(sqlite3:finalize! db))
+	(debug:print-info 11 "open-run-close-no-exception-handling END" )
+	res)
+      #f))
 
 (define (open-run-close-exception-handling proc idb . params)
   (handle-exceptions
@@ -490,6 +493,10 @@
        ;; THIS CANNOT WORK. The run_duration is not updated in the central db due to performance concerns.
        ;;                   The testdat.db file must be consulted.
        ;;
+       ;; HOWEVER: this code in run:test seems to work fine
+       ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+       ;;                     (db:test-get-run_duration testdat)))
+       ;;                    600) 
        (sqlite3:for-each-row 
 	(lambda (test-id)
 	  (set! incompleted (cons test-id incompleted)))
@@ -1695,7 +1702,12 @@
 
 ;; db should be db open proc or #f
 (define (cdb:remote-run proc db . params)
-  (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
+  (if (or *db-write-access*
+	  (not (member proc *db:all-write-procs*)))
+      (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params)
+      (begin
+	(debug:print 0 "ERROR: Attempt to access read-only database")
+	#f)))
 
 (define (db:test-get-logfile-info db run-id test-name)
   (let ((res #f))
@@ -2535,3 +2547,28 @@
     (system "rm -rf tempdir")))
 
 ;; (db:extract-ods-file db "outputfile.ods" '(("sysname" "%")("fsname" "%")("datapath" "%")) "%")
+
+;; This is a list of all procs that write to the db
+;;
+(define *db:all-write-procs*
+  (list 
+   db:set-var 
+   db:del-var
+   db:register-run
+   db:set-comment-for-run
+   db:delete-run
+   db:update-run-event_time
+   db:lock/unlock-run 
+   db:delete-test-step-records
+   db:delete-test-records
+   db:delete-tests-for-run
+   db:delete-old-deleted-test-records
+   db:set-tests-state-status
+   db:test-set-state-status-by-id
+   db:test-set-state-status-by-run-id-testname
+   db:test-set-comment
+   db:testmeta-add-record
+   db:csv->test-data
+   db:test-data-rollup
+   db:teststep-set-status! ))
+
