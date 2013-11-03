@@ -739,12 +739,13 @@
    (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (res         '()))
      (if (sqlite3:database? tdb)
-	 (sqlite3:for-each-row
-	  (lambda (update-time cpuload diskfree run-duration)
-	    (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
-	  tdb
-	  "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY update_time ASC;")
-	 (sqlite3:finalize! tdb))
+	 (begin
+	   (sqlite3:for-each-row
+	    (lambda (update-time cpuload diskfree run-duration)
+	      (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
+	    tdb
+	    "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY update_time ASC;")
+	   (sqlite3:finalize! tdb)))
      res))
 
 ;;======================================================================

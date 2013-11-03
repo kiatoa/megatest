@@ -376,9 +376,11 @@
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
+						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (debug:print-info 0 "WARNING: test db access issue for test " test-id ": " ((condition-property-accessor 'exn 'message) exn))
+						     (make-db:test)
 						     (let* ((newdat (open-run-close db:get-test-info-by-id db test-id ))
 							    (tstdat (if newdat
 									(open-run-close tests:testdat-get-testinfo db test-id #f)
@@ -393,7 +395,8 @@
 							     (db:test-set-diskfree!     newdat diskfree)
 							     (db:test-set-cpuload!      newdat cpuload)))
 						       ;; (debug:print 0 "newdat=" newdat)
-						       newdat))
+						       newdat)
+						     )
 						    #f)))
 			       ;; (debug:print 0 "newtestdat=" newtestdat)
 			       (cond

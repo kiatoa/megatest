@@ -438,7 +438,7 @@
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
-		(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+		(debug:print 0 "ERROR: The proc from reading the items table did not yield a list - please report this")
 		(exit 1))))))
 
      ((and (null? fails)

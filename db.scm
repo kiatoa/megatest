@@ -92,11 +92,11 @@
   (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (if (or *db-write-access*
 	  (not (member proc *db:all-write-procs*)))
-      (let* ((db   (if idb 
-		       (if (procedure? idb)
-			   (idb)
-			   idb)
-		       (open-db)))
+      (let* ((db   (cond
+		    ((sqlite3:database? idb) idb)
+		    ((not idb)               (open-db))
+		    ((procedure? idb)       (idb))
+		    (else   	            (open-db))))
 	     (res #f))
 	(set! res (apply proc db params))
 	(if (not idb)(sqlite3:finalize! db))
@@ -1916,7 +1916,7 @@
 			  ((http)
 			   (debug:print-info 7 "Queuing item " item " for wrapped write")
 			   (db:queue-write-and-wait db qry-sig query params))
-			  (else  
+			  (else 
 			   (apply sqlite3:execute db query params)
 			   #t))))
 	  (debug:print-info 7 "Received " response " from wrapped write")
@@ -2170,14 +2170,15 @@
 	 exn
 	 (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
 	 '()
-	 (sqlite3:for-each-row 
-	  (lambda (id test-id stepname state status event-time logfile)
-	    (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-	  tdb
-	  "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-	  test-id)
-	 (sqlite3:finalize! tdb)
-	 (reverse res))
+	 (begin
+	   (sqlite3:for-each-row 
+	    (lambda (id test-id stepname state status event-time logfile)
+	      (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	    tdb
+	    "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	    test-id)
+	   (sqlite3:finalize! tdb)
+	   (reverse res)))
 	'())))
 
 ;; get a pretty table to summarize steps

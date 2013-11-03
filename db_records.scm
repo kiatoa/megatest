@@ -1,4 +1,4 @@
-(define (make-db:test)(make-vector 6))
+(define (make-db:test)(make-vector 20))
 (define-inline (db:test-get-id           vec) (vector-ref vec 0))
 (define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
 (define-inline (db:test-get-testname     vec) (vector-ref vec 2))
