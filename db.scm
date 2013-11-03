@@ -80,7 +80,7 @@
 	     (not write-access))
 	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
-    (sqlite3:set-busy-handler! db handler)
+    (if write-access (sqlite3:set-busy-handler! db handler))
     (if (not dbexists)
 	(db:initialize db))
     ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
@@ -258,6 +258,7 @@
 	   (directory? work-area)
 	   (file-read-access? work-area))
       (let* ((dbpath    (conc work-area "/testdat.db"))
+	     (tdb-writeable (file-write-access? dbpath))
 	     (dbexists  (file-exists? dbpath))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
@@ -269,7 +270,7 @@
 			((condition-property-accessor 'exn 'message) exn))
 	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
 	 (set! db (sqlite3:open-database dbpath)))
-	(sqlite3:set-busy-handler! db handler)
+	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
 	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
