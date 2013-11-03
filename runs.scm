@@ -238,7 +238,7 @@
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; Ensure all tests are registered in the test_meta table
-    (cdb:remote-run runs:update-all-test_meta #f)
+    (runs:update-all-test_meta #f)
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
