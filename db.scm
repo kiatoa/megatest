@@ -487,6 +487,9 @@
 
        ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
        ;;
+       ;; THIS CANNOT WORK. The run_duration is not updated in the central db due to performance concerns.
+       ;;                   The testdat.db file must be consulted.
+       ;;
        (sqlite3:for-each-row 
 	(lambda (test-id)
 	  (set! incompleted (cons test-id incompleted)))
@@ -1131,7 +1134,7 @@
   ;; Breaking it into two queries for better file access interleaving
   (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area)))
     ;; test db's can go away - must check every time
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "DELETE FROM test_steps;")
 	  (sqlite3:execute tdb "DELETE FROM test_data;")
@@ -2004,7 +2007,7 @@
 (define (db:csv->test-data db test-id csvdata #!key (work-area #f))
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let ((tdb     (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(let ((csvlist (csv->list (make-csv-reader
 				   (open-input-string csvdata)
 				   '((strip-leading-whitespace? #t)
@@ -2064,7 +2067,7 @@
 ;; get a list of test_data records matching categorypatt
 (define (db:read-test-data db test-id categorypatt #!key (work-area #f))
   (let ((tdb  (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(let ((res '()))
 	  (sqlite3:for-each-row 
 	   (lambda (id test_id category variable value expected tol units comment status type)
@@ -2096,7 +2099,7 @@
   (let ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
 	(fail-count 0)
 	(pass-count 0))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:for-each-row
 	   (lambda (fcount pcount)
@@ -2149,7 +2152,7 @@
 (define (db:get-steps-for-test db test-id #!key (work-area #f))
   (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (res '()))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(handle-exceptions
 	 exn
 	 (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
@@ -2391,7 +2394,6 @@
 	(delete-duplicates result))))
 
 (define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile #!key (work-area #f))
-  (debug:print 4 "test-id: " test-id " teststep-name: " teststep-name)
   ;;                 db:open-test-db-by-test-id does cdb:remote-run
   (let* ((tdb       (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (state     (items:check-valid-items "state" state-in))
@@ -2399,7 +2401,7 @@
     (if (or (not state)(not status))
 	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute 
 	   tdb

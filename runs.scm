@@ -210,7 +210,9 @@
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+
     ;; Update the synchronous setting in the db based on the default or what is set by the user
+    ;; This is done once here on a call to run tests rather than on every call to open-db
     (cdb:remote-run db:set-sync #f)
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process

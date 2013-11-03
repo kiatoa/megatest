@@ -728,7 +728,7 @@
 	 
 (define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if tdb
+    (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
 			   cpuload diskfree minutes)
@@ -738,7 +738,7 @@
 (define (tests:testdat-get-testinfo db test-id work-area)
    (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
 	 (res         '()))
-     (if tdb
+     (if (sqlite3:database? tdb)
 	 (sqlite3:for-each-row
 	  (lambda (update-time cpuload diskfree run-duration)
 	    (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
