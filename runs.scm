@@ -401,7 +401,7 @@
     (cond
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
-     
+
      ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
 	      '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
       (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
@@ -684,6 +684,10 @@
 	   (or (null? prereqs-not-met)
 	       (and (eq? testmode 'toplevel)
 		    (null? non-completed))))
+      ;; (hash-table-delete! *max-tries-hash* (runs:make-full-test-name test-name item-path))
+      ;; we are going to reset all the counters for test retries by setting a new hash table
+      ;; this means they will increment only when nothing can be run
+      (set! *max-tries-hash* (make-hash-table))
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
@@ -732,6 +736,11 @@
 		    ;; (list hed tal reg reruns)
 		    (list (car newtal)(cdr newtal) reg reruns)
 		    ))))))))
+
+;; every time though the loop increment the test/itempatt val.
+;; when the min is > max-allowed and none running then force exit
+;;
+(define *max-tries-hash* (make-hash-table))
 
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry)
@@ -797,6 +806,9 @@
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen)))
 
+	(hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1))
+	;; (debug:print 0 "max-tries-hash: " (hash-table->alist *max-tries-hash*))
+
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f))
@@ -841,6 +853,22 @@
 	      (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	(cond 
+	 
+	 ;; We want to catch tests that have waitons that are NOT in the queue and discard them IFF 
+	 ;; they have been through the wringer 10 or more times
+	 ((and (list? waitons)
+	       (not (null? waitons))
+	       (> (hash-table-ref/default *max-tries-hash* tfullname 0) 10)
+	       (not (null? (filter
+			    number?
+			    (map (lambda (waiton)
+				   (if (and (not (member waiton tal))            ;; this waiton is not in the list to be tried to run
+					    (not (member waiton reruns)))
+				       1
+				       #f))
+				 waitons))))) ;; could do this more elegantly with a marker....
+	  (debug:print 0 "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
+	  (hash-table-set! test-registry tfullname 'removed))
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
