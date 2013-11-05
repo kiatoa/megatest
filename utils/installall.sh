@@ -128,8 +128,6 @@ if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
     fi
 fi
 
-exit
-
 # $CHICKEN_INSTALL $PROX sqlite3
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 

@@ -2168,8 +2168,9 @@
     (if (sqlite3:database? tdb)
 	(handle-exceptions
 	 exn
-	 (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
-	 '()
+	 (begin
+	   (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
+	   '())
 	 (begin
 	   (sqlite3:for-each-row 
 	    (lambda (id test-id stepname state status event-time logfile)
