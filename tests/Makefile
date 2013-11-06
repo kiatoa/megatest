@@ -52,8 +52,15 @@ test2 : fullprep
 	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
 
-test3 : fullprep
-	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -debug 10
+test3 : fullprep test3a test3b
+
+test3a :
+	@echo Run runfirst and any waitons.
+	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b 
+
+test3b :
+	@echo Run all_toplevel and all waitons
+	cd fullrun;$(MEGATEST) -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_c
 
 test4 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
