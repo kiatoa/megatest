@@ -1,3 +1,38 @@
+======================================================================
+Try writing to in-memory db and every 2-5 seconds syncing to megatest.db
+======================================================================
+
+First, how much time will it take to write back the changes:
+
+1. Get the run table
+
+(define (get-all db)(let ((res '()))(for-each-row (lambda (a . b)(set! res (cons (apply vector a b) res))) db "SELECT * FROM tests;") res))
+(define tdata (let ((start (current-milliseconds))(res (get-all *db*)))(print (- (current-milliseconds) start))res))
+
+Result ranges from 34ms to 89ms but mostly around 40ms for 623 records on moosefs
+
+Projecting to 15000 records:
+
+  Slow   2 seconds to read all
+  Median 1 second to read all
+
+This seems like it would work with an update period of 2-5 seconds
+
+TODO
+----
+
+1. open-db opens in-memory db and megatest.db, put handles in *memdb* and *db*, *memdb* is < run-id dbh >
+2. Server is part of runtests 
+   a. server start cycle - adapt to per run-id
+      i. states; starting, started, stopping, stopped
+   b. turn off write coalesing
+3. Calls to -runtests, -remove-runs etc. 
+   a. Might talk to running server if run specific
+   b. Can talk to megatest.db but not a generally good idea
+   c. Can start a runserver 
+4. Dashboard is fine except for writes?
+
+======================================================================
 
 [87cbe68f31] 
 [be405e8e2e]
