@@ -116,7 +116,10 @@
      vals
      (lambda (key val)
        (debug:print 2 "setenv " key " " val)
-       (setenv key val)))
+       (if (and (string? key)
+		(string? val))
+	   (setenv key val)
+	   (debug:print 0 "ERROR: Malformed environment variable definition: var=" var ", val=" val))))
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
@@ -207,6 +210,11 @@
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+
+    ;; Update the synchronous setting in the db based on the default or what is set by the user
+    ;; This is done once here on a call to run tests rather than on every call to open-db
+    (cdb:remote-run db:set-sync #f)
+
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
@@ -228,6 +236,9 @@
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
 	  (cdb:delete-tests-in-state *runremote* run-id "NOT_STARTED")
 	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+
+    ;; Ensure all tests are registered in the test_meta table
+    (runs:update-all-test_meta #f)
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
@@ -369,9 +380,9 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
@@ -390,7 +401,7 @@
     (cond
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
-     
+
      ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
 	      '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
       (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
@@ -427,7 +438,7 @@
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
-		(debug:print 0 "ERROR: The proc from reading the setup did not yield a list - please report this")
+		(debug:print 0 "ERROR: The proc from reading the items table did not yield a list - please report this")
 		(exit 1))))))
 
      ((and (null? fails)
@@ -452,14 +463,17 @@
 		  prereqstrs)
 	(if (and give-up
 		 (not (and (null? tal)(null? reg))))
-	    (begin
-	      (debug:print 1 "WARNING: test " hed " has no discarded prerequisites, removing it from the queue")
-	      (list (runs:queue-next-hed tal reg reglen regfull)
-		    (runs:queue-next-tal tal reg reglen regfull)
-		    (runs:queue-next-reg tal reg reglen regfull)
-		    reruns))
-	    (list (car newtal)(append (cdr newtal) reg) '() reruns))))
-
+	    (let ((trimmed-tal (mt:discard-blocked-tests run-id hed tal test-records))
+		  (trimmed-reg (mt:discard-blocked-tests run-id hed reg test-records)))
+	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
+	      (if (and (null? trimmed-tal)
+		       (null? trimmed-reg))
+		  #f
+		  (list (runs:queue-next-hed trimmed-tal trimmed-reg reglen regfull)
+			(runs:queue-next-tal trimmed-tal trimmed-reg reglen regfull)
+			(runs:queue-next-reg trimmed-tal trimmed-reg reglen regfull)
+			reruns)))
+	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
      ;; (debug:print-info 1 "allinqueue: " allinqueue)
      ;; (debug:print-info 1 "prereqstrs: " prereqstrs)
@@ -573,7 +587,7 @@
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (mt:get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
 	 (loop-list               (list hed tal reg reruns)))
@@ -670,6 +684,10 @@
 	   (or (null? prereqs-not-met)
 	       (and (eq? testmode 'toplevel)
 		    (null? non-completed))))
+      ;; (hash-table-delete! *max-tries-hash* (runs:make-full-test-name test-name item-path))
+      ;; we are going to reset all the counters for test retries by setting a new hash table
+      ;; this means they will increment only when nothing can be run
+      (set! *max-tries-hash* (make-hash-table))
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
@@ -687,9 +705,11 @@
       (debug:print 4 "FAILS: " fails)
       ;; If one or more of the prereqs-not-met are FAIL then we can issue
       ;; a message and drop hed from the items to be processed.
-
+      ;; (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met)
       (if (not (null? prereqs-not-met))
-	  (debug:print-info 1 "waiting on tests; " (string-intersperse prereqs-not-met ", ")))
+	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
+						    (runs:mixed-list-testname-and-testrec->list-of-strings 
+						     prereqs-not-met) ", ")))
       
       (if (null? fails)
 	  (begin
@@ -717,11 +737,21 @@
 		    (list (car newtal)(cdr newtal) reg reruns)
 		    ))))))))
 
+;; every time though the loop increment the test/itempatt val.
+;; when the min is > max-allowed and none running then force exit
+;;
+(define *max-tries-hash* (make-hash-table))
+
 ;; test-records is a hash table testname:item_path => vector < testname testconfig waitons priority items-info ... >
 (define (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests reglen-in all-tests-registry)
   ;; At this point the list of parent tests is expanded 
   ;; NB// Should expand items here and then insert into the run queue.
   (debug:print 5 "test-records: " test-records ", flags: " (hash-table->alist flags))
+
+  ;; Do mark-and-find clean up of db before starting runing of quue
+  ;;
+  ;; (cdb:remote-run db:find-and-mark-incomplete #f)
+
   (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
@@ -733,7 +763,8 @@
 				 (if (and mcj (string->number mcj))
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
-	(reglen                (if (number? reglen-in) reglen-in 1)))
+	(reglen                (if (number? reglen-in) reglen-in 1))
+	(last-time-incomplete  (current-seconds)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -753,6 +784,12 @@
 	       (reruns      '()))
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
+      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+      ;; (if (> (current-seconds)(+ last-time-incomplete 900))
+      ;;     (begin
+      ;;       (set! last-time-incomplete (current-seconds))
+      ;;       (cdb:remote-run db:find-and-mark-incomplete #f)))
+
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
@@ -768,6 +805,9 @@
 	     (tfullname   (runs:make-full-test-name test-name item-path))
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen)))
+
+	(hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1))
+	;; (debug:print 0 "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
 	;; and it is clear they *should* have run but did not.
@@ -813,6 +853,22 @@
 	      (set! waiton (filter (lambda (x)(not (equal? x hed))) waitons))))
 
 	(cond 
+	 
+	 ;; We want to catch tests that have waitons that are NOT in the queue and discard them IFF 
+	 ;; they have been through the wringer 10 or more times
+	 ((and (list? waitons)
+	       (not (null? waitons))
+	       (> (hash-table-ref/default *max-tries-hash* tfullname 0) 10)
+	       (not (null? (filter
+			    number?
+			    (map (lambda (waiton)
+				   (if (and (not (member waiton tal))            ;; this waiton is not in the list to be tried to run
+					    (not (member waiton reruns)))
+				       1
+				       #f))
+				 waitons))))) ;; could do this more elegantly with a marker....
+	  (debug:print 0 "WARNING: Marking test " tfullname " as not runnable. It is waiting on tests that cannot be run. Giving up now.")
+	  (hash-table-set! test-registry tfullname 'removed))
 
 	 ;; items is #f then the test is ok to be handed off to launch (but not before)
 	 ;; 
@@ -876,7 +932,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
@@ -967,6 +1023,11 @@
 
     ;; Here is where the test_meta table is best updated
     ;; Yes, another use of a global for caching. Need a better way?
+    ;;
+    ;; There is now a single call to runs:update-all-test_meta and this 
+    ;; per-test call is not needed. Given the delicacy of the move to 
+    ;; v1.55 this code is being left in place for the time being.
+    ;;
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
 	   (hash-table-set! *test-meta-updated* test-name #t)
@@ -974,8 +1035,8 @@
     
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-	   (test-id       (cdb:remote-run db:get-test-id #f  run-id test-name item-path))
-	   (testdat       (cdb:get-test-info-by-id *runremote* test-id)))
+	   (test-id       (cdb:remote-run db:get-test-id-cached #f  run-id test-name item-path))
+	   (testdat       (if test-id (cdb:get-test-info-by-id *runremote* test-id) #f)))
       (if (not testdat)
 	  (let loop ()
 	    ;; ensure that the path exists before registering the test
@@ -986,12 +1047,12 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))
+	    (if (not test-id)(set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
 		  (cdb:tests-register-test *runremote* run-id test-name item-path)
-		  (set! test-id (cdb:remote-run db:get-test-id #f run-id test-name item-path))))
+		  (set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))
 	    (if (not testdat)
@@ -1408,13 +1469,13 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (tests:get-valid-tests)))
+  (let ((test-names (tests:get-all))) ;; (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))
 	 ;; use the cdb:remote-run instead of passing in db
 	 (if test-conf (runs:update-test_meta test-name test-conf))))
-     test-names)))
+     (hash-table-keys test-names))))
 
 ;; This could probably be refactored into one complex query ...
 (define (runs:rollup-run keys runname user keyvals)

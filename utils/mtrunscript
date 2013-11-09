@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+
+# Copyright 2012, Matthew Welland.
+#
+#  This program is made available under the GNU GPL version 2.0 or
+#  greater. See the accompanying file COPYING for details.
+#
+#  This program is distributed WITHOUT ANY WARRANTY; without even the
+#  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE.
+#
+# VERSION: 
+
+# set -e
+# set -u
+# set -x
+
+# Usage: mtrunscript scriptname params
+#
+#    Look for scriptname in this order
+#
+#       $MT_TEST_RUN_DIR/scripts => $MT_RUN_AREA_HOME/scripts 
+#          => $MT_RUN_AREA_HOME/../scripts => $PATH
+#
+#    In each area look for the script with the name like this:
+#
+#       scriptname_$TARGET[1]_$TARGET[2]_...$TARGET[n]_$MT_TESTNAME_$MT_ITEMPATH(s#/#_)
+#
+
+echo "NOT IMPLEMENTED YET!"
+exit
+
+case "x$1" in 
+    # repo
+    xrep*)
+    fsl_dbinit
+    case "x$2" in 
+	xhelp)
+	fsl_help
+	exit
+	;;
+	
+        # repo get
+	xget)
+	hook_pre_repo_get "$@"
+	fsl_repo_get $3 $4
+	hook_post_repo_get "$@"
+	exit
+	;;
+
+	xaddarea)
+	fsl_add_area $3 $4
+	exit
+	;;
+	
+	xdroparea)
+	fsl_remove_area $3
+	exit
+	;;
+
+	xdbinit)
+	fsl_dbinit
+	exit
+	;;
+
+	xls|xlist)
+	shift
+	shift
+	fsl_ls "$@"
+	exit
+	;;
+
+	xcreate)
+	hook_pre_repo_create
+	fsl_repo_create $3 $4 $5 $6
+	hook_post_repo_create
+	exit
+	;; 
+
+	ximport)
+	fsl_repo_import $3 $4 $5
+	exit
+	;;
+
+	*)
+	fsl_help
+	exit
+    esac
+    ;;
+
+    "xmv")
+    if [ "x$2" = "x-f" ];then
+	# echo "Force mode"
+	fsl_force=1
+	shift
+	shift
+        # change this to exec when happy!
+        # fsl mv -f f1 [f2 f3...] targ
+	fsl_mv "$@"
+	# args=("$@")
+	# echo $@  -> echo $@
+        # use $# variable to print out
+        # number of arguments passed to the bash script
+	# echo Number of arguments passed: $#  -> echo Number of arguments passed: $#
+	exit
+    else
+        # echo No force
+	shift
+	fsl_mv "$@"
+	exit
+    fi
+    ;;
+
+    xtim*)
+    fsl_fork_find
+    shift
+    $FOSSILEXE timeline "$@" | sed -e :a -e '$!N;s/\n         / /;ta' -e 'P;D'
+    exit
+    ;;
+
+    # leaves output needs to be niceified, no need for a function
+    xle*)
+    fsl_fork_find
+    shift
+    $FOSSILEXE leaves "$@" | sed -e :a -e '$!N;s/\n         / /;ta' -e 'P;D'
+    exit
+    ;;
+
+    # changes and status
+    xcha* | xstat*)
+    fsl_fork_find
+    fsl_conflicts "$@"
+    rm -f $CONFLICT_FLAG_FILE
+    exit
+    ;;
+
+    # ci/commit
+    xci | xcom*)
+    fsl_conflicts changes "$@"
+    trap "$FOSSILUTIL releaselock $FSLUTIL_PARAMS" SIGINT
+    # Set up for remote locking
+    if [ ! -e $CONFLICT_FLAG_FILE ]; then
+	rm -f $CONFLICT_FLAG_FILE
+	read -p "ERROR: Conflicts detected. Type \"yes\" to continue: " -e ANSWER
+	if [ $ANSWER = "yes" ]; then
+	    $FOSSILUTIL commitlock $FSLUTIL_PARAMS
+	    $FOSSILEXE "$@"
+	    $FOSSILUTIL releaselock $FSLUTIL_PARAMS
+	else
+	    exit 1
+	fi
+    else
+	$FOSSILUTIL commitlock $FSLUTIL_PARAMS
+	$FOSSILEXE "$@"
+	$FOSSILUTIL releaselock $FSLUTIL_PARAMS
+    fi
+    exit
+    ;;
+
+    xtag)
+    case "x$2" in
+	xadd | xcancel)
+	$FOSSILEXE "$@"
+	$FOSSILEXE sync
+	exit
+	;;
+	
+	*)
+	$FOSSILEXE "$@"
+	exit
+	;;
+    esac
+    ;;
+
+    # add mention of repo to help
+    "xhelp")
+    if [ $# -gt 1 ]; then
+       case "x$2" in 
+          xrepo)
+          fsl_help
+          exit
+          ;;
+          
+          *)
+          $FOSSILEXE "$@"
+	  ;;
+
+       esac
+    else
+       $FOSSILEXE help | sed -e 's/sync/sync        repo/'
+    fi
+    exit
+    ;;
+
+    xup* | xco)
+    fsl_fork_find
+    $FOSSILEXE "$@"
+    exit
+    ;;
+
+esac	
+
+exec $FOSSILEXE "$@"

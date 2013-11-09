@@ -1,0 +1,7 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+step1 echo SUCCESS
+step2 exit 123
+
+[requirements]
+waiton e1

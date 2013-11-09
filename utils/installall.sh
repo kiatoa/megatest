@@ -60,9 +60,10 @@ else
   echo Using KTYPE=$KTYPE
 fi
 
-export CHICKEN_VERSION=4.8.0
+export CHICKEN_VERSION=4.8.0.5
+export CHICKEN_BASEVER=4.8.0
 if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
-    wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz
+    wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/chicken-${CHICKEN_VERSION}.tar.gz
 fi 
 
 BUILDHOME=$PWD

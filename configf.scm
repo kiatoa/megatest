@@ -120,16 +120,20 @@
 
 (define-inline (configf:read-line p ht allow-processing)
   (let loop ((inl (read-line p)))
-    (if (and (string? inl)
-	     (not (string-null? inl))
-	     (equal? "\\" (string-take-right inl 1))) ;; last character is \ 
-	(let ((nextl (read-line p)))
-	  (if (not (eof-object? nextl))
-	      (loop (string-append inl nextl))))
-	(if (and allow-processing 
-		 (not (eq? allow-processing 'return-string)))
-	    (configf:process-line inl ht)
-	    inl))))
+    (let ((cont-line (and (string? inl)
+			  (not (string-null? inl))
+			  (equal? "\\" (string-take-right inl 1)))))
+      (if cont-line ;; last character is \ 
+	  (let ((nextl (read-line p)))
+	    (if (not (eof-object? nextl))
+		(loop (string-append (if cont-line 
+					 (string-take inl (- (string-length inl) 1))
+					 inl)
+				     nextl))))
+	  (if (and allow-processing 
+		   (not (eq? allow-processing 'return-string)))
+	      (configf:process-line inl ht)
+	      inl)))))
 
 ;; read a config file, returns hash table of alists
 

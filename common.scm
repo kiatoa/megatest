@@ -77,6 +77,10 @@
 (define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
 (define *runconfigs*        (make-hash-table)) ;; target    => runconfig
 
+;; This is a cache of pre-reqs met, don't re-calc in cases where called with same params less than
+;; five seconds ago
+(define *pre-reqs-met-cache* (make-hash-table))
+
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))
   (set! *keys*               (make-hash-table))
@@ -372,9 +376,21 @@
   (time->string 
    (seconds->local-time sec) "%H:%M:%S"))
 
+(define (seconds->work-week/day-time sec)
+  (time->string
+   (seconds->local-time sec) "ww%V.%u %H:%M"))
+
 (define (seconds->work-week/day sec)
   (time->string
-   (seconds->local-time sec) "%V.%u"))
+   (seconds->local-time sec) "ww%V.%u"))
+
+(define (seconds->year-work-week/day sec)
+  (time->string
+   (seconds->local-time sec) "%yww%V.%w"))
+
+(define (seconds->year-work-week/day-time sec)
+  (time->string
+   (seconds->local-time sec) "%yww%V.%w %H:%M"))
 
 ;;======================================================================
 ;; Colors

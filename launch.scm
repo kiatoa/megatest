@@ -108,13 +108,23 @@
 			       (debug:print 1 "Adding pre-var/val " var " = " val " to the environment")
 			       (setenv var val)))))
 		     varpairs)))
-	  (setenv "MT_TEST_RUN_DIR" work-area)
-	  (setenv "MT_TEST_NAME" test-name)
-	  (setenv "MT_ITEM_INFO" (conc itemdat))
-	  (setenv "MT_RUNNAME"   runname)
-	  (setenv "MT_MEGATEST"  megatest)
-	  (setenv "MT_TARGET"    target)
-	  (setenv "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
+	  (for-each
+	   (lambda (varval)
+	     (let ((var (car varval))
+		   (val (cadr varval)))
+	       (if val
+		   (setenv var val)
+		   (begin
+		     (debug:print 0 "ERROR: required variable " var " does not have a valid value. Exiting")
+		     (exit)))))
+	     (list 
+	      (list  "MT_TEST_RUN_DIR" work-area)
+	      (list  "MT_TEST_NAME" test-name)
+	      (list  "MT_ITEM_INFO" (conc itemdat))
+	      (list  "MT_RUNNAME"   runname)
+	      (list  "MT_MEGATEST"  megatest)
+	      (list  "MT_TARGET"    target)
+	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))))
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  (if (not (setup-for-run))
@@ -127,13 +137,13 @@
 	  ;; (client:setup)
 
 	  (change-directory *toppath*) 
-	  (set-megatest-env-vars run-id) ;; these may be needed by the launching process
+	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  (change-directory work-area) 
 
 	  (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (set-megatest-env-vars run-id)
+	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
@@ -262,11 +272,11 @@
 									       ((eq? overall-status 'warn)
 										(if (eq? this-step-status 'fail) 'fail 'warn))
 									       (else 'fail)))
-							    (next-state       "RUNNING") 
-							                      ;;  (cond
-									      ;;  ((null? tal) ;; more to run?
-									      ;;   "COMPLETED")
-									      ;;  (else "RUNNING"))
+							    (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
+							                       (cond
+									       ((null? tal) ;; more to run?
+									        "COMPLETED")
+									       (else "RUNNING")))
 							    )
 						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
@@ -281,8 +291,8 @@
 							 ((pass)
 							  (tests:test-set-status! test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
-							  (set! rollup-status 1) ;; force fail
-							  (tests:test-set-status! test-id next-state "FAIL" (conc "Failed at step " stepname) #f)
+							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
+							  (tests:test-set-status! test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -339,7 +349,8 @@
 						     (tests:test-set-status! test-id "KILLED"  "FAIL"
 								     (args:get-arg "-m") #f)
 						     (sqlite3:finalize! tdb)
-						     (exit 1))))
+						     (exit 1) ;; IS THIS NECESSARY OR WISE???
+						     )))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
 				       ;; (sqlite3:finalize! db)
@@ -347,7 +358,8 @@
 					   (begin
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 					     (if keep-going
-						 (loop (calc-minutes)))))))))) ;; NOTE: Checking twice for keep-going is intentional
+						 (loop (calc-minutes)))))))
+				   (tests:update-central-meta-info test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
@@ -359,9 +371,11 @@
 	    ;; (thread-sleep! 1)
 	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
 	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
+	    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
-		   (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   ;; only state and status needed - use lazy routine
+		   (testinfo  (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -569,7 +583,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to re-create link " linktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print 0 "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
@@ -631,7 +645,8 @@
 	 (memory          (config-lookup test-conf   "requirements" "memory"))
 	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
-	 (run-time-limit  (configf:lookup  test-conf   "requirements" "runtimelim"))
+	 (run-time-limit  (or (configf:lookup  test-conf   "requirements" "runtimelim")
+			      (configf:lookup  *configdat* "setup" "runtimelim")))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard

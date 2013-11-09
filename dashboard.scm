@@ -227,10 +227,13 @@ Misc
 		       (tests       (mt:get-tests-for-run run-id testnamepatt states statuses
 							  not-in: *hide-not-hide*
 							  sort-by: sort-by
-							  sort-order: sort-order))
+							  sort-order: sort-order
+							  qryvals: 'shortlist))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
 		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
+		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
+		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
 		  (set! referenced-run-ids (cons run-id referenced-run-ids))
 		  (if (> (length tests) maxtests)
@@ -461,7 +464,7 @@ Misc
 			   (testfullname (test:test-get-fullname test))
 			   (teststatus (db:test-get-status   test))
 			   (teststate  (db:test-get-state    test))
-			   (teststart  (db:test-get-event_time test))
+			   ;;(teststart  (db:test-get-event_time test))
 			   (runtime    (db:test-get-run_duration test))
 			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
 			   (button     (vector-ref columndat rown))

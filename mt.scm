@@ -85,8 +85,43 @@
 (define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode))
 
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+  (let* ((key    (list run-id waitons ref-item-path mode))
+	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
+	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
+		   (if last-time
+		       (< (current-seconds)(+ last-time 5))
+		       #f))))
+    (if useres
+	(let ((result (vector-ref res 1)))
+	  (debug:print 4 "Using lazy value res: " result)
+	  result)
+	(let ((newres (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode)))
+	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
+	  newres))))
+
 (define (mt:get-run-stats)
   (cdb:remote-run db:get-run-stats #f))
+
+(define (mt:discard-blocked-tests run-id failed-test tests test-records)
+  (if (null? tests)
+      tests
+      (begin
+	(debug:print-info 1 "Discarding tests from " tests " that are waiting on " failed-test)
+	(let loop ((testn (car tests))
+		   (remt  (cdr tests))
+		   (res   '()))
+	  (let ((waitons (vector-ref (hash-table-ref/default test-records testn (vector #f #f '())) 2)))
+	    ;; (print "mt:discard-blocked-tests run-id: " run-id " failed-test: " failed-test " testn: " testn " with waitons: " waitons)
+	    (if (null? remt)
+		(let ((new-res (reverse res)))
+		  ;; (print "       new-res: " new-res)
+		  new-res)
+		(loop (car remt)
+		      (cdr remt)
+		      (if (member failed-test waitons)
+			  res
+			  (cons testn res)))))))))
 
 ;;======================================================================
 ;;  T R I G G E R S

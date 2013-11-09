@@ -45,7 +45,8 @@
 			      "Current state: "
 			      "Current status: "
 			      "Test comment: "
-			      "Test id: "))
+			      "Test id: "
+			      "Test date: "))
 		   (list (iup:label "" #:expand "VERTICAL"))))
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
@@ -80,6 +81,11 @@
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
 			   (db:test-get-id testdat)))
+	    (store-label "testdate" 
+			 (iup:label "TestDate                           "
+				    #:expand "HORIZONTAL")
+			 (lambda (testdat)
+			   (seconds->work-week/day-time (db:test-get-event_time testdat))))
 	    )))))
 
 ;;======================================================================
@@ -129,22 +135,30 @@
 ;; Run info panel
 ;;======================================================================
 (define (run-info-panel keydat testdat runname)
-  (iup:frame 
-   #:title "Megatest Run Info" ; #:expand "YES"
-   (iup:hbox ; #:expand "YES"
-    (apply iup:vbox ; #:expand "YES"
-	   (append (map (lambda (keyval)
-			  (iup:label (conc (car keyval) " ") ; #:expand "HORIZONTAL"
-				     ))
-			keydat)
-		   (list (iup:label "runname ")(iup:label "run-id"))))
-    (apply iup:vbox
-	   (append (map (lambda (keyval)
-			  (iup:label (cadr keyval) #:expand "HORIZONTAL"))
-			keydat)
-		   (list (iup:label runname)
-			 (iup:label (conc (db:test-get-run_id testdat)))
-			 (iup:label "" #:expand "VERTICAL")))))))
+  (let* ((run-id     (db:test-get-run_id testdat))
+	 (rundat     (cdb:remote-run db:get-run-info #f run-id))
+	 (header     (db:get-header rundat))
+	 (event_time (db:get-value-by-header (db:get-row rundat)
+					     (db:get-header rundat)
+					     "event_time")))
+    (iup:frame 
+     #:title "Megatest Run Info" ; #:expand "YES"
+     (iup:hbox ; #:expand "YES"
+      (apply iup:vbox ; #:expand "YES"
+	     (append (map (lambda (keyval)
+			    (iup:label (conc (car keyval) " ")))
+			  keydat)
+		     (list (iup:label "runname ")
+			   (iup:label "run-id")
+			   (iup:label "run-date"))))
+      (apply iup:vbox
+	     (append (map (lambda (keyval)
+			    (iup:label (cadr keyval) #:expand "HORIZONTAL"))
+			  keydat)
+		     (list (iup:label runname)
+			   (iup:label (conc run-id))
+			   (iup:label (seconds->year-work-week/day-time event_time))
+			   (iup:label "" #:expand "VERTICAL"))))))))
   
 ;;======================================================================
 ;; Host info panel
@@ -357,15 +371,34 @@
 							    (begin
 							      (set! testdat-path (conc rundir "/testdat.db"))
 							      0))))
-				    (need-update   (or (and (>= curr-mod-time db-mod-time)
+				    (need-update   (or (and (> curr-mod-time db-mod-time)
 							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
 				    (newtestdat (if need-update 
+						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 2 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (open-run-close db:get-test-info-by-id db test-id )))))
+						     (debug:print-info 0 "WARNING: test db access issue for test " test-id ": " ((condition-property-accessor 'exn 'message) exn))
+						     (make-db:test)
+						     (let* ((newdat (open-run-close db:get-test-info-by-id db test-id ))
+							    (tstdat (if newdat
+									(open-run-close tests:testdat-get-testinfo db test-id #f)
+									'())))
+						       (if (and newdat 
+								(not (null? tstdat))) ;; (update-time cpuload diskfree run-duration)
+							   (let* ((rec      (car tstdat))
+								  (cpuload  (vector-ref rec 1))
+								  (diskfree (vector-ref rec 2))
+								  (run-dur  (vector-ref rec 3)))
+							     (db:test-set-run_duration! newdat run-dur)
+							     (db:test-set-diskfree!     newdat diskfree)
+							     (db:test-set-cpuload!      newdat cpuload)))
+						       ;; (debug:print 0 "newdat=" newdat)
+						       newdat)
+						     )
+						    #f)))
+			       ;; (debug:print 0 "newtestdat=" newtestdat)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
@@ -374,8 +407,13 @@
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
-				 (if (eq? curr-mod-time db-mod-time) ;; do only once if same
-				     (set! db-mod-time (+ curr-mod-time 1))
+				 
+				 ;; I don't see why this was implemented this way. Please comment it ...
+				 ;; (if (eq? curr-mod-time db-mod-time) ;; do only once if same
+				 ;;     (set! db-mod-time (+ curr-mod-time 1))
+				 ;;     (set! db-mod-time curr-mod-time))
+
+				 (if (not (eq? curr-mod-time db-mod-time))
 				     (set! db-mod-time curr-mod-time))
 				 (set! last-update (current-milliseconds))
 				 (set! request-update #f) ;; met the need ...

@@ -1,3 +1,4 @@
+#
 # run some tests
 
 BINPATH=$(shell readlink -m $(PWD)/../bin)
@@ -51,8 +52,15 @@ test2 : fullprep
 	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
 
-test3 : fullprep
-	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -debug 10
+test3 : fullprep test3a test3b
+
+test3a :
+	@echo Run runfirst and any waitons.
+	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b 
+
+test3b :
+	@echo Run all_toplevel and all waitons
+	cd fullrun;$(MEGATEST) -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_c
 
 test4 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
@@ -101,7 +109,7 @@ test8 : test8a
 
 # Some simple checks for bootstrapping and run loop logic 
 
-test9 : minsetup test9a test9b test9c test9d
+test9 : minsetup test9a test9b test9c test9d test9e
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
@@ -118,6 +126,10 @@ test9c :
 test9d :
 	@echo Run an itemized test with no items
 	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+
+test9e :
+	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
+	cd mintest;megatest -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously

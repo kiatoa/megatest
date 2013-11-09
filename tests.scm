@@ -557,8 +557,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	      (tdat        (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))
+	      (tdat        (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -574,8 +574,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (cdb:remote-run db:get-test-id #f run-id waiton ""))
-       	      (wtdat (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (cdb:remote-run db:get-test-id-cached #f run-id waiton ""))
+				      (wtdat          (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -682,7 +682,7 @@
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+  (let* ((testdat   (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -722,14 +722,32 @@
 	 (diskfree (get-df (current-directory))))
     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
     ;; Update central with uname and hostname = #f
-    (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)))
+    ;; Is this one of the performance problems? This info should come from testdat-meta anyway
+    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
+  ))
 	 
 (define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-		     cpuload diskfree minutes)
-    (sqlite3:finalize! tdb)))
- 
+    (if (sqlite3:database? tdb)
+	(begin
+	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+			   cpuload diskfree minutes)
+	  (sqlite3:finalize! tdb))
+	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
+    
+(define (tests:testdat-get-testinfo db test-id work-area)
+   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
+	 (res         '()))
+     (if (sqlite3:database? tdb)
+	 (begin
+	   (sqlite3:for-each-row
+	    (lambda (update-time cpuload diskfree run-duration)
+	      (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
+	    tdb
+	    "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY update_time ASC;")
+	   (sqlite3:finalize! tdb)))
+     res))
+
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================
