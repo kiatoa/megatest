@@ -99,38 +99,74 @@
   ;;  1. Get all run-ids
   ;;  2. For each run-id 
   ;;     a. Sync that run in a transaction
-  (let ((run-ids (db:get-all-run-ids fromdb))
-	(getstmt (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
-	(putstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
-                                                                 VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
+  (let* ((run-ids     (db:get-all-run-ids fromdb))
+	 (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
+	 (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
+                                                                    VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );"))
+	 (trecchgd     0))
+    ;; First sync tests data
     (for-each
      (lambda (run-id)
-       (let* ((run-dat   (db:get-all-tests-info-by-run-id fromdb run-id))
-	      (curr-tdat #f))
-	 (debug:print 0 "Updating as many as " (length run-dat) " records for run " run-id)
+       (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
+	 ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
 	 (for-each
 	  (lambda (tdat) ;; iterate over tests
 	    (let ((test-id (vector-ref tdat 0)))
 	      (sqlite3:with-transaction
 	       todb
 	       (lambda ()
-		 (sqlite3:for-each-row
-		  (lambda (a . b)
-		    (set! curr-tdat (apply vector a b)))
-		  getstmt
-		  test-id)
-		 (if (not (equal? curr-tdat tdat)) ;; something changed
-		     (begin
-		       (debug:print 0 "Updating test " test-id)
-		       (apply sqlite3:execute putstmt (vector->list tdat)))
-		     (begin
-		       (debug:print 0 "Not updating test " test-id)
-		       ;; (debug:print 0 "       tdat: " tdat)
-		       ;; (debug:print 0 "  curr-tdat: " curr-tdat)
-		       )
-		     )))))
-	  run-dat)))
-     run-ids)))
+		 (let ((curr-tdat #f))
+		   (sqlite3:for-each-row
+		    (lambda (a . b)
+		      (set! curr-tdat (apply vector a b)))
+		    tgetstmt
+		    test-id)
+		   (if (not (equal? curr-tdat tdat)) ;; something changed
+		       (begin
+			 (apply sqlite3:execute tputstmt (vector->list tdat))
+			 (set! trecchgd (+ trecchgd 1)))))))))
+	  tdats)))
+     run-ids)
+    (sqlite3:finalize! tgetstmt)
+    (sqlite3:finalize! tputstmt)
+    (if (> trecchgd 0)(debug:print 0 "sync'd " trecchgd " changed records in tests table"))
+    ;; Next sync runs table
+    (let* ((rrecchgd    0)
+	   (rdats       #f)
+	   (keys        (db:get-keys fromdb))
+	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
+	   (rnumfields  (length (string-split rstdfields ",")))
+	   (runslots    (string-intersperse (make-list rnumfields "?") ","))
+	   (rgetstmt    (sqlite3:prepare todb (conc "SELECT " rstdfields " FROM runs WHERE id=?;")))
+	   (rputstmt    (sqlite3:prepare todb (conc "INSERT OR REPLACE INTO runs (" rstdfields ") VALUES ( " runslots " );"))))
+      ;; first collect all the source run data
+      (sqlite3:for-each-row
+       (lambda (a . b)
+	 (set! rdats (cons (apply vector a b) rdats)))
+       fromdb
+       (conc "SELECT " rstdfields " FROM runs;"))
+      (sqlite3:with-transaction
+       todb
+       (lambda ()
+	 (for-each 
+	  (lambda (rdat)
+	    (let ((run-id    (vector-ref rdat 0))
+		  (curr-rdat #f))
+	      ;; first get the current value of the equivalent row from the target
+	      ;; read, then insert/overwrite if different
+	      (sqlite3:for-each-row 
+	       (lambda (a . b)
+		 (set! curr-rdat (apply vector a b)))
+	       rgetstmt
+	       run-id)
+	      (if (not (equal? curr-rdat rdat))
+		  (begin
+		    (set! rrecchgd (+ rrecchgd 1))
+		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
+	  rdats)))
+      (sqlite3:finalize! rgetstmt)
+      (sqlite3:finalize! rputstmt)
+      (if (> rrecchgd 0)(debug:print 0 "sync'd " rrecchgd " changed records in runs table")))))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)

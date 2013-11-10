@@ -95,7 +95,7 @@
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
 			       ;; open the db on the first call 
-			       (if (not db)(set! db (open-db)))
+			       (if (not db)(set! db *inmemdb*)) ;; (open-db)))
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
@@ -294,6 +294,10 @@
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
+      
+      ;; Use this opportunity to sync the inmemdb to db
+      (db:sync-to *inmemdb* *db*)
+
       (let () ;; (queue-len (cdb:client-call server-info 'sync #t 1)))
       ;; (print "Server running, count is " count)
         (if (< count 1) ;; 3x3 = 9 secs aprox
