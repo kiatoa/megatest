@@ -1899,64 +1899,72 @@
 ;; not used, intended to indicate to run in calling process
 (define db:run-local-queries '()) ;; rollup-tests-pass-fail))
 
-(define (db:process-cached-writes db)
-  (let ((queries    (make-hash-table))
-	(data       #f))
-    (mutex-lock! *incoming-mutex*)
-    ;; data is a list of query packets <vector qry-sig query params
-    (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
-    (set! *server:last-write-flush* (current-milliseconds))
-    (set! *incoming-writes* '())
-    (mutex-unlock! *incoming-mutex*)
-    (if (> (length data) 0)
-	;; Process if we have data
-	(begin
-	  (debug:print-info 7 "Writing cached data " data)
-	  
-	  ;; Prepare the needed sql statements
-	  ;;
-	  (for-each (lambda (request-item)
-		      (let ((stmt-key (vector-ref request-item 0))
-			    (query    (vector-ref request-item 1)))
-			(hash-table-set! queries stmt-key (sqlite3:prepare db query))))
-		    data)
-	  
-	  ;; No outer loop needed. Single loop for write items only. Reads trigger flush of queue
-	  ;; and then are executed.
-	  (sqlite3:with-transaction 
-	   db
-	   (lambda ()
-	     (for-each
-	      (lambda (hed)
-		(let* ((params   (vector-ref hed 2))
-		       (stmt-key (vector-ref hed 0))
-		       (stmt     (hash-table-ref/default queries stmt-key #f)))
-		  (if stmt
-		      (apply sqlite3:execute stmt params)
-		      (debug:print 0 "ERROR: Problem Executing " stmt-key " for " params))))
-	      data)))
-	  
-	  ;; let all the waiting calls know all is done
-	  (mutex-lock! *completed-mutex*)
-	  (for-each (lambda (item)
-		      (let ((qry-sig (cdb:packet-get-client-sig item)))
-			(debug:print-info 7 "Registering query " qry-sig " as done")
-			(hash-table-set! *completed-writes* qry-sig #t)))
-		    data)
-	  (mutex-unlock! *completed-mutex*)
-	  
-	  ;; Finalize the statements. Should this be done inside the mutex above?
-	  ;; I think sqlite3 mutexes will keep the data safe
-	  (for-each (lambda (stmt-key)
-		      (sqlite3:finalize! (hash-table-ref queries stmt-key)))
-		    (hash-table-keys queries))
-	  
-	  ;; Do a little record keeping
-	  (let ((cache-size (length data)))
-	    (if (> cache-size *max-cache-size*)
-		(set! *max-cache-size* cache-size)))
-	  #t)
-	#f)))
+;; (define (db:process-cached-writes db)
+;;   (let ((queries    (make-hash-table))
+;; 	(data       #f))
+;;     (mutex-lock! *incoming-mutex*)
+;;     ;; data is a list of query packets <vector qry-sig query params
+;;     (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
+;;     (set! *server:last-write-flush* (current-milliseconds))
+;;     (set! *incoming-writes* '())
+;;     (mutex-unlock! *incoming-mutex*)
+;;     (if (> (length data) 0)
+;; 	;; Process if we have data
+;; 	(begin
+;; 	  (debug:print-info 7 "Writing cached data " data)
+;; 	  
+;; 	  ;; Prepare the needed sql statements
+;; 	  ;;
+;; 	  (for-each (lambda (request-item)
+;; 		      (let ((stmt-key (vector-ref request-item 0))
+;; 			    (query    (vector-ref request-item 1)))
+;; 			(hash-table-set! queries stmt-key (sqlite3:prepare db query))))
+;; 		    data)
+;; 	  
+;; 	  ;; No outer loop needed. Single loop for write items only. Reads trigger flush of queue
+;; 	  ;; and then are executed.
+;; 	  (sqlite3:with-transaction 
+;; 	   db
+;; 	   (lambda ()
+;; 	     (for-each
+;; 	      (lambda (hed)
+;; 		(let* ((params   (vector-ref hed 2))
+;; 		       (stmt-key (vector-ref hed 0))
+;; 		       (stmt     (hash-table-ref/default queries stmt-key #f)))
+;; 		  (if stmt
+;; 		      (apply sqlite3:execute stmt params)
+;; 		      (debug:print 0 "ERROR: Problem Executing " stmt-key " for " params))))
+;; 	      data)))
+;; 	  
+;; 	  ;; let all the waiting calls know all is done
+;; 	  (mutex-lock! *completed-mutex*)
+;; 	  (for-each (lambda (item)
+;; 		      (let ((qry-sig (cdb:packet-get-client-sig item)))
+;; 			(debug:print-info 7 "Registering query " qry-sig " as done")
+;; 			(hash-table-set! *completed-writes* qry-sig #t)))
+;; 		    data)
+;; 	  (mutex-unlock! *completed-mutex*)
+;; 	  
+;; 	  ;; Finalize the statements. Should this be done inside the mutex above?
+;; 	  ;; I think sqlite3 mutexes will keep the data safe
+;; 	  (for-each (lambda (stmt-key)
+;; 		      (sqlite3:finalize! (hash-table-ref queries stmt-key)))
+;; 		    (hash-table-keys queries))
+;; 	  
+;; 	  ;; Do a little record keeping
+;; 	  (let ((cache-size (length data)))
+;; 	    (if (> cache-size *max-cache-size*)
+;; 		(set! *max-cache-size* cache-size)))
+;; 	  #t)
+;; 	#f)))
+
+(define (db:process-write db request-item)
+  (let ((stmt-key (vector-ref request-item 0))
+	(query    (vector-ref request-item 1))
+	(params   (vector-ref request-item 2))
+	(queryh   (sqlite3:prepare db query)))
+    (apply sqlite3:execute stmt params)
+    #f))
 
 (define *db:process-queue-mutex* (make-mutex))
 
@@ -2032,19 +2040,14 @@
 	      (debug:print-info 9 "Handling special statement " stmt-key)
 	      (case stmt-key
 		((immediate)
-		 ;; This is a read or mixed read-write query, must clear the cache
-		 (case *transport-type*
-		   ((http)
-		    (mutex-lock! *db:process-queue-mutex*)
-		    (db:process-cached-writes db)
-		    (mutex-unlock! *db:process-queue-mutex*)))
+		 (debug:print 0 "WARNING: Immediate calls are verboten now!")
 		 (let* ((proc      (car params))
 			(remparams (cdr params))
 			;; we are being handed a procedure so call it
-			;; (debug:print-info 11 "Running (apply " proc " " remparams ")")
 			(result (server:reply return-address qry-sig #t (apply proc remparams))))
-		   (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
-		   (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
+		   (debug:print-info 11 "Ran (apply " proc " " remparams ")")
+		   ;; (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
+		   ;; (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
 		   result))
 		((login)
 		 (if (< (length params) 3) ;; should get toppath, version and signature

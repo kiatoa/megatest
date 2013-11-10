@@ -69,24 +69,24 @@
 
 ;; Flush the queue every third of a second. Can we assume that setup-for-run 
 ;; has already been done?
-(define (server:write-queue-handler)
-  (if (setup-for-run)
-      (let ((db (open-db)))
-	(let loop ()
-	  (let ((last-write-flush-time #f))
-	    (mutex-lock! *incoming-mutex*)
-	    (set! last-write-flush-time *server:last-write-flush*)
-	    (mutex-unlock! *incoming-mutex*)
-	    (if (> (- (current-milliseconds) last-write-flush-time) 10)
-		(begin
-		  (mutex-lock! *db:process-queue-mutex*)
-		  (db:process-cached-writes db)
-		  (mutex-unlock! *db:process-queue-mutex*)
-		  (thread-sleep! 0.005))))
-	  (loop)))
-      (begin
-	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
-	(exit 1))))
+;; (define (server:write-queue-handler)
+;;   (if (setup-for-run)
+;;       (let ((db (open-db)))
+;; 	(let loop ()
+;; 	  (let ((last-write-flush-time #f))
+;; 	    (mutex-lock! *incoming-mutex*)
+;; 	    (set! last-write-flush-time *server:last-write-flush*)
+;; 	    (mutex-unlock! *incoming-mutex*)
+;; 	    (if (> (- (current-milliseconds) last-write-flush-time) 10)
+;; 		(begin
+;; 		  (mutex-lock! *db:process-queue-mutex*)
+;; 		  (db:process-cached-writes db)
+;; 		  (mutex-unlock! *db:process-queue-mutex*)
+;; 		  (thread-sleep! 0.005))))
+;; 	  (loop)))
+;;       (begin
+;; 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
+;; 	(exit 1))))
     
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
