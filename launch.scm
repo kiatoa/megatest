@@ -429,7 +429,12 @@
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(if *toppath*
-	    (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
+	    (let ((dbdir (conc *toppath* "/db")))
+	      (handle-exceptions
+	       exn
+	       (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+	       (if (not (directory-exists? dbdir))(create-directory dbdir)))
+	      (setenv "MT_RUN_AREA_HOME" *toppath*))
 	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
   *toppath*)
 

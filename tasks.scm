@@ -23,7 +23,7 @@
 ;;======================================================================
 
 (define (tasks:open-db)
-  (let* ((dbpath       (conc *toppath* "/monitor.db"))
+  (let* ((dbpath       (conc *toppath* "/db/monitor.db"))
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
 	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
@@ -66,6 +66,7 @@
                                   mt_version TEXT,
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
+                                  run_id INTEGER,
                                CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,

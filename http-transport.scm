@@ -374,6 +374,10 @@
 					    "-"))) "Server run"))
 		   (th3 (make-thread http-transport:keep-running "Keep running"))
 		   (th1 (make-thread server:write-queue-handler  "write queue")))
+	      ;; This is were we set up the database connections
+	      (set! *db* (open-db))
+	      (set! *inmemdb* (open-in-mem-db))
+	      (db:sync-to *db* *inmemdb*)
 	      (thread-start! th2)
 	      (thread-start! th3)
 	      (thread-start! th1)

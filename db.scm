@@ -45,6 +45,8 @@
 (define *completed-mutex*    (make-mutex))
 (define *cache-on* #f)
 
+
+
 (define (db:set-sync db)
   (let* ((syncval  (config-lookup *configdat* "setup"     "synchronous"))
 	 (val      (cond   ;; 0 | OFF | 1 | NORMAL | 2 | FULL;
@@ -86,6 +88,49 @@
     ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
     ;; (db:set-sync db)
     db))
+
+(define (open-in-mem-db)
+  (let ((db (sqlite3:open-database ":memory:")))
+    (db:initialize db)
+    db))
+
+(define (db:sync-to fromdb todb)
+  ;; strategy
+  ;;  1. Get all run-ids
+  ;;  2. For each run-id 
+  ;;     a. Sync that run in a transaction
+  (let ((run-ids (db:get-all-run-ids fromdb))
+	(getstmt (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
+	(putstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
+                                                                 VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
+    (for-each
+     (lambda (run-id)
+       (let* ((run-dat   (db:get-all-tests-info-by-run-id fromdb run-id))
+	      (curr-tdat #f))
+	 (debug:print 0 "Updating as many as " (length run-dat) " records for run " run-id)
+	 (for-each
+	  (lambda (tdat) ;; iterate over tests
+	    (let ((test-id (vector-ref tdat 0)))
+	      (sqlite3:with-transaction
+	       todb
+	       (lambda ()
+		 (sqlite3:for-each-row
+		  (lambda (a . b)
+		    (set! curr-tdat (apply vector a b)))
+		  getstmt
+		  test-id)
+		 (if (not (equal? curr-tdat tdat)) ;; something changed
+		     (begin
+		       (debug:print 0 "Updating test " test-id)
+		       (apply sqlite3:execute putstmt (vector->list tdat)))
+		     (begin
+		       (debug:print 0 "Not updating test " test-id)
+		       ;; (debug:print 0 "       tdat: " tdat)
+		       ;; (debug:print 0 "  curr-tdat: " curr-tdat)
+		       )
+		     )))))
+	  run-dat)))
+     run-ids)))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -715,6 +760,14 @@
 	  (debug:print 0 "ERROR: Called without all necessary keys")
 	  #f))))
 
+(define (db:get-all-run-ids db)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (run-id)
+       (set! res (cons run-id res)))
+     db 
+     "SELECT DISTINCT run_id FROM tests;")
+    res))
 
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;;
@@ -1355,6 +1408,20 @@
   (set! *test-info* (make-hash-table))
   (set! *test-id-cache* (make-hash-table)))
 
+
+(define (db:get-all-tests-info-by-run-id db run-id)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+		       res)))
+     db 
+     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=?;"
+     run-id)
+    res))
+
+;; Get test data using test_id
 ;; Use db:test-get* to access
 ;;
 ;; Get test data using test_id
