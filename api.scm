@@ -17,7 +17,6 @@
 
 (define (api:execute-requests db cmd params)
   (debug:print-info 1 "api:execute-requests cmd=" cmd " params=" params)
-  (db:process-cached-writes db)
   (case (string->symbol cmd)
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs db params))
@@ -31,6 +30,9 @@
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
 				      (list (vector-ref res 0)
 					    (vector->list (vector-ref res 1)))))
+    ((register-run)                 (apply db:register-run db params))
+    ((login)                        ;(apply db:login db params)
+     (debug:print 0 "WOOHOO: Got login") #t)
     (else
      (list "ERROR" 0))))
 

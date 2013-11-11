@@ -63,6 +63,13 @@
 ;;======================================================================
 
 ;;======================================================================
+;;  A D M I N
+;;======================================================================
+
+(define (rmt:login)
+  (rmt:send-receive 'login (list *toppath* megatest-version *my-client-signature*)))
+
+;;======================================================================
 ;;  K E Y S 
 ;;======================================================================
 
@@ -103,6 +110,10 @@
   (let ((res (rmt:send-receive 'get-run-info (list run-id))))
     (vector (car res)
 	    (list->vector (cadr res)))))
+
+(define (rmt:register-run keyvals runname state status user)
+  (rmt:send-receive 'register-run (list keyvals runname state status user)))
+    
 
 ;;======================================================================
 ;;  S T E P S

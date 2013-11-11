@@ -133,7 +133,7 @@
     (if (> trecchgd 0)(debug:print 0 "sync'd " trecchgd " changed records in tests table"))
     ;; Next sync runs table
     (let* ((rrecchgd    0)
-	   (rdats       #f)
+	   (rdats       '())
 	   (keys        (db:get-keys fromdb))
 	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
 	   (rnumfields  (length (string-split rstdfields ",")))
@@ -1805,14 +1805,14 @@
     (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
     test-dat))
 
-;; db should be db open proc or #f
-(define (cdb:remote-run proc db . params)
-  (if (or *db-write-access*
-	  (not (member proc *db:all-write-procs*)))
-      (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params)
-      (begin
-	(debug:print 0 "ERROR: Attempt to access read-only database")
-	#f)))
+;; ;; db should be db open proc or #f
+;; (define (cdb:remote-run proc db . params)
+;;   (if (or *db-write-access*
+;; 	  (not (member proc *db:all-write-procs*)))
+;;       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params)
+;;       (begin
+;; 	(debug:print 0 "ERROR: Attempt to access read-only database")
+;; 	#f)))
 
 (define (db:test-get-logfile-info db run-id test-name)
   (let ((res #f))
@@ -1959,6 +1959,14 @@
 ;; 	  #t)
 ;; 	#f)))
 
+(define (db:login db keyval calling-path calling-version client-signature)
+  (if (and (equal? calling-path *toppath*)
+	   (equal? megatest-version calling-version))
+      (begin
+	(hash-table-set! *logged-in-clients* client-key (current-seconds))
+	'(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
+      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))
+
 (define (db:process-write db request-item)
   (let ((stmt-key (vector-ref request-item 0))
 	(query    (vector-ref request-item 1))
@@ -1973,6 +1981,7 @@
 (define *writes-total-delay*       0)
 (define *total-non-write-delay*    0)
 (define *number-non-write-queries* 0)
+
 
 ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
 ;; apply and the second slot is the time of the query and the third entry is a list of 
@@ -2070,7 +2079,8 @@
 		((killserver)
 		 (let ((hostname (car  *runremote*))
 		       (port     (cadr *runremote*))
-		       (pid      (car params)))
+		       (pid      (car params))
+		       (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
 		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
 		   (debug:print-info 1 "current pid=" (current-process-id))
 		   (open-run-close tasks:server-deregister tasks:open-db 
@@ -2078,7 +2088,9 @@
 				   port: port)
 		   (set! *server-run* #f)
 		   (thread-sleep! 3)
-		   (process-signal pid signal/kill)
+		   (if pid 
+		       (process-signal pid signal/kill)
+		       (thread-start! th1))
 		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
 		(else ;; not a command, i.e. is a query
 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
