@@ -41,6 +41,7 @@
 (include "common_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+(include "megatest-fossil-hash.scm")
 
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
@@ -65,6 +66,7 @@ Misc
 			"-test"
 			"-debug"
 			"-host" 
+			"-transport"
 			) 
 		 (list  "-h"
 			"-use-server"
@@ -872,7 +874,7 @@ Misc
 	    #:title "States"
 	    (dashboard:text-list-toggle-box 
 	     ;; Move these definitions to common and find the other useages and replace!
-	     *common:std-states* ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
+	     (map cadr *common:std-states*) ;; '("COMPLETED" "RUNNING" "STUCK" "INCOMPLETE" "LAUNCHED" "REMOTEHOSTSTART" "KILLED")
 	     (lambda (all)
 	       (dboard:data-set-states! *data* all)
 	       (dashboard:update-run-command))))
@@ -880,7 +882,7 @@ Misc
 	   (iup:frame
 	    #:title "Statuses"
 	    (dashboard:text-list-toggle-box 
-	     *common:std-statuses* ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
+	     (map cadr *common:std-statuses*) ;; '("PASS" "FAIL" "n/a" "CHECK" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD")
 	     (lambda (all)
 	       (dboard:data-set-statuses! *data* all)
 	       (dashboard:update-run-command))))))))

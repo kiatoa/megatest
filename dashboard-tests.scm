@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses rmt))
 (declare (uses ezsteps))
 
 (include "common_records.scm")
@@ -224,7 +225,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(open-run-close db:test-set-state-status-by-id db test-id #f #f b)
+					(rmt:test-set-state-status-by-id test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -234,10 +235,10 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id db test-id state #f #f)
+								    (rmt:test-set-state-status-by-id test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
-				*common:std-states*))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
+				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
 	       (vector-set! *state-status* 0
 			    (lambda (state color)
 			      (for-each 
@@ -254,10 +255,10 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
+								    (rmt:test-set-state-status-by-id test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
-				*common:std-statuses*))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
+				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
 			    (lambda (status color)
 			      (for-each 
@@ -303,11 +304,103 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
+;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
+;;
+;; get a pretty table to summarize steps
+;;
+(define (dashboard-tests:process-steps-table steps);; db test-id #!key (work-area #f))
+;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(db:step-get-stepname step) 
+			;;        stepname                start end status Duration  Logfile 
+			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))
+	   (case (string->symbol (db:step-get-state step))
+	     ((start)(vector-set! record 1 (db:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(db:step-get-status step)))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (db:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (db:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (db:step-get-logfile step))))
+	     (else
+	      (vector-set! record 2 (db:step-get-state step))
+	      (vector-set! record 3 (db:step-get-status step))
+	      (vector-set! record 4 (db:step-get-event_time step))))
+	   (hash-table-set! res (db:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (db:step-get-id step)
+			"\nstepname: " (db:step-get-stepname step)
+			"\nstate:    " (db:step-get-state step)
+			"\nstatus:   " (db:step-get-status step)
+			"\ntime:     " (db:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
+       (sort steps (lambda (a b)
+		     (cond
+		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
+		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
+		       (<   (db:step-get-id a)        (db:step-get-id b)))
+		      (else #f)))))
+      res))
+
+(define (dashboard-tests:get-compressed-steps test-id #!key (work-area #f))
+  (if (or (not work-area)
+	  (file-exists? (conc work-area "/testdat.db")))
+      (let* ((steps-data  (rmt:get-steps-for-test test-id work-area))
+	     (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+	(map (lambda (x)
+	       ;; take advantage of the \n on time->string
+	       (vector
+		(vector-ref x 0)
+		(let ((s (vector-ref x 1)))
+		  (if (number? s)(seconds->time-string s) s))
+		(let ((s (vector-ref x 2)))
+		  (if (number? s)(seconds->time-string s) s))
+		(vector-ref x 3)    ;; status
+		(vector-ref x 4)
+		(vector-ref x 5)))  ;; time delta
+	     (sort (hash-table-values comprsteps)
+		   (lambda (a b)
+		     (let ((time-a (vector-ref a 1))
+			   (time-b (vector-ref b 1)))
+		       (if (and (number? time-a)(number? time-b))
+			   (if (< time-a time-b)
+			       #t
+			       (if (eq? time-a time-b)
+				   (string<? (conc (vector-ref a 2))
+					     (conc (vector-ref b 2)))
+				   #f))
+			   (string<? (conc time-a)(conc time-b))))))))
+      '()))
+
 ;;======================================================================
 ;;
 ;;======================================================================
 (define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (conc *toppath* "/megatest.db"))
+  (let* ((testdat       (rmt:get-test-info-by-id test-id))
 	 (db            (open-db))
 	 (testdat       (open-run-close db:get-test-info-by-id db test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
@@ -318,8 +411,8 @@
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (open-run-close db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (open-run-close db:get-run-info db run-id) #f))
+	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -328,11 +421,11 @@
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
+	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (open-run-close db:testmeta-get-record db testname)))
+				  (let ((tm (rmt:testmeta-get-record testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -371,7 +464,7 @@
 							    (begin
 							      (set! testdat-path (conc rundir "/testdat.db"))
 							      0))))
-				    (need-update   (or (and (> curr-mod-time db-mod-time)
+				    (need-update   (or (and (>= curr-mod-time db-mod-time)
 							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
 						       request-update))
@@ -379,30 +472,13 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 "WARNING: test db access issue for test " test-id ": " ((condition-property-accessor 'exn 'message) exn))
-						     (make-db:test)
-						     (let* ((newdat (open-run-close db:get-test-info-by-id db test-id ))
-							    (tstdat (if newdat
-									(open-run-close tests:testdat-get-testinfo db test-id #f)
-									'())))
-						       (if (and newdat 
-								(not (null? tstdat))) ;; (update-time cpuload diskfree run-duration)
-							   (let* ((rec      (car tstdat))
-								  (cpuload  (vector-ref rec 1))
-								  (diskfree (vector-ref rec 2))
-								  (run-dur  (vector-ref rec 3)))
-							     (db:test-set-run_duration! newdat run-dur)
-							     (db:test-set-diskfree!     newdat diskfree)
-							     (db:test-set-cpuload!      newdat cpuload)))
-						       ;; (debug:print 0 "newdat=" newdat)
-						       newdat)
-						     )
-						    #f)))
-			       ;; (debug:print 0 "newtestdat=" newtestdat)
+						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (rmt:get-test-info-by-id test-id )))))
+			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (db:get-compressed-steps test-id work-area: rundir))
+				 (set! teststeps    (dashboard-tests:get-compressed-steps test-id work-area: rundir))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))
@@ -643,7 +719,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (open-run-close db:read-test-data db test-id "%")))
+										    (rmt:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

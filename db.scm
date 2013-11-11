@@ -30,6 +30,7 @@
 (declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
+(declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -2460,6 +2461,7 @@
 	 (lambda (waitontest-name)
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
+	   ;; next should be using mt:get-tests-for-run?
 	   (let ((tests             (cdb:remote-run db:get-tests-for-run-state-status #f run-id waitontest-name)) ;; (mt:get-tests-for-run run-id waitontest-name '() '()))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
