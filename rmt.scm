@@ -81,8 +81,10 @@
 ;;======================================================================
 
 (define (rmt:get-test-info-by-id test-id)
-  (list->vector
-   (rmt:send-receive 'get-test-info-by-id (list test-id))))
+  (let ((res (rmt:send-receive 'get-test-info-by-id (list test-id))))
+    (if (list? res)
+	(list->vector res)
+	res)))
 
 (define (rmt:test-get-rundir-from-test-id test-id)
   (rmt:send-receive 'test-get-rundir-from-test-id (list test-id)))

@@ -24,7 +24,7 @@
 ;; 						    (server:launch 'http)))))
 ;; 			   (set! server-pid pid)
 ;; 			   (number? pid)))
-(system "megatest -server - -debug 2 &")
+(system "megatest -server - &")
 
 (thread-sleep! 3) ;; need to wait for server to start. Yes, a better way is needed.
 (test "get-best-server" #t (begin 
@@ -36,9 +36,9 @@
 ;; (and (string? (car  *runremote*))
 ;; 	  (number? (cadr *runremote*)))))
 
-(test #f #t (string? (car *runremote*)))
-(test #f #t (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
-(test #f #f (rmt:get-test-info-by-id 99))
+(test #f #t                       (string? (car *runremote*)))
+(test #f '(#t "successful login") (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
+(test #f #f                       (rmt:get-test-info-by-id 99))
 
 ;; ;; (set! *verbosity* 20)
 ;; (test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))

@@ -95,14 +95,11 @@
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
 			       ;; open the db on the first call 
-			       (let loop ()
-				 (if (not db)
-				     (if (not (sqlite3:database? *inmemdb*))
-					 (begin
-					   (debug:print 0 "WARNING: db not ready yet. Waiting for it to be ready")
-					   (thread-sleep! 5)
-					   (loop)))
-				     (set! db *inmemdb*))) ;; (open-db)))
+				 ;; This is were we set up the database connections
+			       (set! *db*       (open-db))
+			       (set! *inmemdb*  (open-in-mem-db))
+			       (set! db *inmemdb*)
+			       (db:sync-to *db* *inmemdb*)
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
@@ -384,8 +381,9 @@
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
 	 (serverdat   (list iface port uri-dat uri-api-dat)))
-    (set! login-res (client:login serverdat))
-    (if (and (not (null? login-res))
+    (set! *runremote* serverdat) ;; may or may not be good ...
+    (set! login-res (rmt:login))
+    (if (and (list? login-res)
 	     (car login-res))
 	(begin
 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
@@ -516,10 +514,6 @@
 					    "-"))) "Server run"))
 		   (th3 (make-thread http-transport:keep-running "Keep running")))
 ;;		   (th1 (make-thread server:write-queue-handler  "write queue")))
-	      ;; This is were we set up the database connections
-	      (set! *db* (open-db))
-	      (set! *inmemdb* (open-in-mem-db))
-	      (db:sync-to *db* *inmemdb*)
 	      (thread-start! th2)
 	      (thread-start! th3)
 	      ;; (thread-start! th1)

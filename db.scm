@@ -1750,12 +1750,6 @@
 (define (cdb:set-verbosity serverdat val)
   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
 
-(define (cdb:login serverdat keyval signature)
-  (cdb:client-call serverdat 'login #t *default-numtries* keyval megatest-version signature))
-
-(define (cdb:logout serverdat keyval signature)
-  (cdb:client-call serverdat 'logout #t *default-numtries* keyval signature))
-
 (define (cdb:num-clients serverdat)
   (cdb:client-call serverdat 'numclients #t *default-numtries*))
 
@@ -1959,11 +1953,11 @@
 ;; 	  #t)
 ;; 	#f)))
 
-(define (db:login db keyval calling-path calling-version client-signature)
+(define (db:login db calling-path calling-version client-signature)
   (if (and (equal? calling-path *toppath*)
 	   (equal? megatest-version calling-version))
       (begin
-	(hash-table-set! *logged-in-clients* client-key (current-seconds))
+	(hash-table-set! *logged-in-clients* client-signature (current-seconds))
 	'(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
       (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))
 

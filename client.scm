@@ -37,10 +37,6 @@
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
 
-;; client:login serverdat
-(define (client:login serverdat)
-  (cdb:login serverdat *toppath* (client:get-signature)))
-
 ;; Not currently used! But, I think it *should* be used!!!
 (define (client:logout serverdat)
   (let ((ok (and (socket? serverdat)

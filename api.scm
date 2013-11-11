@@ -16,13 +16,13 @@
 ;; These are called by the server on recipt of /api calls
 
 (define (api:execute-requests db cmd params)
-  (debug:print-info 1 "api:execute-requests cmd=" cmd " params=" params)
   (case (string->symbol cmd)
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs db params))
     ;; TESTS
     ;; json doesn't do vectors, convert to list
-    ((get-test-info-by-id)	    (vector->list (apply db:get-test-info-by-id db params)))
+    ((get-test-info-by-id)	    (let ((res (apply db:get-test-info-by-id db params)))
+				      (if (vector? res)(vector->list res) res)))
     ((test-get-rundir-from-test-id) (apply db:test-get-rundir-from-test-id db params))
     ((testmeta-get-record)          (vector->list (apply db:testmeta-get-record db params)))
     ((test-set-state-status-by-id)  (apply db:test-set-state-status-by-id db params))
@@ -31,8 +31,7 @@
 				      (list (vector-ref res 0)
 					    (vector->list (vector-ref res 1)))))
     ((register-run)                 (apply db:register-run db params))
-    ((login)                        ;(apply db:login db params)
-     (debug:print 0 "WOOHOO: Got login") #t)
+    ((login)                        (apply db:login db params))
     (else
      (list "ERROR" 0))))
 
