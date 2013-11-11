@@ -290,12 +290,11 @@
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rmt:general-call 'set-test-comment cmt test-id)))
-    ))
+	  (rmt:general-call 'set-test-comment (list cmt test-id))))))
 
 
 (define (tests:test-set-toplog! db run-id test-name logf) 
-  (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
+  (rmt:general-call 'tests:test-set-toplog logf run-id test-name))
 
 (define (tests:summarize-items db run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
@@ -303,7 +302,7 @@
   ;;   2. logf is same as outputfilename
   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	 (orig-dir       (current-directory))
-	 (logf-info      (cdb:remote-run db:test-get-logfile-info #f run-id test-name))
+	 (logf-info      (rmt:test-get-logfile-info run-id test-name))
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
@@ -329,7 +328,7 @@
 		      (statecounts (make-hash-table))
 		      (outtxt "")
 		      (tot    0)
-		      (testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
+		      (testdat (rmt:test-get-records-for-index-file run-id test-name)))
 		  (with-output-to-port
 		      oup
 		    (lambda ()
@@ -468,8 +467,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))
-	      (tdat        (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (rmt:get-test-id run-id test-name item-path))
+	      (tdat        (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -485,8 +484,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (cdb:remote-run db:get-test-id-cached #f run-id waiton ""))
-				      (wtdat          (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
+				      (wtdat          (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -593,7 +592,7 @@
 ;; teststep-set-status! used to be here
 
 (define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+  (let* ((testdat   (rmt:get-test-info-by-id test-id)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -611,11 +610,11 @@
 (define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
   ;; This is a good candidate for threading the requests to enable
   ;; transactionized write at the server
-  (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
+  (rmt:general-call 'update-cpuload-diskfree cpuload diskfree test-id)
   (if minutes 
-      (cdb:tests-update-run-duration *runremote* test-id minutes))
+      (rmt:general-call 'update-run-duration minutes test-id))
   (if (and uname hostname)
-      (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
+      (rmt:general-call 'update-uname-host uname hostname test-id)))
   
 (define (tests:set-full-meta-info db test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
@@ -624,41 +623,19 @@
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
 	  
 (define (tests:set-partial-meta-info db test-id run-id minutes work-area)
   ;; DOES cdb:remote-run under the hood!
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
     ;; Update central with uname and hostname = #f
     ;; Is this one of the performance problems? This info should come from testdat-meta anyway
     ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
   ))
 	 
-(define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-			   cpuload diskfree minutes)
-	  (sqlite3:finalize! tdb))
-	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
-    
-(define (tests:testdat-get-testinfo db test-id work-area)
-   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (res         '()))
-     (if (sqlite3:database? tdb)
-	 (begin
-	   (sqlite3:for-each-row
-	    (lambda (update-time cpuload diskfree run-duration)
-	      (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
-	    tdb
-	    "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY update_time ASC;")
-	   (sqlite3:finalize! tdb)))
-     res))
-
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================

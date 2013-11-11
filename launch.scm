@@ -93,7 +93,7 @@
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  ;; (set! *runremote* runremote)
 	  ;; (set! *transport-type* (string->symbol transport))
-	  (set! keys       (cdb:remote-run db:get-keys #f))
+	  (set! keys       (rmt:get-keys))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
@@ -257,7 +257,7 @@
 						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
 						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: work-area))
 						     (if logpro-used
-							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
+							 (rmt:test-set-log! test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -375,7 +375,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (rmt:get-testinfo-state-status test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -505,7 +505,7 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (cdb:test-set-rundir-by-test-id *runremote* test-id lnkpathf)
+    (rmt:general-call 'test-set-rundir-by-test-id test-id lnkpathf)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -525,11 +525,11 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (cdb:get-test-info-by-id *runremote* test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (rmt:get-test-info-by-id test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  (cdb:test-set-rundir! *runremote* run-id testname "" lnkpath) ;; toptest-path)
+	  (rmt:general-call 'test-set-rundir lnkpath run-id testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
@@ -674,7 +674,7 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
+	 (testinfo   (rmt:get-test-info-by-id test-id))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))

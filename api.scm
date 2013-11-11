@@ -23,19 +23,23 @@
 
     ;; TESTS
     ;; json doesn't do vectors, convert to list
-    ((get-test-info-by-id)	    (let ((res (apply db:get-test-info-by-id db params)))
-				      (if (vector? res)(vector->list res) res)))
-    ((test-get-rundir-from-test-id) (apply db:test-get-rundir-from-test-id db params))
-    ((testmeta-get-record)          (vector->list (apply db:testmeta-get-record db params)))
-    ((test-set-state-status-by-id)  (apply db:test-set-state-status-by-id db params))
-    ((get-count-tests-running)      (db:get-count-tests-running db))
+    ((get-test-info-by-id)	       (let ((res (apply db:get-test-info-by-id db params)))
+					 (if (vector? res)(vector->list res) res)))
+    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id db params))
+    ((testmeta-get-record)             (vector->list (apply db:testmeta-get-record db params)))
+    ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id db params))
+    ((get-count-tests-running)         (db:get-count-tests-running db))
     ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup db params))
-    ((delete-test-records)          (apply db:delete-test-records params))
+    ((delete-test-records)             (apply db:delete-test-records params))
     ((delete-old-deleted-test-records) (db:delete-old-deleted-test-records db))
-    ((test-set-status-state)        (apply db:test-set-status-state params))
-    ((get-previous-test-run-record) (apply db:get-previous-test-run-record params))
+    ((test-set-status-state)           (apply db:test-set-status-state params))
+    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record params))
     ((get-matching-previous-test-run-records)(map vector->list (apply db:get-matching-previous-test-run-records db params)))
-    
+    ((db:test-get-logfile-info)        (apply db:test-get-logfile-info db params))
+    ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file db params)))
+    ((get-testinfo-state-status)       (apply db:get-testinfo-state-status db params))
+    ((update-testdat-meta-info)        (apply db:update-testdat-meta-info db params))
+
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
 				      (list (vector-ref res 0)

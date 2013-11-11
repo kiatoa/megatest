@@ -137,6 +137,21 @@
   (map list->vector 
        (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path))))
 
+(define (rmt:db:test-get-logfile-info run-id test-name)
+  (rmt:send-receive 'test-get-logfile-info (list run-id test-name)))
+
+(define (rmt:test-get-records-for-index-file run-id test-name)
+  (rmt:send-receive 'test-get-records-for-index-file (list  run-id test-name)))
+
+(define (rmt:get-testinfo-state-status test-id)
+  (rmt:send-receive 'get-testinfo-state-status (list test-id)))
+
+(define (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
+  (rmt:send-receive 'update-testdat-meta-info (list test-id work-area cpuload diskfree minutes)))
+
+(define (rmt:test-set-log! test-id logf)
+  (if (string? logf)(rmt:general-call 'test-set-log logf test-id)))
+
 ;; Statistical queries
 
 (define (rmt:get-count-tests-running)

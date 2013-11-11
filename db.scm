@@ -1317,15 +1317,6 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
-(define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
-  (cdb:client-call serverdat 'update-cpuload-diskfree #t *default-numtries* cpuload diskfree test-id))
-
-(define (cdb:tests-update-run-duration serverdat test-id minutes)
-  (cdb:client-call serverdat 'update-run-duration #t *default-numtries* minutes test-id))
-
-(define (cdb:tests-update-uname-host serverdat test-id uname hostname)
-  (cdb:client-call serverdat 'update-uname-host #t *default-numtries* uname hostname test-id))
-
 ;; speed up for common cases with a little logic
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
 ;;
@@ -1341,6 +1332,15 @@
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
   (mt:process-triggers test-id newstate newstatus))
 
+(define (db:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
+    (if (sqlite3:database? tdb)
+	(begin
+	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
+			   cpuload diskfree minutes)
+	  (sqlite3:finalize! tdb))
+	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
+    
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
@@ -1533,9 +1533,6 @@
      test-id)
     ;; (hash-table-set! *test-paths* test-id res)
     res)) ;; ))
-
-(define (cdb:test-set-log! serverdat test-id logf)
-  (if (string? logf)(cdb:client-call serverdat 'test-set-log #f *default-numtries* logf test-id)))
 
 ;;======================================================================
 ;; Misc. test related queries
