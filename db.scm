@@ -92,7 +92,7 @@
 
 (define (open-in-mem-db)
   (let* ((path   (configf:lookup *configdat* "setup" "tmpdb"))
-	 (fname  (if path (conc path "/temp-megatest.db")))
+	 (fname  (if path (conc path "/temp-megatest.db") #f))
 	 (exists (and path (file-exists? fname)))
 	 (db     (if path
 		     (begin
