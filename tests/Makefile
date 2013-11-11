@@ -37,11 +37,6 @@ test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
 
 test1 : cleanprep
-	rm -f simplerun/megatest.db
-	rm -rf simplelinks/ simpleruns/
-	mkdir -p simplelinks simpleruns
-	cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm
-	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
 	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
