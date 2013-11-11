@@ -88,6 +88,9 @@
 ;;  T E S T S
 ;;======================================================================
 
+(define (rmt:get-test-id run-id testname item-path)
+  (rmt:send-receive 'get-test-id (list run-id testname item-path)))
+
 (define (rmt:get-test-info-by-id test-id)
   (let ((res (rmt:send-receive 'get-test-info-by-id (list test-id))))
     (if (list? res)

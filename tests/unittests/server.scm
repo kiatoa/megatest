@@ -48,35 +48,8 @@
 (test "get tests (no data)" '()   (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f))
 (test "register test"       #t    (rmt:general-call 'register-test 1 "test1" ""))
 (test "get tests (some data)"  1  (length (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f)))
+(test "get test id"            1  (rmt:get-test-id 1 "test1" ""))
 
-;; ;; (set! *verbosity* 20)
-;; (test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
-;; (test #f #f (cdb:roll-up-pass-fail-counts *runremote* 1 "test1" "" "PASS"))
-;; ;; (set! *verbosity* 1)
-;; ;; (cdb:set-verbosity *runremote* *verbosity*)
-;; 
-;; 
-;; 
-;; (test "get-keys" "SYSTEM" (car (db:get-keys *db*)))
-;; 
-;; (define remargs (args:get-args
-;; 		 '("bar" "foo" ":runname" "bob" ":SYSTEM" "ubuntu" ":RELEASE" "v1.2" ":datapath" "blah/foo" "nada")
-;; 		 (list ":runname" ":state" ":status")
-;; 		 (list "-h")
-;; 		 args:arg-hash
-;; 		 0))
-;; 
-;; (test "register-run" #t (number?
-;; 			 (rmt:register-run '(("SYSTEM" "key1")("RELEASE" "key2"))
-;; 					   "myrun" 
-;; 					   "new"
-;; 					   "n/a" 
-;; 					   "bob")))
-;; 
-;; (test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
-;; (test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
-;; (test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
-;; (test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
 
 ;;======================================================================
 ;; D B

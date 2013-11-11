@@ -37,6 +37,7 @@
 				      (db:general-call db stmtname realparams)))
     ((set-tests-state-status)       (apply db:set-state-status db params))
     ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
+    ((get-test-id)                  (apply db:get-test-id-not-cached db params))
     (else
      (list "ERROR" 0))))
 
