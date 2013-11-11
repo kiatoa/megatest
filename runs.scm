@@ -1052,9 +1052,9 @@
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
 		  (rmt:general-call 'tests-register-test run-id test-name item-path)
-		  (set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))))
+		  (set! test-id (rmt:get-test-id run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))
+	    (set! testdat (rmt:get-test-info-by-id test-id))
 	    (if (not testdat)
 		(begin
 		  (debug:print-info 0 "WARNING: server is overloaded, trying again in one second")
@@ -1124,7 +1124,7 @@
 		  ;; currently running
 		  ((and skip-check
 			(configf:lookup test-conf "skip" "prevrunning"))
-		   (let ((running-tests (cdb:remote-run db:get-tests-for-runs-mindata #f #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f)))
+		   (let ((running-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f)))
 		     (if (not (null? running-tests)) ;; have to skip 
 			 (set! skip-test "Skipping due to previous tests running"))))
 		  ((and skip-check

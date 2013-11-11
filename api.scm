@@ -38,6 +38,7 @@
     ((set-tests-state-status)       (apply db:set-state-status db params))
     ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
     ((get-test-id)                  (apply db:get-test-id-not-cached db params))
+    ((get-tests-for-runs-mindata)   (map vector->list (apply db:get-tests-for-runs-mindata db params)))
     (else
      (list "ERROR" 0))))
 

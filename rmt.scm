@@ -122,6 +122,9 @@
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (map list->vector (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))))
 
+(define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+  (map list->vector (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in))))
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
