@@ -37,8 +37,8 @@
 ;; 	  (number? (cadr *runremote*)))))
 
 (test #f #t (string? (car *runremote*)))
-;; (test #f #f (rmt:get-test-info-by-id 99))
 (test #f #t (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
+(test #f #f (rmt:get-test-info-by-id 99))
 
 ;; ;; (set! *verbosity* 20)
 ;; (test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
