@@ -63,15 +63,11 @@
 ;;======================================================================
 
 ;;======================================================================
-;;  A D M I N
+;;  M I S C
 ;;======================================================================
 
 (define (rmt:login)
   (rmt:send-receive 'login (list *toppath* megatest-version *my-client-signature*)))
-
-;;======================================================================
-;;  G E N E R A L   C A L L 
-;;======================================================================
 
 ;; hand off a call to one of the db:queries statements
 (define (rmt:general-call stmtname . params)
@@ -83,6 +79,9 @@
 
 (define (rmt:get-key-val-pairs run-id)
   (rmt:send-receive 'get-key-val-pairs (list run-id)))
+
+(define (rmt:get-keys)
+  (rmt:send-receive 'get-keys '()))
 
 ;;======================================================================
 ;;  T E S T S
@@ -125,6 +124,27 @@
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
   (map list->vector (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in))))
 
+(define (rmt:delete-test-records test-id)
+  (rmt:send-receive 'delete-test-records (list test-id)))
+
+(define (rmt:test-set-status-state test-id status state msg)
+  (rmt:send-receive 'test-set-status-state (list test-id status state msg)))
+
+(define (rmt:get-previous-test-run-record run-id test-name item-path)
+  (rmt:send-receive 'get-previous-test-run-record (list run-id test-name item-path)))
+
+(define (rmt:get-matching-previous-test-run-records run-id test-name item-path)
+  (map list->vector 
+       (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path))))
+
+;; Statistical queries
+
+(define (rmt:get-count-tests-running)
+  (rmt:send-receive 'get-count-tests-running '()))
+
+(define (rmt:get-count-tests-running-in-jobgroup jobgroup)
+  (rmt:send-receive 'get-count-tests-running-in-jobgroup (list jobgroup)))
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
@@ -137,6 +157,14 @@
 (define (rmt:register-run keyvals runname state status user)
   (rmt:send-receive 'register-run (list keyvals runname state status user)))
     
+(define (rmt:get-run-name-from-id run-id)
+  (rmt:send-receive 'get-run-name-from-id (list run-id)))
+
+(define (rmt:delete-run run-id)
+  (rmt:send-receive 'delete-run (list run-id)))
+
+(define (rmt:delete-old-deleted-test-records)
+  (rmt:send-receive 'delete-old-deleted-test-records '()))
 
 ;;======================================================================
 ;;  S T E P S

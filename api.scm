@@ -19,6 +19,8 @@
   (case (string->symbol cmd)
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs db params))
+    ((get-keys)                     (db:get-keys db))
+
     ;; TESTS
     ;; json doesn't do vectors, convert to list
     ((get-test-info-by-id)	    (let ((res (apply db:get-test-info-by-id db params)))
@@ -26,19 +28,31 @@
     ((test-get-rundir-from-test-id) (apply db:test-get-rundir-from-test-id db params))
     ((testmeta-get-record)          (vector->list (apply db:testmeta-get-record db params)))
     ((test-set-state-status-by-id)  (apply db:test-set-state-status-by-id db params))
+    ((get-count-tests-running)      (db:get-count-tests-running db))
+    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup db params))
+    ((delete-test-records)          (apply db:delete-test-records params))
+    ((delete-old-deleted-test-records) (db:delete-old-deleted-test-records db))
+    ((test-set-status-state)        (apply db:test-set-status-state params))
+    ((get-previous-test-run-record) (apply db:get-previous-test-run-record params))
+    ((get-matching-previous-test-run-records)(map vector->list (apply db:get-matching-previous-test-run-records db params)))
+    
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
 				      (list (vector-ref res 0)
 					    (vector->list (vector-ref res 1)))))
     ((register-run)                 (apply db:register-run db params))
-    ((login)                        (apply db:login db params))
-    ((general-call)                 (let ((stmtname   (car params))
-					  (realparams (cdr params)))
-				      (db:general-call db stmtname realparams)))
     ((set-tests-state-status)       (apply db:set-state-status db params))
     ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
     ((get-test-id)                  (apply db:get-test-id-not-cached db params))
     ((get-tests-for-runs-mindata)   (map vector->list (apply db:get-tests-for-runs-mindata db params)))
+    ((get-run-name-from-id)         (apply db:get-run-name-from-id db params))
+    ((delete-run)                   (apply db:delete-run db params))
+
+    ;; MISC
+    ((login)                        (apply db:login db params))
+    ((general-call)                 (let ((stmtname   (car params))
+					  (realparams (cdr params)))
+				      (db:general-call db stmtname realparams)))
     (else
      (list "ERROR" 0))))
 

@@ -107,43 +107,73 @@
   ;;  1. Get all run-ids
   ;;  2. For each run-id 
   ;;     a. Sync that run in a transaction
-  (let* ((run-ids     (db:get-all-run-ids fromdb))
-	 (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
-	 (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
-                                                                    VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );"))
-	 (trecchgd     0))
+  (let ((trecchgd    0)
+	(rrecchgd    0)
+	(tmrecchgd   0))
+
+    ;; First sync test_meta data
+    (let ((tmgetstmt (sqlite3:prepare todb "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE id=?;"))
+	  (tmputstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO test_meta (id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup) 
+                                                                      VALUES (?, ?,       ?,     ?,    ?,          ?,       ?,       ?,          ?,       ?,   ?);"))
+	  (tmdats    (db:testmeta-get-all fromdb)))
+      ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
+      (for-each
+       (lambda (tmdat) ;; iterate over tests
+	 (let ((testm-id (vector-ref tmdat 0)))
+	   (sqlite3:with-transaction
+	    todb
+	    (lambda ()
+	      (let ((curr-tmdat #f))
+		(sqlite3:for-each-row
+		 (lambda (a . b)
+		   (set! curr-tmdat (apply vector a b)))
+		 tmgetstmt testm-id)
+		(if (not (equal? curr-tmdat tmdat)) ;; something changed
+		    (begin
+		      (debug:print 0 "  test-id: " test-id
+				   "\ncurr-tdat: " curr-tmdat
+				   "\n     tdat: " tmdat)
+		      (apply sqlite3:execute tputstmt (vector->list tmdat))
+		      (set! tmrecchgd (+ tmrecchgd 1)))))))))
+       tmdats)
+      (sqlite3:finalize! tmgetstmt)
+      (sqlite3:finalize! tmputstmt))
+
     ;; First sync tests data
-    (for-each
-     (lambda (run-id)
-       (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
-	 ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
-	 (for-each
-	  (lambda (tdat) ;; iterate over tests
-	    (let ((test-id (vector-ref tdat 0)))
-	      (sqlite3:with-transaction
-	        todb
-	        (lambda ()
-		 (let ((curr-tdat #f))
-		   (sqlite3:for-each-row
-		    (lambda (a . b)
-		      (set! curr-tdat (apply vector a b)))
-		    tgetstmt
-		    test-id)
-		   (if (not (equal? curr-tdat tdat)) ;; something changed
-		       (begin
-			 (debug:print 0 "  test-id: " test-id
-				      "\ncurr-tdat: " curr-tdat
-				      "\n     tdat: " tdat)
-			 (apply sqlite3:execute tputstmt (vector->list tdat))
-			 (set! trecchgd (+ trecchgd 1)))))))))
-	  tdats)))
-     run-ids)
-    (sqlite3:finalize! tgetstmt)
-    (sqlite3:finalize! tputstmt)
-    (if (> trecchgd 0)(debug:print 0 "sync'd " trecchgd " changed records in tests table"))
+    (let ((run-ids     (db:get-all-run-ids fromdb))
+	  (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
+	  (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
+                                                                    VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
+      (for-each
+       (lambda (run-id)
+	 (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
+	   ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
+	   (for-each
+	    (lambda (tdat) ;; iterate over tests
+	      (let ((test-id (vector-ref tdat 0)))
+		(sqlite3:with-transaction
+		 todb
+		 (lambda ()
+		   (let ((curr-tdat #f))
+		     (sqlite3:for-each-row
+		      (lambda (a . b)
+			(set! curr-tdat (apply vector a b)))
+		      tgetstmt
+		      test-id)
+		     (if (not (equal? curr-tdat tdat)) ;; something changed
+			 (begin
+			   (debug:print 0 "  test-id: " test-id
+					"\ncurr-tdat: " curr-tdat
+					"\n     tdat: " tdat)
+			   (apply sqlite3:execute tputstmt (vector->list tdat))
+			   (set! trecchgd (+ trecchgd 1)))))))))
+	    tdats)))
+       run-ids)
+      (sqlite3:finalize! tgetstmt)
+      (sqlite3:finalize! tputstmt))
+
     ;; Next sync runs table
-    (let* ((rrecchgd    0)
-	   (rdats       '())
+    (let* ((rdats       '())
 	   (keys        (db:get-keys fromdb))
 	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
 	   (rnumfields  (length (string-split rstdfields ",")))
@@ -179,10 +209,11 @@
 		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
 	  rdats)))
       (sqlite3:finalize! rgetstmt)
-      (sqlite3:finalize! rputstmt)
-      (if (> rrecchgd 0)(debug:print 0 "synced " rrecchgd " changed records in runs  table"))
-      (if (> trecchgd 0)(debug:print 0 "synced " trecchgd " changed records in tests table"))
-      )))
+      (sqlite3:finalize! rputstmt))
+
+    (if (> rrecchgd 0)  (debug:print 0 "synced " rrecchgd " changed records in runs  table"))
+    (if (> trecchgd 0)  (debug:print 0 "synced " trecchgd " changed records in tests table"))
+    (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))))
 
 (define (db:sync-back)
   (db:sync-to *inmemdb* *db*))
@@ -323,10 +354,10 @@
                                      author      TEXT DEFAULT '',
                                      owner       TEXT DEFAULT '',
                                      description TEXT DEFAULT '',
-                                     reviewed    TIMESTAMP,
+                                     reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
                                      iterated    TEXT DEFAULT '',
-                                     avg_runtime REAL,
-                                     avg_disk    REAL,
+                                     avg_runtime REAL DEFAULT -1,
+                                     avg_disk    REAL DEFAULT -1,
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
@@ -397,7 +428,7 @@
 (define (db:open-test-db-by-test-id db test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(cdb:remote-run db:test-get-rundir-from-test-id db test-id))))
+			(db:test-get-rundir-from-test-id db test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
@@ -982,13 +1013,10 @@
       finalres)))
 
 (define (db:set-comment-for-run db run-id comment)
-  (debug:print-info 11 "db:set-comment-for-run START run-id: " run-id " comment: " comment)
-  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id)
-  (debug:print-info 11 "db:set-comment-for-run END run-id: " run-id " comment: " comment))
+  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run db run-id)
-  (common:clear-caches) ;; don't trust caches after doing any deletion
   ;; First set any related tests to DELETED
   (let ((stmt1 (sqlite3:prepare db "UPDATE tests SET state='DELETED',comment='' WHERE run_id=?;"))
 	(stmt2 (sqlite3:prepare db "UPDATE runs SET state='deleted',comment='' WHERE id=?;")))
@@ -998,7 +1026,6 @@
 	  (sqlite3:execute stmt2 run-id)))
     (sqlite3:finalize! stmt1)
     (sqlite3:finalize! stmt2)))
-;;  (sqlite3:execute db "DELETE FROM runs WHERE id=?;" run-id))
 
 (define (db:update-run-event_time db run-id)
   (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
@@ -1256,12 +1283,11 @@
 
 ;; 
 (define (db:delete-test-records db tdb test-id #!key (force #f))
-  (common:clear-caches)
   (if tdb 
       (begin
 	(sqlite3:execute tdb "DELETE FROM test_steps;")
-	(sqlite3:execute tdb "DELETE FROM test_data;")))
-  ;; (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id))
+	(sqlite3:execute tdb "DELETE FROM test_data;"))
+      (db:delete-test-step-records db test-id))
   (if db 
       (begin
 	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
@@ -1271,11 +1297,9 @@
 	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))))
 
 (define (db:delete-tests-for-run db run-id)
-  (common:clear-caches)
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
 
 (define (db:delete-old-deleted-test-records db)
-  (common:clear-caches)
   (let ((targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
     (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime)))
 
@@ -1292,31 +1316,6 @@
 		;;(debug:print 0 "QRY: " qry)
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
-
-
-(define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
-  ;; Convert #f to wildcard %
-  (if (null? testnames)
-      #t
-      (let ((currstate  (if currstate currstate "%"))
-	    (currstatus (if currstatus currstatus "%")))
-	(let loop ((hed (car testnames))
-		   (tal (cdr testnames))
-		   (thr '()))
-	  (let ((th1 (if newstate  (create-thread (cbd:client-call serverdat 'update-test-state  #t *default-numtries* newstate  currstate  run-id testname testname)) #f))
-		(th2 (if newstatus (create-thread (cbd:client-call serverdat 'update-test-status #t *default-numtries* newstatus currstatus run-id testname testname)) #f)))
-	    (thread-start! th1)
-	    (thread-start! th2)
-	    (if (null? tal)
-		(loop (car tal)(cdr tal)(cons th1 (cons th2 thr)))
-		(for-each
-		 (lambda (th)
-		   (if th (thread-join! th)))
-		 thr)))))))
-
-(define (cdb:delete-tests-in-state serverdat run-id state)
-  (common:clear-caches)
-  (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
 
 (define (cdb:tests-update-cpuload-diskfree serverdat test-id cpuload diskfree)
   (cdb:client-call serverdat 'update-cpuload-diskfree #t *default-numtries* cpuload diskfree test-id))
@@ -1514,12 +1513,6 @@
 
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
-
-(define (db:test-set-comment db test-id comment)
-  (sqlite3:execute 
-   db
-   "UPDATE tests SET comment=? WHERE id=?;"
-   comment test-id))
 
 (define (cdb:test-set-rundir! serverdat run-id test-name item-path rundir)
   (cdb:client-call serverdat 'test-set-rundir #t *default-numtries* rundir run-id test-name item-path))
@@ -1769,13 +1762,12 @@
 (define (cdb:num-clients serverdat)
   (cdb:client-call serverdat 'numclients #t *default-numtries*))
 
-;; I think this would be more efficient if executed on client side FIXME???
-(define (cdb:test-set-status-state serverdat test-id status state msg)
+(define (db:test-set-status-state db test-id status state msg)
   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-      (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
+      (db:general-call db 'set-test-start-time (list test-id)))
   (if msg
-      (cdb:client-call serverdat 'state-status-msg #t *default-numtries* state status msg test-id)
-      (cdb:client-call serverdat 'state-status #t *default-numtries* state status test-id))) ;; run-id test-name item-path minutes cpuload diskfree tmpfree) 
+      (db:general-call db 'state-status-msg (list state status msg test-id))
+      (db:general-call db 'state-status     (list state status test-id))))
 
 (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
@@ -2042,6 +2034,96 @@
     (apply sqlite3:execute db query params)
     #t))
 
+;; get the previous record for when this test was run where all keys match but runname
+;; returns #f if no such test found, returns a single test record if found
+;; 
+;; Run this server-side
+;;
+(define (db:get-previous-test-run-record db run-id test-name item-path)
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
+	 (keyvals #f))
+    ;; first look up the key values from the run selected by run-id
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! keyvals (cons a b)))
+     db
+     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
+    (if (not keyvals)
+	#f
+	(let ((prev-run-ids '()))
+	  (apply sqlite3:for-each-row
+		 (lambda (id)
+		   (set! prev-run-ids (cons id prev-run-ids)))
+		 db
+		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
+	  ;; for each run starting with the most recent look to see if there is a matching test
+	  ;; if found then return that matching test record
+	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
+	  (if (null? prev-run-ids) #f
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
+		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
+		  (if (and (null? results)
+			   (not (null? tal)))
+		      (loop (car tal)(cdr tal))
+		      (if (null? results) #f
+			  (car results))))))))))
+
+;; get the previous records for when these tests were run where all keys match but runname
+;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
+;; can use wildcards. Also can likely be factored in with get test paths?
+;;
+;; Run this remotely!!
+;;
+(define (db:get-matching-previous-test-run-records db run-id test-name item-path)
+  (let* ((keys    (db:get-keys db))
+	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (keyvals #f)
+	 (tests-hash (make-hash-table)))
+    ;; first look up the key values from the run selected by run-id
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! keyvals (cons a b)))
+     db
+     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
+    (if (not keyvals)
+	'()
+	(let ((prev-run-ids '()))
+	  (apply sqlite3:for-each-row
+		 (lambda (id)
+		   (set! prev-run-ids (cons id prev-run-ids)))
+		 db
+		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
+	  ;; collect all matching tests for the runs then
+	  ;; extract the most recent test and return that.
+	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
+		       ", previous run ids found: " prev-run-ids)
+	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
+		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
+			       ", item-path " item-path " results: " (intersperse results "\n"))
+		  ;; Keep only the youngest of any test/item combination
+		  (for-each 
+		   (lambda (testdat)
+		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
+			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
+		       (if (or (not stored-test)
+			       (and stored-test
+				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
+			   ;; this test is younger, store it in the hash
+			   (hash-table-set! tests-hash full-testname testdat))))
+		   results)
+		  (if (null? tal)
+		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
+		      (loop (car tal)(cdr tal))))))))))
+
+
 (define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
 	 (qry-sig        (cdb:packet-get-query-sig item))
@@ -2151,6 +2233,15 @@
 ;; update one of the testmeta fields
 (define (db:testmeta-update-field db testname field value)
   (sqlite3:execute db (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
+
+(define (db:testmeta-get-all db)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (a . b)
+       (set! res (cons (apply vector a b) res)))
+     db
+     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta;")
+    res))
 
 ;;======================================================================
 ;; T E S T   D A T A 
@@ -2709,7 +2800,6 @@
    db:set-tests-state-status
    db:test-set-state-status-by-id
    db:test-set-state-status-by-run-id-testname
-   db:test-set-comment
    db:testmeta-add-record
    db:csv->test-data
    db:test-data-rollup

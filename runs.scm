@@ -99,7 +99,7 @@
   (let* ((target      (or (args:get-arg "-reqtarg")
 			  (args:get-arg "-target")
 			  (get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
+	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
@@ -109,7 +109,7 @@
 	  (set! vals ht)
 	  (for-each
 	   (lambda (key)
-	     (hash-table-set! vals (car key) (cadr key))) ;; (cdb:remote-run db:get-run-key-val #f run-id (car key))))
+	     (hash-table-set! vals (car key) (cadr key)))
 	   keyvals)))
     ;; from the cached data set the vars
     (hash-table-for-each
@@ -123,7 +123,7 @@
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (setenv "MT_RUNNAME" (if inrunname inrunname (cdb:remote-run db:get-run-name-from-id #f run-id)))
+    (setenv "MT_RUNNAME" (if inrunname inrunname (rmt:get-run-name-from-id run-id)))
     (setenv "MT_RUN_AREA_HOME" *toppath*)))
 
 (define (set-item-env-vars itemdat)
@@ -138,7 +138,7 @@
 ;;
 (define *last-num-running-tests* 0)
 (define *runs:can-run-more-tests-count* 0)
-(define (runs:shrink-can-run-more-tests-count) ;; the db is a dummy var so we can use cdb:remote-run
+(define (runs:shrink-can-run-more-tests-count)
   (set! *runs:can-run-more-tests-count* 0)) ;; (/ *runs:can-run-more-tests-count* 2)))
 
 ;; Temporary globals. Move these into the logic or into common
@@ -147,6 +147,7 @@
 (define (runs:inc-cant-run-tests testname)
   (hash-table-set! *seen-cant-run-tests* testname
 		   (+ (hash-table-ref/default *seen-cant-run-tests* testname 0) 1)))
+
 (define (runs:can-keep-running? testname n)
   (< (hash-table-ref/default *seen-cant-run-tests* testname 0) n))
 
@@ -165,8 +166,8 @@
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
 		  (else 0)))
-  (let* ((num-running             (cdb:remote-run db:get-count-tests-running #f))
-	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
+  (let* ((num-running             (rmt:get-count-tests-running))
+	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup jobgroup))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
@@ -213,7 +214,6 @@
 
     ;; Update the synchronous setting in the db based on the default or what is set by the user
     ;; This is done once here on a call to run tests rather than on every call to open-db
-    ;; (cdb:remote-run db:set-sync #f)
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
@@ -627,7 +627,7 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       (if (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
 	  (begin
-	    (cdb:tests-register-test *runremote* run-id test-name item-path)
+	    (rmt:general-call 'register-test run-id test-name item-path)
 	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
 	  (let ((th (make-thread (lambda ()
 				   (mutex-lock! registry-mutex)
@@ -635,8 +635,8 @@
 				   (mutex-unlock! registry-mutex)
 				   ;; If haven't done it before register a top level test if this is an itemized test
 				   (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
-				       (cdb:tests-register-test *runremote* run-id test-name ""))
-				   (cdb:tests-register-test *runremote* run-id test-name item-path)
+				       (rmt:general-call 'register-test run-id test-name ""))
+				   (rmt:general-call 'register-test run-id test-name item-path)
 				   (mutex-lock! registry-mutex)
 				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
 				   (mutex-unlock! registry-mutex))
@@ -813,7 +813,7 @@
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f))
 	    (begin
-	      (cdb:tests-register-test *runremote* run-id test-name "")
+	      (rmt:general-call 'register-test run-id test-name "")
 	      (hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
@@ -1035,8 +1035,8 @@
     
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
-	   (test-id       (cdb:remote-run db:get-test-id-cached #f  run-id test-name item-path))
-	   (testdat       (if test-id (cdb:get-test-info-by-id *runremote* test-id) #f)))
+	   (test-id       (rmt:get-test-id run-id test-name item-path))
+	   (testdat       (if test-id (rmt:get-test-info-by-id test-id) #f)))
       (if (not testdat)
 	  (let loop ()
 	    ;; ensure that the path exists before registering the test
@@ -1047,11 +1047,11 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (if (not test-id)(set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
+	    (if (not test-id)(set! test-id (rmt:get-test-id-cached run-id test-name item-path)))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rmt:general-call 'tests-register-test run-id test-name item-path)
+		  (rmt:general-call 'register-test run-id test-name item-path)
 		  (set! test-id (rmt:get-test-id run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (rmt:get-test-info-by-id test-id))
@@ -1204,7 +1204,7 @@
 (define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (keys         (cdb:remote-run db:get-keys db))
+	 (keys         (rmt:get-keys))
 	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
 	 (runs         (vector-ref rundat 1))
@@ -1259,7 +1259,7 @@
 		   (let loop ((test (car sorted-tests))
 			      (tal  (cdr sorted-tests)))
 		     (let* ((test-id       (db:test-get-id test))
-			    (new-test-dat  (cdb:get-test-info-by-id *runremote* test-id)))
+			    (new-test-dat  (rmt:get-test-info-by-id test-id)))
 		       (if (not new-test-dat)
 			   (begin
 			     (debug:print 0 "ERROR: We have a test-id of " test-id " but no record was found. NOTE: No locking of records is done between processes, do not simultaneously remove the same run from two processes!")
@@ -1330,7 +1330,7 @@
 						  (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 					      ))
 				      ;; Only delete the records *after* removing the directory. If things fail we have a record 
-				      (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
+				      (rmt:delete-test-records (db:test-get-id test))
 				      (if (not (null? tal))
 					  (loop (car tal)(cdr tal))))))
 			       ((set-state-status)
@@ -1355,10 +1355,8 @@
 						(take dparts (- (length dparts) 1))
 						"/"))))
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
-		       (cdb:remote-run db:delete-run db run-id)
-		       ;; This is a pretty good place to purge old DELETED tests
-		       (cdb:remote-run db:delete-tests-for-run db run-id)
-		       (cdb:remote-run db:delete-old-deleted-test-records db)
+		       (rmt:delete-run run-id)
+		       (rmt:delete-old-deleted-test-records)
 		       (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))

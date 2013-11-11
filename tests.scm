@@ -129,95 +129,6 @@
 		    (loop (car tal)(cdr tal)(cons qry res)))))))
       #f))
 
-;; get the previous record for when this test was run where all keys match but runname
-;; returns #f if no such test found, returns a single test record if found
-;; 
-;; Run this server-side
-;;
-(define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse  keys ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
-	 (keyvals #f))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	#f
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; for each run starting with the most recent look to see if there is a matching test
-	  ;; if found then return that matching test record
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) #f
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
-		  (if (and (null? results)
-			   (not (null? tal)))
-		      (loop (car tal)(cdr tal))
-		      (if (null? results) #f
-			  (car results))))))))))
-    
-;; get the previous records for when these tests were run where all keys match but runname
-;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
-;; can use wildcards. Also can likely be factored in with get test paths?
-;;
-;; Run this remotely!!
-;;
-(define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
-	 (keyvals #f)
-	 (tests-hash (make-hash-table)))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	'()
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; collect all matching tests for the runs then
-	  ;; extract the most recent test and return that.
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
-		       ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
-			       ", item-path " item-path " results: " (intersperse results "\n"))
-		  ;; Keep only the youngest of any test/item combination
-		  (for-each 
-		   (lambda (testdat)
-		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
-			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
-		       (if (or (not stored-test)
-			       (and stored-test
-				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
-			   ;; this test is younger, store it in the hash
-			   (hash-table-set! tests-hash full-testname testdat))))
-		   results)
-		  (if (null? tal)
-		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
-		      (loop (car tal)(cdr tal))))))))))
-
 ;; Check for waiver eligibility
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
@@ -281,7 +192,7 @@
 	    result)))))
 
 (define (tests:test-force-state-status! test-id state status)
-  (cdb:test-set-status-state *runremote* test-id status state #f)
+  (rmt:test-set-status-state test-id status state #f)
   (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
@@ -290,7 +201,7 @@
   (let* ((db          #f)
 	 (real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (cdb:get-test-info-by-id *runremote* test-id))
+	 (testdat     (rmt:get-test-info-by-id test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -302,7 +213,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (cdb:remote-run test:get-previous-test-run-record #f run-id test-name item-path)
+			  (rmt:get-previous-test-run-record run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -327,7 +238,7 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
+	  (rmt:test-set-status-state test-id real-status state (if waived waived comment))
 	  (mt:process-triggers test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
@@ -379,7 +290,7 @@
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (cdb:remote-run db:test-set-comment #f test-id cmt)))
+	  (rmt:general-call 'set-test-comment cmt test-id)))
     ))
 
 
