@@ -202,7 +202,7 @@
   (common:clear-caches) ;; clear all caches
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
-	 (run-id             (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
+	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (required-tests    '())
@@ -213,7 +213,7 @@
 
     ;; Update the synchronous setting in the db based on the default or what is set by the user
     ;; This is done once here on a call to run tests rather than on every call to open-db
-    (cdb:remote-run db:set-sync #f)
+    ;; (cdb:remote-run db:set-sync #f)
 
     (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
@@ -234,8 +234,8 @@
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (cdb:delete-tests-in-state *runremote* run-id "NOT_STARTED")
-	  (cdb:remote-run db:set-tests-state-status #f run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+	  (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
+	  (rmt:set-tests-state-status run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; Ensure all tests are registered in the test_meta table
     (runs:update-all-test_meta #f)
@@ -752,7 +752,7 @@
   ;;
   ;; (cdb:remote-run db:find-and-mark-incomplete #f)
 
-  (let ((run-info              (cdb:remote-run db:get-run-info #f run-id))
+  (let ((run-info              (rmt:get-run-info run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
 	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
 	(test-registry         (make-hash-table))
@@ -1051,7 +1051,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (cdb:tests-register-test *runremote* run-id test-name item-path)
+		  (rmt:general-call 'tests-register-test run-id test-name item-path)
 		  (set! test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (cdb:get-test-info-by-id *runremote* test-id))

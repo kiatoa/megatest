@@ -1067,9 +1067,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order
-			      #!key
-			      (qryvals #f))
+(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (let* ((qryvalstr       (case qryvals
 			    ((shortlist) "id,run_id,testname,item_path,state,status")
 			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
@@ -2017,6 +2015,15 @@
     (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
     got-it))
 
+(define (db:general-call db stmtname params)
+  (let ((query (let ((q (alist-ref (if (string? stmtname)
+				       (string->symbol stmtname)
+				       stmtname)
+				   db:queries)))
+		 (if q (car q) #f))))
+    (apply sqlite3:execute db query params)
+    #t))
+
 (define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
 	 (qry-sig        (cdb:packet-get-query-sig item))
@@ -2071,6 +2078,7 @@
 		 (set! *verbosity* (car params))
 		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
 		((killserver)
+		 (db:sync-to *inmemdb* *db*)
 		 (let ((hostname (car  *runremote*))
 		       (port     (cadr *runremote*))
 		       (pid      (car params))

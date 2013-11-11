@@ -428,68 +428,66 @@
 			       (* 3 24 60 60)))))
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
-      (thread-sleep! 4) ;; no need to do this very often
-      ;; NB// sync currently does NOT return queue-length
-      
       ;; Use this opportunity to sync the inmemdb to db
-      (db:sync-to *inmemdb* *db*)
+      (if *inmemdb* (db:sync-to *inmemdb* *db*))
 
-      (let () ;; (queue-len (cdb:client-call server-info 'sync #t 1)))
-      ;; (print "Server running, count is " count)
-        (if (< count 1) ;; 3x3 = 9 secs aprox
-            (loop (+ count 1)))
-        
-	;; Check that iface and port have not changed (can happen if server port collides)
-	(mutex-lock! *heartbeat-mutex*)
-	(set! sdat *runremote*)
-	(mutex-unlock! *heartbeat-mutex*)
+      (thread-sleep! 4) ;; no need to do this very often
 
-	(if (or (not (equal? sdat (list iface port)))
-		(not spid))
-	    (begin 
-	      (debug:print-info 0 "interface changed, refreshing iface and port info")
-	      (set! iface (car sdat))
-	      (set! port  (cadr sdat))
-	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
-
-        ;; NOTE: Get rid of this mechanism! It really is not needed...
-        ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
-        (tasks:server-update-heartbeat tdb spid)
+      (if (< count 1) ;; 3x3 = 9 secs aprox
+	  (loop (+ count 1)))
       
-        ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-        (mutex-lock! *heartbeat-mutex*)
-        (set! last-access *last-db-access*)
-        (mutex-unlock! *heartbeat-mutex*)
-	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (and *server-run*
-		 (> (+ last-access server-timeout)
-		    (current-seconds)))
-            (begin
-              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-              (loop 0))
-            (begin
-              (debug:print-info 0 "Starting to shutdown the server.")
-              ;; need to delete only *my* server entry (future use)
-              (set! *time-to-exit* #t)
-              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-              (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
-	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
-	      (debug:print-info 0 "Average cached write time "
-				(if (eq? *number-of-writes* 0)
-				    "n/a (no writes)"
-				    (/ *writes-total-delay*
-				       *number-of-writes*))
-				" ms")
-	      (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
-	      (debug:print-info 0 "Average non-cached time   "
-				(if (eq? *number-non-write-queries* 0)
-				    "n/a (no queries)"
-				    (/ *total-non-write-delay* 
-				       *number-non-write-queries*))
-				" ms")
-              (debug:print-info 0 "Server shutdown complete. Exiting")
-              (exit)))))))
+      ;; Check that iface and port have not changed (can happen if server port collides)
+      (mutex-lock! *heartbeat-mutex*)
+      (set! sdat *runremote*)
+      (mutex-unlock! *heartbeat-mutex*)
+      
+      (if (or (not (equal? sdat (list iface port)))
+	      (not spid))
+	  (begin 
+	    (debug:print-info 0 "interface changed, refreshing iface and port info")
+	    (set! iface (car sdat))
+	    (set! port  (cadr sdat))
+	    (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
+      
+      ;; NOTE: Get rid of this mechanism! It really is not needed...
+      ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
+      (tasks:server-update-heartbeat tdb spid)
+      
+      ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+      (mutex-lock! *heartbeat-mutex*)
+      (set! last-access *last-db-access*)
+      (mutex-unlock! *heartbeat-mutex*)
+      ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
+      (if (and *server-run*
+	       (> (+ last-access server-timeout)
+		  (current-seconds)))
+	  (begin
+	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+	    (loop 0))
+	  (begin
+	    (debug:print-info 0 "Starting to shutdown the server.")
+	    ;; need to delete only *my* server entry (future use)
+	    (set! *time-to-exit* #t)
+	    (if *inmemdb* (db:sync-to *inmemdb* *db*))
+	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+	    (thread-sleep! 1)
+	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+	    (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+	    (debug:print-info 0 "Average cached write time "
+			      (if (eq? *number-of-writes* 0)
+				  "n/a (no writes)"
+				  (/ *writes-total-delay*
+				     *number-of-writes*))
+			      " ms")
+	    (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+	    (debug:print-info 0 "Average non-cached time   "
+			      (if (eq? *number-non-write-queries* 0)
+				  "n/a (no queries)"
+				  (/ *total-non-write-delay* 
+				     *number-non-write-queries*))
+			      " ms")
+	    (debug:print-info 0 "Server shutdown complete. Exiting")
+	    (exit))))))
 
 ;; all routes though here end in exit ...
 (define (http-transport:launch)

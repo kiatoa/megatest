@@ -2,6 +2,10 @@
 ;; S E R V E R
 ;;======================================================================
 
+;; Run like this:
+;;
+;;  (cd ..;make && make install) && ./rununittest.sh server 1;(cd simplerun;megatest -stop-server 0)
+
 (set! *transport-type* 'http)
 
 (test "setup for run" #t (begin (setup-for-run)
@@ -31,14 +35,19 @@
 			     (client:launch)
 			     (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
 			       (vector? dat))))
-;; (print "dat: " dat)
-;; (set! *runremote* (list (vector-ref dat 1)(vector-ref dat 2) #f)) ;; host ip pullport pubport
-;; (and (string? (car  *runremote*))
-;; 	  (number? (cadr *runremote*)))))
+
+(define *keys*               (keys:config-get-fields *configdat*))
+(define *keyvals*            (keys:target->keyval *keys* "a/b/c"))
 
 (test #f #t                       (string? (car *runremote*)))
 (test #f '(#t "successful login") (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
-(test #f #f                       (rmt:get-test-info-by-id 99))
+(test #f #f                       (rmt:get-test-info-by-id 99)) ;; get non-existant test
+(test #f 1                        (rmt:register-run  *keyvals* "firstrun" "new" "n/a" (current-user-name)))
+(test "get run info"  "firstrun"  (let ((rinfo (rmt:get-run-info 1)))
+				    (vector-ref (vector-ref rinfo 1) 3)))
+(test "get tests (no data)" '()   (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f))
+(test "register test"       #t    (rmt:general-call 'register-test 1 "test1" ""))
+(test "get tests (some data)"  1  (length (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f)))
 
 ;; ;; (set! *verbosity* 20)
 ;; (test #f *verbosity* (cadr (cdb:set-verbosity *runremote* *verbosity*)))
@@ -73,5 +82,5 @@
 ;; D B
 ;;======================================================================
 
-(test #f #f (cdb:kill-server *runremote* #f)) ;; *toppath* *my-client-signature* #f)))
+(test #f '(#t "exit process started") (cdb:kill-server *runremote* #f)) ;; *toppath* *my-client-signature* #f)))
 

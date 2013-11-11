@@ -70,6 +70,14 @@
   (rmt:send-receive 'login (list *toppath* megatest-version *my-client-signature*)))
 
 ;;======================================================================
+;;  G E N E R A L   C A L L 
+;;======================================================================
+
+;; hand off a call to one of the db:queries statements
+(define (rmt:general-call stmtname . params)
+  (rmt:send-receive 'general-call (append (list stmtname) params)))
+
+;;======================================================================
 ;;  K E Y S 
 ;;======================================================================
 
@@ -103,6 +111,13 @@
 ;; WARNING: This currently bypasses the transaction wrapped writes system
 (define (rmt:test-set-state-status-by-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id (list test-id newstate newstatus newcomment)))
+
+
+(define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
+  (rmt:send-receive 'set-tests-state-status (list run-id testnames currstate currstatus newstate newstatus)))
+
+(define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
+  (map list->vector (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))))
 
 ;;======================================================================
 ;;  R U N S

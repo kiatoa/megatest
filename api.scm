@@ -32,6 +32,11 @@
 					    (vector->list (vector-ref res 1)))))
     ((register-run)                 (apply db:register-run db params))
     ((login)                        (apply db:login db params))
+    ((general-call)                 (let ((stmtname   (car params))
+					  (realparams (cdr params)))
+				      (db:general-call db stmtname realparams)))
+    ((set-tests-state-status)       (apply db:set-state-status db params))
+    ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
     (else
      (list "ERROR" 0))))
 
@@ -46,6 +51,10 @@
 	 (paramsj ($ 'params))
 	 (params  (rmt:json-str->dat paramsj))
 	 (res     (api:execute-requests db cmd params)))
+
+    ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
+    (db:sync-to *inmemdb* *db*)
+    
     (rmt:dat->json-str
      (if (or (string? res)
 	     (list?   res)
