@@ -91,8 +91,15 @@
     db))
 
 (define (open-in-mem-db)
-  (let ((db (sqlite3:open-database ":memory:")))
-    (db:initialize db)
+  (let* ((path   (configf:lookup *configdat* "setup" "tmpdb"))
+	 (fname  (if path (conc path "/temp-megatest.db")))
+	 (exists (and path (file-exists? fname)))
+	 (db     (if path
+		     (begin
+		       (create-directory path #t)
+		       (sqlite3:open-database fname))
+		     (sqlite3:open-database ":memory:"))))
+    (if (not exists) (db:initialize db))
     db))
 
 (define (db:sync-to fromdb todb)
@@ -114,8 +121,8 @@
 	  (lambda (tdat) ;; iterate over tests
 	    (let ((test-id (vector-ref tdat 0)))
 	      (sqlite3:with-transaction
-	       todb
-	       (lambda ()
+	        todb
+	        (lambda ()
 		 (let ((curr-tdat #f))
 		   (sqlite3:for-each-row
 		    (lambda (a . b)
@@ -124,6 +131,9 @@
 		    test-id)
 		   (if (not (equal? curr-tdat tdat)) ;; something changed
 		       (begin
+			 (debug:print 0 "  test-id: " test-id
+				      "\ncurr-tdat: " curr-tdat
+				      "\n     tdat: " tdat)
 			 (apply sqlite3:execute tputstmt (vector->list tdat))
 			 (set! trecchgd (+ trecchgd 1)))))))))
 	  tdats)))
@@ -162,12 +172,20 @@
 	       run-id)
 	      (if (not (equal? curr-rdat rdat))
 		  (begin
+		    (debug:print 0 "   run-id: " run-id
+				 "\ncurr-rdat: " curr-rdat
+				 "\n     rdat: " rdat)
 		    (set! rrecchgd (+ rrecchgd 1))
 		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
 	  rdats)))
       (sqlite3:finalize! rgetstmt)
       (sqlite3:finalize! rputstmt)
-      (if (> rrecchgd 0)(debug:print 0 "sync'd " rrecchgd " changed records in runs table")))))
+      (if (> rrecchgd 0)(debug:print 0 "synced " rrecchgd " changed records in runs  table"))
+      (if (> trecchgd 0)(debug:print 0 "synced " trecchgd " changed records in tests table"))
+      )))
+
+(define (db:sync-back)
+  (db:sync-to *inmemdb* *db*))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -249,12 +267,12 @@
     (sqlite3:execute db (conc 
 			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
 			 fieldstr (if havekeys "," "")
-			 "runname TEXT,"
-			 "state TEXT DEFAULT '',"
-			 "status TEXT DEFAULT '',"
-			 "owner TEXT DEFAULT '',"
-			 "event_time TIMESTAMP,"
-			 "comment TEXT DEFAULT '',"
+			 "runname    TEXT DEFAULT 'norun',"
+			 "state      TEXT DEFAULT '',"
+			 "status     TEXT DEFAULT '',"
+			 "owner      TEXT DEFAULT '',"
+			 "event_time TIMESTAMP DEFAULT (strftime('%s','now')),"
+			 "comment    TEXT DEFAULT '',"
 			 "fail_count INTEGER DEFAULT 0,"
 			 "pass_count INTEGER DEFAULT 0,"
 			 "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
@@ -262,26 +280,26 @@
     (sqlite3:execute db 
 		     "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
-                     run_id     INTEGER,
-                     testname   TEXT,
-                     host       TEXT DEFAULT 'n/a',
-                     cpuload    REAL DEFAULT -1,
-                     diskfree   INTEGER DEFAULT -1,
-                     uname      TEXT DEFAULT 'n/a', 
-                     rundir     TEXT DEFAULT 'n/a',
-                     shortdir   TEXT DEFAULT '',
-                     item_path  TEXT DEFAULT '',
-                     state      TEXT DEFAULT 'NOT_STARTED',
-                     status     TEXT DEFAULT 'FAIL',
-                     attemptnum INTEGER DEFAULT 0,
-                     final_logf TEXT DEFAULT 'logs/final.log',
-                     logdat     BLOB, 
-                     run_duration INTEGER DEFAULT 0,
-                     comment    TEXT DEFAULT '',
-                     event_time TIMESTAMP,
-                     fail_count INTEGER DEFAULT 0,
-                     pass_count INTEGER DEFAULT 0,
-                     archived   INTEGER DEFAULT 0, -- 0=no, 1=in progress, 2=yes
+                     run_id       INTEGER   DEFAULT -1,
+                     testname     TEXT      DEFAULT 'noname',
+                     host         TEXT      DEFAULT 'n/a',
+                     cpuload      REAL      DEFAULT -1,
+                     diskfree     INTEGER   DEFAULT -1,
+                     uname        TEXT      DEFAULT 'n/a', 
+                     rundir       TEXT      DEFAULT 'n/a',
+                     shortdir     TEXT      DEFAULT '',
+                     item_path    TEXT      DEFAULT '',
+                     state        TEXT      DEFAULT 'NOT_STARTED',
+                     status       TEXT      DEFAULT 'FAIL',
+                     attemptnum   INTEGER   DEFAULT 0,
+                     final_logf   TEXT      DEFAULT 'logs/final.log',
+                     logdat       TEXT      DEFAULT '', 
+                     run_duration INTEGER   DEFAULT 0,
+                     comment      TEXT      DEFAULT '',
+                     event_time   TIMESTAMP DEFAULT (strftime('%s','now')),
+                     fail_count   INTEGER   DEFAULT 0,
+                     pass_count   INTEGER   DEFAULT 0,
+                     archived     INTEGER   DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                      CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path)
           );")
     (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")

@@ -8,6 +8,8 @@
 
 (set! *transport-type* 'http)
 
+(test "open inmem db"          1  (begin (open-in-mem-db) 1))
+
 (test "setup for run" #t (begin (setup-for-run)
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
@@ -28,7 +30,7 @@
 ;; 						    (server:launch 'http)))))
 ;; 			   (set! server-pid pid)
 ;; 			   (number? pid)))
-(system "megatest -server - &")
+(system "megatest -server - -debug 22&")
 
 (thread-sleep! 3) ;; need to wait for server to start. Yes, a better way is needed.
 (test "get-best-server" #t (begin 
@@ -50,6 +52,10 @@
 (test "get tests (some data)"  1  (length (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f)))
 (test "get test id"            1  (rmt:get-test-id 1 "test1" ""))
 
+(test "get test id from main"  1  (db:get-test-id *db* 1 "test1" ""))
+
+
+;; (test "sync back"              #t (begin (rmt:sync-back) #t))
 
 ;;======================================================================
 ;; D B
