@@ -152,7 +152,12 @@
   (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
 
 (define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
-  (rmt:send-receive 'get-prereqs-not-met (list run-id waitons ref-item-path mode)))
+  (let ((res (rmt:send-receive 'get-prereqs-not-met (list run-id waitons ref-item-path mode))))
+    (map (lambda (x)
+	   (if (list? x)
+	       (list->vector x)
+	       x))
+	 res)))
 
 ;; Statistical queries
 
@@ -248,8 +253,10 @@
   (rmt:send-receive 'testmeta-add-record (list testname)))
 
 (define (rmt:testmeta-get-record testname)
-  (list->vector
-   (rmt:send-receive 'testmeta-get-record (list testname))))
+  (let ((res (rmt:send-receive 'testmeta-get-record (list testname))))
+    (if (list? res)
+	(list->vector res)
+	res)))
 
 (define (rmt:testmeta-update-field test-name fld val)
   (rmt:send-receive 'testmeta-update-field (list test-name fld val)))

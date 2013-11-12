@@ -243,7 +243,7 @@
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status work-area: work-area))
+	(tdb:test-data-rollup #f test-id status work-area: work-area))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -283,13 +283,13 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(mt:roll-up-pass-fail-counts run-id test-name item-path status))
+	(rmt:roll-up-pass-fail-counts run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rmt:general-call 'set-test-comment (list cmt test-id))))))
+	  (rmt:general-call 'set-test-comment cmt test-id)))))
 
 (define (tests:test-set-toplog! run-id test-name logf) 
   (rmt:general-call 'tests:test-set-toplog logf run-id test-name))

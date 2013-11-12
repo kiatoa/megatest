@@ -1054,11 +1054,11 @@
 				  ((statestatus) (conc " ORDER BY state " (if  sort-order (conc sort-order ",") "") " status "))
 				  ((event_time)  " ORDER BY event_time ")
 				  (else          (if (string? sort-by)
-						     (conc " ORDER BY " sort-by)
+						     (conc " ORDER BY " sort-by " ")
 						     " ")))
 				(if sort-order sort-order " ")
-				(if limit  (conc " LIMIT " limit)   "")
-				(if offset (conc " OFFSET " offset) "")
+				(if limit  (conc " LIMIT " limit)   " ")
+				(if offset (conc " OFFSET " offset) " ")
 				";"
 				)))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
@@ -1088,15 +1088,17 @@
 
 
 (define (db:get-tests-for-run-state-status db run-id testpatt)
-  (let ((res            '())
-	(tests-match-qry (tests:match->sqlqry testpatt)))
+  (let* ((res            '())
+	 (tests-match-qry (tests:match->sqlqry testpatt))
+	 (qry             (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
+				(if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))))
+    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
     (sqlite3:for-each-row
      (lambda (id testname item-path state status)
        ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
        (set! res (cons (vector id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-") res)))
      db 
-     (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
-	   (if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))
+     qry
      run-id)
     res))
 
@@ -1591,13 +1593,13 @@
 ;; 
 ;; (define (cdb:num-clients serverdat)
 ;;   (cdb:client-call serverdat 'numclients #t *default-numtries*))
-;; 
-;; (define (db:test-set-status-state db test-id status state msg)
-;;   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-;;       (db:general-call db 'set-test-start-time (list test-id)))
-;;   (if msg
-;;       (db:general-call db 'state-status-msg (list state status msg test-id))
-;;       (db:general-call db 'state-status     (list state status test-id))))
+
+(define (db:test-set-status-state db test-id status state msg)
+  (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+      (db:general-call db 'set-test-start-time (list test-id)))
+  (if msg
+      (db:general-call db 'state-status-msg (list state status msg test-id))
+      (db:general-call db 'state-status     (list state status test-id))))
 ;; 
 ;; (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
 ;;   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))

@@ -161,13 +161,13 @@
 (define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (cdb:client-call *runremote* 'state-status-msg #t *default-numtries* newstate newstatus newcomment test-id))
+    (rmt:general-call 'state-status-msg newstate newstatus newcomment test-id))
    ((and newstate newstatus)
-    (cdb:client-call *runremote* 'state-status #t *default-numtries* newstate newstatus test-id))
+    (rmt:general-call 'state-status newstate newstatus test-id))
    (else
-    (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
-    (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
-    (if newcomment (cdb:client-call *runremote* 'set-test-comment #t *default-numtries* newcomment test-id))))
+    (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
+    (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
+    (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
    (mt:process-triggers test-id newstate newstatus)
    #t)
 

@@ -26,20 +26,25 @@
     ((get-test-info-by-id)	       (let ((res (apply db:get-test-info-by-id db params)))
 					 (if (vector? res)(vector->list res) res)))
     ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id db params))
-    ((testmeta-get-record)             (vector->list (apply db:testmeta-get-record db params)))
     ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id db params))
     ((get-count-tests-running)         (db:get-count-tests-running db))
     ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup db params))
-    ((delete-test-records)             (apply db:delete-test-records params))
+    ((delete-test-records)             (apply db:delete-test-records db params))
     ((delete-old-deleted-test-records) (db:delete-old-deleted-test-records db))
-    ((test-set-status-state)           (apply db:test-set-status-state params))
-    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record params))
+    ((test-set-status-state)           (apply db:test-set-status-state db params))
+    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record db params))
     ((get-matching-previous-test-run-records)(map vector->list (apply db:get-matching-previous-test-run-records db params)))
     ((db:test-get-logfile-info)        (apply db:test-get-logfile-info db params))
     ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file db params)))
     ((get-testinfo-state-status)       (apply db:get-testinfo-state-status db params))
-    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new params))
-    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met params))
+    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new db params))
+    ((get-prereqs-not-met)             (let ((res (apply db:get-prereqs-not-met db params)))
+					 (map (lambda (x)
+						(if (vector? x)
+						    (vector->list x)
+						    x))
+					      res)))
+					 
 
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
@@ -60,8 +65,8 @@
 					   (hedr (vector-ref res 0))
 					   (data (vector-ref res 1)))
 				      (list hedr (map vector->list data))))
-    ((lock/unlock-run)              (apply db:lock/unlock-run params))
-    ((update-run-event_time)        (apply db:update-run-event_time params))
+    ((lock/unlock-run)              (apply db:lock/unlock-run db params))
+    ((update-run-event_time)        (apply db:update-run-event_time db params))
 
     ;; MISC
     ((login)                        (apply db:login db params))
@@ -85,8 +90,14 @@
 	   (process-signal pid signal/kill)
 	   (thread-start! th1))
        '(#t "exit process started")))
-    ((testmeta-add-record)       (apply db:testmeta-add-record params))
-    ((testmeta-update-field)     (apply db:testmeta-update-field params))
+
+    ;; TESTMETA
+    ((testmeta-get-record)       (let ((res (apply db:testmeta-get-record db params)))
+				   (if (vector? res)
+				       (vector->list res)
+				       res)))
+    ((testmeta-add-record)       (apply db:testmeta-add-record db params))
+    ((testmeta-update-field)     (apply db:testmeta-update-field db params))
     (else
      (list "ERROR" 0))))
 
