@@ -85,6 +85,7 @@
 				(string->number (config-lookup  *configdat* "server" "port"))
 				(+ 5000 (random 1001)))))
 	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
+    (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -510,7 +511,6 @@
 	      (set! *cache-on* #t)
 	      (set! *db*       (open-db))
 	      (set! *inmemdb*  (open-in-mem-db))
-	      (set! db *inmemdb*)
 	      (db:sync-to *db* *inmemdb*)
 
 	      (thread-start! th2)

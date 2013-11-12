@@ -1055,8 +1055,8 @@
 				  ((event_time)  " ORDER BY event_time ")
 				  (else          (if (string? sort-by)
 						     (conc " ORDER BY " sort-by)
-						     "")))
-				(if sort-order sort-order "")
+						     " ")))
+				(if sort-order sort-order " ")
 				(if limit  (conc " LIMIT " limit)   "")
 				(if offset (conc " OFFSET " offset) "")
 				";"
