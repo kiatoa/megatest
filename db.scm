@@ -877,7 +877,7 @@
 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
 			(exit 6)))))
 	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time"
+    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
 			(if limit  (conc " LIMIT " limit)   "")
 			(if offset (conc " OFFSET " offset) "")
 			";"))
@@ -928,9 +928,7 @@
     (sqlite3:finalize! stmt2)))
 
 (define (db:update-run-event_time db run-id)
-  (debug:print-info 11 "db:update-run-event_time START run-id: " run-id)
-  (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id)
-  (debug:print-info 11 "db:update-run-event_time END run-id: " run-id)) 
+  (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))
 
 (define (db:lock/unlock-run db run-id lock unlock user)
   (let ((newlockval (if lock "locked"

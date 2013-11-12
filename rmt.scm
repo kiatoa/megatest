@@ -109,10 +109,6 @@
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
-(define (rmt:testmeta-get-record testname)
-  (list->vector
-   (rmt:send-receive 'testmeta-get-record (list testname))))
-
 ;; WARNING: This currently bypasses the transaction wrapped writes system
 (define (rmt:test-set-state-status-by-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id (list test-id newstate newstatus newcomment)))
@@ -212,7 +208,13 @@
 	 (hedr (car res))
 	 (data (cadr res)))
     (vector hedr (map list->vector data))))
-  
+
+(define (rmt:lock/unlock-run run-id lock unlock user)
+  (rmt:send-receive 'lock/unlock-run (list run-id lock unlock user)))
+
+(define (rmt:update-run-event_time run-id)
+  (rmt:send-receive 'update-run-event_time (list run-id)))
+
 ;;======================================================================
 ;;  S T E P S
 ;;======================================================================
@@ -241,3 +243,13 @@
     (if tdb
 	(tdb:read-test-data tdb test-id categorypatt)
 	'())))
+
+(define (rmt:testmeta-add-record testname)
+  (rmt:send-receive 'testmeta-add-record (list testname)))
+
+(define (rmt:testmeta-get-record testname)
+  (list->vector
+   (rmt:send-receive 'testmeta-get-record (list testname))))
+
+(define (rmt:testmeta-update-field test-name fld val)
+  (rmt:send-receive 'testmeta-update-field (list test-name fld val)))

@@ -46,7 +46,7 @@
 				      (list (vector-ref res 0)
 					    (vector->list (vector-ref res 1)))))
     ((register-run)                 (apply db:register-run db params))
-    ((set-tests-state-status)       (apply db:set-state-status db params))
+    ((set-tests-state-status)       (apply db:set-tests-state-status db params))
     ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
     ((get-test-id)                  (apply db:get-test-id-not-cached db params))
     ((get-tests-for-runs-mindata)   (map vector->list (apply db:get-tests-for-runs-mindata db params)))
@@ -60,6 +60,8 @@
 					   (hedr (vector-ref res 0))
 					   (data (vector-ref res 1)))
 				      (list hedr (map vector->list data))))
+    ((lock/unlock-run)              (apply db:lock/unlock-run params))
+    ((update-run-event_time)        (apply db:update-run-event_time params))
 
     ;; MISC
     ((login)                        (apply db:login db params))
@@ -83,7 +85,8 @@
 	   (process-signal pid signal/kill)
 	   (thread-start! th1))
        '(#t "exit process started")))
-
+    ((testmeta-add-record)       (apply db:testmeta-add-record params))
+    ((testmeta-update-field)     (apply db:testmeta-update-field params))
     (else
      (list "ERROR" 0))))
 

@@ -1357,7 +1357,7 @@
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
 		       (rmt:delete-run run-id)
 		       (rmt:delete-old-deleted-test-records)
-		       (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
+		       ;; (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -1439,7 +1439,7 @@
 			       (begin
 				 (print "Do you really wish to unlock run " run-id "?\n   y/n: ")
 				 (equal? "y" (read-line)))))
-		      (cdb:remote-run db:lock/unlock-run db run-id lock unlock user)
+		      (rmt:lock/unlock-run run-id lock unlock user)
 		      (debug:print-info 0 "Skipping lock/unlock on " run-id))))
 	      runs)))
 ;;======================================================================
@@ -1448,11 +1448,11 @@
 
 ;; Update the test_meta table for this test
 (define (runs:update-test_meta test-name test-conf)
-  (let ((currrecord (cdb:remote-run db:testmeta-get-record #f test-name)))
+  (let ((currrecord (rmt:testmeta-get-record test-name)))
     (if (not currrecord)
 	(begin
 	  (set! currrecord (make-vector 10 #f))
-	  (cdb:remote-run db:testmeta-add-record #f test-name)))
+	  (rmt:testmeta-add-record test-name)))
     (for-each 
      (lambda (key)
        (let* ((idx (cadr key))
@@ -1462,7 +1462,7 @@
 	 (if (and val (not (equal? (vector-ref currrecord idx) val)))
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
-	       (cdb:remote-run db:testmeta-update-field #f test-name fld val)))))
+	       (rmt:testmeta-update-field test-name fld val)))))
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
 
 ;; Update test_meta for all tests
@@ -1471,19 +1471,20 @@
     (for-each 
      (lambda (test-name)
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))
-	 ;; use the cdb:remote-run instead of passing in db
 	 (if test-conf (runs:update-test_meta test-name test-conf))))
      (hash-table-keys test-names))))
 
 ;; This could probably be refactored into one complex query ...
+;; NOT PORTED - DO NOT USE YET
+;;
 (define (runs:rollup-run keys runname user keyvals)
   (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
   (let* ((db              #f)
-	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
-	 (prev-tests      (cdb:remote-run test:get-matching-previous-test-run-records db new-run-id "%" "%"))
+	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user))
+	 (prev-tests      (rmt:get-matching-previous-test-run-records new-run-id "%" "%"))
 	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))
 	 (curr-tests-hash (make-hash-table)))
-    (cdb:remote-run db:update-run-event_time db new-run-id)
+    (rmt:update-run-event_time new-run-id)
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
@@ -1501,7 +1502,7 @@
 	      (item-path (db:test-get-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps    (cdb:remote-run db:get-steps-for-test db (db:test-get-id testdat)))
+	      (test-steps    (rmt:get-steps-for-test (db:test-get-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
