@@ -379,106 +379,6 @@
     ))
 
 ;;======================================================================
-;; T E S T   S P E C I F I C   D B 
-;;======================================================================
-
-;; Create the sqlite db for the individual test(s)
-(define (open-test-db work-area) 
-  (debug:print-info 11 "open-test-db " work-area)
-  (if (and work-area 
-	   (directory? work-area)
-	   (file-read-access? work-area))
-      (let* ((dbpath    (conc work-area "/testdat.db"))
-	     (tdb-writeable (file-write-access? dbpath))
-	     (dbexists  (file-exists? dbpath))
-	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					       (string->number (args:get-arg "-override-timeout"))
-					       136000))))
-	(handle-exceptions
-	 exn
-	 (begin
-	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
-			((condition-property-accessor 'exn 'message) exn))
-	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
-	 (set! db (sqlite3:open-database dbpath)))
-	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
-	(if (not dbexists)
-	    (begin
-	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
-	      (debug:print-info 11 "Initialized test database " dbpath)
-	      (db:testdb-initialize db)))
-	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	(debug:print-info 11 "open-test-db END (sucessful)" work-area)
-	;; now let's test that everything is correct
-	(handle-exceptions
-	 exn
-	 (begin
-	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
-			((condition-property-accessor 'exn 'message) exn))
-	   #f)
-	 ;; Is there a cheaper single line operation that will check for existance of a table
-	 ;; and raise an exception ?
-	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
-	db)
-      (begin
-	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
-	#f)))
-
-;; find and open the testdat.db file for an existing test
-(define (db:open-test-db-by-test-id db test-id #!key (work-area #f))
-  (let* ((test-path (if work-area
-			work-area
-			(db:test-get-rundir-from-test-id db test-id))))
-    (debug:print 3 "TEST PATH: " test-path)
-    (open-test-db test-path)))
-
-(define (db:testdb-initialize db)
-  (debug:print 11 "db:testdb-initialize START")
-  (for-each
-   (lambda (sqlcmd)
-     (sqlite3:execute db sqlcmd))
-   (list "CREATE TABLE IF NOT EXISTS test_rundat (
-              id INTEGER PRIMARY KEY,
-              update_time TIMESTAMP,
-              cpuload INTEGER DEFAULT -1,
-              diskfree INTEGER DEFAULT -1,
-              diskusage INTGER DEFAULT -1,
-              run_duration INTEGER DEFAULT 0);"
-	 "CREATE TABLE IF NOT EXISTS test_data (
-              id INTEGER PRIMARY KEY,
-              test_id INTEGER,
-              category TEXT DEFAULT '',
-              variable TEXT,
-	      value REAL,
-	      expected REAL,
-	      tol REAL,
-              units TEXT,
-              comment TEXT DEFAULT '',
-              status TEXT DEFAULT 'n/a',
-              type TEXT DEFAULT '',
-              CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));"
-	 "CREATE TABLE IF NOT EXISTS test_steps (
-              id INTEGER PRIMARY KEY,
-              test_id INTEGER, 
-              stepname TEXT, 
-              state TEXT DEFAULT 'NOT_STARTED', 
-              status TEXT DEFAULT 'n/a',
-              event_time TIMESTAMP,
-              comment TEXT DEFAULT '',
-              logfile TEXT DEFAULT '',
-              CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));"
-	 ;; test_meta can be used for handing commands to the test
-	 ;; e.g. KILLREQ
-	 ;;      the ackstate is set to 1 once the command has been completed
-	 "CREATE TABLE IF NOT EXISTS test_meta (
-              id INTEGER PRIMARY KEY,
-              var TEXT,
-              val TEXT,
-              ackstate INTEGER DEFAULT 0,
-              CONSTRAINT metadat_constraint UNIQUE (var));"))
-  (debug:print 11 "db:testdb-initialize END"))
-
-;;======================================================================
 ;; L O G G I N G    D B 
 ;;======================================================================
 
@@ -1270,24 +1170,12 @@
      )
     res))
 
-;; this one is a bit broken BUG FIXME
-(define (db:delete-test-step-records db test-id #!key (work-area #f))
-  ;; Breaking it into two queries for better file access interleaving
-  (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    ;; test db's can go away - must check every time
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:execute tdb "DELETE FROM test_steps;")
-	  (sqlite3:execute tdb "DELETE FROM test_data;")
-	  (sqlite3:finalize! tdb)))))
-
-;; 
 (define (db:delete-test-records db tdb test-id #!key (force #f))
   (if tdb 
       (begin
 	(sqlite3:execute tdb "DELETE FROM test_steps;")
 	(sqlite3:execute tdb "DELETE FROM test_data;"))
-      (db:delete-test-step-records db test-id))
+      (tdb:delete-test-step-records db test-id))
   (if db 
       (begin
 	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
@@ -1332,15 +1220,6 @@
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
   (mt:process-triggers test-id newstate newstatus))
 
-(define (db:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-			   cpuload diskfree minutes)
-	  (sqlite3:finalize! tdb))
-	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
-    
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
@@ -1416,50 +1295,6 @@
     res))
 
 (define db:get-test-id db:get-test-id-not-cached)
-
-;; given a test-info record, patch in the latest data from the testdat.db file
-;; found in the test run directory
-;;
-;; NOT USED
-;;
-(define (db:patch-tdb-data-into-test-info db test-id res #!key (work-area #f))
-  (let ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    ;; get state and status from megatest.db in real time
-    ;; other fields that perhaps should be updated:
-    ;;   fail_count
-    ;;   pass_count
-    ;;   final_logf
-    (sqlite3:for-each-row
-     (lambda (state status final_logf)
-       (db:test-set-state!        res state)
-       (db:test-set-status!       res status)
-       (db:test-set-final_logf!   res final_logf))
-     db
-     "SELECT state,status,final_logf FROM tests WHERE id=?;"
-     test-id)
-    (if tdb
-	(begin
-	  (sqlite3:for-each-row
-	   (lambda (update_time cpuload disk_free run_duration)
-	     (db:test-set-cpuload!      res cpuload)
-	     (db:test-set-diskfree!     res disk_free)
-	     (db:test-set-run_duration! res run_duration))
-	   tdb
-	   "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY id DESC LIMIT 1;")
-	  (sqlite3:finalize! tdb))
-	;; if the test db is not found what to do?
-	;; 1. set state to DELETED
-	;; 2. set status to n/a
-	(begin
-	  (db:test-set-state!  res "NOT_STARTED")
-	  (db:test-set-status! res "n/a")))))
-
-(define *last-test-cache-delete* (current-seconds))
-
-(define (db:clean-all-caches)
-  (set! *test-info* (make-hash-table))
-  (set! *test-id-cache* (make-hash-table)))
-
 
 (define (db:get-all-tests-info-by-run-id db run-id)
   (let ((res '()))
@@ -1546,10 +1381,10 @@
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
 	 (paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target-new db keynames target res
-					testpatt:   testpatt
-					statepatt:  statepatt
-					statuspatt: statuspatt
-					runname:    runname)))
+					testpatt
+					statepatt
+					statuspatt
+					runname)))
     (if fnamepatt
 	(apply append 
 	       (map (lambda (p)
@@ -1584,11 +1419,10 @@
     res))
 
 (define (db:test-get-paths-matching-keynames-target-new db keynames target res 
-							#!key
-							(testpatt   "%")
-							(statepatt  "%")
-							(statuspatt "%")
-							(runname    "%"))
+							testpatt  
+							statepatt 
+							statuspatt
+							runname)
   (let* ((row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
@@ -1663,12 +1497,12 @@
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
-(define (cdb:use-non-blocking-mode proc)
-  (set! *client-non-blocking-mode* #t)
-  (let ((res (proc)))
-    (set! *client-non-blocking-mode* #f)
-    res))
-
+;; (define (cdb:use-non-blocking-mode proc)
+;;   (set! *client-non-blocking-mode* #t)
+;;   (let ((res (proc)))
+;;     (set! *client-non-blocking-mode* #f)
+;;     res))
+;; 
 ;; params = 'target cached remparams
 ;;
 ;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
@@ -1679,130 +1513,123 @@
 ;;                 which either returns the data to the calling server routine or 
 ;;                 directly calls the returning procedure (e.g. zmq).
 ;;
-(define (cdb:client-call serverdat qtype immediate numretries . params)
-  (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
-  (case *transport-type* 
-    ((fs)
-     (let ((packet (vector "na" qtype immediate "na" params 0)))
-       (fs:process-queue-item packet)))
-    ((http)
-     (let* ((client-sig  (client:get-signature))
-	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
-       (debug:print-info 11 "zdat=" zdat)
-       (let* ((res  #f)
-	      (rawdat      (http-transport:client-send-receive serverdat zdat))
-	      (tmp         #f))
-	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
-	 (if rawdat
-	     (begin
-	       (set! tmp (db:string->obj rawdat))
-	       (vector-ref tmp 2))
-	     (begin
-	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
-	       (exit 1))))))
-    ((zmq)
-     (handle-exceptions
-      exn
-      (begin
-	(debug:print-info 0 "cdb:client-call timeout or error. Trying again in 5 seconds")
-	(thread-sleep! 5) 
-	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
-      (let* ((push-socket (vector-ref serverdat 0))
-	     (sub-socket  (vector-ref serverdat 1))
-	     (client-sig  (client:get-signature))
-	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
-	     (res  #f)
-	     (send-receive (lambda ()
-			     (debug:print-info 11 "sending message")
-			     (send-message push-socket zdat)
-			     (debug:print-info 11 "message sent")
-			     (let loop ()
-			       ;; get the sender info
-			       ;; this should match (client:get-signature)
-			       ;; we will need to process "all" messages here some day
-			       (receive-message* sub-socket)
-			       ;; now get the actual message
-			       (let ((myres (db:string->obj (receive-message* sub-socket))))
-				 (if (equal? query-sig (vector-ref myres 1))
-				     (set! res (vector-ref myres 2))
-				     (loop)))))))
-	;; (timeout (lambda ()
-	;;     	(let loop ((n numretries))
-	;;     	  (thread-sleep! 15)
-	;;     	  (if (not res)
-	;;     	      (if (> numretries 0)
-	;;     		  (begin
-	;;     		    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-	;;     		    (debug:print-info 11 "re-sending message")
-	;;     		    (send-message push-socket zdat)
-	;;     		    (debug:print-info 11 "message re-sent")
-	;;     		    (loop (- n 1)))
-	;;     		  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
-	;;     		  (begin
-	;;     		    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-	;;     		    (exit 5))))))))
-	(debug:print-info 11 "Starting threads")
-	(let ((th1 (make-thread send-receive "send receive"))
-	      ;; (th2 (make-thread timeout      "timeout"))
-	      )
-	  (thread-start! th1)
-	  ;; (thread-start! th2)
-	  (thread-join!  th1)
-	  (debug:print-info 11 "cdb:client-call returning res=" res)
-	  res))))))
-
-(define (cdb:set-verbosity serverdat val)
-  (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
-
-(define (cdb:num-clients serverdat)
-  (cdb:client-call serverdat 'numclients #t *default-numtries*))
-
-(define (db:test-set-status-state db test-id status state msg)
-  (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-      (db:general-call db 'set-test-start-time (list test-id)))
-  (if msg
-      (db:general-call db 'state-status-msg (list state status msg test-id))
-      (db:general-call db 'state-status     (list state status test-id))))
-
-(define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
-  (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
-
-(define (cdb:pass-fail-counts serverdat test-id fail-count pass-count)
-  (cdb:client-call serverdat 'pass-fail-counts #t *default-numtries* fail-count pass-count test-id))
-
-(define (cdb:tests-register-test serverdat run-id test-name item-path)
-  (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path))
-
-;; more transactioned calls, these for roll-up-pass-fail stuff
-(define (cdb:update-pass-fail-counts serverdat run-id test-name)
-  (cdb:client-call serverdat 'update-fail-pass-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
-
-(define (cdb:top-test-set-running serverdat run-id test-name)
-  (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
-
-(define (cdb:top-test-set-per-pf-counts serverdat run-id test-name)
-  (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
-
-;;=
-
-(define (cdb:flush-queue serverdat)
-  (cdb:client-call serverdat 'flush #f *default-numtries*))
-
-(define (cdb:kill-server serverdat pid)
-  (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
-
-(define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
-  (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
-
-(define (cdb:get-test-info serverdat run-id test-name item-path)
-  (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
-
-(define (cdb:get-test-info-by-id serverdat test-id)
-  (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
-    (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
-    test-dat))
+;; (define (cdb:client-call serverdat qtype immediate numretries . params)
+;;   (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
+;;   (case *transport-type* 
+;;     ((fs)
+;;      (let ((packet (vector "na" qtype immediate "na" params 0)))
+;;        (fs:process-queue-item packet)))
+;;     ((http)
+;;      (let* ((client-sig  (client:get-signature))
+;; 	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+;; 	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
+;;        (debug:print-info 11 "zdat=" zdat)
+;;        (let* ((res  #f)
+;; 	      (rawdat      (http-transport:client-send-receive serverdat zdat))
+;; 	      (tmp         #f))
+;; 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
+;; 	 (if rawdat
+;; 	     (begin
+;; 	       (set! tmp (db:string->obj rawdat))
+;; 	       (vector-ref tmp 2))
+;; 	     (begin
+;; 	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
+;; 	       (exit 1))))))
+;;     ((zmq)
+;;      (handle-exceptions
+;;       exn
+;;       (begin
+;; 	(debug:print-info 0 "cdb:client-call timeout or error. Trying again in 5 seconds")
+;; 	(thread-sleep! 5) 
+;; 	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
+;;       (let* ((push-socket (vector-ref serverdat 0))
+;; 	     (sub-socket  (vector-ref serverdat 1))
+;; 	     (client-sig  (client:get-signature))
+;; 	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
+;; 	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
+;; 	     (res  #f)
+;; 	     (send-receive (lambda ()
+;; 			     (debug:print-info 11 "sending message")
+;; 			     (send-message push-socket zdat)
+;; 			     (debug:print-info 11 "message sent")
+;; 			     (let loop ()
+;; 			       ;; get the sender info
+;; 			       ;; this should match (client:get-signature)
+;; 			       ;; we will need to process "all" messages here some day
+;; 			       (receive-message* sub-socket)
+;; 			       ;; now get the actual message
+;; 			       (let ((myres (db:string->obj (receive-message* sub-socket))))
+;; 				 (if (equal? query-sig (vector-ref myres 1))
+;; 				     (set! res (vector-ref myres 2))
+;; 				     (loop)))))))
+;; 	;; (timeout (lambda ()
+;; 	;;     	(let loop ((n numretries))
+;; 	;;     	  (thread-sleep! 15)
+;; 	;;     	  (if (not res)
+;; 	;;     	      (if (> numretries 0)
+;; 	;;     		  (begin
+;; 	;;     		    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
+;; 	;;     		    (debug:print-info 11 "re-sending message")
+;; 	;;     		    (send-message push-socket zdat)
+;; 	;;     		    (debug:print-info 11 "message re-sent")
+;; 	;;     		    (loop (- n 1)))
+;; 	;;     		  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
+;; 	;;     		  (begin
+;; 	;;     		    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
+;; 	;;     		    (exit 5))))))))
+;; 	(debug:print-info 11 "Starting threads")
+;; 	(let ((th1 (make-thread send-receive "send receive"))
+;; 	      ;; (th2 (make-thread timeout      "timeout"))
+;; 	      )
+;; 	  (thread-start! th1)
+;; 	  ;; (thread-start! th2)
+;; 	  (thread-join!  th1)
+;; 	  (debug:print-info 11 "cdb:client-call returning res=" res)
+;; 	  res))))))
+;; 
+;; ;; (define (cdb:set-verbosity serverdat val)
+;;   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
+;; 
+;; (define (cdb:num-clients serverdat)
+;;   (cdb:client-call serverdat 'numclients #t *default-numtries*))
+;; 
+;; (define (db:test-set-status-state db test-id status state msg)
+;;   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+;;       (db:general-call db 'set-test-start-time (list test-id)))
+;;   (if msg
+;;       (db:general-call db 'state-status-msg (list state status msg test-id))
+;;       (db:general-call db 'state-status     (list state status test-id))))
+;; 
+;; (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
+;;   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
+;; 
+;; (define (cdb:tests-register-test serverdat run-id test-name item-path)
+;;   (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path))
+;; 
+;; (define (cdb:top-test-set-running serverdat run-id test-name)
+;;   (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
+;; 
+;; (define (cdb:top-test-set-per-pf-counts serverdat run-id test-name)
+;;   (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
+;; 
+;; ;;=
+;; 
+;; (define (cdb:flush-queue serverdat)
+;;   (cdb:client-call serverdat 'flush #f *default-numtries*))
+;; 
+;; (define (cdb:kill-server serverdat pid)
+;;   (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
+;; 
+;; (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
+;;   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
+;; 
+;; (define (cdb:get-test-info serverdat run-id test-name item-path)
+;;   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
+;; 
+;; (define (cdb:get-test-info-by-id serverdat test-id)
+;;   (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
+;;     (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
+;;     test-dat))
 
 ;; ;; db should be db open proc or #f
 ;; (define (cdb:remote-run proc db . params)
@@ -1986,41 +1813,41 @@
 ;; apply and the second slot is the time of the query and the third entry is a list of 
 ;; values to be applied
 ;;
-(define (db:queue-write-and-wait db qry-sig query params)
-  (let ((queue-len  0)
-	(res        #f)
-	(got-it     #f)
-	(qry-pkt    (vector qry-sig query params))
-	(start-time (current-milliseconds))
-	(timeout    (+ 10 (current-seconds)))) ;; set the time out to 10 secs in future
-
-    ;; Put the item in the queue *incoming-writes* 
-    (mutex-lock! *incoming-mutex*)
-    (set! *incoming-writes* (cons qry-pkt *incoming-writes*))
-    (set! queue-len (length *incoming-writes*))
-    (mutex-unlock! *incoming-mutex*)
-
-    (debug:print-info 7 "Current write queue length is " queue-len)
-
-    ;; poll for the write to complete, timeout after 10 seconds
-    ;; periodic flushing of the queue is taken care of by 
-    ;; db:flush-queue
-    (let loop ()
-      (thread-sleep! 0.001)
-      (mutex-lock! *completed-mutex*)
-      (if (hash-table-ref/default *completed-writes* qry-sig #f)
-	  (begin
-	    (hash-table-delete! *completed-writes* qry-sig)
-	    (set! got-it #t)))
-      (mutex-unlock! *completed-mutex*)
-      (if (and (not got-it)
-	       (< (current-seconds) timeout))
-	  (begin
-	    (thread-sleep! 0.01)
-	    (loop))))
-    (set! *number-of-writes*   (+ *number-of-writes*   1))
-    (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
-    got-it))
+;; (define (db:queue-write-and-wait db qry-sig query params)
+;;   (let ((queue-len  0)
+;; 	(res        #f)
+;; 	(got-it     #f)
+;; 	(qry-pkt    (vector qry-sig query params))
+;; 	(start-time (current-milliseconds))
+;; 	(timeout    (+ 10 (current-seconds)))) ;; set the time out to 10 secs in future
+;; 
+;;     ;; Put the item in the queue *incoming-writes* 
+;;     (mutex-lock! *incoming-mutex*)
+;;     (set! *incoming-writes* (cons qry-pkt *incoming-writes*))
+;;     (set! queue-len (length *incoming-writes*))
+;;     (mutex-unlock! *incoming-mutex*)
+;; 
+;;     (debug:print-info 7 "Current write queue length is " queue-len)
+;; 
+;;     ;; poll for the write to complete, timeout after 10 seconds
+;;     ;; periodic flushing of the queue is taken care of by 
+;;     ;; db:flush-queue
+;;     (let loop ()
+;;       (thread-sleep! 0.001)
+;;       (mutex-lock! *completed-mutex*)
+;;       (if (hash-table-ref/default *completed-writes* qry-sig #f)
+;; 	  (begin
+;; 	    (hash-table-delete! *completed-writes* qry-sig)
+;; 	    (set! got-it #t)))
+;;       (mutex-unlock! *completed-mutex*)
+;;       (if (and (not got-it)
+;; 	       (< (current-seconds) timeout))
+;; 	  (begin
+;; 	    (thread-sleep! 0.01)
+;; 	    (loop))))
+;;     (set! *number-of-writes*   (+ *number-of-writes*   1))
+;;     (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
+;;     got-it))
 
 (define (db:general-call db stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
@@ -2121,83 +1948,83 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 
-(define (db:process-queue-item db item)
-  (let* ((stmt-key       (cdb:packet-get-qtype item))
-	 (qry-sig        (cdb:packet-get-query-sig item))
-	 (return-address (cdb:packet-get-client-sig item))
-	 (params         (cdb:packet-get-params item))
-	 (query          (let ((q (alist-ref stmt-key db:queries)))
-			   (if q (car q) #f))))
-    (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
-    (if query
-	;; hand queries off to the write queue
-	(let ((response (case *transport-type*
-			  ((http)
-			   (debug:print-info 7 "Queuing item " item " for wrapped write")
-			   (db:queue-write-and-wait db qry-sig query params))
-			  (else 
-			   (apply sqlite3:execute db query params)
-			   #t))))
-	  (debug:print-info 7 "Received " response " from wrapped write")
-	  (server:reply return-address qry-sig response response))
-	;; otherwise if appropriate flush the queue (this is a read or complex query)
-	(begin
-	  (cond
-	   ((member stmt-key db:special-queries)
-	    (let ((starttime (current-milliseconds)))
-	      (debug:print-info 9 "Handling special statement " stmt-key)
-	      (case stmt-key
-		((immediate)
-		 (debug:print 0 "WARNING: Immediate calls are verboten now!")
-		 (let* ((proc      (car params))
-			(remparams (cdr params))
-			;; we are being handed a procedure so call it
-			(result (server:reply return-address qry-sig #t (apply proc remparams))))
-		   (debug:print-info 11 "Ran (apply " proc " " remparams ")")
-		   ;; (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
-		   ;; (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
-		   result))
-		((login)
-		 (if (< (length params) 3) ;; should get toppath, version and signature
-		     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
-		     (let ((calling-path (car   params))
-			   (calling-vers (cadr  params))
-			   (client-key   (caddr params)))
-		       (if (and (equal? calling-path *toppath*)
-				(equal? megatest-version calling-vers))
-			   (begin
-			     (hash-table-set! *logged-in-clients* client-key (current-seconds))
-			     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
-			   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
-		((flush sync)
-		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
-		((set-verbosity)
-		 (set! *verbosity* (car params))
-		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
-		((killserver)
-		 (db:sync-to *inmemdb* *db*)
-		 (let ((hostname (car  *runremote*))
-		       (port     (cadr *runremote*))
-		       (pid      (car params))
-		       (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
-		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
-		   (debug:print-info 1 "current pid=" (current-process-id))
-		   (open-run-close tasks:server-deregister tasks:open-db 
-				   hostname
-				   port: port)
-		   (set! *server-run* #f)
-		   (thread-sleep! 3)
-		   (if pid 
-		       (process-signal pid signal/kill)
-		       (thread-start! th1))
-		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
-		(else ;; not a command, i.e. is a query
-		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
-		 (server:reply return-address qry-sig #f 'failed)))))
-	   (else
-	    (debug:print-info 11 "Executing " stmt-key " for " params)
-	    (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-	    (server:reply return-address qry-sig #t #t)))))))
+;; (define (db:process-queue-item db item)
+;;   (let* ((stmt-key       (cdb:packet-get-qtype item))
+;; 	 (qry-sig        (cdb:packet-get-query-sig item))
+;; 	 (return-address (cdb:packet-get-client-sig item))
+;; 	 (params         (cdb:packet-get-params item))
+;; 	 (query          (let ((q (alist-ref stmt-key db:queries)))
+;; 			   (if q (car q) #f))))
+;;     (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
+;;     (if query
+;; 	;; hand queries off to the write queue
+;; 	(let ((response (case *transport-type*
+;; 			  ((http)
+;; 			   (debug:print-info 7 "Queuing item " item " for wrapped write")
+;; 			   (db:queue-write-and-wait db qry-sig query params))
+;; 			  (else 
+;; 			   (apply sqlite3:execute db query params)
+;; 			   #t))))
+;; 	  (debug:print-info 7 "Received " response " from wrapped write")
+;; 	  (server:reply return-address qry-sig response response))
+;; 	;; otherwise if appropriate flush the queue (this is a read or complex query)
+;; 	(begin
+;; 	  (cond
+;; 	   ((member stmt-key db:special-queries)
+;; 	    (let ((starttime (current-milliseconds)))
+;; 	      (debug:print-info 9 "Handling special statement " stmt-key)
+;; 	      (case stmt-key
+;; 		((immediate)
+;; 		 (debug:print 0 "WARNING: Immediate calls are verboten now!")
+;; 		 (let* ((proc      (car params))
+;; 			(remparams (cdr params))
+;; 			;; we are being handed a procedure so call it
+;; 			(result (server:reply return-address qry-sig #t (apply proc remparams))))
+;; 		   (debug:print-info 11 "Ran (apply " proc " " remparams ")")
+;; 		   ;; (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
+;; 		   ;; (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
+;; 		   result))
+;; 		((login)
+;; 		 (if (< (length params) 3) ;; should get toppath, version and signature
+;; 		     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
+;; 		     (let ((calling-path (car   params))
+;; 			   (calling-vers (cadr  params))
+;; 			   (client-key   (caddr params)))
+;; 		       (if (and (equal? calling-path *toppath*)
+;; 				(equal? megatest-version calling-vers))
+;; 			   (begin
+;; 			     (hash-table-set! *logged-in-clients* client-key (current-seconds))
+;; 			     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
+;; 			   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
+;; 		((flush sync)
+;; 		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
+;; 		((set-verbosity)
+;; 		 (set! *verbosity* (car params))
+;; 		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
+;; 		((killserver)
+;; 		 (db:sync-to *inmemdb* *db*)
+;; 		 (let ((hostname (car  *runremote*))
+;; 		       (port     (cadr *runremote*))
+;; 		       (pid      (car params))
+;; 		       (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
+;; 		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+;; 		   (debug:print-info 1 "current pid=" (current-process-id))
+;; 		   (open-run-close tasks:server-deregister tasks:open-db 
+;; 				   hostname
+;; 				   port: port)
+;; 		   (set! *server-run* #f)
+;; 		   (thread-sleep! 3)
+;; 		   (if pid 
+;; 		       (process-signal pid signal/kill)
+;; 		       (thread-start! th1))
+;; 		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
+;; 		(else ;; not a command, i.e. is a query
+;; 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
+;; 		 (server:reply return-address qry-sig #f 'failed)))))
+;; 	   (else
+;; 	    (debug:print-info 11 "Executing " stmt-key " for " params)
+;; 	    (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
+;; 	    (server:reply return-address qry-sig #t #t)))))))
 
 (define (db:test-get-records-for-index-file db run-id test-name)
   (let ((res '()))
@@ -2241,324 +2068,6 @@
     res))
 
 ;;======================================================================
-;; T E S T   D A T A 
-;;======================================================================
-
-(define (db:csv->test-data db test-id csvdata #!key (work-area #f))
-  (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((tdb     (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(let ((csvlist (csv->list (make-csv-reader
-				   (open-input-string csvdata)
-				   '((strip-leading-whitespace? #t)
-				     (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
-	  (for-each 
-	   (lambda (csvrow)
-	     (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
-		    (category    (list-ref padded-row 0))
-		    (variable    (list-ref padded-row 1))
-		    (value       (any->number-if-possible (list-ref padded-row 2)))
-		    (expected    (any->number-if-possible (list-ref padded-row 3)))
-		    (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
-		    (units       (list-ref padded-row 5))
-		    (comment     (list-ref padded-row 6))
-		    (status      (let ((s (list-ref padded-row 7)))
-				   (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
-							   (string-match (regexp "^n/a$") s)))
-				       #f
-				       s))) ;; if specified on the input then use, else calculate
-		    (type        (list-ref padded-row 8)))
-	       ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
-	       (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
-			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
-
-	       (if (and (or (not expected)(equal? expected ""))
-			(or (not tol)     (equal? expected ""))
-			(or (not units)   (equal? expected "")))
-		   (let-values (((new-expected new-tol new-units)(db:get-prev-tol-for-test db test-id category variable)))
-			       (set! expected new-expected)
-			       (set! tol      new-tol)
-			       (set! units    new-units)))
-
-	       (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
-			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	       ;; calculate status if NOT specified
-	       (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
-		   (if (number? tol) ;; if tol is a number then we do the standard comparison
-		       (let* ((max-val (+ expected tol))
-			      (min-val (- expected tol))
-			      (result  (and (>=  value min-val)(<= value max-val))))
-			 (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
-			 (set! status (if result "pass" "fail")))
-		       (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
-			     (case (string->symbol tol) ;; tol should be >, <, >=, <=
-			       ((>)  (if (>  value expected) "pass" "fail"))
-			       ((<)  (if (<  value expected) "pass" "fail"))
-			       ((>=) (if (>= value expected) "pass" "fail"))
-			       ((<=) (if (<= value expected) "pass" "fail"))
-			       (else (conc "ERROR: bad tol comparator " tol))))))
-	       (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
-			    ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	       (sqlite3:execute tdb "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
-				test-id category variable value expected tol units (if comment comment "") status type)))
-	   csvlist)
-	  (sqlite3:finalize! tdb)))))
-
-;; get a list of test_data records matching categorypatt
-(define (db:read-test-data db test-id categorypatt #!key (work-area #f))
-  (let ((tdb  (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(let ((res '()))
-	  (sqlite3:for-each-row 
-	   (lambda (id test_id category variable value expected tol units comment status type)
-	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-	   tdb
-	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-	  (sqlite3:finalize! tdb)
-	  (reverse res))
-	'())))
-
-;; NOTE: Run this local with #f for db !!!
-(define (db:load-test-data db test-id #!key (work-area #f))
-  (let loop ((lin (read-line)))
-    (if (not (eof-object? lin))
-	(begin
-	  (debug:print 4 lin)
-	  (db:csv->test-data db test-id lin work-area: work-area)
-	  (loop (read-line)))))
-  ;; roll up the current results.
-  ;; FIXME: Add the status to 
-  (db:test-data-rollup db test-id #f work-area: work-area))
-
-;; WARNING: Do NOT call this for the parent test on an iterated test
-;; Roll up test_data pass/fail results
-;; look at the test_data status field, 
-;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
-;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id status #!key (work-area #f))
-  (let ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
-	(fail-count 0)
-	(pass-count 0))
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:for-each-row
-	   (lambda (fcount pcount)
-	     (set! fail-count fcount)
-	     (set! pass-count pcount))
-	   tdb 
-	   "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
-                   (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
-	   test-id test-id)
-	  (sqlite3:finalize! tdb)
-
-	  ;; Now rollup the counts to the central megatest.db
-	  (cdb:pass-fail-counts *runremote* test-id fail-count pass-count)
-	  ;; (sqlite3:execute db "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;" 
-	  ;;                     fail-count pass-count test-id)
-
-	  ;; The flush is not needed with the transaction based write agregation enabled. Remove these commented lines
-	  ;; next time you read this!
-	  ;;
-	  ;; (cdb:flush-queue *runremote*)
-	  ;; (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
-	  
-	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (cdb:test-rollup-test_data-pass-fail *runremote* test-id)
-	  ;; (sqlite3:execute
-	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
-	  ;;  "UPDATE tests
-	  ;;             SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
-	  ;;                THEN 'FAIL'
-	  ;;             WHEN (SELECT pass_count FROM tests WHERE id=?) > 0 AND 
-	  ;;                  (SELECT status FROM tests WHERE id=?) NOT IN ('WARN','FAIL')
-	  ;;             THEN 'PASS'
-	  ;;             ELSE status
-	  ;;         END WHERE id=?;"
-	  ;;  test-id test-id test-id test-id)
-	  ))))
-
-(define (db:get-prev-tol-for-test db test-id category variable)
-  ;; Finish me?
-  (values #f #f #f))
-
-;;======================================================================
-;; S T E P S 
-;;======================================================================
-
-(define (db:step-get-time-as-string vec)
-  (seconds->time-string (db:step-get-event_time vec)))
-
-;; db-get-test-steps-for-run
-(define (db:get-steps-for-test db test-id #!key (work-area #f))
-  (let* ((tdb (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (res '()))
-    (if (sqlite3:database? tdb)
-	(handle-exceptions
-	 exn
-	 (begin
-	   (debug:print 0 "ERROR: error on access to testdat for test with id " test-id)
-	   '())
-	 (begin
-	   (sqlite3:for-each-row 
-	    (lambda (id test-id stepname state status event-time logfile)
-	      (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-	    tdb
-	    "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-	    test-id)
-	   (sqlite3:finalize! tdb)
-	   (reverse res)))
-	'())))
-
-;; get a pretty table to summarize steps
-;;
-(define (db:get-steps-table db test-id #!key (work-area #f))
-  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(db:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (db:step-get-stepname step) ""   "" ""     ""        ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))
-	   (case (string->symbol (db:step-get-state step))
-	     ((start)(vector-set! record 1 (db:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(db:step-get-status step)))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (db:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (db:step-get-state step))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (db:step-get-event_time step))))
-	   (hash-table-set! res (db:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
-		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
-		       (<   (db:step-get-id a)        (db:step-get-id b)))
-		      (else #f)))))
-      res)))
-
-;; get a pretty table to summarize steps
-;;
-(define (db:get-steps-table-list db test-id #!key (work-area #f))
-  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(db:step-get-stepname step) 
-			;;        stepname                start end status    
-			(vector (db:step-get-stepname step) ""   "" ""     "" ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))
-	   (case (string->symbol (db:step-get-state step))
-	     ((start)(vector-set! record 1 (db:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(db:step-get-status step)))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (db:step-get-event_time step)))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (db:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (db:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (db:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (db:step-get-state step))
-	      (vector-set! record 3 (db:step-get-status step))
-	      (vector-set! record 4 (db:step-get-event_time step))))
-	   (hash-table-set! res (db:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (db:step-get-id step)
-			"\nstepname: " (db:step-get-stepname step)
-			"\nstate:    " (db:step-get-state step)
-			"\nstatus:   " (db:step-get-status step)
-			"\ntime:     " (db:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (db:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (db:step-get-event_time a)(db:step-get-event_time b)) #t)
-		      ((eq? (db:step-get-event_time a)(db:step-get-event_time b)) 
-		       (<   (db:step-get-id a)        (db:step-get-id b)))
-		      (else #f)))))
-      res)))
-
-(define (db:get-compressed-steps test-id #!key (work-area #f)(tdb #f))
-  (if (or (not work-area)
-	  (file-exists? (conc work-area "/testdat.db")))
-      (let* ((comprsteps (open-run-close db:get-steps-table tdb test-id work-area: work-area)))
-	(map (lambda (x)
-	       ;; take advantage of the \n on time->string
-	       (vector
-		(vector-ref x 0)
-		(let ((s (vector-ref x 1)))
-		  (if (number? s)(seconds->time-string s) s))
-		(let ((s (vector-ref x 2)))
-		  (if (number? s)(seconds->time-string s) s))
-		(vector-ref x 3)    ;; status
-		(vector-ref x 4)
-		(vector-ref x 5)))  ;; time delta
-	     (sort (hash-table-values comprsteps)
-		   (lambda (a b)
-		     (let ((time-a (vector-ref a 1))
-			   (time-b (vector-ref b 1)))
-		       (if (and (number? time-a)(number? time-b))
-			   (if (< time-a time-b)
-			       #t
-			       (if (eq? time-a time-b)
-				   (string<? (conc (vector-ref a 2))
-					     (conc (vector-ref b 2)))
-				   #f))
-			   (string<? (conc time-a)(conc time-b))))))))
-      '()))
-
-;;======================================================================
 ;; M I S C   M A N A G E M E N T   I T E M S 
 ;;======================================================================
 
@@ -2571,7 +2080,7 @@
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+(define (db:get-prereqs-not-met db run-id waitons ref-item-path mode)
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -2582,7 +2091,7 @@
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
 	   ;; next should be using mt:get-tests-for-run?
-	   (let ((tests             (cdb:remote-run db:get-tests-for-run-state-status #f run-id waitontest-name)) ;; (mt:get-tests-for-run run-id waitontest-name '() '()))
+	   (let ((tests             (db:get-tests-for-run-state-status db run-id waitontest-name))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))
@@ -2635,24 +2144,6 @@
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	 waitons)
 	(delete-duplicates result))))
-
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile #!key (work-area #f))
-  ;;                 db:open-test-db-by-test-id does cdb:remote-run
-  (let* ((tdb       (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (state     (items:check-valid-items "state" state-in))
-	 (status    (items:check-valid-items "status" status-in)))
-    (if (or (not state)(not status))
-	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
-		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:execute 
-	   tdb
-	   "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
-	   test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile ""))
-	  (sqlite3:finalize! tdb)
-	  #t)
-	#f)))
 
 ;;======================================================================
 ;; Extract ods file from the db
@@ -2781,24 +2272,23 @@
 
 ;; This is a list of all procs that write to the db
 ;;
-(define *db:all-write-procs*
-  (list 
-   db:set-var 
-   db:del-var
-   db:register-run
-   db:set-comment-for-run
-   db:delete-run
-   db:update-run-event_time
-   db:lock/unlock-run 
-   db:delete-test-step-records
-   db:delete-test-records
-   db:delete-tests-for-run
-   db:delete-old-deleted-test-records
-   db:set-tests-state-status
-   db:test-set-state-status-by-id
-   db:test-set-state-status-by-run-id-testname
-   db:testmeta-add-record
-   db:csv->test-data
-   db:test-data-rollup
-   db:teststep-set-status! ))
+;; (define *db:all-write-procs*
+;;   (list 
+;;    db:set-var 
+;;    db:del-var
+;;    db:register-run
+;;    db:set-comment-for-run
+;;    db:delete-run
+;;    db:update-run-event_time
+;;    db:lock/unlock-run 
+;;    db:delete-test-step-records
+;;    db:delete-test-records
+;;    db:delete-tests-for-run
+;;    db:delete-old-deleted-test-records
+;;    db:set-tests-state-status
+;;    db:test-set-state-status-by-id
+;;    db:test-set-state-status-by-run-id-testname
+;;    db:testmeta-add-record
+;;    db:csv->test-data
+;;    ))
 

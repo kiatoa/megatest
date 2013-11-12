@@ -77,5 +77,5 @@
 ;; D B
 ;;======================================================================
 
-(test #f '(#t "exit process started") (cdb:kill-server *runremote* #f)) ;; *toppath* *my-client-signature* #f)))
+(test #f '(#t "exit process started") (rmt:kill-server)) ;; *toppath* *my-client-signature* #f)))
 

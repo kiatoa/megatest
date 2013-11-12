@@ -19,6 +19,7 @@
 (declare (unit tests))
 (declare (uses lock-queue))
 (declare (uses db))
+(declare (uses tdb))
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
@@ -197,9 +198,7 @@
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
-  (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
-  (let* ((db          #f)
-	 (real-status status)
+  (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
 	 (testdat     (rmt:get-test-info-by-id test-id))
 	 (run-id      (db:test-get-run_id testdat))
@@ -292,11 +291,10 @@
 	(let ((cmt  (if waived waived comment)))
 	  (rmt:general-call 'set-test-comment (list cmt test-id))))))
 
-
-(define (tests:test-set-toplog! db run-id test-name logf) 
+(define (tests:test-set-toplog! run-id test-name logf) 
   (rmt:general-call 'tests:test-set-toplog logf run-id test-name))
 
-(define (tests:summarize-items db run-id test-id test-name force)
+(define (tests:summarize-items run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
@@ -318,8 +316,7 @@
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if ;; (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-              (not (lock-queue:wait-turn outputfilename test-id))
+	  (if (not (lock-queue:wait-turn outputfilename test-id))
 	      (print "Not updating " outputfilename " as another test item has signed up for the job")
 	      (begin
 		(print "Obtained lock for " outputfilename)
@@ -379,12 +376,13 @@
 		      (print "<table cellspacing=\"0\" border=\"1\">" 
 			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
 			     outtxt "</table></body></html>")
-		      (release-dot-lock outputfilename)))
+		      ;; (release-dot-lock outputfilename)
+		      ))
 		  (close-output-port oup)
 		  (lock-queue:release-lock outputfilename test-id)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! db run-id test-name outputfilename)
+		  (tests:test-set-toplog! run-id test-name outputfilename)
 		  )))))))
 
 ;;======================================================================
@@ -608,33 +606,25 @@
   0)
 
 (define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
-  ;; This is a good candidate for threading the requests to enable
-  ;; transactionized write at the server
   (rmt:general-call 'update-cpuload-diskfree cpuload diskfree test-id)
   (if minutes 
       (rmt:general-call 'update-run-duration minutes test-id))
   (if (and uname hostname)
       (rmt:general-call 'update-uname-host uname hostname test-id)))
   
-(define (tests:set-full-meta-info db test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
-  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
+(define (tests:set-full-meta-info test-id run-id minutes work-area)
+  (let* ((num-records 0)
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
+    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
 	  
-(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
+(define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-    ;; Update central with uname and hostname = #f
-    ;; Is this one of the performance problems? This info should come from testdat-meta anyway
-    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
-  ))
+    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)))
 	 
 ;;======================================================================
 ;; A R C H I V I N G

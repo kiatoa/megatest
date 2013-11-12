@@ -69,6 +69,9 @@
 (define (rmt:login)
   (rmt:send-receive 'login (list *toppath* megatest-version *my-client-signature*)))
 
+(define (rmt:kill-server)
+  (rmt:send-receive 'kill-server '()))
+
 ;; hand off a call to one of the db:queries statements
 (define (rmt:general-call stmtname . params)
   (rmt:send-receive 'general-call (append (list stmtname) params)))
@@ -146,11 +149,14 @@
 (define (rmt:get-testinfo-state-status test-id)
   (rmt:send-receive 'get-testinfo-state-status (list test-id)))
 
-(define (rmt:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-  (rmt:send-receive 'update-testdat-meta-info (list test-id work-area cpuload diskfree minutes)))
-
 (define (rmt:test-set-log! test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log logf test-id)))
+
+(define (rmt:test-get-paths-matching-keynames-target-new keynames target res testpatt statepatt statuspatt runname)
+  (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
+
+(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+  (rmt:send-receive 'get-prereqs-not-met (list run-id waitons ref-item-path mode)))
 
 ;; Statistical queries
 
@@ -159,6 +165,20 @@
 
 (define (rmt:get-count-tests-running-in-jobgroup jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup (list jobgroup)))
+
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
+  (if (and (not (equal? item-path ""))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
+      (begin
+	(cdb:update-pass-fail-counts *runremote* run-id test-name)
+	(if (equal? status "RUNNING")
+	    (cdb:top-test-set-running *runremote* run-id test-name)
+	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
+	#f)
+      #f))
+
+(define (rmt:update-pass-fail-counts run-id test-name)
+  (rmt:general-call 'update-fail-pass-counts run-id test-name run-id test-name run-id test-name))
 
 ;;======================================================================
 ;;  R U N S
@@ -187,6 +207,12 @@
 	 (data (cadr res)))
     (vector hedr (map list->vector data))))
 
+(define (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)
+  (let* ((res  (rmt:send-receive 'get-runs-by-patt (list runpatt count offset keypatts)))
+	 (hedr (car res))
+	 (data (cadr res)))
+    (vector hedr (map list->vector data))))
+  
 ;;======================================================================
 ;;  S T E P S
 ;;======================================================================

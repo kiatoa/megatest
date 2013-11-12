@@ -38,7 +38,8 @@
     ((db:test-get-logfile-info)        (apply db:test-get-logfile-info db params))
     ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file db params)))
     ((get-testinfo-state-status)       (apply db:get-testinfo-state-status db params))
-    ((update-testdat-meta-info)        (apply db:update-testdat-meta-info db params))
+    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new params))
+    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met params))
 
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
@@ -55,12 +56,34 @@
 					   (hedr (vector-ref res 0))
 					   (data (vector-ref res 1)))
 				      (list hedr (map vector->list data))))
+    ((get-runs-by-patt)             (let* ((res  (apply db:get-runs-by-patt db params))
+					   (hedr (vector-ref res 0))
+					   (data (vector-ref res 1)))
+				      (list hedr (map vector->list data))))
 
     ;; MISC
     ((login)                        (apply db:login db params))
     ((general-call)                 (let ((stmtname   (car params))
 					  (realparams (cdr params)))
 				      (db:general-call db stmtname realparams)))
+    ((kill-server)
+     (db:sync-to *inmemdb* *db*)
+     (let ((hostname (car  *runremote*))
+	   (port     (cadr *runremote*))
+	   (pid      (if (null? params) #f (car params)))
+	   (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
+       (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+       (debug:print-info 1 "current pid=" (current-process-id))
+       (open-run-close tasks:server-deregister tasks:open-db 
+		       hostname
+		       port: port)
+       (set! *server-run* #f)
+       (thread-sleep! 3)
+       (if pid 
+	   (process-signal pid signal/kill)
+	   (thread-start! th1))
+       '(#t "exit process started")))
+
     (else
      (list "ERROR" 0))))
 

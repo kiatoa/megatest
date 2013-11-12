@@ -606,7 +606,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
 			  (tests  (db:get-tests-for-run db run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
-		     ;; (db:get-tests-for-run db run-id testpatt '() '())))
 		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
 			    " status: " (db:get-value-by-header run header "state")
 			    " run-id: " run-id ", number tests: " (length tests))
@@ -770,7 +769,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((keys     (cdb:remote-run db:get-keys db))
+	  (let* ((keys     (rmt:get-keys))
 		 ;; db:test-get-paths must not be run remote
 		 (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
@@ -806,7 +805,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (db        #f)
+	       (db        (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target")))
@@ -821,24 +820,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (let* ((keys     (cdb:remote-run db:get-keys db))
+	  (let* ((keys     (db:get-keys db))
 		 ;; DO NOT run remote
 		 (paths    (db:test-get-paths-matching db keys target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
-		      paths)))
+		      paths))
+	  (if (sqlite3:database? db)(sqlite3:finalize! db)))
 	;; else do a general-run-call
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
 	 (lambda (target runname keys keyvals)
-	   (let* ((db       #f)
+	   (let* ((db       (open-db))
 		  ;; DO NOT run remote
 		  (paths    (db:test-get-paths-matching db keys target)))
 	     (for-each (lambda (path)
 			 (print path))
-		       paths))))))
+		       paths)
+	     (sqlite3:finalize! db))))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -849,13 +850,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-extract-ods"
      "Make ods spreadsheet"
      (lambda (target runname keys keyvals)
-       (let ((db         #f)
+       (let ((db         (open-db))
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
-	 (cdb:remote-run db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)))))
+	 (db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)
+	 (sqlite3:finalize! db)
+	 (set! *didsomething* #t)))))
 
 ;;======================================================================
 ;; execute the test
