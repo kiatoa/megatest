@@ -26,7 +26,6 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
-(declare (uses rmt))
 (declare (uses ezsteps))
 
 (include "common_records.scm")
@@ -135,9 +134,9 @@
 ;;======================================================================
 ;; Run info panel
 ;;======================================================================
-(define (run-info-panel keydat testdat runname)
+(define (run-info-panel db keydat testdat runname)
   (let* ((run-id     (db:test-get-run_id testdat))
-	 (rundat     (cdb:remote-run db:get-run-info #f run-id))
+	 (rundat     (db:get-run-info db run-id))
 	 (header     (db:get-header rundat))
 	 (event_time (db:get-value-by-header (db:get-row rundat)
 					     (db:get-header rundat)
@@ -216,7 +215,7 @@
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
-(define (set-fields-panel test-id testdat #!key (db #f))
+(define (set-fields-panel db test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
 	(newstate   #f))
@@ -225,7 +224,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(rmt:test-set-state-status-by-id test-id #f #f b)
+					(db:test-set-state-status-by-id db test-id #f #f b)
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -235,7 +234,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (rmt:test-set-state-status-by-id test-id state #f #f)
+								    (db:test-set-state-status-by-id db test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -255,7 +254,7 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (rmt:test-set-state-status-by-id test-id #f status #f)
+								    (db:test-set-state-status-by-id db test-id #f status #f)
 								    (db:test-set-status! testdat status)))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -369,7 +368,7 @@
 (define (dashboard-tests:get-compressed-steps test-id #!key (work-area #f))
   (if (or (not work-area)
 	  (file-exists? (conc work-area "/testdat.db")))
-      (let* ((steps-data  (rmt:get-steps-for-test test-id work-area))
+      (let* ((steps-data  (tdb:get-steps-for-test test-id work-area))
 	     (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
 	(map (lambda (x)
 	       ;; take advantage of the \n on time->string
@@ -400,9 +399,10 @@
 ;;
 ;;======================================================================
 (define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((testdat       (rmt:get-test-info-by-id test-id))
+  (let* ((db-path       (conc *toppath* "/megatest.db"))
 	 (db            (open-db))
-	 (testdat       (open-run-close db:get-test-info-by-id db test-id))
+	 (tdb           (tdb:open-test-db-by-test-id-local test-id))
+	 (testdat       (db:get-test-info-by-id db test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
@@ -411,8 +411,8 @@
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
-	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
+	       (keydat        (if testdat (db:get-key-val-pairs db run-id) #f))
+	       (rundat        (if testdat (db:get-run-info db run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -425,7 +425,7 @@
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (rmt:testmeta-get-record testname)))
+				  (let ((tm (db:testmeta-get-record db testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -473,7 +473,7 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (rmt:get-test-info-by-id test-id )))))
+						     (db:get-test-info-by-id db test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
@@ -593,7 +593,7 @@
 			      (iup:vbox ; #:expand "YES"
 			       ;; The run and test info
 			       (iup:hbox  ; #:expand "YES"
-				(run-info-panel keydat testdat runname)
+				(run-info-panel db keydat testdat runname)
 				(test-info-panel testdat store-label widgets)
 				(test-meta-panel testmeta store-meta))
 			       (host-info-panel testdat store-label)
@@ -611,7 +611,7 @@
 					   (apply 
 					    iup:hbox
 					    (list command-text-box command-launch-button))))
-			       (set-fields-panel test-id testdat)
+			       (set-fields-panel db test-id testdat)
 			       (let ((tabs 
 				      (iup:tabs
 				       ;; Replace here with matrix
@@ -719,7 +719,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (rmt:read-test-data test-id "%")))
+										    (tdb:open-run-close-db-by-test-id-local test-id #f tdb:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

@@ -84,9 +84,11 @@
 	 ;; and raise an exception ?
 	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
 	db)
-      (begin
+      (let ((baddb (sqlite3:open-database ":memory:")))
 	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
-	#f)))
+	;; provide an in-mem db (this is dangerous!)
+	(tdb:testdb-initialize baddb)
+	baddb)))
 
 ;; find and open the testdat.db file for an existing test
 (define (tdb:open-test-db-by-test-id test-id #!key (work-area #f))
@@ -95,6 +97,22 @@
 			(rmt:test-get-rundir-from-test-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
+
+;; find and open the testdat.db file for an existing test
+(define (tdb:open-test-db-by-test-id-local test-id #!key (work-area #f))
+  (let* ((test-path (if work-area
+			work-area
+			(open-run-close db:test-get-rundir-from-test-id #f test-id))))
+    (debug:print 3 "TEST PATH: " test-path)
+    (open-test-db test-path)))
+
+;; find and open the testdat.db file for an existing test
+(define (tdb:open-run-close-db-by-test-id-local test-id work-area proc . params)
+  (let* ((test-path (if work-area
+			work-area
+			(open-run-close db:test-get-rundir-from-test-id #f test-id)))
+	 (tdb        (open-test-db test-path)))
+    (apply proc tdb params)))
 
 (define (tdb:testdb-initialize db)
   (debug:print 11 "db:testdb-initialize START")
@@ -169,7 +187,7 @@
 
 (define (tdb:csv->test-data test-id csvdata #!key (work-area #f))
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((tdb     (tdb:open-test-db-by-test-id test-id work-area: work-area)))
+  (let ((tdb     (tdb:open-test-db-by-test-id-local test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(let ((csvlist (csv->list (make-csv-reader
 				   (open-input-string csvdata)
@@ -227,19 +245,19 @@
 	   csvlist)
 	  (sqlite3:finalize! tdb)))))
 
-;; get a list of test_data records matching categorypatt
-(define (tdb:read-test-data test-id categorypatt #!key (work-area #f))
-  (let ((tdb  (tdb:open-test-db-by-test-id test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(let ((res '()))
-	  (sqlite3:for-each-row 
-	   (lambda (id test_id category variable value expected tol units comment status type)
-	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
-	   tdb
-	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
-	  (sqlite3:finalize! tdb)
-	  (reverse res))
-	'())))
+;; ;; get a list of test_data records matching categorypatt
+;; (define (tdb:read-test-data test-id categorypatt #!key (work-area #f))
+;;   (let ((tdb  (tdb:open-test-db-by-test-id test-id work-area: work-area)))
+;;     (if (sqlite3:database? tdb)
+;; 	(let ((res '()))
+;; 	  (sqlite3:for-each-row 
+;; 	   (lambda (id test_id category variable value expected tol units comment status type)
+;; 	     (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+;; 	   tdb
+;; 	   "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+;; 	  (sqlite3:finalize! tdb)
+;; 	  (reverse res))
+;; 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
 (define (tdb:load-test-data test-id #!key (work-area #f))
@@ -259,7 +277,7 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (tdb:test-data-rollup test-id status #!key (work-area #f))
-  (let ((tdb (tdb:open-test-db-by-test-id test-id work-area: work-area))
+  (let ((tdb (tdb:open-test-db-by-test-id-local test-id work-area: work-area))
 	(fail-count 0)
 	(pass-count 0))
     (if (sqlite3:database? tdb)
@@ -313,7 +331,7 @@
 
 ;; db-get-test-steps-for-run
 (define (tdb:get-steps-for-test test-id #!key (work-area #f))
-  (let* ((tdb (tdb:open-test-db-by-test-id test-id work-area: work-area))
+  (let* ((tdb (tdb:open-test-db-by-test-id-local test-id work-area: work-area))
 	 (res '()))
     (if (sqlite3:database? tdb)
 	(handle-exceptions
@@ -482,7 +500,7 @@
       '()))
 
 (define (tdb:teststep-set-status! test-id teststep-name state-in status-in comment logfile #!key (work-area #f))
-  (let* ((tdb       (tdb:open-test-db-by-test-id test-id work-area: work-area))
+  (let* ((tdb       (tdb:open-test-db-by-test-id-local test-id work-area: work-area))
 	 (state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
@@ -501,7 +519,7 @@
 ;; this one is a bit broken BUG FIXME
 (define (tdb:delete-test-step-records test-id #!key (work-area #f))
   ;; Breaking it into two queries for better file access interleaving
-  (let* ((tdb (tdb:open-test-db-by-test-id test-id work-area: work-area)))
+  (let* ((tdb (tdb:open-test-db-by-test-id-local test-id work-area: work-area)))
     ;; test db's can go away - must check every time
     (if (sqlite3:database? tdb)
 	(begin
@@ -511,7 +529,7 @@
 
 ;; 
 (define (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (tdb:open-test-db-by-test-id test-id work-area: work-area)))
+  (let ((tdb         (tdb:open-test-db-by-test-id-local test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

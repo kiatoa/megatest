@@ -88,15 +88,15 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *db* #f) ;; (open-db))
+(define *db* (open-db))
 
-(if (args:get-arg "-host")
-    (begin
-      (set! *runremote* (string-split (args:get-arg "-host" ":")))
-      (client:launch))
-    (if (not (args:get-arg "-use-server"))
-	(set! *transport-type* 'fs) ;; force fs access
-	(client:launch)))
+;; (if (args:get-arg "-host")
+;;     (begin
+;;       (set! *runremote* (string-split (args:get-arg "-host" ":")))
+;;       (client:launch))
+;;     (if (not (args:get-arg "-use-server"))
+;; 	(set! *transport-type* 'fs) ;; force fs access
+;; 	(client:launch)))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
@@ -105,8 +105,8 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-;; (define *keys*   (open-run-close db:get-keys #f))
-(define *keys*   (cdb:remote-run db:get-keys #f))
+(define *keys*   (db:get-keys *db*))
+;; (define *keys*   (cdb:remote-run db:get-keys #f))
 ;; (define *keys*   (db:get-keys   *db*))
 
 (define *dbkeys*  (append *keys* (list "runname")))
@@ -120,7 +120,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (cdb:remote-run db:get-num-runs #f "%"))
+(define *tot-run-count* (db:get-num-runs *db* "%"))
 ;; (define *tot-run-count* (db:get-num-runs *db* "%"))
 
 ;; Update management
@@ -207,7 +207,7 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (cdb:remote-run db:get-runs #f runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	 (allruns     (db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 				      *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
@@ -226,14 +226,15 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests       (mt:get-tests-for-run run-id testnamepatt states statuses
-							  not-in: *hide-not-hide*
-							  sort-by: sort-by
-							  sort-order: sort-order
-							  qryvals: 'shortlist))
+		       (tests       (db:get-tests-for-run *db* run-id testnamepatt states statuses
+							  #f #f
+							  *hide-not-hide*
+							  sort-by
+							  sort-order
+							  'shortlist))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
-		       (key-vals    (cdb:remote-run db:get-key-vals #f run-id)))
+		       (key-vals    (db:get-key-vals *db* run-id)))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
@@ -560,7 +561,7 @@ Misc
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (open-run-close db:get-targets #f))
+	 (db-target-dat (db:get-targets *db*))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (all-targets   (append db-targets
@@ -825,7 +826,7 @@ Misc
 					    (dashboard:update-run-command))))
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
-					    (runs-for-targ (mt:get-runs-by-patt *keys* "%" target))
+					    (runs-for-targ (db:get-runs-by-patt *db* *keys* "%" target #f #f))
 					    (runs-header   (vector-ref runs-for-targ 0))
 					    (runs-dat      (vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
@@ -985,7 +986,7 @@ Misc
 ;;======================================================================
 ;;
 ;; General info about the run(s) and megatest area
-(define (dashboard:summary)
+(define (dashboard:summary db)
   (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
     (iup:vbox
      (iup:split
@@ -1010,7 +1011,7 @@ Misc
 	(dcommon:section-matrix rawconfig "disks" "Disk area" "Path"))))
      (iup:frame
       #:title "Run statistics"
-      (dcommon:run-stats)))))
+      (dcommon:run-stats db)))))
 
 ;;======================================================================
 ;; R U N
@@ -1026,7 +1027,7 @@ Misc
 (define dashboard:update-run-summary-tab #f)
 
 ;; (define (tests window-id)
-(define (dashboard:one-run)
+(define (dashboard:one-run db)
   (let* ((tb      (iup:treebox
 		   #:value 0
 		   #:name "Runs"
@@ -1046,15 +1047,17 @@ Misc
 	 (run-matrix (iup:matrix
 		      #:expand "YES"))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (mt:get-runs-by-patt *keys* "%" #f))
+		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
-			    (tests-dat    (let ((tdat (mt:get-tests-for-run run-id 
+			    (tests-dat    (let ((tdat (db:get-tests-for-run db run-id 
 									    (hash-table-ref/default *searchpatts* "test-name" "%/%")
 									    (hash-table-keys *state-ignore-hash*) ;; '()
 									    (hash-table-keys *status-ignore-hash*) ;; '()
-									    not-in: *hide-not-hide*
-									    qryvals: "id,testname,item_path,state,status"))) ;; get 'em all
+									    #f #f
+									    *hide-not-hide*
+									    #f #f
+									    "id,testname,item_path,state,status"))) ;; get 'em all
 					    (sort tdat (lambda (a b)
 							 (let* ((aval (vector-ref a 2))
 								(bval (vector-ref b 2))
@@ -1171,7 +1174,7 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (make-dashboard-buttons nruns ntests keynames)
+(define (make-dashboard-buttons db nruns ntests keynames)
   (let* ((nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
@@ -1245,7 +1248,7 @@ Misc
 							  (hash-table-set! *status-ignore-hash* status #t)
 							  (hash-table-delete! *status-ignore-hash* status))
 						      (set-bg-on-filter))))
-		   *common:std-statuses*)) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
+		   (map cadr *common:std-statuses*))) ;; '("PASS" "FAIL" "WARN" "CHECK" "WAIVED" "STUCK/DEAD" "n/a" "SKIP")))
 	     (apply 
 	      iup:hbox
 	      (map (lambda (state)
@@ -1255,7 +1258,7 @@ Misc
 							  (hash-table-set! *state-ignore-hash* state #t)
 							  (hash-table-delete! *state-ignore-hash* state))
 						      (set-bg-on-filter))))
-		   *common:std-states*)) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
+		   (map cadr *common:std-states*))) ;; '("RUNNING" "COMPLETED" "INCOMPLETE" "LAUNCHED" "NOT_STARTED" "KILLED" "DELETED")))
 	     (iup:valuator #:valuechanged_cb (lambda (obj)
 					       (let ((val (inexact->exact (round (/ (string->number (iup:attribute obj "VALUE")) 10))))
 						     (oldmax   (string->number (iup:attribute obj "MAX")))
@@ -1382,9 +1385,9 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(set! *please-update-buttons* #t)
 					(set! *current-tab-number* curr))
-		    (dashboard:summary)
+		    (dashboard:summary db)
 		    runs-view
-		    (dashboard:one-run)
+		    (dashboard:one-run db)
 		    (dashboard:run-controls)
 		    )))
 	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
@@ -1488,7 +1491,7 @@ Misc
 	  (lambda (x)
 	    (on-exit (lambda ()
 		       (if *db* (sqlite3:finalize! *db*))))
-	    (cdb:remote-run examine-run *db* runid)))
+	    (examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
@@ -1503,7 +1506,7 @@ Misc
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))
  (else
-  (set! uidat (make-dashboard-buttons *num-runs* *num-tests* *dbkeys*))
+  (set! uidat (make-dashboard-buttons *db* *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
@@ -1522,3 +1525,4 @@ Misc
 		       1))))
 
 (iup:main-loop)
+(sqlite3:finalize! *db*)
