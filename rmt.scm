@@ -209,7 +209,7 @@
     (vector hedr (map list->vector data))))
 
 (define (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)
-  (let* ((res  (rmt:send-receive 'get-runs-by-patt (list runpatt count offset keypatts)))
+  (let* ((res  (rmt:send-receive 'get-runs-by-patt (list keys runnamepatt targpatt offset limit)))
 	 (hedr (car res))
 	 (data (cadr res)))
     (vector hedr (map list->vector data))))
