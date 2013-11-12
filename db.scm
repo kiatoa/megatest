@@ -213,7 +213,8 @@
 
     (if (> rrecchgd 0)  (debug:print 0 "synced " rrecchgd " changed records in runs  table"))
     (if (> trecchgd 0)  (debug:print 0 "synced " trecchgd " changed records in tests table"))
-    (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))))
+    (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))
+    (+ rrecchgd trecchgd tmrecchgd)))
 
 (define (db:sync-back)
   (db:sync-to *inmemdb* *db*))
@@ -894,7 +895,7 @@
 (define (db:get-run-info db run-id)
   ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
   ;;    (hash-table-ref *run-info-cache* run-id)
-  (let* ((res      #f)
+  (let* ((res       (vector #f #f #f #f))
 	 (keys      (db:get-keys db))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header    (append keys remfields))

@@ -103,8 +103,6 @@
 	 (res     (api:execute-requests db cmd params)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
-    (db:sync-to *inmemdb* *db*)
-    
     (rmt:dat->json-str
      (if (or (string? res)
 	     (list?   res)

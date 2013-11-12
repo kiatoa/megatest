@@ -85,7 +85,6 @@
 				(string->number (config-lookup  *configdat* "server" "port"))
 				(+ 5000 (random 1001)))))
 	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
-    (set! *cache-on* #t)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -96,10 +95,6 @@
     (vhost-map `(((* any) . ,(lambda (continue)
 			       ;; open the db on the first call 
 				 ;; This is were we set up the database connections
-			       (set! *db*       (open-db))
-			       (set! *inmemdb*  (open-in-mem-db))
-			       (set! db *inmemdb*)
-			       (db:sync-to *db* *inmemdb*)
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
@@ -512,6 +507,12 @@
 					    "-"))) "Server run"))
 		   (th3 (make-thread http-transport:keep-running "Keep running")))
 ;;		   (th1 (make-thread server:write-queue-handler  "write queue")))
+	      (set! *cache-on* #t)
+	      (set! *db*       (open-db))
+	      (set! *inmemdb*  (open-in-mem-db))
+	      (set! db *inmemdb*)
+	      (db:sync-to *db* *inmemdb*)
+
 	      (thread-start! th2)
 	      (thread-start! th3)
 	      ;; (thread-start! th1)

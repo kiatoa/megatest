@@ -123,7 +123,10 @@
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (setenv "MT_RUNNAME" (if inrunname inrunname (rmt:get-run-name-from-id run-id)))
+    (let ((runname  (if inrunname inrunname (rmt:get-run-name-from-id run-id))))
+      (if runname
+	  (setenv "MT_RUNNAME" runname)
+	  (debug:print 0 "ERROR: no value for runname for id " run-id)))
     (setenv "MT_RUN_AREA_HOME" *toppath*)))
 
 (define (set-item-env-vars itemdat)
