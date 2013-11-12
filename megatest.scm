@@ -27,6 +27,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
+(declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
 
@@ -633,15 +634,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
+			      (let ((steps (tdb:get-steps-for-test (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
 					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-					   (db:step-get-stepname step)
-					   (db:step-get-state step)
-					   (db:step-get-status step)
-					   (db:step-get-event_time step)))
+					   (tdb:step-get-stepname step)
+					   (tdb:step-get-state step)
+					   (tdb:step-get-status step)
+					   (tdb:step-get-event_time step)))
 				 steps)))))
 		      tests)))))
 	     runs)

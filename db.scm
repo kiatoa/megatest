@@ -130,10 +130,10 @@
 		 tmgetstmt testm-id)
 		(if (not (equal? curr-tmdat tmdat)) ;; something changed
 		    (begin
-		      (debug:print 0 "  test-id: " test-id
+		      (debug:print 0 "  test-id: " testm-id
 				   "\ncurr-tdat: " curr-tmdat
 				   "\n     tdat: " tmdat)
-		      (apply sqlite3:execute tputstmt (vector->list tmdat))
+		      (apply sqlite3:execute tmputstmt (vector->list tmdat))
 		      (set! tmrecchgd (+ tmrecchgd 1)))))))))
        tmdats)
       (sqlite3:finalize! tmgetstmt)
