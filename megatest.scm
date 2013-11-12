@@ -470,7 +470,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (define (full-runconfigs-read)
-  (let* ((keys   (cdb:remote-run db:get-keys #f))
+  (let* ((keys   (rmt:get-keys))
 	 (target (if (args:get-arg "-reqtarg")
 		     (args:get-arg "-reqtarg")
 		     (if (args:get-arg "-target")
@@ -575,18 +575,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Query runs
 ;;======================================================================
 
+;; NOTE: list-runs and list-db-targets operate on local db!!!
+;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
-	(let* ((db       #f)
+	(let* ((db       (open-db))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
 			     "%"))
-	       (runsdat  (cdb:remote-run db:get-runs #f runpatt #f #f '()))
+	       (runsdat  (db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
-	       (keys     (cdb:remote-run db:get-keys #f))
+	       (keys     (db:get-keys db))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
@@ -603,7 +605,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (print targetstr))))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
-			  (tests  (mt:get-tests-for-run run-id testpatt '() '())))
+			  (tests  (db:get-tests-for-run db run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
+		     ;; (db:get-tests-for-run db run-id testpatt '() '())))
 		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
 			    " status: " (db:get-value-by-header run header "state")
 			    " run-id: " run-id ", number tests: " (length tests))
@@ -624,14 +627,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     (equal? (db:test-get-status test) "WARN")
 				     (equal? (db:test-get-state test)  "NOT_STARTED")))
 			    (begin
-			      (print "         cpuload:  " (db:test-get-cpuload test)
+			      (print   "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
 				     "\n         uname:    " (db:test-get-uname test)
 				     "\n         rundir:   " (db:test-get-rundir test)
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test #f (db:test-get-id test))))
+			      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 

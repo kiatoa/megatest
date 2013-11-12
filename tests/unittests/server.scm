@@ -63,6 +63,14 @@
 (test "get comment" "this is a comment" (let ((trec (rmt:get-test-info-by-id 1)))
 					  (db:test-get-comment trec)))
 
+;; MORE RUNS
+(test "get runs"  #t (let* ((runs   (rmt:get-runs "%" #f #f '()))
+			    (header (vector-ref runs 0))
+			    (data   (vector-ref runs 1)))
+		       (and (list?   header)
+			    (list?   data)
+			    (vector? (car data)))))
+
 ;; (test "sync back"              #t (begin (rmt:sync-back) #t))
 
 ;;======================================================================

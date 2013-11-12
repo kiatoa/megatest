@@ -181,6 +181,12 @@
 (define (rmt:delete-old-deleted-test-records)
   (rmt:send-receive 'delete-old-deleted-test-records '()))
 
+(define (rmt:get-runs runpatt count offset keypatts)
+  (let* ((res  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
+	 (hedr (car res))
+	 (data (cadr res)))
+    (vector hedr (map list->vector data))))
+
 ;;======================================================================
 ;;  S T E P S
 ;;======================================================================

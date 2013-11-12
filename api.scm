@@ -51,6 +51,10 @@
     ((get-tests-for-runs-mindata)   (map vector->list (apply db:get-tests-for-runs-mindata db params)))
     ((get-run-name-from-id)         (apply db:get-run-name-from-id db params))
     ((delete-run)                   (apply db:delete-run db params))
+    ((get-runs)                     (let* ((res  (apply db:get-runs db params))
+					   (hedr (vector-ref res 0))
+					   (data (vector-ref res 1)))
+				      (list hedr (map vector->list data))))
 
     ;; MISC
     ((login)                        (apply db:login db params))
