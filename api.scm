@@ -48,7 +48,7 @@
 						    x))
 					      res)))
     ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts db params))
-    
+    ((update-fail-pass-counts)         (apply db:general-call db 'update-pass-fail-counts params))
 
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))

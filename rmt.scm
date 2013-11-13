@@ -42,7 +42,7 @@
 	     #f))
      ))
     (else
-     (debug:print 0 "ERROR: Transport not yet (re)supported")
+     (debug:print 0 "ERROR: Transport " *transport-type* " not yet (re)supported")
      (exit 1))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
@@ -174,15 +174,7 @@
   (rmt:send-receive 'get-count-tests-running-in-jobgroup (list jobgroup)))
 
 (define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
-  (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
-      (begin
-	(cdb:update-pass-fail-counts *runremote* run-id test-name)
-	(if (equal? status "RUNNING")
-	    (cdb:top-test-set-running *runremote* run-id test-name)
-	    (cdb:top-test-set-per-pf-counts *runremote* run-id test-name))
-	#f)
-      #f))
+  (rmt:send-receive 'roll-up-pass-fail-counts (list run-id test-name item-path status)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
   (rmt:general-call 'update-fail-pass-counts run-id test-name run-id test-name run-id test-name))

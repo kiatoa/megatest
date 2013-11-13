@@ -1635,7 +1635,7 @@
 ;; 	(debug:print 0 "ERROR: Attempt to access read-only database")
 ;; 	#f)))
 
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
+(define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (begin
@@ -1695,7 +1695,7 @@
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	;; stuff for roll-up-pass-fail-counts
-	'(update-fail-pass-counts "UPDATE tests 
+	'(update-pass-fail-counts "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE run_id=? AND testname=? AND item_path='';")

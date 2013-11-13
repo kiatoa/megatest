@@ -216,7 +216,7 @@
 	       (if (and (or (not expected)(equal? expected ""))
 			(or (not tol)     (equal? expected ""))
 			(or (not units)   (equal? expected "")))
-		   (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test db test-id category variable)))
+		   (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test tdb test-id category variable)))
 			       (set! expected new-expected)
 			       (set! tol      new-tol)
 			       (set! units    new-units)))
@@ -265,7 +265,7 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (tdb:csv->test-data db test-id lin work-area: work-area)
+	  (tdb:csv->test-data test-id lin work-area: work-area)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
@@ -318,7 +318,7 @@
 	  ;;  test-id test-id test-id test-id)
 	  ))))
 
-(define (tdb:get-prev-tol-for-test test-id category variable)
+(define (tdb:get-prev-tol-for-test tdb test-id category variable)
   ;; Finish me?
   (values #f #f #f))
 
