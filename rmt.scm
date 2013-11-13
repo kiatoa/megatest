@@ -20,6 +20,16 @@
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
 ;;
 
+;; ;; For debugging add the following to ~/.megatestrc
+;;
+;; (require-library trace)
+;; (import trace)
+;; (trace
+;; rmt:send-receive
+;; api:execute-requests
+;; )
+
+
 ;;======================================================================
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================

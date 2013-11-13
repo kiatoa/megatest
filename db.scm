@@ -1492,157 +1492,21 @@
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
-;; (define (cdb:use-non-blocking-mode proc)
-;;   (set! *client-non-blocking-mode* #t)
-;;   (let ((res (proc)))
-;;     (set! *client-non-blocking-mode* #f)
-;;     res))
-;; 
-;; params = 'target cached remparams
-;;
-;; make-vector-record cdb packet client-sig qtype immediate query-sig params qtime
-;;
-;; cdb:client-call is the unified interface to all the transports. It dispatches the
-;;                 query to a server routine (e.g. server:client-send-recieve) that 
-;;                 transports the data to the server where it is passed to db:process-queue-item
-;;                 which either returns the data to the calling server routine or 
-;;                 directly calls the returning procedure (e.g. zmq).
-;;
-;; (define (cdb:client-call serverdat qtype immediate numretries . params)
-;;   (debug:print-info 11 "cdb:client-call serverdat=" serverdat ", qtype=" qtype ", immediate=" immediate ", numretries=" numretries ", params=" params)
-;;   (case *transport-type* 
-;;     ((fs)
-;;      (let ((packet (vector "na" qtype immediate "na" params 0)))
-;;        (fs:process-queue-item packet)))
-;;     ((http)
-;;      (let* ((client-sig  (client:get-signature))
-;; 	    (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-;; 	    (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds))))) ;; (with-output-to-string (lambda ()(serialize params))))
-;;        (debug:print-info 11 "zdat=" zdat)
-;;        (let* ((res  #f)
-;; 	      (rawdat      (http-transport:client-send-receive serverdat zdat))
-;; 	      (tmp         #f))
-;; 	 (debug:print-info 11 "Sent " zdat ", received " rawdat)
-;; 	 (if rawdat
-;; 	     (begin
-;; 	       (set! tmp (db:string->obj rawdat))
-;; 	       (vector-ref tmp 2))
-;; 	     (begin
-;; 	       (debug:print 0 "ERROR: Communication with the server failed. Exiting if possible")
-;; 	       (exit 1))))))
-;;     ((zmq)
-;;      (handle-exceptions
-;;       exn
-;;       (begin
-;; 	(debug:print-info 0 "cdb:client-call timeout or error. Trying again in 5 seconds")
-;; 	(thread-sleep! 5) 
-;; 	(if (> numretries 0)(apply cdb:client-call serverdat qtype immediate (- numretries 1) params)))
-;;       (let* ((push-socket (vector-ref serverdat 0))
-;; 	     (sub-socket  (vector-ref serverdat 1))
-;; 	     (client-sig  (client:get-signature))
-;; 	     (query-sig   (message-digest-string (md5-primitive) (conc qtype immediate params)))
-;; 	     (zdat        (db:obj->string (vector client-sig qtype immediate query-sig params (current-seconds)))) ;; (with-output-to-string (lambda ()(serialize params))))
-;; 	     (res  #f)
-;; 	     (send-receive (lambda ()
-;; 			     (debug:print-info 11 "sending message")
-;; 			     (send-message push-socket zdat)
-;; 			     (debug:print-info 11 "message sent")
-;; 			     (let loop ()
-;; 			       ;; get the sender info
-;; 			       ;; this should match (client:get-signature)
-;; 			       ;; we will need to process "all" messages here some day
-;; 			       (receive-message* sub-socket)
-;; 			       ;; now get the actual message
-;; 			       (let ((myres (db:string->obj (receive-message* sub-socket))))
-;; 				 (if (equal? query-sig (vector-ref myres 1))
-;; 				     (set! res (vector-ref myres 2))
-;; 				     (loop)))))))
-;; 	;; (timeout (lambda ()
-;; 	;;     	(let loop ((n numretries))
-;; 	;;     	  (thread-sleep! 15)
-;; 	;;     	  (if (not res)
-;; 	;;     	      (if (> numretries 0)
-;; 	;;     		  (begin
-;; 	;;     		    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-;; 	;;     		    (debug:print-info 11 "re-sending message")
-;; 	;;     		    (send-message push-socket zdat)
-;; 	;;     		    (debug:print-info 11 "message re-sent")
-;; 	;;     		    (loop (- n 1)))
-;; 	;;     		  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
-;; 	;;     		  (begin
-;; 	;;     		    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-;; 	;;     		    (exit 5))))))))
-;; 	(debug:print-info 11 "Starting threads")
-;; 	(let ((th1 (make-thread send-receive "send receive"))
-;; 	      ;; (th2 (make-thread timeout      "timeout"))
-;; 	      )
-;; 	  (thread-start! th1)
-;; 	  ;; (thread-start! th2)
-;; 	  (thread-join!  th1)
-;; 	  (debug:print-info 11 "cdb:client-call returning res=" res)
-;; 	  res))))))
-;; 
-;; ;; (define (cdb:set-verbosity serverdat val)
-;;   (cdb:client-call serverdat 'set-verbosity #f *default-numtries* val))
-;; 
-;; (define (cdb:num-clients serverdat)
-;;   (cdb:client-call serverdat 'numclients #t *default-numtries*))
-
 (define (db:test-set-status-state db test-id status state msg)
   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
       (db:general-call db 'set-test-start-time (list test-id)))
   (if msg
       (db:general-call db 'state-status-msg (list state status msg test-id))
       (db:general-call db 'state-status     (list state status test-id))))
-;; 
-;; (define (cdb:test-rollup-test_data-pass-fail serverdat test-id)
-;;   (cdb:client-call serverdat 'test_data-pf-rollup #t *default-numtries* test-id test-id test-id test-id))
-;; 
-;; (define (cdb:tests-register-test serverdat run-id test-name item-path)
-;;   (cdb:client-call serverdat 'register-test #t *default-numtries* run-id test-name item-path))
-;; 
-;; (define (cdb:top-test-set-running serverdat run-id test-name)
-;;   (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
-;; 
-;; (define (cdb:top-test-set-per-pf-counts serverdat run-id test-name)
-;;   (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
-;; 
-;; ;;=
-;; 
-;; (define (cdb:flush-queue serverdat)
-;;   (cdb:client-call serverdat 'flush #f *default-numtries*))
-;; 
-;; (define (cdb:kill-server serverdat pid)
-;;   (cdb:client-call serverdat 'killserver #t *default-numtries* pid))
-;; 
-;; (define (cdb:roll-up-pass-fail-counts serverdat run-id test-name item-path status)
-;;   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:roll-up-pass-fail-counts #f run-id test-name item-path status))
-;; 
-;; (define (cdb:get-test-info serverdat run-id test-name item-path)
-;;   (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info #f run-id test-name item-path))
-;; 
-;; (define (cdb:get-test-info-by-id serverdat test-id)
-;;   (let ((test-dat (cdb:client-call serverdat 'immediate #f *default-numtries* open-run-close db:get-test-info-by-id #f test-id)))
-;;     (hash-table-set! *test-info* test-id (vector (current-seconds) test-dat)) ;; cached for use where up-to-date info is not needed
-;;     test-dat))
-
-;; ;; db should be db open proc or #f
-;; (define (cdb:remote-run proc db . params)
-;;   (if (or *db-write-access*
-;; 	  (not (member proc *db:all-write-procs*)))
-;;       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params)
-;;       (begin
-;; 	(debug:print 0 "ERROR: Attempt to access read-only database")
-;; 	#f)))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (begin
-	(db:general-call 'update-pass-fail-counts db (list run-id test-name run-id test-name))
+	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
 	(if (equal? status "RUNNING")
-	    (db:general-call 'top-test-set-running db (list run-id test-name))
-	    (db:general-call 'top-test-set-per-pf-counts db (list run-id test-name run-id test-name)))
+	    (db:general-call db 'top-test-set-running (list run-id test-name))
+	    (db:general-call db 'top-test-set-per-pf-counts (list run-id test-name run-id test-name run-id test-name)))
 	#f)
       #f))
 
@@ -1729,68 +1593,6 @@
 			       killserver
 			       ))
 
-;; not used, intended to indicate to run in calling process
-(define db:run-local-queries '()) ;; rollup-tests-pass-fail))
-
-;; (define (db:process-cached-writes db)
-;;   (let ((queries    (make-hash-table))
-;; 	(data       #f))
-;;     (mutex-lock! *incoming-mutex*)
-;;     ;; data is a list of query packets <vector qry-sig query params
-;;     (set! data (reverse *incoming-writes*)) ;;  (sort ... (lambda (a b)(< (vector-ref a 1)(vector-ref b 1)))))
-;;     (set! *server:last-write-flush* (current-milliseconds))
-;;     (set! *incoming-writes* '())
-;;     (mutex-unlock! *incoming-mutex*)
-;;     (if (> (length data) 0)
-;; 	;; Process if we have data
-;; 	(begin
-;; 	  (debug:print-info 7 "Writing cached data " data)
-;; 	  
-;; 	  ;; Prepare the needed sql statements
-;; 	  ;;
-;; 	  (for-each (lambda (request-item)
-;; 		      (let ((stmt-key (vector-ref request-item 0))
-;; 			    (query    (vector-ref request-item 1)))
-;; 			(hash-table-set! queries stmt-key (sqlite3:prepare db query))))
-;; 		    data)
-;; 	  
-;; 	  ;; No outer loop needed. Single loop for write items only. Reads trigger flush of queue
-;; 	  ;; and then are executed.
-;; 	  (sqlite3:with-transaction 
-;; 	   db
-;; 	   (lambda ()
-;; 	     (for-each
-;; 	      (lambda (hed)
-;; 		(let* ((params   (vector-ref hed 2))
-;; 		       (stmt-key (vector-ref hed 0))
-;; 		       (stmt     (hash-table-ref/default queries stmt-key #f)))
-;; 		  (if stmt
-;; 		      (apply sqlite3:execute stmt params)
-;; 		      (debug:print 0 "ERROR: Problem Executing " stmt-key " for " params))))
-;; 	      data)))
-;; 	  
-;; 	  ;; let all the waiting calls know all is done
-;; 	  (mutex-lock! *completed-mutex*)
-;; 	  (for-each (lambda (item)
-;; 		      (let ((qry-sig (cdb:packet-get-client-sig item)))
-;; 			(debug:print-info 7 "Registering query " qry-sig " as done")
-;; 			(hash-table-set! *completed-writes* qry-sig #t)))
-;; 		    data)
-;; 	  (mutex-unlock! *completed-mutex*)
-;; 	  
-;; 	  ;; Finalize the statements. Should this be done inside the mutex above?
-;; 	  ;; I think sqlite3 mutexes will keep the data safe
-;; 	  (for-each (lambda (stmt-key)
-;; 		      (sqlite3:finalize! (hash-table-ref queries stmt-key)))
-;; 		    (hash-table-keys queries))
-;; 	  
-;; 	  ;; Do a little record keeping
-;; 	  (let ((cache-size (length data)))
-;; 	    (if (> cache-size *max-cache-size*)
-;; 		(set! *max-cache-size* cache-size)))
-;; 	  #t)
-;; 	#f)))
-
 (define (db:login db calling-path calling-version client-signature)
   (if (and (equal? calling-path *toppath*)
 	   (equal? megatest-version calling-version))
@@ -1813,47 +1615,6 @@
 (define *writes-total-delay*       0)
 (define *total-non-write-delay*    0)
 (define *number-non-write-queries* 0)
-
-
-;; The queue is a list of vectors where the zeroth slot indicates the type of query to
-;; apply and the second slot is the time of the query and the third entry is a list of 
-;; values to be applied
-;;
-;; (define (db:queue-write-and-wait db qry-sig query params)
-;;   (let ((queue-len  0)
-;; 	(res        #f)
-;; 	(got-it     #f)
-;; 	(qry-pkt    (vector qry-sig query params))
-;; 	(start-time (current-milliseconds))
-;; 	(timeout    (+ 10 (current-seconds)))) ;; set the time out to 10 secs in future
-;; 
-;;     ;; Put the item in the queue *incoming-writes* 
-;;     (mutex-lock! *incoming-mutex*)
-;;     (set! *incoming-writes* (cons qry-pkt *incoming-writes*))
-;;     (set! queue-len (length *incoming-writes*))
-;;     (mutex-unlock! *incoming-mutex*)
-;; 
-;;     (debug:print-info 7 "Current write queue length is " queue-len)
-;; 
-;;     ;; poll for the write to complete, timeout after 10 seconds
-;;     ;; periodic flushing of the queue is taken care of by 
-;;     ;; db:flush-queue
-;;     (let loop ()
-;;       (thread-sleep! 0.001)
-;;       (mutex-lock! *completed-mutex*)
-;;       (if (hash-table-ref/default *completed-writes* qry-sig #f)
-;; 	  (begin
-;; 	    (hash-table-delete! *completed-writes* qry-sig)
-;; 	    (set! got-it #t)))
-;;       (mutex-unlock! *completed-mutex*)
-;;       (if (and (not got-it)
-;; 	       (< (current-seconds) timeout))
-;; 	  (begin
-;; 	    (thread-sleep! 0.01)
-;; 	    (loop))))
-;;     (set! *number-of-writes*   (+ *number-of-writes*   1))
-;;     (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
-;;     got-it))
 
 (define (db:general-call db stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
@@ -1952,85 +1713,6 @@
 		  (if (null? tal)
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
-
-
-;; (define (db:process-queue-item db item)
-;;   (let* ((stmt-key       (cdb:packet-get-qtype item))
-;; 	 (qry-sig        (cdb:packet-get-query-sig item))
-;; 	 (return-address (cdb:packet-get-client-sig item))
-;; 	 (params         (cdb:packet-get-params item))
-;; 	 (query          (let ((q (alist-ref stmt-key db:queries)))
-;; 			   (if q (car q) #f))))
-;;     (debug:print-info 11 "Special queries/requests stmt-key=" stmt-key ", return-address=" return-address ", query=" query ", params=" params)
-;;     (if query
-;; 	;; hand queries off to the write queue
-;; 	(let ((response (case *transport-type*
-;; 			  ((http)
-;; 			   (debug:print-info 7 "Queuing item " item " for wrapped write")
-;; 			   (db:queue-write-and-wait db qry-sig query params))
-;; 			  (else 
-;; 			   (apply sqlite3:execute db query params)
-;; 			   #t))))
-;; 	  (debug:print-info 7 "Received " response " from wrapped write")
-;; 	  (server:reply return-address qry-sig response response))
-;; 	;; otherwise if appropriate flush the queue (this is a read or complex query)
-;; 	(begin
-;; 	  (cond
-;; 	   ((member stmt-key db:special-queries)
-;; 	    (let ((starttime (current-milliseconds)))
-;; 	      (debug:print-info 9 "Handling special statement " stmt-key)
-;; 	      (case stmt-key
-;; 		((immediate)
-;; 		 (debug:print 0 "WARNING: Immediate calls are verboten now!")
-;; 		 (let* ((proc      (car params))
-;; 			(remparams (cdr params))
-;; 			;; we are being handed a procedure so call it
-;; 			(result (server:reply return-address qry-sig #t (apply proc remparams))))
-;; 		   (debug:print-info 11 "Ran (apply " proc " " remparams ")")
-;; 		   ;; (set! *total-non-write-delay* (+ *total-non-write-delay* (- (current-milliseconds) starttime))) 
-;; 		   ;; (set! *number-non-write-queries* (+ *number-non-write-queries* 1))
-;; 		   result))
-;; 		((login)
-;; 		 (if (< (length params) 3) ;; should get toppath, version and signature
-;; 		     (server:reply return-address qry-sig '(#f "login failed due to missing params")) ;; missing params
-;; 		     (let ((calling-path (car   params))
-;; 			   (calling-vers (cadr  params))
-;; 			   (client-key   (caddr params)))
-;; 		       (if (and (equal? calling-path *toppath*)
-;; 				(equal? megatest-version calling-vers))
-;; 			   (begin
-;; 			     (hash-table-set! *logged-in-clients* client-key (current-seconds))
-;; 			     (server:reply return-address qry-sig #t '(#t "successful login")))      ;; path matches - pass! Should vet the caller at this time ...
-;; 			   (server:reply return-address qry-sig #f (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*)))))))
-;; 		((flush sync)
-;; 		 (server:reply return-address qry-sig #t 1)) ;; (length data)))
-;; 		((set-verbosity)
-;; 		 (set! *verbosity* (car params))
-;; 		 (server:reply return-address qry-sig #t (list #t *verbosity*)))
-;; 		((killserver)
-;; 		 (db:sync-to *inmemdb* *db*)
-;; 		 (let ((hostname (car  *runremote*))
-;; 		       (port     (cadr *runremote*))
-;; 		       (pid      (car params))
-;; 		       (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
-;; 		   (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
-;; 		   (debug:print-info 1 "current pid=" (current-process-id))
-;; 		   (open-run-close tasks:server-deregister tasks:open-db 
-;; 				   hostname
-;; 				   port: port)
-;; 		   (set! *server-run* #f)
-;; 		   (thread-sleep! 3)
-;; 		   (if pid 
-;; 		       (process-signal pid signal/kill)
-;; 		       (thread-start! th1))
-;; 		   (server:reply return-address qry-sig #t '(#t "exit process started"))))
-;; 		(else ;; not a command, i.e. is a query
-;; 		 (debug:print 0 "ERROR: Unrecognised query/command " stmt-key)
-;; 		 (server:reply return-address qry-sig #f 'failed)))))
-;; 	   (else
-;; 	    (debug:print-info 11 "Executing " stmt-key " for " params)
-;; 	    (apply sqlite3:execute (hash-table-ref queries stmt-key) params)
-;; 	    (server:reply return-address qry-sig #t #t)))))))
 
 (define (db:test-get-records-for-index-file db run-id test-name)
   (let ((res '()))

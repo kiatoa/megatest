@@ -269,7 +269,7 @@
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status to 
-  (tdb:test-data-rollup db test-id #f work-area: work-area))
+  (tdb:test-data-rollup test-id #f work-area: work-area))
 
 ;; WARNING: Do NOT call this for the parent test on an iterated test
 ;; Roll up test_data pass/fail results
@@ -290,7 +290,6 @@
 	   "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
                    (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
 	   test-id test-id)
-	  (sqlite3:finalize! tdb)
 
 	  ;; Now rollup the counts to the central megatest.db
 	  (rmt:general-call 'pass-fail-counts fail-count pass-count test-id)
@@ -304,7 +303,7 @@
 	  ;; (thread-sleep! 1) ;; play nice with the queue by ensuring the rollup is at least 10ms later than the set
 	  
 	  ;; if the test is not FAIL then set status based on the fail and pass counts.
-	  (rmt:general-call 'test-rollup-test_data-pass-fail test-id)
+	  (rmt:general-call 'test_data-pf-rollup test-id test-id test-id test-id)
 	  ;; (sqlite3:execute
 	  ;;  db   ;;; NOTE: Should this be WARN,FAIL? A WARN is not a FAIL????? BUG FIXME
 	  ;;  "UPDATE tests
@@ -316,6 +315,7 @@
 	  ;;             ELSE status
 	  ;;         END WHERE id=?;"
 	  ;;  test-id test-id test-id test-id)
+	  (sqlite3:finalize! tdb)
 	  ))))
 
 (define (tdb:get-prev-tol-for-test tdb test-id category variable)

@@ -1038,13 +1038,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     (not status)))
 		    (begin
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-		      ;; (sqlite3:finalize! db)
+		      (if (sqlite3:database? db)(sqlite3:finalize! db))
 		      (exit 6)))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
 		  (tests:test-set-status! test-id state newstatus msg otherdata work-area: work-area))))
-	  (if db (sqlite3:finalize! db))
+	  (if (sqlite3:database? db)(sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -1061,7 +1061,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       (set! keys (cdb:remote-run db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse keys ", "))
-      (if db (sqlite3:finalize! db))
+      (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")

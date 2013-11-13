@@ -24,7 +24,7 @@ all : test1 test2 test3 test4 test5 test6 test7 test8 test9
 
 server :
 	cd ..;make;make install
-	cd fullrun;../../bin/megatest -server - -debug 22 &
+	cd fullrun;../../bin/megatest -server - -debug 22
 
 stopserver :
 	cd ..;make && make install
