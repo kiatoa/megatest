@@ -8,8 +8,6 @@
 
 (set! *transport-type* 'http)
 
-(test "open inmem db"          1  (begin (open-in-mem-db) 1))
-
 (test "setup for run" #t (begin (setup-for-run)
 				(string? (getenv "MT_RUN_AREA_HOME"))))
 
@@ -30,9 +28,16 @@
 ;; 						    (server:launch 'http)))))
 ;; 			   (set! server-pid pid)
 ;; 			   (number? pid)))
-(system "megatest -server - -debug 0 &")
+(system "../../bin/megatest -server - -debug 22 > server.log 2> server.log &")
 
-(thread-sleep! 3) ;; need to wait for server to start. Yes, a better way is needed.
+(let loop ((n 10))
+  (thread-sleep! 1) ;; need to wait for server to start.
+  (let ((res (open-run-close tasks:get-best-server tasks:open-db)))
+    (print "tasks:get-best-server returned " res)
+    (if (and (not res)
+	     (> n 0))
+	(loop (- n 1)))))
+
 (test "get-best-server" #t (begin 
 			     (client:launch)
 			     (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
@@ -43,13 +48,6 @@
 
 (test #f #t                       (string? (car *runremote*)))
 (test #f '(#t "successful login") (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
-
-(define inmem (open-in-mem-db))
-(define (inmem-test t b)
-  (test "inmem sync to"   t (db:sync-to *db* inmem))
-  (test "inmem sync back" b (db:sync-to inmem *db*)))
-
-(inmem-test 0 0)
 
 (test #f #f                       (rmt:get-test-info-by-id 99)) ;; get non-existant test
 
@@ -64,9 +62,7 @@
 (test "register test"       #t    (rmt:general-call 'register-test 1 "test1" ""))
 (test "get tests (some data)"  1  (length (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f)))
 (test "get test id"            1  (rmt:get-test-id 1 "test1" ""))
-
-(inmem-test 1 1)
-
+(test "sync back"              #t (> (rmt:sync-inmem->db) 0))
 (test "get test id from main"  1  (db:get-test-id *db* 1 "test1" ""))
 (test "get keys"               #t (list? (rmt:get-keys)))
 (test "set comment"            #t (begin (rmt:general-call 'set-test-comment "this is a comment" 1) #t))
@@ -81,8 +77,8 @@
 			    (list?   data)
 			    (vector? (car data)))))
 
-
-(inmem-test 1 1)
+(test "get local testinfo" "test1" (vector-ref (db:get-testinfo-state-status *db* 1) 2))
+(test "get testinfo"       "test1" (vector-ref (rmt:get-testinfo-state-status 1) 2))
 
 ;;======================================================================
 ;; D B

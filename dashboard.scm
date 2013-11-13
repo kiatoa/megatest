@@ -1430,7 +1430,7 @@ Misc
 	   (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
-(define *monitor-db-path* (conc *toppath* "/monitor.db"))
+(define *monitor-db-path* (conc *toppath* "/db/monitor.db"))
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.

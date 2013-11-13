@@ -76,6 +76,9 @@
 (define (rmt:general-call stmtname . params)
   (rmt:send-receive 'general-call (append (list stmtname) params)))
 
+(define (rmt:sync-inmem->db)
+  (rmt:send-receive 'sync-inmem->db '()))
+
 ;;======================================================================
 ;;  K E Y S 
 ;;======================================================================
@@ -136,14 +139,17 @@
   (map list->vector 
        (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path))))
 
-(define (rmt:db:test-get-logfile-info run-id test-name)
+(define (rmt:test-get-logfile-info run-id test-name)
   (rmt:send-receive 'test-get-logfile-info (list run-id test-name)))
 
 (define (rmt:test-get-records-for-index-file run-id test-name)
   (rmt:send-receive 'test-get-records-for-index-file (list  run-id test-name)))
 
 (define (rmt:get-testinfo-state-status test-id)
-  (rmt:send-receive 'get-testinfo-state-status (list test-id)))
+  (let ((res (rmt:send-receive 'get-testinfo-state-status (list test-id))))
+    (if (list? res)
+	(list->vector res)
+	res)))
 
 (define (rmt:test-set-log! test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log logf test-id)))

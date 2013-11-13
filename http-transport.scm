@@ -76,7 +76,7 @@
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   (server:get-best-guess-address hostname)
 					   #f)))
-			    (if ipstr ipstr hostn))) ;; hostname)))
+			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port    (if (and (args:get-arg "-port")
 				 (string->number (args:get-arg "-port")))
 			    (string->number (args:get-arg "-port"))

@@ -36,7 +36,10 @@
     ((get-matching-previous-test-run-records)(map vector->list (apply db:get-matching-previous-test-run-records db params)))
     ((db:test-get-logfile-info)        (apply db:test-get-logfile-info db params))
     ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file db params)))
-    ((get-testinfo-state-status)       (apply db:get-testinfo-state-status db params))
+    ((get-testinfo-state-status)       (let ((res (apply db:get-testinfo-state-status db params)))
+					 (if (vector? res)
+					     (vector->list res)
+					     res)))
     ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new db params))
     ((get-prereqs-not-met)             (let ((res (apply db:get-prereqs-not-met db params)))
 					 (map (lambda (x)
@@ -44,7 +47,8 @@
 						    (vector->list x)
 						    x))
 					      res)))
-					 
+    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts db params))
+    
 
     ;; RUNS
     ((get-run-info)                 (let ((res (apply db:get-run-info db params)))
@@ -73,6 +77,7 @@
     ((general-call)                 (let ((stmtname   (car params))
 					  (realparams (cdr params)))
 				      (db:general-call db stmtname realparams)))
+    ((sync-inmem->db)               (db:sync-back))
     ((kill-server)
      (db:sync-to *inmemdb* *db*)
      (let ((hostname (car  *runremote*))

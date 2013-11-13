@@ -3,6 +3,7 @@
 
 BINPATH=$(shell readlink -m $(PWD)/../bin)
 MEGATEST=$(BINPATH)/megatest
+DASHBOARD=$(BINPATH)/dashboard
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)
 IPADDR := "-"
@@ -108,23 +109,23 @@ test9 : minsetup test9a test9b test9c test9d test9e
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
-	cd mintest;megatest -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9b :
 	@echo Run simple mintest d with one waiton c
-	cd mintest;megatest -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
-	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
 	@echo Run an itemized test with no items
-	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9e :
 	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
-	cd mintest;megatest -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously
@@ -143,10 +144,10 @@ test11 :
 minsetup : 
 	cd ..;make && make install
 	mkdir -p mintest/runs mintest/links
-	cd mintest;megatest -stop-server 0
-	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
+	cd mintest;$(MEGATEST) -stop-server 0
+	cd mintest;$(MEGATEST) -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3
-	cd mintest;dashboard -rows 18 &
+	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
@@ -172,11 +173,11 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -f */megatest.db */logging.db */monitor.db || true
+	rm -rf */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* || true
 	killall -v mtest dboard || true
 
 hardkill : kill
-	sleep 5;killall -v mtest main.sh dboard -9
+	sleep 2;killall -v mtest main.sh dboard -9
 
 listservers :
 	cd fullrun;$(MEGATEST) -list-servers

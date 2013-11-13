@@ -74,8 +74,8 @@
 	    (exit))))
   (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
-	 (write-access (file-write-access? dbpath))
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (write-access (file-write-access? dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
@@ -98,8 +98,12 @@
 		     (begin
 		       (create-directory path #t)
 		       (sqlite3:open-database fname))
-		     (sqlite3:open-database ":memory:"))))
-    (if (not exists) (db:initialize db))
+		     (sqlite3:open-database ":memory:")))
+	 (handler   (make-busy-timeout 3600)))
+    (if (or (not path)
+	    (not exists))
+	(db:initialize db))
+    (sqlite3:set-busy-handler! db handler)
     db))
 
 (define (db:sync-to fromdb todb)
@@ -1171,19 +1175,9 @@
      )
     res))
 
-(define (db:delete-test-records db tdb test-id #!key (force #f))
-  (if tdb 
-      (begin
-	(sqlite3:execute tdb "DELETE FROM test_steps;")
-	(sqlite3:execute tdb "DELETE FROM test_data;"))
-      (tdb:delete-test-step-records db test-id))
-  (if db 
-      (begin
-	(sqlite3:execute db "DELETE FROM test_steps WHERE test_id=?;" test-id)
-	(sqlite3:execute db "DELETE FROM test_data  WHERE test_id=?;" test-id)
-	(if force
-	    (sqlite3:execute db "DELETE FROM tests WHERE id=?;" test-id)
-	    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))))
+(define (db:delete-test-records db test-id)
+  (tdb:delete-test-step-records db test-id)
+  (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))
 
 (define (db:delete-tests-for-run db run-id)
   (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id))
@@ -1641,6 +1635,17 @@
 ;; 	(debug:print 0 "ERROR: Attempt to access read-only database")
 ;; 	#f)))
 
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
+  (if (and (not (equal? item-path ""))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
+      (begin
+	(db:general-call 'update-pass-fail-counts db (list run-id test-name run-id test-name))
+	(if (equal? status "RUNNING")
+	    (db:general-call 'top-test-set-running db (list run-id test-name))
+	    (db:general-call 'top-test-set-per-pf-counts db (list run-id test-name run-id test-name)))
+	#f)
+      #f))
+
 (define (db:test-get-logfile-info db run-id test-name)
   (let ((res #f))
     (sqlite3:for-each-row 
@@ -1889,7 +1894,7 @@
 	  (if (null? prev-run-ids) #f
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
 		  (if (and (null? results)
 			   (not (null? tal)))
@@ -1930,7 +1935,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
