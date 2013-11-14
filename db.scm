@@ -106,6 +106,80 @@
     (sqlite3:set-busy-handler! db handler)
     db))
 
+;; (define (db:sync-table tblname fields fromdb todb)
+
+(define (db:tbls db)
+  (let ((keys  (db:get-keys db)))
+    (list
+     (list "metadat" '("var" #f) '("val" #f))
+     (append (list "runs" 
+		   '("id"  #f))
+	     (map (lambda (k)(list k #f))
+		  (append keys
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))))))
+
+;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
+(define (db:sync-tables tbls fromdb todb)
+  (let ((stmts      (make-hash-table)) ;; table-field => stmt
+	(all-stmts  '()))              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+    (for-each ;; table
+     (lambda (tabledat)
+       (let* ((tablename  (car tabledat))
+	      (fields     (cdr tabledat))
+	      (num-fields (length fields))
+	      (field->num (make-hash-table))
+	      (num->field (apply vector (map car fields)))
+	      (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
+				" FROM " tablename ";"))
+	      (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
+				" VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
+	      (fromdat    '())
+	      (todat      (make-hash-table))
+	      (count      0))
+
+	 ;; set up the field->num table
+	 (for-each
+	  (lambda (field)
+	    (hash-table-set! field->num field count)
+	    (set! count (+ count 1)))
+	  fields)
+
+	 ;; read the source table
+	 (sqlite3:for-each-row
+	  (lambda (a . b)
+	    (set! fromdat (cons (apply vector a b) fromdat)))
+	  fromdb
+	  full-sel)
+
+	 ;; read the target table
+	 (sqlite3:for-each-row
+	  (lambda (a . b)
+	    (hash-table-set! todat a (apply vector a b)))
+	  todb
+	  full-sel)
+
+	 ;; first pass implementation, just insert all changed rows
+	 (let ((stmth (sqlite3:prepare todb full-ins)))
+	   (sqlite3:with-transaction
+	    todb
+	    (lambda ()
+	      (for-each ;; 
+	       (lambda (fromrow)
+		 (let* ((a    (vector-ref fromrow 0))
+			(curr (hash-table-ref todat a))
+			(same #t))
+		   (let loop ((i 0))
+		     (if (not (equal? (vector-ref fromrow i)(vector-ref curr i)))
+			 (set! same #f))
+		     (if (and same
+			      (< i (- num-fields 1)))
+			 (loop (+ i 1))))
+		   (if (not same)(apply sqlite3:execute full-ins (vector->list fromrow)))))
+	       fromdat)))
+	   (sqlite3:finalize! stmth))))
+     tbls)))
+		   
+
 (define (db:sync-to fromdb todb)
   ;; strategy
   ;;  1. Get all run-ids
