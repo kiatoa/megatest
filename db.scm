@@ -1250,6 +1250,15 @@
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
     res))
 
+(define (db:get-count-tests-running-for-run-id db run-id)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND id=?;" run-id)
+    res))
+
 (define (db:get-running-stats db)
   (let ((res '()))
     (sqlite3:for-each-row
