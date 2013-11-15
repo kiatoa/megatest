@@ -218,7 +218,7 @@
     ;; Update the synchronous setting in the db based on the default or what is set by the user
     ;; This is done once here on a call to run tests rather than on every call to open-db
 
-    (set-megatest-env-vars run-id inkeys: keys) ;; these may be needed by the launching process
+    (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
@@ -254,6 +254,7 @@
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
+	  (setenv "MT_TEST_NAME" hed) ;; 
 	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 		 (waitons (let ((instr (if config 
 					   (config-lookup config "requirements" "waiton")
@@ -767,7 +768,8 @@
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
 	(reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (current-seconds)))
+	(last-time-incomplete  (current-seconds))
+	(last-time-some-running (current-seconds)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -807,9 +809,14 @@
 	     (item-path   (item-list->path itemdat))
 	     (tfullname   (runs:make-full-test-name test-name item-path))
 	     (newtal      (append tal (list hed)))
-	     (regfull     (>= (length reg) reglen)))
+	     (regfull     (>= (length reg) reglen))
+	     (num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id)))
 
-	(hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1))
+      (if (> num-running 0)
+	  (set! last-time-some-running (current-seconds)))
+
+      (if (> (current-seconds)(+ last-time-some-running 60))
+	  (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
 	;; (debug:print 0 "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
