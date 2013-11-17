@@ -57,7 +57,18 @@
 					    (vector->list (vector-ref res 1)))))
     ((register-run)                 (apply db:register-run db params))
     ((set-tests-state-status)       (apply db:set-tests-state-status db params))
-    ((get-tests-for-run)            (map vector->list (apply db:get-tests-for-run db params)))
+    ((get-tests-for-run)            (let ((res  (apply db:get-tests-for-run db params)))
+				      (if (list? res)
+					  (map (lambda (x)
+						 (if (list? x)
+						     (vector->list x)
+						     (begin
+						       (debug:print 0 "ERROR in remote of get-tests-for-run, not a vector")
+						       x)))
+					       res)
+					  (begin
+					    (debug:print 0 "ERROR in remote of get-tests-for-run, not a list")
+					    res))))
     ((get-test-id)                  (apply db:get-test-id-not-cached db params))
     ((get-tests-for-runs-mindata)   (map vector->list (apply db:get-tests-for-runs-mindata db params)))
     ((get-run-name-from-id)         (apply db:get-run-name-from-id db params))
@@ -116,15 +127,16 @@
 (define (api:process-request db $) ;; the $ is the request vars proc
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
-	 (params  (rmt:json-str->dat paramsj))
+	 (params  (db:string->obj paramsj)) ;; (rmt:json-str->dat paramsj))
 	 (res     (api:execute-requests db cmd params)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
-    (rmt:dat->json-str
-     (if (or (string? res)
-	     (list?   res)
-	     (number? res)
-	     (boolean? res))
-	 res 
-	 (list "ERROR" 1 cmd params res)))))
+    ;; (rmt:dat->json-str
+    ;;  (if (or (string? res)
+    ;;          (list?   res)
+    ;;          (number? res)
+    ;;          (boolean? res))
+    ;;      res 
+    ;;      (list "ERROR, not string, list, number or boolean" 1 cmd params res)))))
+    (db:obj->string res)))
 

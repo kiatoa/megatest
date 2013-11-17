@@ -160,10 +160,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -transport fs -rows 20 &
-
-dashboard-http : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -transport http -rows 20 &
+	cd fullrun && $(BINPATH)/dashboard -rows 20 &
 
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %

@@ -39,14 +39,14 @@
 ;;
 (define (rmt:send-receive cmd params)
   (case *transport-type* 
-    ((fs)
+    ((fs-aint-here)
      (debug:print 0 "ERROR: Not yet (re)supported")
      (exit 1))
-    ((http)
-     (let* ((jparams (rmt:dat->json-str params))
+    ((fs http)
+     (let* ((jparams (db:obj->string params)) ;; (rmt:dat->json-str params))
 	    (res (http-transport:client-api-send-receive *runremote* cmd jparams)))
        (if res
-	   (rmt:json-str->dat res)
+	   (db:string->obj res) ;; (rmt:json-str->dat res)
 	   (begin
 	     (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
 	     #f))
@@ -131,10 +131,16 @@
   (rmt:send-receive 'set-tests-state-status (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
-  (map list->vector (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))))
+  (let ((res  (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))))
+    (if (list? res)
+	(map list->vector res)
+	res)))
 
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (map list->vector (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in))))
+  (let ((res (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in))))
+    (cond 
+     ((list? res)(map list->vector res))
+     (else res))))
 
 (define (rmt:delete-test-records test-id)
   (rmt:send-receive 'delete-test-records (list test-id)))

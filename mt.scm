@@ -19,6 +19,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses runs))
+(declare (uses rmt))
 
 (include "common_records.scm")
 (include "key_records.scm")

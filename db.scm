@@ -1552,8 +1552,8 @@
 ;; NOTE: Can remove the regex and base64 encoding for zmq
 (define (db:obj->string obj)
   (case *transport-type*
-    ((fs) obj)
-    ((http)
+    ;; ((fs) obj)
+    ((http fs)
      (string-substitute
       (regexp "=") "_"
       (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
@@ -1563,8 +1563,8 @@
 
 (define (db:string->obj msg)
   (case *transport-type*
-    ((fs) msg)
-    ((http)
+    ;; ((fs) msg)
+    ((http fs)
      (if (string? msg)
 	 (with-input-from-string 
 	     (base64:base64-decode
