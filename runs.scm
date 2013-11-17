@@ -810,7 +810,7 @@
 	     (tfullname   (runs:make-full-test-name test-name item-path))
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen))
-	     (num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id)))
+	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
 
       (if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))

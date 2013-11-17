@@ -225,6 +225,7 @@
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
 					(db:test-set-state-status-by-id db test-id #f #f b)
+					;; IDEA: Just set a variable with the proc to call?
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
 			     #:expand "HORIZONTAL"))
@@ -254,8 +255,13 @@
 				  (let ((btn (iup:button status
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (db:test-set-state-status-by-id db test-id #f status #f)
-								    (db:test-set-status! testdat status)))))
+								    (let ((t (iup:attribute x "TITLE")))
+								      (if (equal? t "WAIVED")
+									  (iup:show (dashboard-tests:waiver testdat (lambda (c)
+														      (set! newcomment c))))
+									  (begin
+									    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
+									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
@@ -302,6 +308,48 @@
     ;;     	#:action (lambda (obj)
     ;;     		   (print "Refresh test data " stepname))
     )))
+
+(define (dashboard-tests:waiver testdat cmtcmd)
+  (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
+	 (wregx (if (string? wpatt)(regexp wpatt) #f))
+	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
+	 (comnt (iup:textbox #:action (lambda (val a b)
+					(if wpatt
+					    (if (string-match wregx b)
+						(iup:attribute-set! wmesg "TITLE" (conc "Comment matches " wpatt))
+						(iup:attribute-set! wmesg "TITLE" (conc "Comment does not match " wpatt))
+						)))
+			     #:value (db:test-get-comment testdat)
+			     #:expand "HORIZONTAL"))
+	 (dlog  #f))
+    (set! dlog (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
+		#:title "SET WAIVER"
+		(iup:vbox ; #:expand "YES"
+		 (iup:label (conc "Enter justification for waiving test "
+				  (db:test-get-testname testdat)
+				  (if (equal? (db:test-get-item-path testdat) "") 
+				      ""
+				      (conc "/" (db:test-get-item-path testdat)))))
+		 wmesg ;; the informational msg on whether it matches
+		 comnt
+		 (iup:hbox
+		  (iup:button "Apply and Close "
+			      #:expand "HORIZONTAL"
+			      #:action (lambda (obj)
+					 (let ((comment (iup:attribute comnt "VALUE"))
+					       (test-id (db:test-get-id testdat)))
+					   (if (or (not wpatt)
+						   (string-match wregx comment))
+					       (begin
+						 (open-run-close db:test-set-state-status-by-id #f test-id #f "WAIVED" comment)
+						 (db:test-set-status! testdat "WAIVED")
+						 (cmtcmd comment)
+						 (iup:destroy! dlog))))))
+		  (iup:button "Cancel"
+			      #:expand "HORIZONTAL" 
+			      #:action (lambda (obj)
+					 (iup:destroy! dlog)))))))
+    dlog))
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
 ;;

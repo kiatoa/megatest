@@ -175,6 +175,9 @@
 	       x))
 	 res)))
 
+(define (rmt:get-count-tests-running-for-run-id run-id)
+  (rmt:send-receive 'get-count-tests-running-for-run-id (list run-id)))
+
 ;; Statistical queries
 
 (define (rmt:get-count-tests-running)
