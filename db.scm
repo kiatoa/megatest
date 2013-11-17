@@ -1427,12 +1427,6 @@
 (define (db:get-test-info db run-id testname item-path)
   (db:get-test-info-by-id db (db:get-test-id db run-id testname item-path)))
 
-(define (cdb:test-set-rundir! serverdat run-id test-name item-path rundir)
-  (cdb:client-call serverdat 'test-set-rundir #t *default-numtries* rundir run-id test-name item-path))
-
-(define (cdb:test-set-rundir-by-test-id serverdat test-id rundir)
-  (cdb:client-call serverdat 'test-set-rundir-by-test-id #t *default-numtries* rundir test-id))
-
 (define (db:test-get-rundir-from-test-id db test-id)
   (let ((res #f)) ;; (hash-table-ref/default *test-paths* test-id #f)))
     ;; (if res
@@ -1458,7 +1452,7 @@
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
 	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
 	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
-	 (paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target-new db keynames target res
+	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
 					testpatt
 					statepatt
 					statuspatt
