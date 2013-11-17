@@ -107,10 +107,7 @@
   (rmt:send-receive 'get-test-id (list run-id testname item-path)))
 
 (define (rmt:get-test-info-by-id test-id)
-  (let ((res (rmt:send-receive 'get-test-info-by-id (list test-id))))
-    (if (list? res)
-	(list->vector res)
-	res)))
+  (rmt:send-receive 'get-test-info-by-id (list test-id)))
 
 (define (rmt:test-get-rundir-from-test-id test-id)
   (rmt:send-receive 'test-get-rundir-from-test-id (list test-id)))
@@ -126,21 +123,14 @@
 (define (rmt:test-set-state-status-by-id test-id newstate newstatus newcomment)
   (rmt:send-receive 'test-set-state-status-by-id (list test-id newstate newstatus newcomment)))
 
-
 (define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
-  (let ((res  (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))))
-    (if (list? res)
-	(map list->vector res)
-	res)))
+  (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)))
 
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (let ((res (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in))))
-    (cond 
-     ((list? res)(map list->vector res))
-     (else res))))
+  (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in)))
 
 (define (rmt:delete-test-records test-id)
   (rmt:send-receive 'delete-test-records (list test-id)))
@@ -152,8 +142,7 @@
   (rmt:send-receive 'get-previous-test-run-record (list run-id test-name item-path)))
 
 (define (rmt:get-matching-previous-test-run-records run-id test-name item-path)
-  (map list->vector 
-       (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path))))
+  (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path)))
 
 (define (rmt:test-get-logfile-info run-id test-name)
   (rmt:send-receive 'test-get-logfile-info (list run-id test-name)))
@@ -162,10 +151,7 @@
   (rmt:send-receive 'test-get-records-for-index-file (list  run-id test-name)))
 
 (define (rmt:get-testinfo-state-status test-id)
-  (let ((res (rmt:send-receive 'get-testinfo-state-status (list test-id))))
-    (if (list? res)
-	(list->vector res)
-	res)))
+  (rmt:send-receive 'get-testinfo-state-status (list test-id)))
 
 (define (rmt:test-set-log! test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log logf test-id)))
@@ -174,12 +160,7 @@
   (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
 
 (define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
-  (let ((res (rmt:send-receive 'get-prereqs-not-met (list run-id waitons ref-item-path mode))))
-    (map (lambda (x)
-	   (if (list? x)
-	       (list->vector x)
-	       x))
-	 res)))
+  (rmt:send-receive 'get-prereqs-not-met (list run-id waitons ref-item-path mode)))
 
 (define (rmt:get-count-tests-running-for-run-id run-id)
   (rmt:send-receive 'get-count-tests-running-for-run-id (list run-id)))
@@ -203,9 +184,7 @@
 ;;======================================================================
 
 (define (rmt:get-run-info run-id)
-  (let ((res (rmt:send-receive 'get-run-info (list run-id))))
-    (vector (car res)
-	    (list->vector (cadr res)))))
+  (rmt:send-receive 'get-run-info (list run-id)))
 
 (define (rmt:register-run keyvals runname state status user)
   (rmt:send-receive 'register-run (list keyvals runname state status user)))
@@ -220,16 +199,10 @@
   (rmt:send-receive 'delete-old-deleted-test-records '()))
 
 (define (rmt:get-runs runpatt count offset keypatts)
-  (let* ((res  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
-	 (hedr (car res))
-	 (data (cadr res)))
-    (vector hedr (map list->vector data))))
+  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
 
 (define (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)
-  (let* ((res  (rmt:send-receive 'get-runs-by-patt (list keys runnamepatt targpatt offset limit)))
-	 (hedr (car res))
-	 (data (cadr res)))
-    (vector hedr (map list->vector data))))
+  (rmt:send-receive 'get-runs-by-patt (list keys runnamepatt targpatt offset limit)))
 
 (define (rmt:lock/unlock-run run-id lock unlock user)
   (rmt:send-receive 'lock/unlock-run (list run-id lock unlock user)))
@@ -270,10 +243,7 @@
   (rmt:send-receive 'testmeta-add-record (list testname)))
 
 (define (rmt:testmeta-get-record testname)
-  (let ((res (rmt:send-receive 'testmeta-get-record (list testname))))
-    (if (list? res)
-	(list->vector res)
-	res)))
+  (rmt:send-receive 'testmeta-get-record (list testname)))
 
 (define (rmt:testmeta-update-field test-name fld val)
   (rmt:send-receive 'testmeta-update-field (list test-name fld val)))
