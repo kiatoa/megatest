@@ -243,7 +243,7 @@
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(tdb:test-data-rollup #f test-id status work-area: work-area))
+	(tdb:test-data-rollup test-id status work-area: work-area))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
