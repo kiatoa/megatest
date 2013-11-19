@@ -189,7 +189,7 @@
 ;; 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (tdb:load-test-data test-id #!key (work-area #f))
+(define (tdb:load-test-data test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
