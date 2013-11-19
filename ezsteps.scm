@@ -79,8 +79,7 @@
 		  (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 		  
 		  (debug:print 4 "script: " script)
-		  ;; DO NOT remote
-		  (db:teststep-set-status! #f test-id stepname "start" "-" #f #f work-area: test-run-dir)
+		  (rmt:teststep-set-status! #f test-id stepname "start" "-" #f #f)
 		  ;; now launch
 		  (let ((pid (process-run script)))
 		    (let processloop ((i 0))
@@ -97,8 +96,7 @@
 				  ))
 		    (let ((exinfo (vector-ref exit-info 2))
 			  (logfna (if logpro-used (conc stepname ".html") "")))
-		      ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-		      (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: test-run-dir))
+		      (rmt:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
 		    (if logpro-used
 			(rmt:test-set-log! test-id (conc stepname ".html")))
 		    ;; set the test final status

@@ -413,35 +413,32 @@
 		      (else #f)))))
       res))
 
-(define (dashboard-tests:get-compressed-steps test-id #!key (work-area #f))
-  (if (or (not work-area)
-	  (file-exists? (conc work-area "/testdat.db")))
-      (let* ((steps-data  (tdb:get-steps-for-test test-id work-area))
-	     (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
-	(map (lambda (x)
-	       ;; take advantage of the \n on time->string
-	       (vector
-		(vector-ref x 0)
-		(let ((s (vector-ref x 1)))
-		  (if (number? s)(seconds->time-string s) s))
-		(let ((s (vector-ref x 2)))
-		  (if (number? s)(seconds->time-string s) s))
-		(vector-ref x 3)    ;; status
-		(vector-ref x 4)
-		(vector-ref x 5)))  ;; time delta
-	     (sort (hash-table-values comprsteps)
-		   (lambda (a b)
-		     (let ((time-a (vector-ref a 1))
-			   (time-b (vector-ref b 1)))
-		       (if (and (number? time-a)(number? time-b))
-			   (if (< time-a time-b)
-			       #t
-			       (if (eq? time-a time-b)
-				   (string<? (conc (vector-ref a 2))
-					     (conc (vector-ref b 2)))
-				   #f))
-			   (string<? (conc time-a)(conc time-b))))))))
-      '()))
+(define (dashboard-tests:get-compressed-steps db test-id)
+  (let* ((steps-data  (db:get-steps-for-test db test-id))
+	 (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+    (map (lambda (x)
+	   ;; take advantage of the \n on time->string
+	   (vector
+	    (vector-ref x 0)
+	    (let ((s (vector-ref x 1)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (let ((s (vector-ref x 2)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (vector-ref x 3)    ;; status
+	    (vector-ref x 4)
+	    (vector-ref x 5)))  ;; time delta
+	 (sort (hash-table-values comprsteps)
+	       (lambda (a b)
+		 (let ((time-a (vector-ref a 1))
+		       (time-b (vector-ref b 1)))
+		   (if (and (number? time-a)(number? time-b))
+		       (if (< time-a time-b)
+			   #t
+			   (if (eq? time-a time-b)
+			       (string<? (conc (vector-ref a 2))
+					 (conc (vector-ref b 2)))
+			       #f))
+		       (string<? (conc time-a)(conc time-b)))))))))
 
 ;;======================================================================
 ;;
@@ -469,7 +466,7 @@
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps test-id work-area: rundir) '()))
+	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps db test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
@@ -526,7 +523,7 @@
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dashboard-tests:get-compressed-steps test-id work-area: rundir))
+				 (set! teststeps    (dashboard-tests:get-compressed-steps db test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       (db:test-get-rundir testdat))
 				 (set! testfullname (db:test-get-fullname testdat))

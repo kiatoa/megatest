@@ -1250,7 +1250,8 @@
     res))
 
 (define (db:delete-test-records db test-id)
-  (tdb:delete-test-step-records db test-id)
+  (db:general-call 'delete-test-step-records test-id)
+  (db:general-call 'delete-test-data-records test-id)
   (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))
 
 (define (db:delete-tests-for-run db run-id)
@@ -1442,6 +1443,119 @@
     res)) ;; ))
 
 ;;======================================================================
+;; S T E P S
+;;======================================================================
+
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
+   (sqlite3:execute 
+    db
+    "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+    test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+   
+;; db-get-test-steps-for-run
+(define (db:get-steps-for-test db test-id)
+  (let* ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test-id stepname state status event-time logfile)
+       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+     db
+     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+     test-id)
+    (reverse res)))
+
+(define (db:get-steps-data db test-id)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test-id stepname state status event-time logfile)
+       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+     db
+     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+     test-id)
+    (reverse res)))
+
+;;======================================================================
+;; T E S T  D A T A 
+;;======================================================================
+
+;; WARNING: Do NOT call this for the parent test on an iterated test
+;; Roll up test_data pass/fail results
+;; look at the test_data status field, 
+;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
+;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
+(define (db:test-data-rollup db test-id status)
+  (let ((fail-count 0)
+	(pass-count 0))
+    (sqlite3:for-each-row
+     (lambda (fcount pcount)
+       (set! fail-count fcount)
+       (set! pass-count pcount))
+     db 
+     "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
+                   (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
+     test-id test-id)
+    ;; Now rollup the counts to the central megatest.db
+    (db:general-call 'pass-fail-counts fail-count pass-count test-id)
+    ;; if the test is not FAIL then set status based on the fail and pass counts.
+    (db:general-call 'test_data-pf-rollup test-id test-id test-id test-id)))
+
+(define (db:csv->test-data db test-id csvdata)
+  (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
+  (let ((csvlist (csv->list (make-csv-reader
+			     (open-input-string csvdata)
+			     '((strip-leading-whitespace? #t)
+			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
+    (for-each 
+     (lambda (csvrow)
+       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
+	      (category    (list-ref padded-row 0))
+	      (variable    (list-ref padded-row 1))
+	      (value       (any->number-if-possible (list-ref padded-row 2)))
+	      (expected    (any->number-if-possible (list-ref padded-row 3)))
+	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
+	      (units       (list-ref padded-row 5))
+	      (comment     (list-ref padded-row 6))
+	      (status      (let ((s (list-ref padded-row 7)))
+			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
+						     (string-match (regexp "^n/a$") s)))
+				 #f
+				 s))) ;; if specified on the input then use, else calculate
+	      (type        (list-ref padded-row 8)))
+	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
+	 
+	 (if (and (or (not expected)(equal? expected ""))
+		  (or (not tol)     (equal? expected ""))
+		  (or (not units)   (equal? expected "")))
+	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test tdb test-id category variable)))
+			 (set! expected new-expected)
+			 (set! tol      new-tol)
+			 (set! units    new-units)))
+	 
+	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	 ;; calculate status if NOT specified
+	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
+	     (if (number? tol) ;; if tol is a number then we do the standard comparison
+		 (let* ((max-val (+ expected tol))
+			(min-val (- expected tol))
+			(result  (and (>=  value min-val)(<= value max-val))))
+		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+		   (set! status (if result "pass" "fail")))
+		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
+		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
+			 ((>)  (if (>  value expected) "pass" "fail"))
+			 ((<)  (if (<  value expected) "pass" "fail"))
+			 ((>=) (if (>= value expected) "pass" "fail"))
+			 ((<=) (if (<= value expected) "pass" "fail"))
+			 (else (conc "ERROR: bad tol comparator " tol))))))
+	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+			  test-id category variable value expected tol units (if comment comment "") status type)))
+     csvlist)))
+
+;;======================================================================
 ;; Misc. test related queries
 ;;======================================================================
 
@@ -1609,7 +1723,10 @@
 ;;======================================================================
 
 (define db:queries 
-  (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+  (list '(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
+
+	;; TESTS
+	'(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
 	;; Test state and status
 	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
 	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
@@ -1634,7 +1751,6 @@
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
-	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
@@ -1660,6 +1776,10 @@
                                               AND status = 'SKIP') > 0 THEN 'SKIP'
                                   ELSE 'UNKNOWN' END
                        WHERE run_id=? AND testname=? AND item_path='';")
+
+	;; STEPS
+	'(delete-test-step-records "UPDATE test_steps SET state='DELETED' WHERE id=?;")
+	'(delete-test-data-records "UPDATE test_data  SET state='DELETED' WHERE id=?;")
 	))
 
 ;; do not run these as part of the transaction

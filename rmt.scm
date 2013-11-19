@@ -223,11 +223,19 @@
 ;;  1. Do a remote call to get the test path
 ;;  2. Continue as above
 ;; 
-(define (rmt:get-steps-for-test test-id #!key (work-area #f))
-  (let* ((tdb (rmt:open-test-db-by-test-id test-id work-area: work-area)))
-    (if tdb
-	(tdb:get-steps-data tdb test-id)
-	'())))
+(define (rmt:get-steps-for-test test-id)
+  (rmt:send-receive 'get-steps-data (list test-id)))
+
+(define (rmt:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
+  (let* ((state     (items:check-valid-items "state" state-in))
+	 (status    (items:check-valid-items "status" status-in)))
+    (if (or (not state)(not status))
+	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
+		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
+    (rmt:send-receive 'teststep-set-status! (list test-id teststep-name state-in status-in comment logfile))))
+
+(define (rmt:get-steps-for-test test-id)
+  (rmt:send-receive 'get-steps-for-test (list test-id)))
 
 ;;======================================================================
 ;;  T E S T   D A T A 
@@ -247,3 +255,9 @@
 
 (define (rmt:testmeta-update-field test-name fld val)
   (rmt:send-receive 'testmeta-update-field (list test-name fld val)))
+
+(define (rmt:test-data-rollup test-id status)
+  (rmt:send-receive 'test-data-rollup (list test-id status)))
+
+(define (db:csv->test-data db test-id csvdata)
+  (rmt:send-receive 'csv->test-data (list test-id csvdata)))
