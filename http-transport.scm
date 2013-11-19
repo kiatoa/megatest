@@ -425,9 +425,18 @@
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
       ;; Use this opportunity to sync the inmemdb to db
-      (if *inmemdb* (db:sync-to *inmemdb* *db*))
+      (let ((start-time (current-milliseconds))
+	    (sync-time  #f)
+	    (rem-time   #f))
+	(if *inmemdb* (db:sync-to *inmemdb* *db*))
+	(set! sync-time  (- (current-milliseconds) start-time))
+	(debug:print 0 "SYNC: time= " sync-time)
+	(set! rem-time (quotient (- 4000 sync-time) 1000))
+	(if (and (< rem-time 4)
+		 (> rem-time 0))
+	    (thread-sleep! rem-time)))
 
-      (thread-sleep! 4) ;; no need to do this very often
+      ;; (thread-sleep! 4) ;; no need to do this very often
 
       (if (< count 1) ;; 3x3 = 9 secs aprox
 	  (loop (+ count 1)))
