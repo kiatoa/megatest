@@ -76,7 +76,7 @@
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   (server:get-best-guess-address hostname)
 					   #f)))
-			    (if ipstr ipstr hostn))) ;; hostname)))
+			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port    (if (and (args:get-arg "-port")
 				 (string->number (args:get-arg "-port")))
 			    (string->number (args:get-arg "-port"))
@@ -85,7 +85,7 @@
 				(string->number (config-lookup  *configdat* "server" "port"))
 				(+ 5000 (random 1001)))))
 	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
-    (set! *cache-on* #t)
+    (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -95,11 +95,18 @@
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
 			       ;; open the db on the first call 
-			       (if (not db)(set! db (open-db)))
+				 ;; This is were we set up the database connections
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
+				  ((equal? (uri-path (request-uri (current-request)))
+					   '(/ "api"))
+				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
+						  headers: '((content-type text/plain)))
+				   (mutex-lock! *heartbeat-mutex*)
+				   (set! *last-db-access* (current-seconds))
+				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
 				  ((equal? (uri-path (request-uri (current-request)))
@@ -177,6 +184,50 @@
 
 (define *http-mutex* (make-mutex))
 
+;; This next block all imported en-mass from the api branch
+(define *http-requests-in-progress* 0)
+(define *http-connections-next-cleanup* (current-seconds))
+
+(define (http-transport:get-time-to-cleanup)
+  (let ((res #f))
+    (mutex-lock! *http-mutex*)
+    (set! res (> (current-seconds) *http-connections-next-cleanup*))
+    (mutex-unlock! *http-mutex*)
+    res))
+
+(define (http-transport:inc-requests-count)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*))
+  ;; Use this opportunity to slow things down iff there are too many requests in flight
+  (if (> *http-requests-in-progress* 5)
+      (begin
+	(debug:print-info 0 "Whoa there buddy, ease up...")
+	(thread-sleep! 1)))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count proc) 
+  (mutex-lock! *http-mutex*)
+  (proc)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count-and-close-all-connections)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (let loop ((etime (+ (current-seconds) 5))) ;; give up in five seconds
+    (if (> *http-requests-in-progress* 0)
+	(if (> etime (current-seconds))
+	    (begin
+	      (thread-sleep! 0.05)
+	      (loop etime))
+	    (debug:print 0 "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
+	(close-all-connections!)))
+  (set! *http-connections-next-cleanup* (+ (current-seconds) 10))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:inc-requests-and-prep-to-close-all-connections)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*)))
+
 ;; (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 4")
 
 ;; <html>
@@ -242,12 +293,93 @@
 	     (debug:print-info 11 "final=" final)
 	     final)))))))
 
+;; Send "cmd" with json payload "params" to serverdat and receive result
+;;
+(define (http-transport:client-api-send-receive serverdat cmd params #!key (numretries 30))
+  (let* ((fullurl    (if (list? serverdat)
+			 (cadddr serverdat) ;; this is the uri for /api
+			 (begin
+			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
+			   (exit 1))))
+	 (res        #f))
+    (handle-exceptions
+     exn
+     (begin
+       ;; TODO: Send this output to a log file so it isn't lost when running as daemon
+       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
+       (thread-sleep! 2)
+       (if (> numretries 0)
+	   (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))))
+     (begin
+       (debug:print-info 11 "fullurl=" fullurl "\n")
+       ;; set up the http-client here
+       (max-retry-attempts 5)
+       ;; consider all requests indempotent
+       (retry-request? (lambda (request)
+			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
+       ;; (set! numretries (- numretries 1))
+       ;;  		 #t))
+       ;; send the data and get the response
+       ;; extract the needed info from the http data and 
+       ;; process and return it.
+
+       ;; (with-input-from-request "http://localhost/echo-service"
+       ;;                  '((test . "value")) read-string)
+
+       (let* ((send-recieve (lambda ()
+			;;       (let ((dat #f)
+			;; 	    (cleanup (http-transport:get-time-to-cleanup)))
+			;; 	(if cleanup 
+			;; 	    (http-transport:inc-requests-and-prep-to-close-all-connections)
+			;; 	    (http-transport:inc-requests-count))
+			;; 	;; Do the actual data transfer NB// KEPP THIS IN SYNC WITH http-transport:client-send-receive
+				 (mutex-lock! *http-mutex*)
+				 (set! res (with-input-from-request ;; was dat
+					   fullurl 
+					   (list (cons 'key "thekey")
+						 (cons 'cmd cmd)
+						 (cons 'params params))
+					   read-string))
+				 ;; Shouldn't this be a call to the managed call-all-connections stuff above?
+				(close-all-connections!)
+				(mutex-unlock! *http-mutex*)
+				))
+	                          ;; (if cleanup
+				  ;;   ;; mutex already set
+				  ;;   (begin
+				  ;;     (set! res dat)
+				  ;;     (http-transport:dec-requests-count-and-close-all-connections))
+				  ;;   (http-transport:dec-requests-count
+				  ;;    (lambda ()
+				  ;;      (set! res dat)))))))
+	      (time-out     (lambda ()
+			      (thread-sleep! 45)
+			      (if (not res)
+				  (begin
+				    (debug:print 0 "WARNING: communication with the server timed out.")
+				    (mutex-unlock! *http-mutex*)
+				    (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))
+				    (if (< numretries 3) ;; on last try just exit
+					(begin
+					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
+					  (exit 1)))))))
+	      (th1 (make-thread send-recieve "with-input-from-request"))
+	      (th2 (make-thread time-out     "time out")))
+	 (thread-start! th1)
+	 (thread-start! th2)
+	 (thread-join! th1)
+	 (thread-terminate! th2)
+	 (debug:print-info 11 "got res=" res)
+	 res)))))
+
 (define (http-transport:client-connect iface port)
   (let* ((login-res   #f)
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (serverdat   (list iface port uri-dat)))
-    (set! login-res (client:login serverdat))
-    (if (and (not (null? login-res))
+	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 (serverdat   (list iface port uri-dat uri-api-dat)))
+    (set! *runremote* serverdat) ;; may or may not be good ...
+    (set! login-res (rmt:login))
+    (if (and (list? login-res)
 	     (car login-res))
 	(begin
 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
@@ -292,64 +424,66 @@
 			       (* 3 24 60 60)))))
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
+      ;; Use this opportunity to sync the inmemdb to db
+      (if *inmemdb* (db:sync-to *inmemdb* *db*))
+
       (thread-sleep! 4) ;; no need to do this very often
-      ;; NB// sync currently does NOT return queue-length
-      (let () ;; (queue-len (cdb:client-call server-info 'sync #t 1)))
-      ;; (print "Server running, count is " count)
-        (if (< count 1) ;; 3x3 = 9 secs aprox
-            (loop (+ count 1)))
-        
-	;; Check that iface and port have not changed (can happen if server port collides)
-	(mutex-lock! *heartbeat-mutex*)
-	(set! sdat *runremote*)
-	(mutex-unlock! *heartbeat-mutex*)
 
-	(if (or (not (equal? sdat (list iface port)))
-		(not spid))
-	    (begin 
-	      (debug:print-info 0 "interface changed, refreshing iface and port info")
-	      (set! iface (car sdat))
-	      (set! port  (cadr sdat))
-	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
-
-        ;; NOTE: Get rid of this mechanism! It really is not needed...
-        ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
-        (tasks:server-update-heartbeat tdb spid)
+      (if (< count 1) ;; 3x3 = 9 secs aprox
+	  (loop (+ count 1)))
       
-        ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-        (mutex-lock! *heartbeat-mutex*)
-        (set! last-access *last-db-access*)
-        (mutex-unlock! *heartbeat-mutex*)
-	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (and *server-run*
-		 (> (+ last-access server-timeout)
-		    (current-seconds)))
-            (begin
-              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-              (loop 0))
-            (begin
-              (debug:print-info 0 "Starting to shutdown the server.")
-              ;; need to delete only *my* server entry (future use)
-              (set! *time-to-exit* #t)
-              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-              (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
-	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
-	      (debug:print-info 0 "Average cached write time "
-				(if (eq? *number-of-writes* 0)
-				    "n/a (no writes)"
-				    (/ *writes-total-delay*
-				       *number-of-writes*))
-				" ms")
-	      (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
-	      (debug:print-info 0 "Average non-cached time   "
-				(if (eq? *number-non-write-queries* 0)
-				    "n/a (no queries)"
-				    (/ *total-non-write-delay* 
-				       *number-non-write-queries*))
-				" ms")
-              (debug:print-info 0 "Server shutdown complete. Exiting")
-              (exit)))))))
+      ;; Check that iface and port have not changed (can happen if server port collides)
+      (mutex-lock! *heartbeat-mutex*)
+      (set! sdat *runremote*)
+      (mutex-unlock! *heartbeat-mutex*)
+      
+      (if (or (not (equal? sdat (list iface port)))
+	      (not spid))
+	  (begin 
+	    (debug:print-info 0 "interface changed, refreshing iface and port info")
+	    (set! iface (car sdat))
+	    (set! port  (cadr sdat))
+	    (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
+      
+      ;; NOTE: Get rid of this mechanism! It really is not needed...
+      ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
+      (tasks:server-update-heartbeat tdb spid)
+      
+      ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+      (mutex-lock! *heartbeat-mutex*)
+      (set! last-access *last-db-access*)
+      (mutex-unlock! *heartbeat-mutex*)
+      ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
+      (if (and *server-run*
+	       (> (+ last-access server-timeout)
+		  (current-seconds)))
+	  (begin
+	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+	    (loop 0))
+	  (begin
+	    (debug:print-info 0 "Starting to shutdown the server.")
+	    ;; need to delete only *my* server entry (future use)
+	    (set! *time-to-exit* #t)
+	    (if *inmemdb* (db:sync-to *inmemdb* *db*))
+	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+	    (thread-sleep! 1)
+	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+	    (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+	    (debug:print-info 0 "Average cached write time "
+			      (if (eq? *number-of-writes* 0)
+				  "n/a (no writes)"
+				  (/ *writes-total-delay*
+				     *number-of-writes*))
+			      " ms")
+	    (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+	    (debug:print-info 0 "Average non-cached time   "
+			      (if (eq? *number-non-write-queries* 0)
+				  "n/a (no queries)"
+				  (/ *total-non-write-delay* 
+				     *number-non-write-queries*))
+			      " ms")
+	    (debug:print-info 0 "Server shutdown complete. Exiting")
+	    (exit))))))
 
 ;; all routes though here end in exit ...
 (define (http-transport:launch)
@@ -372,11 +506,16 @@
 					(if (args:get-arg "-server")
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
-		   (th3 (make-thread http-transport:keep-running "Keep running"))
-		   (th1 (make-thread server:write-queue-handler  "write queue")))
+		   (th3 (make-thread http-transport:keep-running "Keep running")))
+;;		   (th1 (make-thread server:write-queue-handler  "write queue")))
+	      (set! *cache-on* #t)
+	      (set! *db*       (open-db))
+	      (set! *inmemdb*  (open-in-mem-db))
+	      (db:sync-to *db* *inmemdb*)
+
 	      (thread-start! th2)
 	      (thread-start! th3)
-	      (thread-start! th1)
+	      ;; (thread-start! th1)
 	      (set! *didsomething* #t)
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))

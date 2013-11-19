@@ -27,6 +27,9 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
+(declare (uses tdb))
+(declare (uses mt))
+(declare (uses api))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -468,7 +471,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (define (full-runconfigs-read)
-  (let* ((keys   (cdb:remote-run db:get-keys #f))
+  (let* ((keys   (rmt:get-keys))
 	 (target (if (args:get-arg "-reqtarg")
 		     (args:get-arg "-reqtarg")
 		     (if (args:get-arg "-target")
@@ -573,18 +576,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Query runs
 ;;======================================================================
 
+;; NOTE: list-runs and list-db-targets operate on local db!!!
+;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
-	(let* ((db       #f)
+	(let* ((db       (open-db))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
 			     "%"))
-	       (runsdat  (cdb:remote-run db:get-runs #f runpatt #f #f '()))
+	       (runsdat  (db:get-runs db runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
-	       (keys     (cdb:remote-run db:get-keys #f))
+	       (keys     (db:get-keys db))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
@@ -601,7 +606,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (print targetstr))))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
-			  (tests  (mt:get-tests-for-run run-id testpatt '() '())))
+			  (tests  (db:get-tests-for-run db run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
 		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
 			    " status: " (db:get-value-by-header run header "state")
 			    " run-id: " run-id ", number tests: " (length tests))
@@ -619,25 +624,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				(db:test-get-event_time test)
 				(db:test-get-host test))
 			(if (not (or (equal? (db:test-get-status test) "PASS")
-				     (equal? (db:test-get-status test) "WARN")
+			   	     (equal? (db:test-get-status test) "WARN")
 				     (equal? (db:test-get-state test)  "NOT_STARTED")))
 			    (begin
-			      (print "         cpuload:  " (db:test-get-cpuload test)
+			      (print   "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
 				     "\n         uname:    " (db:test-get-uname test)
 				     "\n         rundir:   " (db:test-get-rundir test)
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test #f (db:test-get-id test))))
+			      (let ((steps (tdb:get-steps-for-test (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
 					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-					   (db:step-get-stepname step)
-					   (db:step-get-state step)
-					   (db:step-get-status step)
-					   (db:step-get-event_time step)))
+					   (tdb:step-get-stepname step)
+					   (tdb:step-get-state step)
+					   (tdb:step-get-status step)
+					   (tdb:step-get-event_time step)))
 				 steps)))))
 		      tests)))))
 	     runs)
@@ -765,7 +770,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
-	  (let* ((keys     (cdb:remote-run db:get-keys db))
+	  (let* ((keys     (rmt:get-keys))
 		 ;; db:test-get-paths must not be run remote
 		 (paths    (db:test-get-paths-matching db keys target (args:get-arg "-test-files"))))
 	    (set! *didsomething* #t)
@@ -801,7 +806,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (db        #f)
+	       (db        (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target")))
@@ -816,24 +821,26 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
-	  (let* ((keys     (cdb:remote-run db:get-keys db))
+	  (let* ((keys     (db:get-keys db))
 		 ;; DO NOT run remote
 		 (paths    (db:test-get-paths-matching db keys target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
-		      paths)))
+		      paths))
+	  (if (sqlite3:database? db)(sqlite3:finalize! db)))
 	;; else do a general-run-call
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
 	 (lambda (target runname keys keyvals)
-	   (let* ((db       #f)
+	   (let* ((db       (open-db))
 		  ;; DO NOT run remote
 		  (paths    (db:test-get-paths-matching db keys target)))
 	     (for-each (lambda (path)
 			 (print path))
-		       paths))))))
+		       paths)
+	     (sqlite3:finalize! db))))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -844,13 +851,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-extract-ods"
      "Make ods spreadsheet"
      (lambda (target runname keys keyvals)
-       (let ((db         #f)
+       (let ((db         (open-db))
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
-	 (cdb:remote-run db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)))))
+	 (db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)
+	 (sqlite3:finalize! db)
+	 (set! *didsomething* #t)))))
 
 ;;======================================================================
 ;; execute the test
@@ -896,7 +905,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (exit 1)))
 	(if (and state status)
 	    ;; DO NOT remote run, makes calls to the testdat.db test db.
-	    (db:teststep-set-status! db test-id step state status msg logfile work-area: work-area)
+	    (tdb:teststep-set-status! test-id step state status msg logfile work-area: work-area)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -955,13 +964,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
-	      (db:load-test-data db test-id work-area: work-area))
+	      (tdb:load-test-data test-id work-area: work-area))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		(cdb:test-set-log! *runremote* test-id logfname)))
+		(rmt:test-set-log! test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
-	      (tests:test-set-toplog! db run-id test-name (args:get-arg "-set-toplog")))
+	      (tests:test-set-toplog! run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      ;; DO NOT run remote
 	      (tests:summarize-items db run-id test-id test-name #t)) ;; do force here
@@ -987,7 +996,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
 		    ;; DO NOT run remote
-		    (db:teststep-set-status! db test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
+		    (tdb:teststep-set-status! test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
@@ -1004,10 +1013,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  (cdb:test-set-log! *runremote* test-id htmllogfile)))
+			  (rmt:test-set-log! test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      ;; DO NOT run remote
-		      (db:teststep-set-status! db test-id stepname "end" exitstat msg logfile work-area: work-area))
+		      (tdb:teststep-set-status! test-id stepname "end" exitstat msg logfile work-area: work-area))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
@@ -1029,13 +1038,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     (not status)))
 		    (begin
 		      (debug:print 0 "ERROR: You must specify :state and :status with every call to -test-status\n" help)
-		      ;; (sqlite3:finalize! db)
+		      (if (sqlite3:database? db)(sqlite3:finalize! db))
 		      (exit 6)))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
 		  (tests:test-set-status! test-id state newstatus msg otherdata work-area: work-area))))
-	  (if db (sqlite3:finalize! db))
+	  (if (sqlite3:database? db)(sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -1052,7 +1061,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (exit 1)))
       (set! keys (cdb:remote-run db:get-keys db))
       (debug:print 1 "Keys: " (string-intersperse keys ", "))
-      (if db (sqlite3:finalize! db))
+      (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-gui")

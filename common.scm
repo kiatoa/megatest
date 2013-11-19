@@ -29,7 +29,7 @@
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
 
-;; global gletches
+;; GLOBAL GLETCHES
 (define *db-keys* #f)
 (define *configinfo* #f)
 (define *configdat*  #f)
@@ -57,7 +57,7 @@
 (define *default-numtries*  10)
 (define *server-run*        #t)
 (define *db-write-access*   #t)
-
+(define *inmemdb*           #f)
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -98,10 +98,25 @@
 ;;======================================================================
 
 (define *common:std-states*   
-  (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ" "STUCK"))
+  '((0 "COMPLETED")
+    (1 "NOT_STARTED")
+    (2 "RUNNING")
+    (3 "REMOTEHOSTSTART")
+    (4 "LAUNCHED")
+    (5 "KILLED")
+    (6 "KILLREQ")
+    (7 "STUCK")))
 
 (define *common:std-statuses*
-  (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD"))
+  '((0 "PASS")
+    (1 "WARN")
+    (2 "FAIL")
+    (3 "CHECK")
+    (4 "n/a")
+    (5 "WAIVED")
+    (6 "SKIP")
+    (7 "DELETED")
+    (8 "STUCK/DEAD")))
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
