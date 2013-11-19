@@ -501,7 +501,7 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (rmt:general-call 'test-set-rundir-by-test-id test-id lnkpathf)
+    (rmt:general-call 'test-set-rundir-by-test-id lnkpathf test-id)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))

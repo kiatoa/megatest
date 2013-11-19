@@ -1503,12 +1503,16 @@
 		       (string-split target "/"))
 		  " AND "))
 	 (testqry (tests:match->sqlqry testpatt))
-	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';")))
-	 (tstsqry (sqlite3:prepare db (conc "SELECT rundir FROM tests WHERE run_id=? AND " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;"))))
+	 (rqry    (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))
+	 (runsqry (sqlite3:prepare db rqry))
+	 (tqry    (conc "SELECT rundir FROM tests WHERE run_id=? AND " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;"))
+	 (tstsqry (sqlite3:prepare db tqry)))
+    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  rqry=" rqry "\n  tqry=" tqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
      runsqry)
+    (sqlite3:finalize! runsqry)
     (for-each (lambda (rid)
 		(sqlite3:for-each-row 
 		 (lambda (p)
@@ -1516,7 +1520,6 @@
 		 tstsqry rid))
 	      row-ids)
     (sqlite3:finalize! tstsqry)
-    (sqlite3:finalize! runsqry)
     res))
 
 ;; look through tests from matching runs for a file
