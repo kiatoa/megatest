@@ -194,7 +194,7 @@
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (rmt:csv->test-data test-id lin work-area: work-area)
+	  (rmt:csv->test-data test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 

@@ -1250,8 +1250,8 @@
     res))
 
 (define (db:delete-test-records db test-id)
-  (db:general-call 'delete-test-step-records test-id)
-  (db:general-call 'delete-test-data-records test-id)
+  (db:general-call db 'delete-test-step-records (list test-id))
+  (db:general-call db 'delete-test-data-records (list test-id))
   (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))
 
 (define (db:delete-tests-for-run db run-id)
@@ -1491,12 +1491,12 @@
        (set! pass-count pcount))
      db 
      "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
-                   (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
+             (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
      test-id test-id)
     ;; Now rollup the counts to the central megatest.db
-    (db:general-call 'pass-fail-counts fail-count pass-count test-id)
+    (db:general-call db 'pass-fail-counts (list fail-count pass-count test-id))
     ;; if the test is not FAIL then set status based on the fail and pass counts.
-    (db:general-call 'test_data-pf-rollup test-id test-id test-id test-id)))
+    (db:general-call db 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
 (define (db:csv->test-data db test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
@@ -1779,7 +1779,7 @@
 
 	;; STEPS
 	'(delete-test-step-records "UPDATE test_steps SET state='DELETED' WHERE id=?;")
-	'(delete-test-data-records "UPDATE test_data  SET state='DELETED' WHERE id=?;")
+	'(delete-test-data-records "UPDATE test_data  SET status='DELETED' WHERE id=?;") ;; using status since no state field
 	))
 
 ;; do not run these as part of the transaction

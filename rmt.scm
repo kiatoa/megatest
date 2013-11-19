@@ -226,7 +226,7 @@
 (define (rmt:get-steps-for-test test-id)
   (rmt:send-receive 'get-steps-data (list test-id)))
 
-(define (rmt:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
+(define (rmt:teststep-set-status! test-id teststep-name state-in status-in comment logfile)
   (let* ((state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
@@ -259,5 +259,5 @@
 (define (rmt:test-data-rollup test-id status)
   (rmt:send-receive 'test-data-rollup (list test-id status)))
 
-(define (db:csv->test-data db test-id csvdata)
+(define (rmt:csv->test-data test-id csvdata)
   (rmt:send-receive 'csv->test-data (list test-id csvdata)))
