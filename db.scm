@@ -16,7 +16,7 @@
 (require-extension (srfi 18) extras tcp) ;;  rpc)
 ;; (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -111,17 +111,65 @@
 (define (db:tbls db)
   (let ((keys  (db:get-keys db)))
     (list
+     (list "keys"
+	   '("id"        #f)
+	   '("fieldname" #f)
+	   '("fieldtype" #f))
      (list "metadat" '("var" #f) '("val" #f))
      (append (list "runs" 
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))))))
-
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count"))))
+     (list "tests" 
+	   '("id"             #f)
+	   '("run_id"         #f)
+	   '("testname"       #f)
+	   '("host"           #f)
+	   '("cpuload"        #f)
+	   '("diskfree"       #f)
+	   '("uname"          #f)
+	   '("rundir"         #f)
+	   '("shortdir"       #f)
+	   '("item_path"      #f)
+	   '("state"          #f)
+	   '("status"         #f)
+	   '("attemptnum"     #f)
+	   '("final_logf"     #f)
+	   '("logdat"         #f)
+	   '("run_duration"   #f)
+	   '("comment"        #f)
+	   '("event_time"     #f)
+	   '("fail_count"     #f)
+	   '("pass_count"     #f)
+	   '("archived"       #f))
+     (list "test_steps"
+	   '("id"             #f)
+	   '("test_id"        #f)
+	   '("stepname"       #f)
+	   '("state"          #f)
+	   '("status"         #f)
+	   '("event_time"     #f)
+	   '("comment"        #f)
+	   '("logfile"        #f))
+     (list "test_meta"
+	   '("id"             #f)
+	   '("testname"       #f)
+	   '("owner"          #f)
+	   '("description"    #f)
+	   '("reviewed"       #f)
+	   '("iterated"       #f)
+	   '("avg_runtime"    #f)
+	   '("avg_disk"       #f)
+	   '("tags"           #f)
+	   '("jobgroup"       #f)))))
+    
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 (define (db:sync-tables tbls fromdb todb)
-  (let ((stmts      (make-hash-table)) ;; table-field => stmt
-	(all-stmts  '()))              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+  (let ((stmts       (make-hash-table)) ;; table-field => stmt
+	(all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+	(numrecs     (make-hash-table))
+	(start-time  (current-milliseconds)))
     (for-each ;; table
      (lambda (tabledat)
        (let* ((tablename  (car tabledat))
@@ -166,19 +214,31 @@
 	      (for-each ;; 
 	       (lambda (fromrow)
 		 (let* ((a    (vector-ref fromrow 0))
-			(curr (hash-table-ref todat a))
+			(curr (hash-table-ref/default todat a #f))
 			(same #t))
 		   (let loop ((i 0))
-		     (if (not (equal? (vector-ref fromrow i)(vector-ref curr i)))
+		     (if (or (not curr)
+			     (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
 			 (set! same #f))
 		     (if (and same
 			      (< i (- num-fields 1)))
 			 (loop (+ i 1))))
-		   (if (not same)(apply sqlite3:execute full-ins (vector->list fromrow)))))
+		   (if (not same)
+		       (begin
+			 (apply sqlite3:execute stmth (vector->list fromrow))
+			 (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 	       fromdat)))
 	   (sqlite3:finalize! stmth))))
-     tbls)))
-		   
+     tbls)
+    (let ((runtime (- (current-milliseconds) start-time)))
+      (debug:print 0 "INFO: db sync, total run time " runtime " ms")
+      (for-each 
+       (lambda (dat)
+	 (let ((tblname (car dat))
+	       (count   (cdr dat)))
+	   (if (> count 0)
+	       (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
+       (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))))
 
 (define (db:sync-to fromdb todb)
   ;; strategy
@@ -295,7 +355,7 @@
     (+ rrecchgd trecchgd tmrecchgd)))
 
 (define (db:sync-back)
-  (db:sync-to *inmemdb* *db*))
+  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)

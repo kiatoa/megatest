@@ -71,7 +71,7 @@
 				      (db:general-call db stmtname realparams)))
     ((sync-inmem->db)               (db:sync-back))
     ((kill-server)
-     (db:sync-to *inmemdb* *db*)
+     (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
      (let ((hostname (car  *runremote*))
 	   (port     (cadr *runremote*))
 	   (pid      (if (null? params) #f (car params)))
