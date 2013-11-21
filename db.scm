@@ -1714,7 +1714,13 @@
 (define (cdb:remote-run proc db . params)
   (if (or *db-write-access*
 	  (not (member proc *db:all-write-procs*)))
-      (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params)
+      (handle-exceptions
+       exn
+       (begin 
+	 (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
+	 (thread-sleep! 10)
+	 (apply cdb:remote-run proc db params))
+       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
       (begin
 	(debug:print 0 "ERROR: Attempt to access read-only database")
 	#f)))
