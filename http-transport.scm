@@ -425,9 +425,18 @@
     (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
     (let loop ((count 0))
       ;; Use this opportunity to sync the inmemdb to db
-      (if *inmemdb* (db:sync-to *inmemdb* *db*))
+      (let ((start-time (current-milliseconds))
+	    (sync-time  #f)
+	    (rem-time   #f))
+	(if *inmemdb* (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
+	(set! sync-time  (- (current-milliseconds) start-time))
+	(debug:print 0 "SYNC: time= " sync-time)
+	(set! rem-time (quotient (- 4000 sync-time) 1000))
+	(if (and (< rem-time 4)
+		 (> rem-time 0))
+	    (thread-sleep! rem-time)))
 
-      (thread-sleep! 4) ;; no need to do this very often
+      ;; (thread-sleep! 4) ;; no need to do this very often
 
       (if (< count 1) ;; 3x3 = 9 secs aprox
 	  (loop (+ count 1)))
@@ -464,7 +473,7 @@
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
 	    (set! *time-to-exit* #t)
-	    (if *inmemdb* (db:sync-to *inmemdb* *db*))
+	    (if *inmemdb* (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
 	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
 	    (thread-sleep! 1)
 	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
@@ -511,7 +520,7 @@
 	      (set! *cache-on* #t)
 	      (set! *db*       (open-db))
 	      (set! *inmemdb*  (open-in-mem-db))
-	      (db:sync-to *db* *inmemdb*)
+	      (db:sync-tables (db:tbls *db*) *db* *inmemdb*) ;; (db:sync-to *db* *inmemdb*)
 
 	      (thread-start! th2)
 	      (thread-start! th3)

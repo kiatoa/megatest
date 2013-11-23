@@ -56,6 +56,14 @@
     ((lock/unlock-run)              (apply db:lock/unlock-run db params))
     ((update-run-event_time)        (apply db:update-run-event_time db params))
 
+    ;; STEPS
+    ((teststep-set-status!)         (apply db:teststep-set-status! db params))
+
+    ;; TEST DATA
+    ((test-data-rollup)             (apply db:test-data-rollup db params))
+    ((csv->test-data)               (apply db:csv->test-data db params))
+    ((get-steps-data)               (apply db:get-steps-data db params))
+
     ;; MISC
     ((login)                        (apply db:login db params))
     ((general-call)                 (let ((stmtname   (car params))
@@ -63,7 +71,7 @@
 				      (db:general-call db stmtname realparams)))
     ((sync-inmem->db)               (db:sync-back))
     ((kill-server)
-     (db:sync-to *inmemdb* *db*)
+     (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
      (let ((hostname (car  *runremote*))
 	   (port     (cadr *runremote*))
 	   (pid      (if (null? params) #f (car params)))

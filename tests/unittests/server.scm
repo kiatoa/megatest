@@ -84,5 +84,31 @@
 ;; D B
 ;;======================================================================
 
+(test "pass fail counts" #t (rmt:general-call 'pass-fail-counts 10 9 1))
+(test "get pass fail counts" 19 (let ((dat (rmt:get-test-info-by-id 1)))
+				  (+ (db:test-get-pass_count dat)
+				     (db:test-get-fail_count dat))))
+
+(define testregistry (make-hash-table))
+(for-each
+ (lambda (tname)
+   (for-each
+    (lambda (itempath)
+      (let ((tkey  (conc tname "/" itempath))
+	    (rpass (random 10))
+	    (rfail (random 10)))
+	(hash-table-set! testregistry tkey (list tname itempath))
+	(rmt:general-call 'register-test 1 tname itempath)
+	(let* ((tid  (rmt:get-test-id 1 tname itempath))
+	       (tdat (rmt:get-test-info-by-id tid)))
+	  (rmt:general-call 'pass-fail-counts rpass rfail (db:test-get-id tdat))
+	  (let* ((resdat (rmt:get-test-info-by-id tid)))
+	    (test "set/get pass fail counts" (list rpass rfail)
+		  (list (db:test-get-pass_count resdat)
+			(db:test-get-fail_count resdat)))))))
+    (list "" "a" "b" "c" "d" "e" "f" "g" "h" "i" "j")))
+ (list "test1" "test2" "test3" "test4" "test5"))
+
+
 (test #f '(#t "exit process started") (rmt:kill-server)) ;; *toppath* *my-client-signature* #f)))
 

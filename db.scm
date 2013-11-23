@@ -16,7 +16,7 @@
 (require-extension (srfi 18) extras tcp) ;;  rpc)
 ;; (import (prefix rpc rpc:))
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -111,17 +111,65 @@
 (define (db:tbls db)
   (let ((keys  (db:get-keys db)))
     (list
+     (list "keys"
+	   '("id"        #f)
+	   '("fieldname" #f)
+	   '("fieldtype" #f))
      (list "metadat" '("var" #f) '("val" #f))
      (append (list "runs" 
 		   '("id"  #f))
 	     (map (lambda (k)(list k #f))
 		  (append keys
-			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))))))
-
+			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count"))))
+     (list "tests" 
+	   '("id"             #f)
+	   '("run_id"         #f)
+	   '("testname"       #f)
+	   '("host"           #f)
+	   '("cpuload"        #f)
+	   '("diskfree"       #f)
+	   '("uname"          #f)
+	   '("rundir"         #f)
+	   '("shortdir"       #f)
+	   '("item_path"      #f)
+	   '("state"          #f)
+	   '("status"         #f)
+	   '("attemptnum"     #f)
+	   '("final_logf"     #f)
+	   '("logdat"         #f)
+	   '("run_duration"   #f)
+	   '("comment"        #f)
+	   '("event_time"     #f)
+	   '("fail_count"     #f)
+	   '("pass_count"     #f)
+	   '("archived"       #f))
+     (list "test_steps"
+	   '("id"             #f)
+	   '("test_id"        #f)
+	   '("stepname"       #f)
+	   '("state"          #f)
+	   '("status"         #f)
+	   '("event_time"     #f)
+	   '("comment"        #f)
+	   '("logfile"        #f))
+     (list "test_meta"
+	   '("id"             #f)
+	   '("testname"       #f)
+	   '("owner"          #f)
+	   '("description"    #f)
+	   '("reviewed"       #f)
+	   '("iterated"       #f)
+	   '("avg_runtime"    #f)
+	   '("avg_disk"       #f)
+	   '("tags"           #f)
+	   '("jobgroup"       #f)))))
+    
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 (define (db:sync-tables tbls fromdb todb)
-  (let ((stmts      (make-hash-table)) ;; table-field => stmt
-	(all-stmts  '()))              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+  (let ((stmts       (make-hash-table)) ;; table-field => stmt
+	(all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+	(numrecs     (make-hash-table))
+	(start-time  (current-milliseconds)))
     (for-each ;; table
      (lambda (tabledat)
        (let* ((tablename  (car tabledat))
@@ -166,136 +214,148 @@
 	      (for-each ;; 
 	       (lambda (fromrow)
 		 (let* ((a    (vector-ref fromrow 0))
-			(curr (hash-table-ref todat a))
+			(curr (hash-table-ref/default todat a #f))
 			(same #t))
 		   (let loop ((i 0))
-		     (if (not (equal? (vector-ref fromrow i)(vector-ref curr i)))
+		     (if (or (not curr)
+			     (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
 			 (set! same #f))
 		     (if (and same
 			      (< i (- num-fields 1)))
 			 (loop (+ i 1))))
-		   (if (not same)(apply sqlite3:execute full-ins (vector->list fromrow)))))
+		   (if (not same)
+		       (begin
+			 (apply sqlite3:execute stmth (vector->list fromrow))
+			 (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
 	       fromdat)))
 	   (sqlite3:finalize! stmth))))
-     tbls)))
-		   
+     tbls)
+    (let ((runtime (- (current-milliseconds) start-time)))
+      (debug:print 0 "INFO: db sync, total run time " runtime " ms")
+      (for-each 
+       (lambda (dat)
+	 (let ((tblname (car dat))
+	       (count   (cdr dat)))
+	   (if (> count 0)
+	       (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
+       (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))))
 
-(define (db:sync-to fromdb todb)
-  ;; strategy
-  ;;  1. Get all run-ids
-  ;;  2. For each run-id 
-  ;;     a. Sync that run in a transaction
-  (let ((trecchgd    0)
-	(rrecchgd    0)
-	(tmrecchgd   0))
-
-    ;; First sync test_meta data
-    (let ((tmgetstmt (sqlite3:prepare todb "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE id=?;"))
-	  (tmputstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO test_meta (id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup) 
-                                                                      VALUES (?, ?,       ?,     ?,    ?,          ?,       ?,       ?,          ?,       ?,   ?);"))
-	  (tmdats    (db:testmeta-get-all fromdb)))
-      ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
-      (for-each
-       (lambda (tmdat) ;; iterate over tests
-	 (let ((testm-id (vector-ref tmdat 0)))
-	   (sqlite3:with-transaction
-	    todb
-	    (lambda ()
-	      (let ((curr-tmdat #f))
-		(sqlite3:for-each-row
-		 (lambda (a . b)
-		   (set! curr-tmdat (apply vector a b)))
-		 tmgetstmt testm-id)
-		(if (not (equal? curr-tmdat tmdat)) ;; something changed
-		    (begin
-		      (debug:print 0 "  test-id: " testm-id
-				   "\ncurr-tdat: " curr-tmdat
-				   "\n     tdat: " tmdat)
-		      (apply sqlite3:execute tmputstmt (vector->list tmdat))
-		      (set! tmrecchgd (+ tmrecchgd 1)))))))))
-       tmdats)
-      (sqlite3:finalize! tmgetstmt)
-      (sqlite3:finalize! tmputstmt))
-
-    ;; First sync tests data
-    (let ((run-ids     (db:get-all-run-ids fromdb))
-	  (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
-	  (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
-                                                                    VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
-      (for-each
-       (lambda (run-id)
-	 (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
-	   ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
-	   (for-each
-	    (lambda (tdat) ;; iterate over tests
-	      (let ((test-id (vector-ref tdat 0)))
-		(sqlite3:with-transaction
-		 todb
-		 (lambda ()
-		   (let ((curr-tdat #f))
-		     (sqlite3:for-each-row
-		      (lambda (a . b)
-			(set! curr-tdat (apply vector a b)))
-		      tgetstmt
-		      test-id)
-		     (if (not (equal? curr-tdat tdat)) ;; something changed
-			 (begin
-			   (debug:print 0 "  test-id: " test-id
-					"\ncurr-tdat: " curr-tdat
-					"\n     tdat: " tdat)
-			   (apply sqlite3:execute tputstmt (vector->list tdat))
-			   (set! trecchgd (+ trecchgd 1)))))))))
-	    tdats)))
-       run-ids)
-      (sqlite3:finalize! tgetstmt)
-      (sqlite3:finalize! tputstmt))
-
-    ;; Next sync runs table
-    (let* ((rdats       '())
-	   (keys        (db:get-keys fromdb))
-	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
-	   (rnumfields  (length (string-split rstdfields ",")))
-	   (runslots    (string-intersperse (make-list rnumfields "?") ","))
-	   (rgetstmt    (sqlite3:prepare todb (conc "SELECT " rstdfields " FROM runs WHERE id=?;")))
-	   (rputstmt    (sqlite3:prepare todb (conc "INSERT OR REPLACE INTO runs (" rstdfields ") VALUES ( " runslots " );"))))
-      ;; first collect all the source run data
-      (sqlite3:for-each-row
-       (lambda (a . b)
-	 (set! rdats (cons (apply vector a b) rdats)))
-       fromdb
-       (conc "SELECT " rstdfields " FROM runs;"))
-      (sqlite3:with-transaction
-       todb
-       (lambda ()
-	 (for-each 
-	  (lambda (rdat)
-	    (let ((run-id    (vector-ref rdat 0))
-		  (curr-rdat #f))
-	      ;; first get the current value of the equivalent row from the target
-	      ;; read, then insert/overwrite if different
-	      (sqlite3:for-each-row 
-	       (lambda (a . b)
-		 (set! curr-rdat (apply vector a b)))
-	       rgetstmt
-	       run-id)
-	      (if (not (equal? curr-rdat rdat))
-		  (begin
-		    (debug:print 0 "   run-id: " run-id
-				 "\ncurr-rdat: " curr-rdat
-				 "\n     rdat: " rdat)
-		    (set! rrecchgd (+ rrecchgd 1))
-		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
-	  rdats)))
-      (sqlite3:finalize! rgetstmt)
-      (sqlite3:finalize! rputstmt))
-
-    (if (> rrecchgd 0)  (debug:print 0 "synced " rrecchgd " changed records in runs  table"))
-    (if (> trecchgd 0)  (debug:print 0 "synced " trecchgd " changed records in tests table"))
-    (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))
-    (+ rrecchgd trecchgd tmrecchgd)))
+;; (define (db:sync-to fromdb todb)
+;;   ;; strategy
+;;   ;;  1. Get all run-ids
+;;   ;;  2. For each run-id 
+;;   ;;     a. Sync that run in a transaction
+;;   (let ((trecchgd    0)
+;; 	(rrecchgd    0)
+;; 	(tmrecchgd   0))
+;; 
+;;     ;; First sync test_meta data
+;;     (let ((tmgetstmt (sqlite3:prepare todb "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE id=?;"))
+;; 	  (tmputstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO test_meta (id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup) 
+;;                                                                       VALUES (?, ?,       ?,     ?,    ?,          ?,       ?,       ?,          ?,       ?,   ?);"))
+;; 	  (tmdats    (db:testmeta-get-all fromdb)))
+;;       ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
+;;       (for-each
+;;        (lambda (tmdat) ;; iterate over tests
+;; 	 (let ((testm-id (vector-ref tmdat 0)))
+;; 	   (sqlite3:with-transaction
+;; 	    todb
+;; 	    (lambda ()
+;; 	      (let ((curr-tmdat #f))
+;; 		(sqlite3:for-each-row
+;; 		 (lambda (a . b)
+;; 		   (set! curr-tmdat (apply vector a b)))
+;; 		 tmgetstmt testm-id)
+;; 		(if (not (equal? curr-tmdat tmdat)) ;; something changed
+;; 		    (begin
+;; 		      (debug:print 0 "  test-id: " testm-id
+;; 				   "\ncurr-tdat: " curr-tmdat
+;; 				   "\n     tdat: " tmdat)
+;; 		      (apply sqlite3:execute tmputstmt (vector->list tmdat))
+;; 		      (set! tmrecchgd (+ tmrecchgd 1)))))))))
+;;        tmdats)
+;;       (sqlite3:finalize! tmgetstmt)
+;;       (sqlite3:finalize! tmputstmt))
+;; 
+;;     ;; First sync tests data
+;;     (let ((run-ids     (db:get-all-run-ids fromdb))
+;; 	  (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
+;; 	  (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
+;;                                                                     VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
+;;       (for-each
+;;        (lambda (run-id)
+;; 	 (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
+;; 	   ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
+;; 	   (for-each
+;; 	    (lambda (tdat) ;; iterate over tests
+;; 	      (let ((test-id (vector-ref tdat 0)))
+;; 		(sqlite3:with-transaction
+;; 		 todb
+;; 		 (lambda ()
+;; 		   (let ((curr-tdat #f))
+;; 		     (sqlite3:for-each-row
+;; 		      (lambda (a . b)
+;; 			(set! curr-tdat (apply vector a b)))
+;; 		      tgetstmt
+;; 		      test-id)
+;; 		     (if (not (equal? curr-tdat tdat)) ;; something changed
+;; 			 (begin
+;; 			   (debug:print 0 "  test-id: " test-id
+;; 					"\ncurr-tdat: " curr-tdat
+;; 					"\n     tdat: " tdat)
+;; 			   (apply sqlite3:execute tputstmt (vector->list tdat))
+;; 			   (set! trecchgd (+ trecchgd 1)))))))))
+;; 	    tdats)))
+;;        run-ids)
+;;       (sqlite3:finalize! tgetstmt)
+;;       (sqlite3:finalize! tputstmt))
+;; 
+;;     ;; Next sync runs table
+;;     (let* ((rdats       '())
+;; 	   (keys        (db:get-keys fromdb))
+;; 	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
+;; 	   (rnumfields  (length (string-split rstdfields ",")))
+;; 	   (runslots    (string-intersperse (make-list rnumfields "?") ","))
+;; 	   (rgetstmt    (sqlite3:prepare todb (conc "SELECT " rstdfields " FROM runs WHERE id=?;")))
+;; 	   (rputstmt    (sqlite3:prepare todb (conc "INSERT OR REPLACE INTO runs (" rstdfields ") VALUES ( " runslots " );"))))
+;;       ;; first collect all the source run data
+;;       (sqlite3:for-each-row
+;;        (lambda (a . b)
+;; 	 (set! rdats (cons (apply vector a b) rdats)))
+;;        fromdb
+;;        (conc "SELECT " rstdfields " FROM runs;"))
+;;       (sqlite3:with-transaction
+;;        todb
+;;        (lambda ()
+;; 	 (for-each 
+;; 	  (lambda (rdat)
+;; 	    (let ((run-id    (vector-ref rdat 0))
+;; 		  (curr-rdat #f))
+;; 	      ;; first get the current value of the equivalent row from the target
+;; 	      ;; read, then insert/overwrite if different
+;; 	      (sqlite3:for-each-row 
+;; 	       (lambda (a . b)
+;; 		 (set! curr-rdat (apply vector a b)))
+;; 	       rgetstmt
+;; 	       run-id)
+;; 	      (if (not (equal? curr-rdat rdat))
+;; 		  (begin
+;; 		    (debug:print 0 "   run-id: " run-id
+;; 				 "\ncurr-rdat: " curr-rdat
+;; 				 "\n     rdat: " rdat)
+;; 		    (set! rrecchgd (+ rrecchgd 1))
+;; 		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
+;; 	  rdats)))
+;;       (sqlite3:finalize! rgetstmt)
+;;       (sqlite3:finalize! rputstmt))
+;; 
+;;     (if (> rrecchgd 0)  (debug:print 0 "synced " rrecchgd " changed records in runs  table"))
+;;     (if (> trecchgd 0)  (debug:print 0 "synced " trecchgd " changed records in tests table"))
+;;     (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))
+;;     (+ rrecchgd trecchgd tmrecchgd)))
 
 (define (db:sync-back)
-  (db:sync-to *inmemdb* *db*))
+  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1250,7 +1310,8 @@
     res))
 
 (define (db:delete-test-records db test-id)
-  (tdb:delete-test-step-records db test-id)
+  (db:general-call db 'delete-test-step-records (list test-id))
+  (db:general-call db 'delete-test-data-records (list test-id))
   (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))
 
 (define (db:delete-tests-for-run db run-id)
@@ -1397,11 +1458,11 @@
 	#f)
       (let ((res #f))
 	(sqlite3:for-each-row
-	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)))
+	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)))
 	 db 
-	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"
+	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,pass_count,fail_count FROM tests WHERE id=?;"
 	 test-id)
 	res)))
 
@@ -1415,12 +1476,12 @@
 	'())
       (let ((res '()))
 	(sqlite3:for-each-row
-	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	   (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+	   (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
 			   res)))
 	 db 
-	 (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id in ("
+	 (conc "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,pass_count,fail_count FROM tests WHERE id in ("
 	       (string-intersperse (map conc test-ids) ",") ");"))
 	res)))
 
@@ -1440,6 +1501,119 @@
      test-id)
     ;; (hash-table-set! *test-paths* test-id res)
     res)) ;; ))
+
+;;======================================================================
+;; S T E P S
+;;======================================================================
+
+(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
+   (sqlite3:execute 
+    db
+    "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+    test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+   
+;; db-get-test-steps-for-run
+(define (db:get-steps-for-test db test-id)
+  (let* ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test-id stepname state status event-time logfile)
+       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+     db
+     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+     test-id)
+    (reverse res)))
+
+(define (db:get-steps-data db test-id)
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (id test-id stepname state status event-time logfile)
+       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+     db
+     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+     test-id)
+    (reverse res)))
+
+;;======================================================================
+;; T E S T  D A T A 
+;;======================================================================
+
+;; WARNING: Do NOT call this for the parent test on an iterated test
+;; Roll up test_data pass/fail results
+;; look at the test_data status field, 
+;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
+;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
+(define (db:test-data-rollup db test-id status)
+  (let ((fail-count 0)
+	(pass-count 0))
+    (sqlite3:for-each-row
+     (lambda (fcount pcount)
+       (set! fail-count fcount)
+       (set! pass-count pcount))
+     db 
+     "SELECT (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'fail') AS fail_count,
+             (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
+     test-id test-id)
+    ;; Now rollup the counts to the central megatest.db
+    (db:general-call db 'pass-fail-counts (list pass-count fail-count test-id))
+    ;; if the test is not FAIL then set status based on the fail and pass counts.
+    (db:general-call db 'test_data-pf-rollup (list test-id test-id test-id test-id))))
+
+(define (db:csv->test-data db test-id csvdata)
+  (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
+  (let ((csvlist (csv->list (make-csv-reader
+			     (open-input-string csvdata)
+			     '((strip-leading-whitespace? #t)
+			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
+    (for-each 
+     (lambda (csvrow)
+       (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
+	      (category    (list-ref padded-row 0))
+	      (variable    (list-ref padded-row 1))
+	      (value       (any->number-if-possible (list-ref padded-row 2)))
+	      (expected    (any->number-if-possible (list-ref padded-row 3)))
+	      (tol         (any->number-if-possible (list-ref padded-row 4))) ;; >, <, >=, <=, or a number
+	      (units       (list-ref padded-row 5))
+	      (comment     (list-ref padded-row 6))
+	      (status      (let ((s (list-ref padded-row 7)))
+			     (if (and (string? s)(or (string-match (regexp "^\\s*$") s)
+						     (string-match (regexp "^n/a$") s)))
+				 #f
+				 s))) ;; if specified on the input then use, else calculate
+	      (type        (list-ref padded-row 8)))
+	 ;; look up expected,tol,units from previous best fit test if they are all either #f or ''
+	 (debug:print 4 "BEFORE: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment " type: " type)
+	 
+	 (if (and (or (not expected)(equal? expected ""))
+		  (or (not tol)     (equal? expected ""))
+		  (or (not units)   (equal? expected "")))
+	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test tdb test-id category variable)))
+			 (set! expected new-expected)
+			 (set! tol      new-tol)
+			 (set! units    new-units)))
+	 
+	 (debug:print 4 "AFTER:  category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	 ;; calculate status if NOT specified
+	 (if (and (not status)(number? expected)(number? value)) ;; need expected and value to be numbers
+	     (if (number? tol) ;; if tol is a number then we do the standard comparison
+		 (let* ((max-val (+ expected tol))
+			(min-val (- expected tol))
+			(result  (and (>=  value min-val)(<= value max-val))))
+		   (debug:print 4 "max-val: " max-val " min-val: " min-val " result: " result)
+		   (set! status (if result "pass" "fail")))
+		 (set! status ;; NB// need to assess each one (i.e. not return operator since need to act if not valid op.
+		       (case (string->symbol tol) ;; tol should be >, <, >=, <=
+			 ((>)  (if (>  value expected) "pass" "fail"))
+			 ((<)  (if (<  value expected) "pass" "fail"))
+			 ((>=) (if (>= value expected) "pass" "fail"))
+			 ((<=) (if (<= value expected) "pass" "fail"))
+			 (else (conc "ERROR: bad tol comparator " tol))))))
+	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
+		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
+			  test-id category variable value expected tol units (if comment comment "") status type)))
+     csvlist)))
 
 ;;======================================================================
 ;; Misc. test related queries
@@ -1609,7 +1783,10 @@
 ;;======================================================================
 
 (define db:queries 
-  (list '(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
+  (list '(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
+
+	;; TESTS
+	'(register-test          "INSERT OR IGNORE INTO tests (run_id,testname,event_time,item_path,state,status) VALUES (?,?,strftime('%s','now'),?,'NOT_STARTED','n/a');")
 	;; Test state and status
 	'(set-test-state         "UPDATE tests SET state=?   WHERE id=?;")
 	'(set-test-status        "UPDATE tests SET state=?   WHERE id=?;")
@@ -1618,7 +1795,7 @@
 	;; Test comment
 	'(set-test-comment       "UPDATE tests SET comment=? WHERE id=?;")
 	'(set-test-start-time    "UPDATE tests SET event_time=strftime('%s','now') WHERE id=?;")
-	'(pass-fail-counts       "UPDATE tests SET fail_count=?,pass_count=? WHERE id=?;")
+	'(pass-fail-counts       "UPDATE tests SET pass_count=?,fail_count=? WHERE id=?;")
 	;; test_data-pf-rollup is used to set a tests PASS/FAIL based on the pass/fail info from the steps
 	'(test_data-pf-rollup    "UPDATE tests
                                     SET status=CASE WHEN (SELECT fail_count FROM tests WHERE id=?) > 0 
@@ -1634,7 +1811,6 @@
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=? AND run_id=?;")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;")
-	'(update-run-duration     "UPDATE tests SET run_duration=? WHERE id=?;")
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
@@ -1660,6 +1836,10 @@
                                               AND status = 'SKIP') > 0 THEN 'SKIP'
                                   ELSE 'UNKNOWN' END
                        WHERE run_id=? AND testname=? AND item_path='';")
+
+	;; STEPS
+	'(delete-test-step-records "UPDATE test_steps SET status='DELETED' WHERE id=?;")
+	'(delete-test-data-records "UPDATE test_data  SET status='DELETED' WHERE id=?;") ;; using status since no state field
 	))
 
 ;; do not run these as part of the transaction

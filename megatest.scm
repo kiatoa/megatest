@@ -634,7 +634,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (tdb:get-steps-for-test (db:test-get-id test))))
+			      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
@@ -904,8 +904,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	(if (and state status)
-	    ;; DO NOT remote run, makes calls to the testdat.db test db.
-	    (tdb:teststep-set-status! test-id step state status msg logfile work-area: work-area)
+	    (rmt:teststep-set-status! test-id step state status msg logfile)
 	    (begin
 	      (debug:print 0 "ERROR: You must specify :state and :status with every call to -step")
 	      (exit 6))))))
@@ -964,7 +963,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
 	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
-	      (tdb:load-test-data test-id work-area: work-area))
+	      (tdb:load-test-data test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
 		(rmt:test-set-log! test-id logfname)))
@@ -995,12 +994,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						(cons cmd params) " ")
 					   ") " redir " " logfile)))
 		    ;; mark the start of the test
-		    ;; DO NOT run remote
-		    (tdb:teststep-set-status! test-id stepname "start" "n/a" (args:get-arg "-m") logfile work-area: work-area)
+		    (rmt:teststep-set-status! test-id stepname "start" "n/a" (args:get-arg "-m") logfile)
 		    ;; run the test step
 		    (debug:print-info 2 "Running \"" fullcmd "\" in directory \"" startingdir)
 		    (change-directory startingdir)
-		    (set! exitstat (system fullcmd)) ;; cmd params))
+		    (set! exitstat (system fullcmd))
 		    (set! *globalexitstatus* exitstat)
 		    ;; (change-directory testpath)
 		    ;; run logpro if applicable ;; (process-run "ls" (list "/foo" "2>&1" "blah.log"))
@@ -1015,8 +1013,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (change-directory testpath)
 			  (rmt:test-set-log! test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
-		      ;; DO NOT run remote
-		      (tdb:teststep-set-status! test-id stepname "end" exitstat msg logfile work-area: work-area))
+		      (rmt:teststep-set-status! test-id stepname "end" exitstat msg logfile))
 		    )))
 	  (if (or (args:get-arg "-test-status")
 		  (args:get-arg "-set-values"))
