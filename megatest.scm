@@ -634,7 +634,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (tdb:get-steps-for-test (db:test-get-id test))))
+			      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
