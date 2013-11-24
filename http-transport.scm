@@ -184,6 +184,9 @@
 
 (define *http-mutex* (make-mutex))
 
+;; NOTE: Large block of code from 32436b426188080f72fceb6894af541fbad9921e removed here
+;;       I'm pretty sure it is defunct.
+
 ;; This next block all imported en-mass from the api branch
 (define *http-requests-in-progress* 0)
 (define *http-connections-next-cleanup* (current-seconds))

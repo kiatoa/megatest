@@ -26,6 +26,7 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses rmt))
 (declare (uses ezsteps))
 
 (include "common_records.scm")

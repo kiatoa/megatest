@@ -98,9 +98,9 @@
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
 	  newres))))
 
+(define (mt:get-run-stats dbstruct run-id)
 ;;  Get run stats from local access, move this ... but where?
-(define (mt:get-run-stats)
-  (db:get-run-stats #f))
+  (db:get-run-stats dbstruct run-id))
 
 (define (mt:discard-blocked-tests run-id failed-test tests test-records)
   (if (null? tests)
