@@ -1756,6 +1756,13 @@
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
+      (handle-exceptions
+       exn
+       (begin 
+	 (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
+	 (thread-sleep! 10)
+	 (apply cdb:remote-run proc db params))
+       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
       (begin
 	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
 	(if (equal? status "RUNNING")
