@@ -62,7 +62,7 @@
 (define *default-numtries*  10)
 (define *server-run*        #t)
 (define *db-write-access*   #t)
-
+(define *inmemdb*           #f)
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -81,6 +81,10 @@
 ;; Testconfig and runconfig caches. 
 (define *testconfigs*       (make-hash-table)) ;; test-name => testconfig
 (define *runconfigs*        (make-hash-table)) ;; target    => runconfig
+
+;; This is a cache of pre-reqs met, don't re-calc in cases where called with same params less than
+;; five seconds ago
+(define *pre-reqs-met-cache* (make-hash-table))
 
 (define (common:clear-caches)
   (set! *target*             (make-hash-table))

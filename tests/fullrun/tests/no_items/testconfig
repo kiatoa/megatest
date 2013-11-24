@@ -1,0 +1,15 @@
+[ezsteps]
+listfiles ls
+
+[items]
+FOO
+
+[test_meta]
+author matt
+owner  bob
+description This test runs a single ezstep which is expected to pass \
+but there is an items definition with no items. This should evoke an \
+error.
+
+tags first,single
+reviewed 09/10/2011, by Matt

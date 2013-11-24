@@ -1,0 +1,31 @@
+#!/bin/bash
+
+fullparams="$@"
+
+function findfile () {
+megatest $fullparams -repl <<EOF
+(let* ((numargs (length remargs))
+       (path    (if (> numargs 0)(car remargs)  #f))
+       (scriptn (if (> numargs 1)(cadr remargs) #f))
+       (keys    (cdb:remote-run db:get-keys #f))
+       (target  (if (args:get-arg "-reqtarg")
+		    (args:get-arg "-reqtarg")
+		    (if (args:get-arg "-target")
+			(args:get-arg "-target")
+			#f)))
+       (key-vals (if target (keys:target->keyval keys target) #f))
+       (errmsg   (cond
+		  ((not key-vals) "missing -target")
+		  ((not target)   "missing -target")
+		  ((not scriptn)  "missing file name to find")
+		  (else #f))))
+  (if errmsg
+      (begin
+	(print "THEPATH: Missing required switch: " errmsg)
+	(print "THEPATH: Usage: mtgetfile -target target scriptname [searchpath]")
+	(exit)))
+  (print "THEPATH: key-vals=" key-vals " path=" path " scriptn=" scriptn))
+EOF
+}
+
+findfile | egrep "^THEPATH: " | sed -e 's/^THEPATH: //'

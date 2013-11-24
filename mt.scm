@@ -19,6 +19,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses runs))
+(declare (uses rmt))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -42,6 +43,7 @@
 ;;
 (define (mt:get-runs-by-patt dbstruct keys runnamepatt targpatt)
   (let loop ((runsdat  (db:get-runs-by-patt dbstruct keys runnamepatt targpatt 0 500))
+  (let loop ((runsdat  (rmt:get-runs-by-patt keys runnamepatt targpatt 0 500))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -54,6 +56,7 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit))
 		(next-batch (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit)))
+		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)))
 	    (debug:print-info 4 "More than " limit " runs, have " (length full-list) " runs so far.")
 	    (debug:print-info 0 "next-batch: " next-batch)
 	    (loop next-batch
@@ -68,6 +71,7 @@
 
 (define (mt:get-tests-for-run dbstruct run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
   (let loop ((testsdat (db:get-tests-for-run dbstruct run-id testpatt states status 0 500 not-in sort-by sort-order qryvals: qryvals))
+  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -77,16 +81,31 @@
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
 	    (loop (db:get-tests-for-run dbstruct run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals: qryvals)
+	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals)
 		  full-list
 		  new-offset
 		  limit))
 	  full-list))))
 
-(define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
-  (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode))
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+  (let* ((key    (list run-id waitons ref-item-path mode))
+	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
+	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
+		   (if last-time
+		       (< (current-seconds)(+ last-time 5))
+		       #f))))
+    (if useres
+	(let ((result (vector-ref res 1)))
+	  (debug:print 4 "Using lazy value res: " result)
+	  result)
+	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode)))
+	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
+	  newres))))
 
 (define (mt:get-run-stats dbstruct run-id)
+;;  Get run stats from local access, move this ... but where?
   (db:get-run-stats dbstruct run-id))
+  (db:get-run-stats #f))
 
 (define (mt:discard-blocked-tests run-id failed-test tests test-records)
   (if (null? tests)
@@ -113,7 +132,7 @@
 ;;======================================================================
 
 (define (mt:process-triggers test-id newstate newstatus)
-  (let* ((test-dat      (mt:lazy-get-test-info-by-id test-id))
+  (let* ((test-dat      (rmt:get-test-info-by-id test-id))
 	 (test-rundir   (db:test-get-rundir test-dat))
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
@@ -144,28 +163,17 @@
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
 ;;======================================================================
 
-(define (mt:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
-  (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
-      (begin
-	(db:update-pass-fail-counts dbstruct run-id test-name)
-	(if (equal? status "RUNNING")
-	    (db:top-test-set-running dbstruct run-id test-name)
-	    (db:top-test-set-per-pf-counts dbstruct run-id test-name))
-	#f)
-      #f))
-
 ;; ;; speed up for common cases with a little logic
 ;; (define (mt:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
 ;;   (cond
 ;;    ((and newstate newstatus newcomment)
-;;     (sqlite3: 'state-status-msg #t *default-numtries* newstate newstatus newcomment test-id))
+    (rmt:general-call 'state-status-msg newstate newstatus newcomment test-id))
 ;;    ((and newstate newstatus)
-;;     (cdb:client-call *runremote* 'state-status #t *default-numtries* newstate newstatus test-id))
+    (rmt:general-call 'state-status newstate newstatus test-id))
 ;;    (else
-;;     (if newstate   (cdb:client-call *runremote* 'set-test-state #t *default-numtries* newstate test-id))
-;;     (if newstatus  (cdb:client-call *runremote* 'set-test-status #t *default-numtries* newstatus test-id))
-;;     (if newcomment (cdb:client-call *runremote* 'set-test-comment #t *default-numtries* newcomment test-id))))
+    (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
+    (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
+    (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
 ;;    (mt:process-triggers test-id newstate newstatus)
 ;;    #t)
 

@@ -23,7 +23,7 @@
 ;;======================================================================
 
 (define (tasks:open-db)
-  (let* ((dbpath       (conc *toppath* "/monitor.db"))
+  (let* ((dbpath       (conc *toppath* "/db/monitor.db"))
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
 	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
@@ -66,6 +66,7 @@
                                   mt_version TEXT,
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
+                                  run_id INTEGER,
                                CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
@@ -427,7 +428,7 @@
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
       (debug:print-info 1 "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc *toppath* "/monitor.db"))
+	     (monitordbf     (conc *toppath* "/db/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
 	(task:register-monitor mdb)
 	(let loop ((count      0)
