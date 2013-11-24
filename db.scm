@@ -1263,9 +1263,9 @@
 
 (define (db:delete-test-records dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id)))
-  (db:general-call db 'delete-test-step-records (list test-id))
-  (db:general-call db 'delete-test-data-records (list test-id))
-  (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id))
+    (db:general-call db 'delete-test-step-records (list test-id))
+    (db:general-call db 'delete-test-data-records (list test-id))
+    (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
 (define (db:delete-tests-for-run dbdbstruct run-id)
   (let ((db (db:get-db dbstruct run-id)))
@@ -1298,16 +1298,16 @@
 ;;
 (define (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
   (let ((db (db:get-db dbstruct run-id)))
-  (cond
-   ((and newstate newstatus newcomment)
-    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
-   ((and newstate newstatus)
-    (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
-   (else
-    (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
-    (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
-  (mt:process-triggers test-id newstate newstatus))
+    (cond
+     ((and newstate newstatus newcomment)
+      (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
+     ((and newstate newstatus)
+      (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+     (else
+      (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+      (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+      (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
+    (mt:process-triggers test-id newstate newstatus)))
 
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
@@ -1666,14 +1666,6 @@
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (let ((db (db:get-db dbstruct rid)))
-      (handle-exceptions
-       exn
-       (begin 
-	 (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
-	 (thread-sleep! 10)
-	 (apply cdb:remote-run proc db params))
-       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
-      (begin
 	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
 	(if (equal? status "RUNNING")
 	    (db:general-call db 'top-test-set-running (list run-id test-name))
