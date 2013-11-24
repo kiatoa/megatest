@@ -66,7 +66,7 @@
 	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
 
-(define (open-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (open-db-classic) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -86,6 +86,63 @@
     (if write-access (sqlite3:set-busy-handler! db handler))
     (if (not dbexists)
 	(db:initialize db))
+    ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
+    ;; (db:set-sync db)
+    db))
+
+(define (db:open-db run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
+	    (exit))))
+  (if (not (directory-exists? (conc *toppath* "/db")))
+      (create-directory (conc *toppath* "/db") #t))
+  ;; Open and close main to ensure it is initialized
+  (let ((db (db:open-main)))
+    (sqlite3:finalize! db))
+
+  (let* ((dbpath    (conc *toppath* "/db/" run-id ".db")) ;; fname)
+	 (dbexists  (file-exists? dbpath))
+	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (write-access (file-write-access? dbpath))
+	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					   (string->number (args:get-arg "-override-timeout"))
+					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+    (if (and dbexists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
+    (if write-access (sqlite3:set-busy-handler! db handler))
+    (if (not dbexists)
+	(db:initialize-tests db))
+    (sqlite3:execute db (conc "ATTACH DATABASE '" *toppath* "/db/main.db';"))
+    ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
+    ;; (db:set-sync db)
+    db))
+
+(define (db:open-main)
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
+	    (exit))))
+  (if (not (directory-exists? (conc *toppath* "/db")))
+      (create-directory (conc *toppath* "/db") #t))
+  (let* ((dbpath    (conc *toppath* "/db/main.db")) ;; fname)
+	 (dbexists  (file-exists? dbpath))
+	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (write-access (file-write-access? dbpath))
+	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
+					   (string->number (args:get-arg "-override-timeout"))
+					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+    (if (and dbexists
+	     (not write-access))
+	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
+    (if write-access (sqlite3:set-busy-handler! db handler))
+    (if (not dbexists)
+	(db:initialize-main db))
     ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
     ;; (db:set-sync db)
     db))
