@@ -42,7 +42,6 @@
 ;;  to extract info from the structure returned
 ;;
 (define (mt:get-runs-by-patt dbstruct keys runnamepatt targpatt)
-  (let loop ((runsdat  (db:get-runs-by-patt dbstruct keys runnamepatt targpatt 0 500))
   (let loop ((runsdat  (rmt:get-runs-by-patt keys runnamepatt targpatt 0 500))
 	     (res      '())
 	     (offset   0)
@@ -55,7 +54,6 @@
       ;; (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
-		(next-batch (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit)))
 		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)))
 	    (debug:print-info 4 "More than " limit " runs, have " (length full-list) " runs so far.")
 	    (debug:print-info 0 "next-batch: " next-batch)
@@ -63,14 +61,13 @@
 		  full-list
 		  new-offset
 		  limit))
-	 (vector header full-list)))))
+	  (vector header full-list)))))
 
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
 
-(define (mt:get-tests-for-run dbstruct run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
-  (let loop ((testsdat (db:get-tests-for-run dbstruct run-id testpatt states status 0 500 not-in sort-by sort-order qryvals: qryvals))
+(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
   (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals))
 	     (res      '())
 	     (offset   0)
@@ -80,7 +77,6 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (db:get-tests-for-run dbstruct run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals: qryvals)
 	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals)
 		  full-list
 		  new-offset
@@ -105,7 +101,6 @@
 (define (mt:get-run-stats dbstruct run-id)
 ;;  Get run stats from local access, move this ... but where?
   (db:get-run-stats dbstruct run-id))
-  (db:get-run-stats #f))
 
 (define (mt:discard-blocked-tests run-id failed-test tests test-records)
   (if (null? tests)
@@ -164,18 +159,18 @@
 ;;======================================================================
 
 ;; ;; speed up for common cases with a little logic
-;; (define (mt:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
-;;   (cond
-;;    ((and newstate newstatus newcomment)
+(define (mt:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
+   (cond
+    ((and newstate newstatus newcomment)
     (rmt:general-call 'state-status-msg newstate newstatus newcomment test-id))
-;;    ((and newstate newstatus)
+    ((and newstate newstatus)
     (rmt:general-call 'state-status newstate newstatus test-id))
-;;    (else
-    (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
-    (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
-    (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
-;;    (mt:process-triggers test-id newstate newstatus)
-;;    #t)
+    (else
+     (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
+     (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
+     (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
+   (mt:process-triggers test-id newstate newstatus)
+   #t)
 
 (define (mt:lazy-get-test-info-by-id test-id)
   (let* ((tdat (hash-table-ref/default *test-info* test-id #f)))

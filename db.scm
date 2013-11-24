@@ -572,7 +572,16 @@
                                type        TEXT DEFAULT '',
                         CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+                              id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
+                              update_time  TIMESTAMP,
+                              cpuload      INTEGER DEFAULT -1,
+                              diskfree     INTEGER DEFAULT -1,
+                              diskusage    INTGER DEFAULT -1,
+                              run_duration INTEGER DEFAULT 0);")
+  db)
+
+;;======================================================================
 ;; L O G G I N G    D B 
 ;;======================================================================
 
@@ -1299,8 +1308,8 @@
 ;; ;;      )
 ;; ;;     res))
 
-(define (db:delete-test-records db test-id)
-(define (db:delete-test-step-records dbstruct run-id test-id)
+(define (db:delete-test-records dbstruct run-id test-id)
+;; (define (db:delete-test-step-records dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id)))
   (db:general-call db 'delete-test-step-records (list test-id))
   (db:general-call db 'delete-test-data-records (list test-id))
@@ -1367,8 +1376,8 @@
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
 ;; 
-(define (db:get-running-stats dbstruct run-id)
-(define (db:get-count-tests-running-for-run-id db run-id)
+;; (define (db:get-running-stats dbstruct run-id)
+(define (db:get-count-tests-running-for-run-id dbstruct run-id)
   (let ((res 0))
     (sqlite3:for-each-row
      (lambda (count)
@@ -1422,43 +1431,41 @@
 
 (define db:test-record-qry-selector "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment,realdir_id")
 
-(define (db:get-all-tests-info-by-run-id db run-id)
-  (let ((res '()))
 ;; NOTE: Use db:test-get* to access records
-;; 
 ;; NOTE: This needs rundir_id decoding? Decide, decode here or where used? For the moment decode where used.
+(define (db:get-all-tests-info-by-run-id dbstruct run-id)
+  (let ((res '()))
+    (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
 		       res)))
-     db 
-     "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE run_id=?;"
+     (db:get-db dbstruct run-id)
+     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE run_id=?;")
      run-id)
     res))
-;; Get test data using test_id
-;;
+
 ;; Get test data using test_id
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (let ((res #f))
     (sqlite3:for-each-row
-	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	   (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)))
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)))
      (db:get-db dbstruct run-id)
-	 "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment,pass_count,fail_count FROM tests WHERE id=?;"
+     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
      test-id)
     res))
 
 ;; Use db:test-get* to access
-;;
 ;; Get test data using test_ids. NB// Only works within a single run!!
 ;;
 (define (db:get-test-info-by-ids dbstruct run-id test-ids)
   (let ((res '()))
     (sqlite3:for-each-row
-	 (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	   (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment pass_count fail_count)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
 		       res)))
      (db:get-db dbstruct run-id) 
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
@@ -1648,11 +1655,7 @@
      qrystr)
     res))
 
-(define (db:test-get-paths-matching-keynames-target-new dbstruct keynames target res 
-							testpatt  
-							statepatt 
-							statuspatt
-							runname)
+(define (db:test-get-paths-matching-keynames-target-new dbstruct keynames target res testpatt statepatt statuspatt runname)
   (let* ((row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
@@ -1663,9 +1666,7 @@
 	 (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';")))
 	 (tstsqry (conc "SELECT rundir_id FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
-	 (tqry    (conc "SELECT rundir FROM tests WHERE run_id=? AND " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;"))
-	 (tstsqry (sqlite3:prepare db tqry)))
-    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  rqry=" rqry "\n  tqry=" tqry)
+    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstqry=" tstqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -1678,31 +1679,7 @@
 		 (db:get-db dbstruct rid)
 		 tstsqry))
 	      row-ids)
-    ;; (sqlite3:finalize! tstsqry)
     res))
-
-;; NEVER FINISHED? ;; look through tests from matching runs for a file
-;; NEVER FINISHED? (define (db:test-get-first-path-matching dbstruct keynames target fname)
-;; NEVER FINISHED?   ;; [refpaths] is the section where references to other megatest databases are stored
-;; NEVER FINISHED? ;;
-;; NEVER FINISHED? ;; NEED TO REVISIT THIS!!! BUGGISHNESS
-;; NEVER FINISHED? ;;
-;; NEVER FINISHED?   (let ((mt-paths (configf:get-section "refpaths"))
-;; NEVER FINISHED? 	(res       (db:test-get-paths-matching dbstruct keynames target fname)))
-;; NEVER FINISHED?     (let loop ((pathdat (if (null? paths) #f (car mt-paths)))
-;; NEVER FINISHED? 	       (tal     (if (null? paths) '()(cdr mt-paths))))
-;; NEVER FINISHED?       (if (not (null? res))
-;; NEVER FINISHED? 	  (car res) ;; return first found
-;; NEVER FINISHED? 	  (if path
-;; NEVER FINISHED? 	      (let* ((db     (open-db path: (cadr pathdat)))
-;; NEVER FINISHED? 		     (newres (db:test-get-paths-matching db keynames target fname)))
-;; NEVER FINISHED? 		(debug:print-info 4 "Trying " (car pathdat) " at " (cadr pathdat))
-;; NEVER FINISHED? 		(sqlite3:finalize! db)
-;; NEVER FINISHED? 		(if (not (null? newres))
-;; NEVER FINISHED? 		    (car newres)
-;; NEVER FINISHED? 		    (if (null? tal)
-;; NEVER FINISHED? 			#f
-;; NEVER FINISHED? 			(loop (car tal)(cdr tal))))))))))
 
 ;;======================================================================
 ;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS
@@ -1734,82 +1711,28 @@
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
-(define (db:test-set-status-state db test-id status state msg)
-  (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-      (db:general-call db 'set-test-start-time (list test-id)))
-  (if msg
-      (db:general-call db 'state-status-msg (list state status msg test-id))
-      (db:general-call db 'state-status     (list state status test-id))))
+(define (db:test-set-status-state dbstruct run-id test-id status state msg)
+  (let ((db  (db:get-db dbstruct rid)))
+    (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+	(db:general-call db 'set-test-start-time (list test-id)))
+    (if msg
+	(db:general-call db 'state-status-msg (list state status msg test-id))
+	(db:general-call db 'state-status     (list state status test-id)))))
 
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
-      (handle-exceptions
-       exn
-       (begin 
-	 (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
-	 (thread-sleep! 10)
-	 (apply cdb:remote-run proc db params))
-;; 			       ;; get the sender info
-;; 			       ;; this should match (client:get-signature)
-;; 			       ;; we will need to process "all" messages here some day
-;; 			       (receive-message* sub-socket)
-;; 			       ;; now get the actual message
-;; 			       (let ((myres (db:string->obj (receive-message* sub-socket))))
-;; 				 (if (equal? query-sig (vector-ref myres 1))
-;; 				     (set! res (vector-ref myres 2))
-;; 				     (loop)))))))
-;; 	;; (timeout (lambda ()
-;; 	;;     	(let loop ((n numretries))
-;; 	;;     	  (thread-sleep! 15)
-;; 	;;     	  (if (not res)
-;; 	;;     	      (if (> numretries 0)
-;; 	;;     		  (begin
-;; 	;;     		    (debug:print 2 "WARNING: no reply to query " params ", trying resend")
-;; 	;;     		    (debug:print-info 11 "re-sending message")
-;; 	;;     		    (send-message push-socket zdat)
-;; 	;;     		    (debug:print-info 11 "message re-sent")
-;; 	;;     		    (loop (- n 1)))
-;; 	;;     		  ;; (apply cdb:client-call *runremote* qtype immediate (- numretries 1) params))
-;; 	;;     		  (begin
-;; 	;;     		    (debug:print 0 "ERROR: cdb:client-call timed out " params ", exiting.")
-;; 	;;     		    (exit 5))))))))
-;; 	(debug:print-info 11 "Starting threads")
-;; 	(let ((th1 (make-thread send-receive "send receive"))
-;; 	      ;; (th2 (make-thread timeout      "timeout"))
-;; 	      )
-;; 	  (thread-start! th1)
-;; 	  ;; (thread-start! th2)
-;; 	  (thread-join!  th1)
-;; 	  (debug:print-info 11 "cdb:client-call returning res=" res)
-;; 	  res))))))
-;; NOT NEEDED FOR NOW 
-;; NOT NEEDED FOR NOW (define (cdb:login serverdat keyval signature)
-;; NOT NEEDED FOR NOW   (cdb:client-call serverdat 'login #t *default-numtries* keyval megatest-version signature))
-;; NOT NEEDED FOR NOW 
-;; NOT NEEDED FOR NOW (define (cdb:logout serverdat keyval signature)
-;; NOT NEEDED FOR NOW   (cdb:client-call serverdat 'logout #t *default-numtries* keyval signature))
-;; NOT NEEDED FOR NOW 
-;; NOT NEEDED FOR NOW (define (cdb:num-clients serverdat)
-;; NOT NEEDED FOR NOW   (cdb:client-call serverdat 'numclients #t *default-numtries*))
-;; NOT NEEDED FOR NOW 
-;;   (cdb:client-call serverdat 'set-test-start-time #t *default-numtries* test-id))
+      (let ((db (db:get-db dbstruct rid)))
+	(handle-exceptions
+	 exn
+	 (begin 
+	   (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
+	   (thread-sleep! 10)
+	   (apply cdb:remote-run proc db params))
+	 (apply cdb:remote-run proc db params)))))
 
 (define (db:tests-register-test dbstruct run-id test-name item-path)
   (sqlite3:execute (db:get-db dbstruct run-id) 'register-test run-id test-name item-path))
-       (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
-      (begin
-	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
-	(if (equal? status "RUNNING")
-	    (db:general-call db 'top-test-set-running (list run-id test-name))
-	    (db:general-call db 'top-test-set-per-pf-counts (list run-id test-name run-id test-name run-id test-name)))
-	#f)
-      #f))
-;; 
-;; ;; db should be db open proc or #f
-;; (define (cdb:remote-run proc db . params)
-;;   (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
-;; 
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (let ((res #f))
@@ -2086,8 +2009,7 @@
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path #!mode
-(define (db:get-prereqs-not-met db run-id waitons ref-item-path mode)
+(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
   (if (or (not waitons)
 	  (null? waitons))
       '()

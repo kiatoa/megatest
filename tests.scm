@@ -294,9 +294,6 @@
 
 (define (tests:test-set-toplog! run-id test-name logf) 
   (rmt:general-call 'tests:test-set-toplog logf run-id test-name))
-		   (db:get-query 'tests:test-set-toplog)
-		   (db:save-string dbstruct logf)
-		   test-name))
 
 (define (tests:summarize-items run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
@@ -616,16 +613,15 @@
   (if (and uname hostname)
       (rmt:general-call 'update-uname-host uname hostname test-id)))
   
-(define (tests:set-full-meta-info test-id run-id minutes work-area)
-  (let* ((num-records 0)
 (define (tests:set-full-meta-info dbstruct test-id run-id minutes work-area)
+  (let* ((num-records 0)
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
     (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info dbstruct run-id test-id cpuload diskfree minutes uname hostname)))
-	  
+
 (define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
