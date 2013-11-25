@@ -431,7 +431,7 @@
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)
 	    (rem-time   #f))
-	(if *inmemdb* (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
+	(if *inmemdb* (db:sync-touched *inmemdb*))
 	(set! sync-time  (- (current-milliseconds) start-time))
 	(debug:print 0 "SYNC: time= " sync-time)
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
@@ -476,7 +476,7 @@
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
 	    (set! *time-to-exit* #t)
-	    (if *inmemdb* (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
+	    (if *inmemdb* (db:sync-touched *inmemdb*))
 	    (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
 	    (thread-sleep! 1)
 	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
@@ -519,36 +519,14 @@
 					    (args:get-arg "-server")
 					    "-"))) "Server run"))
 		   (th3 (make-thread http-transport:keep-running "Keep running")))
-;;		   (th1 (make-thread server:write-queue-handler  "write queue")))
-	      (set! *cache-on* #t)
-	      (set! *db*       (open-db))
-	      (set! *inmemdb*  (open-in-mem-db))
-	      (db:sync-tables (db:tbls *db*) *db* *inmemdb*) ;; (db:sync-to *db* *inmemdb*)
-
+	      ;; Database connection
+	      (set! *inmemdb*  (make-dbr:dbstruct path: *toppath*))
 	      (thread-start! th2)
 	      (thread-start! th3)
-	      ;; (thread-start! th1)
 	      (set! *didsomething* #t)
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
     (exit)))
-
-;; (use trace)
-;; (trace http-transport:keep-running 
-;;        tasks:server-update-heartbeat
-;;        tasks:server-get-server-id)
-;;        tasks:get-best-server
-;;        http-transport:run
-;;        http-transport:launch
-;;        http-transport:try-start-server
-;;        http-transport:client-send-receive
-;;        http-transport:make-server-url
-;;        tasks:server-register
-;;        tasks:server-delete
-;;        start-server
-;;        hostname->ip
-;;        with-input-from-request
-;;        tasks:server-deregister-self)
 
 (define (http-transport:server-signal-handler signum)
   (handle-exceptions
@@ -556,8 +534,6 @@
    (debug:print " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (thread-sleep! 1))
-			     ;; (if (not *received-response*)
-			     ;;	 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")

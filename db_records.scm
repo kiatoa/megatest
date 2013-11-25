@@ -11,7 +11,7 @@
 ;;            |-1.db
 ;;            |-<N>.db
 (define (make-dbr:dbstruct #!key (path #f))
-  (make-vector
+  (vector
    #f                  ;; the main db (contains runs, test_meta etc.) NOT CACHED IN MEM
    (make-hash-table)   ;; run-id => [ rundb inmemdb last-mod last-read last-sync ]
    #f                  ;; the global string db (use for state, status etc.)
@@ -28,7 +28,7 @@
     (if runvec
 	runvec
 	(begin
-	  (hash-table-set! dbhash run-id (vector #f #f -1 -1 -1))
+	  (hash-table-set! dbhash run-id (vector #f #f -1 -1 -1 #f))
 	  (dbr:dbstruct-get-rundb-rec vec run-id)))))
 
 ;;  [ rundb inmemdb last-mod last-read last-sync ]
@@ -39,12 +39,15 @@
     ((mtime) 2) ;; last modification time
     ((rtime) 3) ;; last read time
     ((stime) 4) ;; last sync time
+    ((inuse) 5) ;; is the db currently in use
     (else -1)))
 
 ;; get/set rundb fields
 (define (dbr:dbstruct-get-runrec vec run-id field-name)
-  (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-ref runvec (dbr:dbstruct-field-name->num field-name))))
+  (let ((runvec   (dbr:dbstruct-get-rundb-rec vec run-id))
+	(fieldnum (dbr:dbstruct-field-name->num field-name)))
+    ;; (vector-set! runvec (dbr:dbstruct-field-name->num 'inuse) #t)
+    (vector-ref runvec fieldnum)))
 
 (define (dbr:dbstruct-set-runvec! vec run-id field-name val)
   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))

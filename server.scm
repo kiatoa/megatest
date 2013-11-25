@@ -53,9 +53,9 @@
   (debug:print-info 2 "Starting server using " transport " transport")
   (set! *transport-type* transport)
   (case transport
-    ((fs)   (exit)) ;; there is no "fs" server transport
-    ((http) (http-transport:launch))
-    ((zmq)  (zmq-transport:launch))
+    ;; ((fs)   (exit)) ;; there is no "fs" server transport
+    ((fs http) (http-transport:launch))
+    ((zmq)     (zmq-transport:launch))
     (else
      (debug:print "WARNING: unrecognised transport " transport)
      (exit))))

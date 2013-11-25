@@ -38,42 +38,35 @@
 (include "key_records.scm")
 (include "run_records.scm")
 
-;; timestamp type (val1 val2 ...)
-;; type: meta-info, step
-(define *incoming-writes*      '())
-(define *completed-writes*   (make-hash-table))
-(define *incoming-last-time* (current-seconds))
-(define *incoming-mutex*     (make-mutex))
-(define *completed-mutex*    (make-mutex))
+(define *rundb-mutex* (make-mutex)) ;; prevent problems opening/closing rundb's
 
 ;; Get/open a database
 ;;    if run-id => get run specific db
 ;;    if #f     => get main db
 ;;    if db already open - return inmem
 ;;    if db not open, open inmem, rundb and sync then return inmem
+;;    inuse gets set automatically for rundb's
 ;;
 (define (db:get-db dbstruct run-id)
-  (if run-id
-      (db:open-rundb dbstruct run-id)
-      (db:open-main dbstruct)))
+  (mutex-lock! *rundb-mutex*)
+  (let ((db (if run-id
+		(db:open-rundb dbstruct run-id)
+		(db:open-main dbstruct))))
+    ;; db prunning would go here
+    (mutex-unlock! *rundb-mutex*)
+    db))
 
-(define (db:set-sync db)
-  (let* ((syncval  (config-lookup *configdat* "setup"     "synchronous"))
-	 (val      (cond   ;; 0 | OFF | 1 | NORMAL | 2 | FULL;
-		    ((not syncval) #f)
-		    ((string->number syncval)
-		     (let ((val (string->number syncval)))
-		       (if (member val '(0 1 2)) val #f)))
-		    ((string-match (regexp "yes" #t) syncval) 1)
-		    ((string-match (regexp "no"  #t) syncval) 0)
-		    ((string-match (regexp "(off|normal|full)" #t) syncval) syncval)
-		    (else 
-		     (debug:print 0 "ERROR: synchronous must be 0,1,2,OFF,NORMAL or FULL, you provided: " syncval)
-		     #f))))
-    (if val
-	(begin
-	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
-	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
+;; mod-read:
+;;     'mod   modified data
+;;     'read  read data
+;;
+(define (db:done-with dbstruct run-id mod-read)
+  (mutex-lock! *rundb-mutex*)
+  (if (eq? mod-read 'mod)
+      (dbr:dbstruct-set-runvec! dbstruct run-id 'mtime (current-milliseconds))
+      (dbr:dbstruct-set-runvec! dbstruct run-id 'rtime (current-milliseconds)))
+  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #f)
+  (mutex-unlock! *rundb-mutex*))
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -121,6 +114,8 @@
 	  (if (not dbexists)(db:initialize-run-id-db db run-id))
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inmem inmem)
+	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #t)
+	  (db:sync-tables db:sync-tests-only db inmem)
 	  inmem))))
 
 ;; This routine creates the db. It is only called if the db is not already opened
@@ -149,6 +144,20 @@
 	  (dbr:dbstruct-set-main! dbstruct db)
 	  db))))
 
+;; sync all touched runs to disk
+(define (db:sync-touched dbstruct)
+  (for-each
+   (lambda (runvec)
+     (let ((mtime (vector-ref runvec (dbr:dbstruct-field-name->num 'mtime)))
+	   (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
+	   (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
+	   (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem))))
+       (if (> mtime stime)
+	   (begin
+	     (db:sync-tables db:sync-tests-only inmem rundb)
+	     (vector-set! runvec (dbr:dbstruct-field-name->run 'stime (current-milliseconds)))))))
+   (hash-table-values (vector-ref dbstruct 1))))
+
 ;; close all opened run-id dbs
 (define (db:close-all-db)
   (for-each
@@ -166,8 +175,55 @@
     (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     db))
 
-;; (define (db:sync-table tblname fields fromdb todb)
+;; just tests, test_steps and test_data tables
+(define db:sync-tests-only
+  (list
+   (list "tests" 
+	 '("id"             #f)
+	 '("run_id"         #f)
+	 '("testname"       #f)
+	 '("host"           #f)
+	 '("cpuload"        #f)
+	 '("diskfree"       #f)
+	 '("uname"          #f)
+	 '("rundir"         #f)
+	 '("shortdir"       #f)
+	 '("item_path"      #f)
+	 '("state"          #f)
+	 '("status"         #f)
+	 '("attemptnum"     #f)
+	 '("final_logf"     #f)
+	 '("logdat"         #f)
+	 '("run_duration"   #f)
+	 '("comment"        #f)
+	 '("event_time"     #f)
+	 '("fail_count"     #f)
+	 '("pass_count"     #f)
+	 '("archived"       #f))
+   (list "test_steps"
+	 '("id"             #f)
+	 '("test_id"        #f)
+	 '("stepname"       #f)
+	 '("state"          #f)
+	 '("status"         #f)
+	 '("event_time"     #f)
+	 '("comment"        #f)
+	 '("logfile"        #f))
+   (list "test_data"
+	 '("id"             #f)
+	 '("test_id"        #f)
+	 '("category"       #f)
+	 '("variable"       #f)
+	 '("value"          #f)
+	 '("expected"       #f)
+	 '("tol"            #f)
+	 '("units"          #f)
+	 '("comment"        #f)
+	 '("status"         #f)
+	 '("type"           #f))))
 
+;; needs db to get keys, this is for syncing all tables
+;;
 (define (db:tbls db)
   (let ((keys  (db:get-keys db)))
     (list
@@ -339,7 +395,7 @@
 
 (define (db:initialize-megatest-db db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
-	 (keys     (keys:configq-get-fields configdat))
+	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys)))
@@ -431,15 +487,15 @@
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
-                              (id          INTEGER PRIMARY KEY,
-                                     reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
-                                     iterated    TEXT DEFAULT '',
-                                     avg_runtime REAL DEFAULT -1,
-                                     avg_disk    REAL DEFAULT -1,
-                                     tags        TEXT DEFAULT '',
-                                     jobgroup    TEXT DEFAULT 'default',
-                                CONSTRAINT test_meta_constraint UNIQUE (testname));")
+;;   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
+;;                               (id          INTEGER PRIMARY KEY,
+;;                                      reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
+;;                                      iterated    TEXT DEFAULT '',
+;;                                      avg_runtime REAL DEFAULT -1,
+;;                                      avg_disk    REAL DEFAULT -1,
+;;                                      tags        TEXT DEFAULT '',
+;;                                      jobgroup    TEXT DEFAULT 'default',
+;;                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
