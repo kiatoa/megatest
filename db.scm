@@ -46,17 +46,16 @@
 (define *incoming-mutex*     (make-mutex))
 (define *completed-mutex*    (make-mutex))
 
+;; Get/open a database
+;;    if run-id => get run specific db
+;;    if #f     => get main db
+;;    if db already open - return inmem
+;;    if db not open, open inmem, rundb and sync then return inmem
+;;
 (define (db:get-db dbstruct run-id)
-  (let ((db (if run-id
-		(hash-table-ref/default (vector-ref dbstruct 1) run-id #f)
-		(vector-ref dbstruct 0))))
-    (if db
-	db
-	(let ((db (open-db run-id)))
-	  (if run-id
-	      (hash-table-set! (vector-ref dbstruct 1) run-id db)
-	      (vector-set! dbstruct 0 db))
-	  db))))
+  (if run-id
+      (db:open-rundb dbstruct run-id)
+      (db:open-main dbstruct)))
 
 (define (db:set-sync db)
   (let* ((syncval  (config-lookup *configdat* "setup"     "synchronous"))
@@ -75,7 +74,6 @@
 	(begin
 	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
-;;	(sqlite3:execute db "PRAGMA synchronous = normal;")))) ;; need a default?
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -101,58 +99,55 @@
   (let ((fdb (db:get-filedb dbstruct)))
     (filedb:get-path db id)))
 
-;;======================================================================
-;; U S E   F I L E   D B   T O   S T O R E   S T R I N G S 
-;;
-;; N O T E ! !   T H I S   C L O B B E R S   M U L T I P L E  ////  T O  /
-;;
-;; Replace with something proper!
-;;
-;;======================================================================
-
-;; Use to save a stored string, pad with _ to deal with trimming the prepending of /
+;; This routine creates the db. It is only called if the db is not already opened
 ;; 
-(define (db:save-string dbstruct str)
-  (let ((fdb (db:get-filedb dbstruct)))
-    (filedb:register-path fdb (conc "_" str))))
-
-;; Use to get a stored string
-;;
-(define (db:get-string dbstruct id)
-  (let ((fdb (db:get-filedb dbstruct)))
-    (string-drop (filedb:get-path fdb id) 2)))
+(define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (let ((rdb (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+    (if rdb
+	rdb
+	(let* ((toppath      (dbr:dbstruct-get-path dbstruct))
+	       (dbpath       (conc toppath "/db/" run-id ".db"))
+	       (dbexists     (file-exists? dbpath))
+	       (inmem        (open-inmem-db))
+	       (db           (sqlite3:open-database dbpath))
+	       (write-access (file-write-access? dbpath))
+	       (handler      (make-busy-timeout 136000)))
+	  (if (and dbexists (not write-access))
+	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
+	  (if write-access
+	      (begin
+		(sqlite3:set-busy-handler! db handler)
+		(sqlite3:execute db "PRAGMA synchronous = 0;")))
+	  (if (not dbexists)(db:initialize-run-id-db db run-id))
+	  (dbr:dbstruct-set-runvec! dbstruct run-id 'rundb db)
+	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inmem inmem)
+	  inmem))))
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;;
-(define (open-db dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
-	    (exit))))
-  (let* ((dbpath       (if run-id 
-			   (conc *toppath* "/db/" run-id ".db")
-			   (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
-			     (if (not (directory-exists? dbdir))
-				 (create-direcory dbdir))
-			     (conc *toppath* "/megatest.db"))))
-	 (dbexists  (file-exists? dbpath))
-	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (write-access (file-write-access? dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
-    (if (and dbexists
-	     (not write-access))
-	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-    (debug:print-info 11 "open-db, dbpath=" dbpath " argv=" (argv))
-    (if write-access (sqlite3:set-busy-handler! db handler))
-    (if (not dbexists)
-	(if (not run-id) ;; do the megatest.db
-	    (db:initialize-megatest-db db)
-	    (db:initialize-run-id-db   db run-id)))
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    db))
+(define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+  (let ((mdb (dbr:dbstruct-get-main dbstruct)))
+    (if mdb
+	mdb
+	(let* ((toppath      (dbr:dbstruct-get-path dbstruct))
+	       (dbpath       (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
+			       (if (not (directory-exists? dbdir))
+				   (create-direcory dbdir))
+			       (conc *toppath* "/db/main.db")))
+	       (dbexists     (file-exists? dbpath))
+	       (db           (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	       (write-access (file-write-access? dbpath))
+	       (handler      (make-busy-timeout 136000)))
+	  (if (and dbexists (not write-access))
+	      (set! *db-write-access* #f))
+	  (if write-access 
+	      (begin
+		(sqlite3:set-busy-handler! db handler)
+		(sqlite3:execute db "PRAGMA synchronous = 0;")))
+	  (if (not dbexists)
+	      (db:initialize-megatest-db db))
+	  (dbr:dbstruct-set-main! dbstruct db)
+	  db))))
 
 ;; close all opened run-id dbs
 (define (db:close-all-db)
@@ -162,19 +157,10 @@
    (hash-table-values (vector-ref *open-dbs* 1)))
   (finalize! (vector-ref *open-dbs* 0)))
 
-(define (open-in-mem-db)
-  (let* ((path   (configf:lookup *configdat* "setup" "tmpdb"))
-	 (fname  (if path (conc path "/temp-megatest.db") #f))
-	 (exists (and path (file-exists? fname)))
-	 (db     (if path
-		     (begin
-		       (create-directory path #t)
-		       (sqlite3:open-database fname))
-		     (sqlite3:open-database ":memory:")))
+(define (open-inmem-db)
+  (let* ((db      (sqlite3:open-database ":memory:"))
 	 (handler   (make-busy-timeout 3600)))
-    (if (or (not path)
-	    (not exists))
-	(db:initialize db))
+    (db:initialize db)
     (sqlite3:set-busy-handler! db handler)
     (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
     (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -313,120 +299,6 @@
 	   (if (> count 0)
 	       (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
        (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))))
-
-;; (define (db:sync-to fromdb todb)
-;;   ;; strategy
-;;   ;;  1. Get all run-ids
-;;   ;;  2. For each run-id 
-;;   ;;     a. Sync that run in a transaction
-;;   (let ((trecchgd    0)
-;; 	(rrecchgd    0)
-;; 	(tmrecchgd   0))
-;; 
-;;     ;; First sync test_meta data
-;;     (let ((tmgetstmt (sqlite3:prepare todb "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE id=?;"))
-;; 	  (tmputstmt (sqlite3:prepare todb "INSERT OR REPLACE INTO test_meta (id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup) 
-;;                                                                       VALUES (?, ?,       ?,     ?,    ?,          ?,       ?,       ?,          ?,       ?,   ?);"))
-;; 	  (tmdats    (db:testmeta-get-all fromdb)))
-;;       ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
-;;       (for-each
-;;        (lambda (tmdat) ;; iterate over tests
-;; 	 (let ((testm-id (vector-ref tmdat 0)))
-;; 	   (sqlite3:with-transaction
-;; 	    todb
-;; 	    (lambda ()
-;; 	      (let ((curr-tmdat #f))
-;; 		(sqlite3:for-each-row
-;; 		 (lambda (a . b)
-;; 		   (set! curr-tmdat (apply vector a b)))
-;; 		 tmgetstmt testm-id)
-;; 		(if (not (equal? curr-tmdat tmdat)) ;; something changed
-;; 		    (begin
-;; 		      (debug:print 0 "  test-id: " testm-id
-;; 				   "\ncurr-tdat: " curr-tmdat
-;; 				   "\n     tdat: " tmdat)
-;; 		      (apply sqlite3:execute tmputstmt (vector->list tmdat))
-;; 		      (set! tmrecchgd (+ tmrecchgd 1)))))))))
-;;        tmdats)
-;;       (sqlite3:finalize! tmgetstmt)
-;;       (sqlite3:finalize! tmputstmt))
-;; 
-;;     ;; First sync tests data
-;;     (let ((run-ids     (db:get-all-run-ids fromdb))
-;; 	  (tgetstmt    (sqlite3:prepare todb "SELECT id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment FROM tests WHERE id=?;"))
-;; 	  (tputstmt    (sqlite3:prepare todb "INSERT OR REPLACE INTO tests  (id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment)
-;;                                                                     VALUES (?, ?,     ?,       ?,    ?,     ?,         ?,   ?,      ?,       ?,    ?,     ?,        ?,           ?,         ?     );")))
-;;       (for-each
-;;        (lambda (run-id)
-;; 	 (let ((tdats     (db:get-all-tests-info-by-run-id fromdb run-id)))
-;; 	   ;; (debug:print 7 "Updating as many as " (length tdats) " records for run " run-id)
-;; 	   (for-each
-;; 	    (lambda (tdat) ;; iterate over tests
-;; 	      (let ((test-id (vector-ref tdat 0)))
-;; 		(sqlite3:with-transaction
-;; 		 todb
-;; 		 (lambda ()
-;; 		   (let ((curr-tdat #f))
-;; 		     (sqlite3:for-each-row
-;; 		      (lambda (a . b)
-;; 			(set! curr-tdat (apply vector a b)))
-;; 		      tgetstmt
-;; 		      test-id)
-;; 		     (if (not (equal? curr-tdat tdat)) ;; something changed
-;; 			 (begin
-;; 			   (debug:print 0 "  test-id: " test-id
-;; 					"\ncurr-tdat: " curr-tdat
-;; 					"\n     tdat: " tdat)
-;; 			   (apply sqlite3:execute tputstmt (vector->list tdat))
-;; 			   (set! trecchgd (+ trecchgd 1)))))))))
-;; 	    tdats)))
-;;        run-ids)
-;;       (sqlite3:finalize! tgetstmt)
-;;       (sqlite3:finalize! tputstmt))
-;; 
-;;     ;; Next sync runs table
-;;     (let* ((rdats       '())
-;; 	   (keys        (db:get-keys fromdb))
-;; 	   (rstdfields  (conc "id," (string-intersperse keys ",") ",runname,state,status,owner,event_time,comment,fail_count,pass_count"))
-;; 	   (rnumfields  (length (string-split rstdfields ",")))
-;; 	   (runslots    (string-intersperse (make-list rnumfields "?") ","))
-;; 	   (rgetstmt    (sqlite3:prepare todb (conc "SELECT " rstdfields " FROM runs WHERE id=?;")))
-;; 	   (rputstmt    (sqlite3:prepare todb (conc "INSERT OR REPLACE INTO runs (" rstdfields ") VALUES ( " runslots " );"))))
-;;       ;; first collect all the source run data
-;;       (sqlite3:for-each-row
-;;        (lambda (a . b)
-;; 	 (set! rdats (cons (apply vector a b) rdats)))
-;;        fromdb
-;;        (conc "SELECT " rstdfields " FROM runs;"))
-;;       (sqlite3:with-transaction
-;;        todb
-;;        (lambda ()
-;; 	 (for-each 
-;; 	  (lambda (rdat)
-;; 	    (let ((run-id    (vector-ref rdat 0))
-;; 		  (curr-rdat #f))
-;; 	      ;; first get the current value of the equivalent row from the target
-;; 	      ;; read, then insert/overwrite if different
-;; 	      (sqlite3:for-each-row 
-;; 	       (lambda (a . b)
-;; 		 (set! curr-rdat (apply vector a b)))
-;; 	       rgetstmt
-;; 	       run-id)
-;; 	      (if (not (equal? curr-rdat rdat))
-;; 		  (begin
-;; 		    (debug:print 0 "   run-id: " run-id
-;; 				 "\ncurr-rdat: " curr-rdat
-;; 				 "\n     rdat: " rdat)
-;; 		    (set! rrecchgd (+ rrecchgd 1))
-;; 		    (apply sqlite3:execute rputstmt (vector->list rdat))))))
-;; 	  rdats)))
-;;       (sqlite3:finalize! rgetstmt)
-;;       (sqlite3:finalize! rputstmt))
-;; 
-;;     (if (> rrecchgd 0)  (debug:print 0 "synced " rrecchgd " changed records in runs  table"))
-;;     (if (> trecchgd 0)  (debug:print 0 "synced " trecchgd " changed records in tests table"))
-;;     (if (> tmrecchgd 0) (debug:print 0 "sync'd " tmrecchgd " changed records in test_meta table"))
-;;     (+ rrecchgd trecchgd tmrecchgd)))
 
 (define (db:sync-back)
   (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
@@ -1057,7 +929,7 @@
       finalres)))
 
 (define (db:set-comment-for-run dbstruct run-id comment)
-  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" (sdb:qry 'getid comment) run-id))
+  (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET comment=? WHERE id=?;" (sdb:qry 'getid comment) run-id))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run dbstruct run-id)

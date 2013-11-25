@@ -3,6 +3,9 @@
 # Usage: rununittest.sh testname debuglevel
 #
 
+# Ensure all is made
+(cd ..;make && make install)
+
 # Clean setup
 #
 rm -f simplerun/megatest.db simplerun/monitor.db simplerun/db/monitor.db
