@@ -39,6 +39,8 @@
 (include "run_records.scm")
 
 (define *rundb-mutex* (make-mutex)) ;; prevent problems opening/closing rundb's
+(define *number-of-writes* 0)
+(define *number-non-write-queries* 0)
 
 ;; Get/open a database
 ;;    if run-id => get run specific db
@@ -130,7 +132,7 @@
 				   (create-direcory dbdir))
 			       (conc *toppath* "/db/main.db")))
 	       (dbexists     (file-exists? dbpath))
-	       (db           (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	       (db           (sqlite3:open-database dbpath))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
 	  (if (and dbexists (not write-access))
@@ -366,9 +368,9 @@
 	  (not (member proc *db:all-write-procs*)))
       (let* ((db   (cond
 		    ((sqlite3:database? idb) idb)
-		    ((not idb)               (open-db))
+		    ((not idb)               (make-dbr:dbstruct path: *toppath*))
 		    ((procedure? idb)       (idb))
-		    (else   	            (open-db))))
+		    (else   	            (make-dbr:dbstruct path: *toppath*))))
 	     (res #f))
 	(set! res (apply proc db params))
 	(if (not idb)(sqlite3:finalize! db))
@@ -525,7 +527,7 @@
 (define (open-logging-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
-	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (db        (sqlite3:open-database dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
 					   136000)))) ;; 136000)))

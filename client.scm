@@ -67,7 +67,7 @@
 			       'fs))
     (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
     (case *transport-type* 
-      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+      ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
       ((http)
        (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
 				      (tasks:hostinfo-get-port hostinfo)))
@@ -76,9 +76,8 @@
 				     (tasks:hostinfo-get-port      hostinfo)
 				     (tasks:hostinfo-get-pubport   hostinfo)))
       (else  ;; default to fs
-       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " attempting to continue with fs")
-       (set! *transport-type* 'fs)
-       (set! *megatest-db*    (open-db))))
+       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
+       (exit)))
     (pop-directory)))
 
 ;; client:signal-handler

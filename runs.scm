@@ -60,11 +60,6 @@
 			   *runremote*
 			   #f)) ;; to be used later
 	  (transport   (or (args:get-arg "-transport") 'http))
-	  (db          (if (and mconfig
-				(or (args:get-arg "-server")
-				    (eq? transport 'fs)))
-			   (open-db)
-			   #f))
 	  (run-id      #f))
     ;; Set all the environment vars we know so far, start with keys
     (for-each (lambda (keyval)
@@ -215,9 +210,6 @@
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts)))
-
-    ;; Update the synchronous setting in the db based on the default or what is set by the user
-    ;; This is done once here on a call to run tests rather than on every call to open-db
 
     (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)

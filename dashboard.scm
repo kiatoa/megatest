@@ -88,7 +88,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *db* (open-db))
+(define *db*  (make-dbr:dbstruct path: *toppath*))
 
 ;; (define sdb:qry (make-sdb:qry)) ;;  'init #f)
 

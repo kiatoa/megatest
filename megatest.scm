@@ -386,32 +386,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (server:ensure-running)
 		       (client:launch))
 		      (else ;; (fs)
+		       (debug:print 0 "ERROR: Should NOT be getting here! fs transport is no longer supported")
 		       (set! *transport-type* 'fs)
-		       (set! *megatest-db* (open-db))))))))))
-;; 		    (cond
-;; 		     ;; command line overrides other mechanisms
-;; 		     (transport-from-cmdln
-;; 		      (if (equal? transport-from-cmdln "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     ;; cmdinfo is second priority
-;; 		     (transport-from-cmdinfo
-;; 		      (if (equal? transport-from-cmdinfo "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     ;; config file is next highest priority for determinining transport
-;; 		     (transport-from-config
-;; 		      (if (equal? transport-from-config "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     (else
-;; 		      (set! *transport-type* 'fs)))))))))
+		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -437,7 +414,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (priority   (vector-ref server 7))
 		      (state      (vector-ref server 8))
 		      (mt-ver     (vector-ref server 9))
-		      (last-update (vector-ref server 10)) ;;   (open-run-close tasks:server-alive? tasks:open-db #f hostname: hostname port: port))
+		      (last-update (vector-ref server 10)) 
 		      (transport  (vector-ref server 11))
 		      (killed     #f)
 		      (status     (< last-update 20)))
@@ -586,7 +563,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
-	(let* ((db       (open-db))
+	(let* ((db       (make-dbr:dbstruct path: *toppath* local: #t))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
@@ -811,7 +788,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db-host   (assoc/default 'db-host   cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (db        (open-db))
+	       ;; (db        (make-dbr:dbstruct path: *))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target")))
@@ -828,18 +805,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(exit 1)))
 	  (let* ((keys     (db:get-keys db))
 		 ;; DO NOT run remote
-		 (paths    (db:test-get-paths-matching db keys target)))
+		 (paths    (rmt:test-get-paths-matching keys target)))
 	    (set! *didsomething* #t)
 	    (for-each (lambda (path)
 			(print path))
 		      paths))
-	  (if (sqlite3:database? db)(sqlite3:finalize! db)))
+	  ;; (if (sqlite3:database? db)(sqlite3:finalize! db))
+	  )
 	;; else do a general-run-call
 	(general-run-call 
 	 "-test-paths"
 	 "Get paths to tests"
 	 (lambda (target runname keys keyvals)
-	   (let* ((db       (open-db))
+	   (let* ((db       (make-dbr:dbstruct path: *toppath* local: #t))
 		  ;; DO NOT run remote
 		  (paths    (db:test-get-paths-matching db keys target)))
 	     (for-each (lambda (path)
@@ -856,7 +834,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-extract-ods"
      "Make ods spreadsheet"
      (lambda (target runname keys keyvals)
-       (let ((db         (open-db))
+       (let ((db         (make-dbr:dbstruct path: *toppath* local: #t))
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod")))
@@ -1152,13 +1130,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
+	   (db      (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
       (if db
 	  (begin
 	    (set! *db* db)
 	    (set! *client-non-blocking-mode* #t)
 	    (import readline)
 	    (import apropos)
+	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
 	    (gnu-history-install-file-manager
 	     (string-append
 	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
@@ -1171,7 +1150,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-convert-to-norm")
     (let* ((toppath (setup-for-run))
-	   (db      (if toppath (open-db) #f)))
+	   (db      (if toppath (make-dbr:dbstruct path: toppath local: #t))))
       (for-each 
        (lambda (field)
 	 (let ((dat '()))

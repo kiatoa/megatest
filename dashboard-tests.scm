@@ -447,8 +447,8 @@
 ;;
 ;;======================================================================
 (define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (conc *toppath* "/megatest.db"))
-	 (db            (open-db))
+  (let* ((db-path       (conc *toppath* "db/main.db"))
+	 (db            (make-dbr:dbstruct path: *toppath*))
 	 (tdb           (tdb:open-test-db-by-test-id-local test-id))
 	 (testdat       (db:get-test-info-by-id db test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
