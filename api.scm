@@ -15,60 +15,60 @@
 
 ;; These are called by the server on recipt of /api calls
 
-(define (api:execute-requests db cmd params)
+(define (api:execute-requests dbstruct cmd params)
   (case (string->symbol cmd)
     ;; KEYS
-    ((get-key-val-pairs)            (apply db:get-key-val-pairs db params))
+    ((get-key-val-pairs)            (apply db:get-key-val-pairs dbstruct params))
     ((get-keys)                     (db:get-keys db))
 
     ;; TESTS
     ;; json doesn't do vectors, convert to list
-    ((get-test-info-by-id)	       (apply db:get-test-info-by-id db params))
-    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id db params))
-    ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id db params))
+    ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
+    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
+    ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))
     ((get-count-tests-running)         (db:get-count-tests-running db))
-    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup db params))
-    ((delete-test-records)             (apply db:delete-test-records db params))
+    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
+    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
     ((delete-old-deleted-test-records) (db:delete-old-deleted-test-records db))
-    ((test-set-status-state)           (apply db:test-set-status-state db params))
-    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record db params))
-    ((get-matching-previous-test-run-records)(apply db:get-matching-previous-test-run-records db params))
-    ((db:test-get-logfile-info)        (apply db:test-get-logfile-info db params))
-    ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file db params)))
-    ((get-testinfo-state-status)       (apply db:get-testinfo-state-status db params))
-    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new db params))
-    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met db params))
-    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts db params))
-    ((update-fail-pass-counts)         (apply db:general-call db 'update-pass-fail-counts params))
-    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id db params))
+    ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
+    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record dbstruct params))
+    ((get-matching-previous-test-run-records)(apply db:get-matching-previous-test-run-records dbstruct params))
+    ((db:test-get-logfile-info)        (apply db:test-get-logfile-info dbstruct params))
+    ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file dbstruct params)))
+    ((get-testinfo-state-status)       (apply db:get-testinfo-state-status dbstruct params))
+    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new dbstruct params))
+    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
+    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))
+    ((update-fail-pass-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
+    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
 
     ;; RUNS
-    ((get-run-info)                 (apply db:get-run-info db params))
-    ((register-run)                 (apply db:register-run db params))
-    ((set-tests-state-status)       (apply db:set-tests-state-status db params))
-    ((get-tests-for-run)            (apply db:get-tests-for-run db params))
-    ((get-test-id)                  (apply db:get-test-id-not-cached db params))
-    ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata db params))
-    ((get-run-name-from-id)         (apply db:get-run-name-from-id db params))
-    ((delete-run)                   (apply db:delete-run db params))
-    ((get-runs)                     (apply db:get-runs db params))
-    ((get-runs-by-patt)             (apply db:get-runs-by-patt db params))
-    ((lock/unlock-run)              (apply db:lock/unlock-run db params))
-    ((update-run-event_time)        (apply db:update-run-event_time db params))
+    ((get-run-info)                 (apply db:get-run-info dbstruct params))
+    ((register-run)                 (apply db:register-run dbstruct params))
+    ((set-tests-state-status)       (apply db:set-tests-state-status dbstruct params))
+    ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))
+    ((get-test-id)                  (apply db:get-test-id-not-cached dbstruct params))
+    ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata dbstruct params))
+    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
+    ((delete-run)                   (apply db:delete-run dbstruct params))
+    ((get-runs)                     (apply db:get-runs dbstruct params))
+    ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
+    ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
+    ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
 
     ;; STEPS
-    ((teststep-set-status!)         (apply db:teststep-set-status! db params))
+    ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))
 
     ;; TEST DATA
-    ((test-data-rollup)             (apply db:test-data-rollup db params))
-    ((csv->test-data)               (apply db:csv->test-data db params))
-    ((get-steps-data)               (apply db:get-steps-data db params))
+    ((test-data-rollup)             (apply db:test-data-rollup dbstruct params))
+    ((csv->test-data)               (apply db:csv->test-data dbstruct params))
+    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
 
     ;; MISC
-    ((login)                        (apply db:login db params))
+    ((login)                        (apply db:login dbstruct params))
     ((general-call)                 (let ((stmtname   (car params))
 					  (realparams (cdr params)))
-				      (db:general-call db stmtname realparams)))
+				      (db:general-call dbstruct stmtname realparams)))
     ((sync-inmem->db)               (db:sync-back))
     ((kill-server)
      (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
@@ -89,9 +89,9 @@
        '(#t "exit process started")))
 
     ;; TESTMETA
-    ((testmeta-get-record)       (apply db:testmeta-get-record db params))
-    ((testmeta-add-record)       (apply db:testmeta-add-record db params))
-    ((testmeta-update-field)     (apply db:testmeta-update-field db params))
+    ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))
+    ((testmeta-add-record)       (apply db:testmeta-add-record dbstruct params))
+    ((testmeta-update-field)     (apply db:testmeta-update-field dbstruct params))
     (else
      (list "ERROR" 0))))
 
@@ -101,11 +101,11 @@
 ;;
 ;; NB// Runs on the server as part of the server loop
 ;;
-(define (api:process-request db $) ;; the $ is the request vars proc
+(define (api:process-request dbstruct $) ;; the $ is the request vars proc
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
 	 (params  (db:string->obj paramsj)) ;; (rmt:json-str->dat paramsj))
-	 (res     (api:execute-requests db cmd params)))
+	 (res     (api:execute-requests dbstruct cmd params)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
     ;; (rmt:dat->json-str

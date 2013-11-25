@@ -1304,7 +1304,8 @@
 
 ;; map run-id, testname item-path to test-id
 (define (db:get-test-id dbstruct run-id testname item-path)
-  (let* ((res #f))
+  (let* ((db (db:get-db dbstruct run-id))
+	 (res #f))
     (sqlite3:for-each-row
      (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
        (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
@@ -1318,7 +1319,8 @@
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir_id decoding? Decide, decode here or where used? For the moment decode where used.
 (define (db:get-all-tests-info-by-run-id dbstruct run-id)
-  (let ((res '()))
+  (let ((db (db:get-db dbstruct run-id))
+	(res '()))
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
@@ -1331,8 +1333,9 @@
 
 ;; Get test data using test_id
 (define (db:get-test-info-by-id dbstruct run-id test-id)
-      (let ((res #f))
-	(sqlite3:for-each-row
+  (let ((db (db:get-db dbstruct run-id))
+	(res #f))
+    (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
        (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)))
@@ -1345,8 +1348,9 @@
 ;; Get test data using test_ids. NB// Only works within a single run!!
 ;;
 (define (db:get-test-info-by-ids dbstruct run-id test-ids)
-      (let ((res '()))
-	(sqlite3:for-each-row
+  (let ((db (db:get-db dbstruct run-id))
+	(res '()))
+    (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
@@ -1357,7 +1361,8 @@
     res))
 
 (define (db:get-test-info dbstruct run-id testname item-path)
-  (let ((res #f))
+  (let ((db (db:get-db dbstruct run-id))
+	(res #f))
     (sqlite3:for-each-row
      (lambda (a . b)
        (set! res (apply vector a b)))
@@ -1367,7 +1372,8 @@
     res))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
-  (let ((res #f))
+  (let ((db (db:get-db dbstruct run-id))
+	(res #f))
     (sqlite3:for-each-row
      (lambda (tpath)
        (set! res tpath))
@@ -1380,17 +1386,19 @@
 ;; S T E P S
 ;;======================================================================
 
-(define (db:teststep-set-status! db test-id teststep-name state-in status-in comment logfile)
-   (sqlite3:execute 
-    db
-    "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
-    test-id teststep-name state-in status-in (current-seconds)
-    (sdb:qry 'getid  (if comment comment ""))
-    (sdb:qry 'getid  (if logfile logfile ""))))
+(define (db:teststep-set-status! dbstruct run-id test-id teststep-name state-in status-in comment logfile)
+  (let ((db (db:get-db dbstruct run-id)))
+    (sqlite3:execute 
+     db
+     "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+     test-id teststep-name state-in status-in (current-seconds)
+     (sdb:qry 'getid  (if comment comment ""))
+     (sdb:qry 'getid  (if logfile logfile "")))))
    
 ;; db-get-test-steps-for-run
-(define (db:get-steps-for-test db test-id)
-  (let* ((res '()))
+(define (db:get-steps-for-test db run-id test-id)
+  (let* ((db (db:get-db dbstruct run-id))
+	 (res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
        (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
@@ -1399,8 +1407,9 @@
      test-id)
     (reverse res)))
 
-(define (db:get-steps-data db test-id)
-  (let ((res '()))
+(define (db:get-steps-data db run-id test-id)
+  (let ((db  (db:get-db dbstruct run-id))
+	(res '()))
     (sqlite3:for-each-row 
      (lambda (id test-id stepname state status event-time logfile)
        (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
@@ -1418,8 +1427,9 @@
 ;; look at the test_data status field, 
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
-(define (db:test-data-rollup db test-id status)
-  (let ((fail-count 0)
+(define (db:test-data-rollup dbstruct run-id test-id status)
+  (let ((db        (db:get-db dbstruct run-id))
+	(fail-count 0)
 	(pass-count 0))
     (sqlite3:for-each-row
      (lambda (fcount pcount)
@@ -1434,9 +1444,10 @@
     ;; if the test is not FAIL then set status based on the fail and pass counts.
     (db:general-call db 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
-(define (db:csv->test-data db test-id csvdata)
+(define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((csvlist (csv->list (make-csv-reader
+  (let ((db (db:get-db dbstruct run-id))
+	(csvlist (csv->list (make-csv-reader
 			     (open-input-string csvdata)
 			     '((strip-leading-whitespace? #t)
 			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
@@ -1497,7 +1508,7 @@
 
 ;; MUST BE CALLED local!
 ;;
-(define (db:test-get-paths-matching dbstruct keynames target fnamepatt #!key (res '()))
+(define (db:test-get-paths-matching keynames target fnamepatt #!key (res '()))
   ;; BUG: Move the values derived from args to parameters and push to megatest.scm
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
 	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
@@ -1516,30 +1527,6 @@
 			  '()))
 		    paths-from-db))
 	paths-from-db)))
-
-(define (db:test-get-paths-matching-keynames-target db keynames target res 
-						    #!key
-						    (testpatt   "%")
-						    (statepatt  "%")
-						    (statuspatt "%")
-						    (runname    "%"))
-  (let* ((keystr (string-intersperse 
-		  (map (lambda (key val)
-			 (conc "r." key " like '" val "'"))
-		       keynames 
-		       (string-split target "/"))
-		  " AND "))
-	 (testqry (tests:match->sqlqry testpatt))
-	 (qrystr (conc "SELECT t.rundir FROM tests AS t INNER JOIN runs AS r ON t.run_id=r.id WHERE "
-		       keystr " AND r.runname LIKE '" runname "' AND " testqry
-		       " AND t.state LIKE '" statepatt "' AND t.status LIKE '" statuspatt 
-		       "' ORDER BY t.event_time ASC;")))
-    (sqlite3:for-each-row 
-     (lambda (p)
-       (set! res (cons p res)))
-     db 
-     qrystr)
-    res))
 
 (define (db:test-get-paths-matching-keynames-target-new dbstruct keynames target res testpatt statepatt statuspatt runname)
   (let* ((row-ids '())
