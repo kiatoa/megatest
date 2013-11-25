@@ -100,10 +100,11 @@
   (let ((rdb (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if rdb
 	rdb
-	(let* ((toppath      (dbr:dbstruct-get-path dbstruct))
+	(let* ((local        (dbr:dbstruct-get-local dbstruct))
+	       (toppath      (dbr:dbstruct-get-path dbstruct))
 	       (dbpath       (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
-	       (inmem        (open-inmem-db))
+	       (inmem        (if local #f (open-inmem-db)))
 	       (db           (sqlite3:open-database dbpath))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
@@ -115,10 +116,13 @@
 		(sqlite3:execute db "PRAGMA synchronous = 0;")))
 	  (if (not dbexists)(db:initialize-run-id-db db run-id))
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'rundb db)
-	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inmem inmem)
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #t)
-	  (db:sync-tables db:sync-tests-only db inmem)
-	  inmem))))
+	  (if local
+	      db
+	      (begin
+		(dbr:dbstruct-set-runvec! dbstruct run-id 'inmem inmem)
+		(db:sync-tables db:sync-tests-only db inmem)
+		inmem))))))
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;;
@@ -161,12 +165,14 @@
    (hash-table-values (vector-ref dbstruct 1))))
 
 ;; close all opened run-id dbs
-(define (db:close-all-db)
+(define (db:close-all dbstruct)
+  ;; finalize main.db
+  (sqlite3:finalize! (db:get-db dbstruct #f))
   (for-each
-   (lambda (db)
-     (finalize! db))
-   (hash-table-values (vector-ref *open-dbs* 1)))
-  (finalize! (vector-ref *open-dbs* 0)))
+   (lambda (runvec)
+     (let ((rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb))))
+       (sqlite3:finalize! rundb)))
+   (hash-table-values (vector-ref dbstruct 1))))
 
 (define (open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
@@ -366,14 +372,14 @@
   (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
   (if (or *db-write-access*
 	  (not (member proc *db:all-write-procs*)))
-      (let* ((db   (cond
-		    ((sqlite3:database? idb) idb)
-		    ((not idb)               (make-dbr:dbstruct path: *toppath*))
-		    ((procedure? idb)       (idb))
-		    (else   	            (make-dbr:dbstruct path: *toppath*))))
+      (let* ((db (cond
+		  ((sqlite3:database? idb)     idb)
+		  ((not idb)                   (debug:print 0 "ERROR: cannot open-run-close with #f anymore"))
+		  ((procedure? idb)            (idb))
+		  (else   	               (debug:print 0 "ERROR: cannot open-run-close with #f anymore"))))
 	     (res #f))
 	(set! res (apply proc db params))
-	(if (not idb)(sqlite3:finalize! db))
+	(if (not idb)(sqlite3:finalize! dbstruct))
 	(debug:print-info 11 "open-run-close-no-exception-handling END" )
 	res)
       #f))
@@ -391,9 +397,9 @@
    (apply open-run-close-no-exception-handling proc idb params)))
 
 ;; (define open-run-close 
-(define open-run-close (if (debug:debug-mode 2)
-			   open-run-close-no-exception-handling
-			   open-run-close-exception-handling))
+(define open-run-close ;; (if (debug:debug-mode 2)
+			   open-run-close-no-exception-handling)
+			 ;;  open-run-close-exception-handling))
 
 (define (db:initialize-megatest-db db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
@@ -821,9 +827,10 @@
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 ;; runpatts: patt1,patt2 ...
 ;;
-(define (db:get-runs db runpatt count offset keypatts)
-  (let* ((res       '())
-	 (keys       (db:get-keys db))
+(define (db:get-runs dbstruct runpatt count offset keypatts)
+  (let* ((db         (db:get-db dbstruct #f))
+	 (res       '())
+	 (keys       (db:get-keys dbstruct))
 	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header     (append keys remfields))

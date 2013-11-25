@@ -10,12 +10,13 @@
 ;;            |-fdb.db
 ;;            |-1.db
 ;;            |-<N>.db
-(define (make-dbr:dbstruct #!key (path #f))
+(define (make-dbr:dbstruct #!key (path #f)(local #f))
   (vector
    #f                  ;; the main db (contains runs, test_meta etc.) NOT CACHED IN MEM
    (make-hash-table)   ;; run-id => [ rundb inmemdb last-mod last-read last-sync ]
    #f                  ;; the global string db (use for state, status etc.)
-   path))              ;; path to database files/megatest area
+   path                ;; path to database files/megatest area
+   local))             ;; read-only local access
 
 ;; get and set main db
 (define-inline (dbr:dbstruct-get-main vec)    (vector-ref vec 0))
@@ -67,8 +68,12 @@
 (define-inline (dbr:dbstruct-set-strdb! vec db)(vector-set! vec 2 db))
 
 ;; path
-(define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
 (define-inline (dbr:dbstruct-get-path  vec)     (vector-ref vec 3))
+(define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
+
+;; local
+(define-inline (dbr:dbstruct-get-local vec)     (vector-ref vec 4))
+(define-inline (dbr:dbstruct-set-local! vec val)(vector-set! vec 4 val))
 
 
 (define (make-db:test)(make-vector 20))

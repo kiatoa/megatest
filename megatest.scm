@@ -563,15 +563,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (setup-for-run)
-	(let* ((db       (make-dbr:dbstruct path: *toppath* local: #t))
+	(let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
 			     "%"))
-	       (runsdat  (db:get-runs db runpatt #f #f '()))
+	       (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
-	       (keys     (db:get-keys db))
+	       (keys     (db:get-keys dbstruct))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
@@ -588,7 +588,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (print targetstr))))
 	       (if (not db-targets)
 		   (let* ((run-id (db:get-value-by-header run header "id"))
-			  (tests  (db:get-tests-for-run db run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
+			  (tests  (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
 		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
 			    " status: " (db:get-value-by-header run header "state")
 			    " run-id: " run-id ", number tests: " (length tests))
@@ -616,7 +616,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test db (db:test-get-id test))))
+			      (let ((steps (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				(for-each 
 				 (lambda (step)
 				   (format #t 
@@ -628,7 +628,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 steps)))))
 		      tests)))))
 	     runs)
-	   (set! *didsomething* #t))))
+	  (db:close-all dbstruct)
+	  (set! *didsomething* #t))))
 
 ;;======================================================================
 ;; full run
@@ -817,13 +818,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 "-test-paths"
 	 "Get paths to tests"
 	 (lambda (target runname keys keyvals)
-	   (let* ((db       (make-dbr:dbstruct path: *toppath* local: #t))
+	   (let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
 		  ;; DO NOT run remote
-		  (paths    (db:test-get-paths-matching db keys target)))
+		  (paths    (db:test-get-paths-matching dbstruct keys target)))
 	     (for-each (lambda (path)
 			 (print path))
 		       paths)
-	     (sqlite3:finalize! db))))))
+	     (db:close-all dbstruct))))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -834,14 +835,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-extract-ods"
      "Make ods spreadsheet"
      (lambda (target runname keys keyvals)
-       (let ((db         (make-dbr:dbstruct path: *toppath* local: #t))
+       (let ((dbstruct   (make-dbr:dbstruct path: *toppath* local: #t))
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (args:get-arg ":runname"))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
-	 (db:extract-ods-file db outputfile keyvals (if runspatt runspatt "%") pathmod)
-	 (sqlite3:finalize! db)
+	 (db:extract-ods-file dbstruct outputfile keyvals (if runspatt runspatt "%") pathmod)
+	 (db:close-all dbstruct)
 	 (set! *didsomething* #t)))))
 
 ;;======================================================================
@@ -1130,10 +1131,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (setup-for-run))
-	   (db      (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-      (if db
+	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+      (if dbstruct
 	  (begin
-	    (set! *db* db)
+	    (set! *db* dbstruct)
 	    (set! *client-non-blocking-mode* #t)
 	    (import readline)
 	    (import apropos)
@@ -1144,13 +1145,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (current-input-port (make-gnu-readline-port "megatest> "))
 	    (if (args:get-arg "-repl")
 		(repl)
-		(load (args:get-arg "-load"))))
+		(load (args:get-arg "-load")))
+	    (db:close-all dbstruct))
 	  (exit))
       (set! *didsomething* #t)))
 
+;; Not converted to use dbstruct yet
+;;
 (if (args:get-arg "-convert-to-norm")
     (let* ((toppath (setup-for-run))
-	   (db      (if toppath (make-dbr:dbstruct path: toppath local: #t))))
+	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t))))
       (for-each 
        (lambda (field)
 	 (let ((dat '()))
@@ -1158,7 +1162,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (sqlite3:for-each-row
 	    (lambda (id val)
 	      (set! dat (cons (list id val) dat)))
-	    db
+	    (get-db db run-id)
 	    (conc "SELECT id," field " FROM tests;"))
 	   (debug:print-info 0 "found " (length dat) " items for field " field)
 	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
@@ -1170,6 +1174,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (sqlite3:execute qry newval (car item))))
 	      dat)
 	     (sqlite3:finalize! qry))))
+       (db:close-all dbstruct)
        (list "uname" "rundir" "final_logf" "comment"))
       (set! *didsomething* #t)))
 
