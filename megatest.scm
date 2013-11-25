@@ -27,6 +27,8 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
+(declare (uses sdb))
+(declare (uses filedb))
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
@@ -240,6 +242,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-update-meta"
 			"-gen-megatest-area"
 			"-mark-incompletes"
+
+			"-convert-to-norm"
+			"-convert-to-old"
 
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -629,8 +634,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (begin
 			      (print   "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
-				     "\n         uname:    " (db:test-get-uname test)
-				     "\n         rundir:   " (db:test-get-rundir test)
+				     "\n         uname:    " (sdb:qry 'getstr (db:test-get-uname test))
+				     "\n         rundir:   " (filedb:get-path *fdb* (db:test-get-rundir test))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
@@ -966,6 +971,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (tdb:load-test-data test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
+		;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid logfname))))
 		(rmt:test-set-log! test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
@@ -1011,6 +1017,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
+			  ;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid htmllogfile))))
 			  (rmt:test-set-log! test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (rmt:teststep-set-status! test-id stepname "end" exitstat msg logfile))
@@ -1162,6 +1169,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (exit))
       (set! *didsomething* #t)))
 
+(if (args:get-arg "-convert-to-norm")
+    (let* ((toppath (setup-for-run))
+	   (db      (if toppath (open-db) #f)))
+      (for-each 
+       (lambda (field)
+	 (let ((dat '()))
+	   (debug:print-info 0 "Getting data for field " field)
+	   (sqlite3:for-each-row
+	    (lambda (id val)
+	      (set! dat (cons (list id val) dat)))
+	    db
+	    (conc "SELECT id," field " FROM tests;"))
+	   (debug:print-info 0 "found " (length dat) " items for field " field)
+	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
+	     (for-each
+	      (lambda (item)
+		(let ((newval (sdb:qry 'getid (cadr item))))
+		  (if (not (equal? newval (cadr item)))
+		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
+		  (sqlite3:execute qry newval (car item))))
+	      dat)
+	     (sqlite3:finalize! qry))))
+       (list "uname" "rundir" "final_logf" "comment"))
+      (set! *didsomething* #t)))
+
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
@@ -1172,6 +1204,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; (if (and *runremote*
 ;; 	 (socket? *runremote*))
 ;;     (close-socket *runremote*))
+
+(if sdb:qry (sdb:qry 'finalize #f))
+(if *fdb*   (filedb:finalize-db! *fdb*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

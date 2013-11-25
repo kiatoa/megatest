@@ -30,6 +30,7 @@
 (declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
+(declare (uses sdb))
 (declare (uses filedb))
 
 (include "common_records.scm")
@@ -74,6 +75,7 @@
 	(begin
 	  (debug:print-info 9 "db:set-sync, setting pragma synchronous to " val)
 	  (sqlite3:execute db (conc "PRAGMA synchronous = '" val "';"))))))
+;;	(sqlite3:execute db "PRAGMA synchronous = normal;")))) ;; need a default?
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -174,6 +176,8 @@
 	    (not exists))
 	(db:initialize db))
     (sqlite3:set-busy-handler! db handler)
+    (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
+    (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     db))
 
 ;; (define (db:sync-table tblname fields fromdb todb)
@@ -1053,7 +1057,7 @@
       finalres)))
 
 (define (db:set-comment-for-run dbstruct run-id comment)
-  (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET comment=? WHERE id=?;" comment run-id))
+  (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" (sdb:qry 'getid comment) run-id))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run dbstruct run-id)
@@ -1300,13 +1304,13 @@
   (let ((db (db:get-db dbstruct run-id)))
     (cond
      ((and newstate newstatus newcomment)
-      (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment test-id))
+    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus (sdb:qry 'getid newcomment) test-id))
      ((and newstate newstatus)
       (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
      (else
       (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-      (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment test-id))))
+    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" (sdb:qry 'getid newcomment) test-id))))
     (mt:process-triggers test-id newstate newstatus)))
 
 ;; Never used, but should be?
@@ -1443,7 +1447,9 @@
    (sqlite3:execute 
     db
     "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
-    test-id teststep-name state-in status-in (current-seconds) (if comment comment "") (if logfile logfile "")))
+    test-id teststep-name state-in status-in (current-seconds)
+    (sdb:qry 'getid  (if comment comment ""))
+    (sdb:qry 'getid  (if logfile logfile ""))))
    
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test db test-id)
@@ -1680,12 +1686,12 @@
   (let ((res #f))
     (sqlite3:for-each-row 
      (lambda (path-id final_logf-id)
-       (let ((path       (db:get-path   dbstruct path-id))
-	     (final_logf (db:get-string dbstruct final_logf-id)))
-       (set! logf final_logf)
-       (set! res (list path final_logf))
-       (if (directory? path)
-	   (debug:print 2 "Found path: " path)
+       (let ((path       (sdb:qry 'getstr path-id))
+	     (final_logf (sdb:qry 'getstr final_logf-id)))
+	 (set! logf final_logf)
+	 (set! res (list path final_logf))
+	 (if (directory? path)
+	     (debug:print 2 "Found path: " path)
 	     (debug:print 2 "No such path: " path))))
      (db:get-db dbstruct run-id)
      "SELECT rundir_id,final_logf_id FROM tests WHERE testname=? AND item_path='';"

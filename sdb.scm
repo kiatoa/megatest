@@ -22,13 +22,13 @@
 (declare (unit sdb))
 
 ;; 
-(define (sdb:open) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (sdb:open #!key (fname #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
 	    (exit))))
-  (let* ((dbpath    (conc *toppath* "/db/sdb.db")) ;; fname)
+  (let* ((dbpath    (conc *toppath* "/db/" (if fname fname "sdb.db"))) ;; fname)
 	 (dbexists  (let ((fe (file-exists? dbpath)))
 		      (if fe 
 			  fe
@@ -36,9 +36,7 @@
 			    (create-directory (conc *toppath* "/db") #t)
 			    #f))))
 	 (sdb        (sqlite3:open-database dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   136000))))
+	 (handler   (make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! sdb handler)
     (if (not dbexists)
 	(sdb:initialize sdb))
@@ -79,16 +77,23 @@
 	 "SELECT str FROM strs WHERE id=?;" id))
     str))
 
-(define sdb:qry
-  (let ((sdb    #f)
+;; Numbers get passed though in both directions
+;;
+(define (make-sdb:qry #!key (fname #f))
+  (let ((sdb    #f) ;; (sdb:open fname: fname))
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
-      (if (not sdb)(set! sdb (sdb:open)))
+      (if (not sdb)(set! sdb (sdb:open fname: fname)))
       (case cmd
-	((init)      (if (not sdb)(set! sdb (sdb:open))))
-	((finalize!) (if sdb (sqlite3:finalize! sdb)))
-	((getid)     (let ((id (sdb:string->id sdb scache var)))
+	((finalize) (if sdb
+			(begin
+			  (sqlite3:finalize! sdb)
+			  (set! sdb #f))))
+	((getid)     (let ((id (if (or (number? var)
+				       (string->number var))
+				   var
+				   (sdb:string->id sdb scache var))))
 		       (if id
 			   id
 			   (begin

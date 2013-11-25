@@ -21,7 +21,9 @@
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
+(declare (uses sdb))
 (declare (uses tdb))
+(declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -499,6 +501,7 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
+    ;; (cdb:test-set-rundir-by-test-id *runremote* test-id (filedb:register-path *fdb* lnkpathf))
     (rmt:general-call 'test-set-rundir-by-test-id lnkpathf test-id)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
@@ -520,9 +523,10 @@
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
 	(let* ((testinfo       (rmt:get-test-info-by-id test-id)) ;;  run-id testname item-path))
-	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
+	       (curr-test-path (if testinfo (filedb:get-path *fdb* (db:test-get-rundir testinfo)) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
+	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
 	  (rmt:general-call 'test-set-rundir lnkpath run-id testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
