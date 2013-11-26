@@ -1221,7 +1221,7 @@ Misc
 		(set! *hide-not-hide-button* hideit)
 		hideit))
 	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (sqlite3:finalize! *db*))(exit)))
+	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (db:close-all *db*))(exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update)))
 	      (iup:button "Collapse"  #:action (lambda (obj)
@@ -1492,7 +1492,7 @@ Misc
 	(begin
 	  (lambda (x)
 	    (on-exit (lambda ()
-		       (if *db* (sqlite3:finalize! *db*))))
+		       (if *db* (db:close-all *db*))))
 	    (examine-run *db* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
@@ -1527,4 +1527,4 @@ Misc
 		       1))))
 
 (iup:main-loop)
-(sqlite3:finalize! *db*)
+(db:close-all *db*)

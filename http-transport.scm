@@ -433,7 +433,7 @@
 	    (rem-time   #f))
 	(if *inmemdb* (db:sync-touched *inmemdb*))
 	(set! sync-time  (- (current-milliseconds) start-time))
-	(debug:print 0 "SYNC: time= " sync-time)
+	;; (debug:print 0 "SYNC: time= " sync-time)
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
 	(if (and (< rem-time 4)
 		 (> rem-time 0))

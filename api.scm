@@ -67,8 +67,11 @@
     ;; MISC
     ((login)                        (apply db:login dbstruct params))
     ((general-call)                 (let ((stmtname   (car params))
-					  (realparams (cdr params)))
-				      (db:general-call dbstruct stmtname realparams)))
+					  (run-id     (cadr params))
+					  (realparams (cddr params)))
+				      (db:with-db dbstruct run-id #t ;; these are all for modifying the db
+						  (lambda (db)
+						    (db:general-call db stmtname realparams)))))
     ((sync-inmem->db)               (db:sync-back))
     ((kill-server)
      (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)

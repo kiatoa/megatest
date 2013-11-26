@@ -123,7 +123,7 @@
 	      (begin
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 0;")))
-	  (if (not dbexists)(db:initialize-run-id-db db run-id))
+	  (if (not dbexists)(db:initialize-run-id-db db))
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #t)
 	  (if local
@@ -188,7 +188,7 @@
 (define (open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
 	 (handler   (make-busy-timeout 3600)))
-    (db:initialize db)
+    (db:initialize-run-id-db db)
     (sqlite3:set-busy-handler! db handler)
     (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
     (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -472,7 +472,7 @@
 ;; R U N   S P E C I F I C   D B 
 ;;======================================================================
 
-(define (db:initialize-run-id-db db run-id)
+(define (db:initialize-run-id-db db)
   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,

@@ -28,9 +28,9 @@
 	 (runvec (hash-table-ref/default dbhash run-id #f)))
     (if runvec
 	runvec
-	(begin
-	  (hash-table-set! dbhash run-id (vector #f #f -1 -1 -1 #f))
-	  (dbr:dbstruct-get-rundb-rec vec run-id)))))
+	(let ((nvec  (vector #f #f -1 -1 -1 #f)))
+	  (hash-table-set! dbhash run-id nvec)
+	  nvec))))
 
 ;;  [ rundb inmemdb last-mod last-read last-sync ]
 (define-inline (dbr:dbstruct-field-name->num field-name)
@@ -44,7 +44,7 @@
     (else -1)))
 
 ;; get/set rundb fields
-(define (dbr:dbstruct-get-runrec vec run-id field-name)
+(define (dbr:dbstruct-get-runvec vec run-id field-name)
   (let ((runvec   (dbr:dbstruct-get-rundb-rec vec run-id))
 	(fieldnum (dbr:dbstruct-field-name->num field-name)))
     ;; (vector-set! runvec (dbr:dbstruct-field-name->num 'inuse) #t)

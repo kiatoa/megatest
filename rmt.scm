@@ -83,8 +83,10 @@
   (rmt:send-receive 'kill-server '()))
 
 ;; hand off a call to one of the db:queries statements
-(define (rmt:general-call stmtname . params)
-  (rmt:send-receive 'general-call (append (list stmtname) params)))
+;; added run-id to make looking up the correct db possible 
+;;
+(define (rmt:general-call stmtname run-id . params)
+  (rmt:send-receive 'general-call (append (list stmtname run-id) params)))
 
 (define (rmt:sync-inmem->db)
   (rmt:send-receive 'sync-inmem->db '()))
