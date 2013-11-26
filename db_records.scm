@@ -19,13 +19,13 @@
    local))             ;; read-only local access
 
 ;; get and set main db
-(define-inline (dbr:dbstruct-get-main vec)    (vector-ref vec 0))
+(define-inline (dbr:dbstruct-get-main  vec)    (vector-ref vec 0))
 (define-inline (dbr:dbstruct-set-main! vec db)(vector-set! vec 0 db))
 
 ;; get a rundb vector
 (define (dbr:dbstruct-get-rundb-rec vec run-id)
   (let* ((dbhash (vector-ref vec 1))
-	 (runvec (hash-table-ref/default dbhash run-id)))
+	 (runvec (hash-table-ref/default dbhash run-id #f)))
     (if runvec
 	runvec
 	(begin
@@ -52,7 +52,7 @@
 
 (define (dbr:dbstruct-set-runvec! vec run-id field-name val)
   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-set! runvec (dbr:dbstruct-field-name->num field-name) rundb)))
+    (vector-set! runvec (dbr:dbstruct-field-name->num field-name) runvec)))
 
 ;; get/set inmemdb
 (define (dbr:dbstruct-get-inmemdb vec run-id)

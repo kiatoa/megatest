@@ -70,6 +70,15 @@
   (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #f)
   (mutex-unlock! *rundb-mutex*))
 
+;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
+;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
+;;
+(define (db:with-db dbstruct run-id r/w proc . params)
+  (let* ((db (db:get-db dbstruct run-id)))
+    (let ((res (apply proc db params)))
+      (db:done-with dbstruct run-id r/w)
+      res)))
+
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
 ;;======================================================================
@@ -171,7 +180,9 @@
   (for-each
    (lambda (runvec)
      (let ((rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb))))
-       (sqlite3:finalize! rundb)))
+       (if (sqlite3:database? rundb)
+	   (sqlite3:finalize! rundb)
+	   (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
    (hash-table-values (vector-ref dbstruct 1))))
 
 (define (open-inmem-db)
@@ -422,17 +433,17 @@
 		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 	      keys)
     (sqlite3:execute db (conc 
-			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, " 
-			 fieldstr (if havekeys "," "")
-			 "runname    TEXT DEFAULT 'norun',"
-			 "state      TEXT DEFAULT '',"
-			 "status     TEXT DEFAULT '',"
-			 "owner      TEXT DEFAULT '',"
-			 "event_time TIMESTAMP DEFAULT (strftime('%s','now')),"
-			 "comment    TEXT DEFAULT '',"
-			 "fail_count INTEGER DEFAULT 0,"
-			 "pass_count INTEGER DEFAULT 0,"
-			 "CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
+			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
+			 fieldstr (if havekeys "," "") "
+			 runname    TEXT DEFAULT 'norun',
+			 state      TEXT DEFAULT '',
+			 status     TEXT DEFAULT '',
+			 owner      TEXT DEFAULT '',
+			 event_time TIMESTAMP DEFAULT (strftime('%s','now')),
+			 comment    TEXT DEFAULT '',
+			 fail_count INTEGER DEFAULT 0,
+			 pass_count INTEGER DEFAULT 0,
+			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
                                      id          INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
@@ -453,14 +464,15 @@
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
     ;; Must do this *after* running patch db !! No more. 
-    (db:set-var db "MEGATEST_VERSION" megatest-version)
+    ;; cannot use db:set-var since it will deadlock, hardwire the code here
+    (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" megatest-version)
     (debug:print-info 11 "db:initialize END")))
 
 ;;======================================================================
 ;; R U N   S P E C I F I C   D B 
 ;;======================================================================
 
-(define (db:initialized-run-id-db db run-id)
+(define (db:initialize-run-id-db db run-id)
   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
@@ -717,11 +729,13 @@
 (define (db:get-keys dbstruct)
   (if *db-keys* *db-keys* 
       (let ((res '()))
-	(sqlite3:for-each-row 
-	 (lambda (key)
-	   (set! res (cons key res)))
-	 (db:get-db dbstruct #f)
-	 "SELECT fieldname FROM keys ORDER BY id DESC;")
+	(db:with-db dbstruct #f #f
+		    (lambda (db)
+		      (sqlite3:for-each-row 
+		       (lambda (key)
+			 (set! res (cons key res)))
+		       (db:get-db dbstruct #f)
+		       "SELECT fieldname FROM keys ORDER BY id DESC;")))
 	(set! *db-keys* res)
 	res)))
 
@@ -963,12 +977,14 @@
 			(if offset (conc " OFFSET " offset) "")
 			";"))
     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (sqlite3:for-each-row 
-     (lambda (a . r)
-       (set! res (cons (list->vector (cons a r)) res)))
-     (db:get-db dbstruct #f)
-     qry-str
-     runnamepatt)
+    (db:with-db dbstruct #f #f ;; reads db, does not write to it.
+		(lambda (db)
+		  (sqlite3:for-each-row
+		   (lambda (a . r)
+		     (set! res (cons (list->vector (cons a r)) res)))
+		   (db:get-db dbstruct #f)
+		   qry-str
+		   runnamepatt)))
     (vector header res)))
 
 ;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
@@ -1092,7 +1108,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run db run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
+(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (let* ((qryvalstr       (case qryvals
 			    ((shortlist) "id,run_id,testname,item_path,state,status")
 			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")

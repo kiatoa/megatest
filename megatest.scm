@@ -356,7 +356,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     (hash-table-keys args:arg-hash)
 		     '("-list-servers"
 		       "-stop-server"
-		       "-show-cmdinfo")))
+		       "-show-cmdinfo"
+		       "-list-runs")))
 	(if (setup-for-run)
 	    (begin
 
@@ -568,10 +569,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
 			     "%"))
-	       (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
+	       (keys     (db:get-keys dbstruct))
+	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
+	       (runsdat  (db:get-runs-by-patt dbstruct keys runpatt (or (args:get-arg "-target")
+									(args:get-arg "-reqtarg")) #f #f))
+		;; (cdb:remote-run db:get-runs #f runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
-	       (keys     (db:get-keys dbstruct))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table)))
 	  ;; Each run
