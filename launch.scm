@@ -311,7 +311,7 @@
 				   (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
+				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 									       (time-exceeded (> run-seconds runtlim)))
 									  (if time-exceeded
@@ -347,7 +347,7 @@
 						   ;;     (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (tests:test-set-status! test-id "KILLED"  "FAIL"
+						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
 								     (args:get-arg "-m") #f)
 						     (exit 1) ;; IS THIS NECESSARY OR WISE???
 						     )))
@@ -502,7 +502,7 @@
 
     ;; Update the rundir path in the test record for all
     ;; (cdb:test-set-rundir-by-test-id *runremote* test-id (filedb:register-path *fdb* lnkpathf))
-    (rmt:general-call 'test-set-rundir-by-test-id lnkpathf test-id)
+    (rmt:general-call 'test-set-rundir-by-test-id run-id lnkpathf test-id)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -522,12 +522,12 @@
     ;; NB - This is not working right - some top tests are not getting the path set!!!
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (rmt:get-test-info-by-id test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo (filedb:get-path *fdb* (db:test-get-rundir testinfo)) #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
-	  (rmt:general-call 'test-set-rundir lnkpath run-id testname "") ;; toptest-path)
+	  (rmt:general-call 'test-set-rundir run-id lnkpath run-id testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
@@ -663,7 +663,7 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	 (testinfo   (rmt:get-test-info-by-id test-id))
+	 (testinfo   (rmt:get-test-info-by-id run-id test-id))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))

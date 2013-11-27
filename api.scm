@@ -19,17 +19,17 @@
   (case (string->symbol cmd)
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs dbstruct params))
-    ((get-keys)                     (db:get-keys db))
+    ((get-keys)                     (db:get-keys dbstruct))
 
     ;; TESTS
     ;; json doesn't do vectors, convert to list
     ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
     ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
     ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))
-    ((get-count-tests-running)         (db:get-count-tests-running db))
+    ((get-count-tests-running)         (apply db:get-count-tests-running dbstruct params))
     ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
     ((delete-test-records)             (apply db:delete-test-records dbstruct params))
-    ((delete-old-deleted-test-records) (db:delete-old-deleted-test-records db))
+    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
     ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
     ((get-previous-test-run-record)    (apply db:get-previous-test-run-record dbstruct params))
     ((get-matching-previous-test-run-records)(apply db:get-matching-previous-test-run-records dbstruct params))
@@ -47,7 +47,7 @@
     ((register-run)                 (apply db:register-run dbstruct params))
     ((set-tests-state-status)       (apply db:set-tests-state-status dbstruct params))
     ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))
-    ((get-test-id)                  (apply db:get-test-id-not-cached dbstruct params))
+    ((get-test-id)                  (apply db:get-test-id dbstruct params))
     ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata dbstruct params))
     ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
     ((delete-run)                   (apply db:delete-run dbstruct params))

@@ -161,12 +161,12 @@
 	  #t)
 	#f)))
 
-(define (runs:can-run-more-tests jobgroup max-concurrent-jobs)
+(define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
 		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
 		  (else 0)))
-  (let* ((num-running             (rmt:get-count-tests-running))
-	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup jobgroup))
+  (let* ((num-running             (rmt:get-count-tests-running run-id))
+	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
 	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
@@ -379,7 +379,7 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode)) ;; (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
@@ -578,13 +578,13 @@
        inlst))
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
-  (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+  (let* ((run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode)) ;; (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
 	 (loop-list               (list hed tal reg reruns)))
@@ -624,7 +624,7 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       (if (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
 	  (begin
-	    (rmt:general-call 'register-test run-id test-name item-path)
+	    (rmt:general-call 'register-test run-id run-id test-name item-path)
 	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
 	  (let ((th (make-thread (lambda ()
 				   (mutex-lock! registry-mutex)
@@ -632,8 +632,8 @@
 				   (mutex-unlock! registry-mutex)
 				   ;; If haven't done it before register a top level test if this is an itemized test
 				   (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
-				       (rmt:general-call 'register-test run-id test-name ""))
-				   (rmt:general-call 'register-test run-id test-name item-path)
+				       (rmt:general-call 'register-test run-id run-id test-name ""))
+				   (rmt:general-call 'register-test run-id run-id test-name item-path)
 				   (mutex-lock! registry-mutex)
 				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
 				   (mutex-unlock! registry-mutex))
@@ -816,7 +816,7 @@
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f))
 	    (begin
-	      (rmt:general-call 'register-test run-id test-name "")
+	      (rmt:general-call 'register-test run-id run-id test-name "")
 	      (hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
@@ -932,7 +932,7 @@
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
 	 ((or (procedure? items)(eq? items 'have-procedure))
-	  (let ((can-run-more    (runs:can-run-more-tests jobgroup max-concurrent-jobs)))
+	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
 		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)))
@@ -1039,7 +1039,7 @@
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
 	   (test-id       (rmt:get-test-id run-id test-name item-path))
-	   (testdat       (if test-id (rmt:get-test-info-by-id test-id) #f)))
+	   (testdat       (if test-id (rmt:get-test-info-by-id run-id test-id) #f)))
       (if (not testdat)
 	  (let loop ()
 	    ;; ensure that the path exists before registering the test
@@ -1054,10 +1054,10 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rmt:general-call 'register-test run-id test-name item-path)
+		  (rmt:general-call 'register-test run-id run-id test-name item-path)
 		  (set! test-id (rmt:get-test-id run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
-	    (set! testdat (rmt:get-test-info-by-id test-id))
+	    (set! testdat (rmt:get-test-info-by-id run-id test-id))
 	    (if (not testdat)
 		(begin
 		  (debug:print-info 0 "WARNING: server is overloaded, trying again in one second")
@@ -1136,7 +1136,7 @@
 		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists"))))))
 		 (if skip-test
 		     (begin
-		       (mt:test-set-state-status-by-id test-id "COMPLETED" "SKIP" skip-test)
+		       (mt:test-set-state-status-by-id run-id test-id "COMPLETED" "SKIP" skip-test)
 		       (debug:print-info 1 "SKIPPING Test " full-test-name " due to " skip-test))
 		     (if (not (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat flags))
 			 (begin
@@ -1262,7 +1262,7 @@
 		   (let loop ((test (car sorted-tests))
 			      (tal  (cdr sorted-tests)))
 		     (let* ((test-id       (db:test-get-id test))
-			    (new-test-dat  (rmt:get-test-info-by-id test-id)))
+			    (new-test-dat  (rmt:get-test-info-by-id run-id test-id)))
 		       (if (not new-test-dat)
 			   (begin
 			     (debug:print 0 "ERROR: We have a test-id of " test-id " but no record was found. NOTE: No locking of records is done between processes, do not simultaneously remove the same run from two processes!")
@@ -1291,17 +1291,17 @@
 					  ;; up and blow it away.
 					  (begin
 					    (debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
-					    (mt:test-set-state-status-by-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
+					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
 					    (thread-sleep! 1))
 					  (begin
-					    (mt:test-set-state-status-by-id (db:test-get-id test) "KILLREQ" "n/a" #f)
+					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "KILLREQ" "n/a" #f)
 					    (thread-sleep! 1)))
 				      ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
 				      (if (null? tal)
 					  (loop new-test-dat tal)
 					  (loop (car tal)(append tal (list new-test-dat)))))
 				    (begin
-				      (mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f)
+				      (mt:test-set-state-status-by-id run-id (db:test-get-id test) "REMOVING" "LOCKED" #f)
 				      (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
 				      (if (and real-dir 
 					       (> (string-length real-dir) 5)
@@ -1338,7 +1338,7 @@
 					  (loop (car tal)(cdr tal))))))
 			       ((set-state-status)
 				(debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-				(mt:test-set-state-status-by-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
+				(mt:test-set-state-status-by-id run-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       ((run-wait)

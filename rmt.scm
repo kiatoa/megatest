@@ -108,22 +108,22 @@
 (define (rmt:get-test-id run-id testname item-path)
   (rmt:send-receive 'get-test-id (list run-id testname item-path)))
 
-(define (rmt:get-test-info-by-id test-id)
-  (rmt:send-receive 'get-test-info-by-id (list test-id)))
+(define (rmt:get-test-info-by-id run-id test-id)
+  (rmt:send-receive 'get-test-info-by-id (list run-id test-id)))
 
-(define (rmt:test-get-rundir-from-test-id test-id)
-  (rmt:send-receive 'test-get-rundir-from-test-id (list test-id)))
+(define (rmt:test-get-rundir-from-test-id run-id test-id)
+  (rmt:send-receive 'test-get-rundir-from-test-id (list run-id test-id)))
 
-(define (rmt:open-test-db-by-test-id test-id #!key (work-area #f))
+(define (rmt:open-test-db-by-test-id run-id test-id #!key (work-area #f))
   (let* ((test-path (if (string? work-area)
 			work-area
-			(rmt:test-get-rundir-from-test-id test-id))))
+			(rmt:test-get-rundir-from-test-id run-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; WARNING: This currently bypasses the transaction wrapped writes system
-(define (rmt:test-set-state-status-by-id test-id newstate newstatus newcomment)
-  (rmt:send-receive 'test-set-state-status-by-id (list test-id newstate newstatus newcomment)))
+(define (rmt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
+  (rmt:send-receive 'test-set-state-status-by-id (list run-id test-id newstate newstatus newcomment)))
 
 (define (rmt:set-tests-state-status run-id testnames currstate currstatus newstate newstatus)
   (rmt:send-receive 'set-tests-state-status (list run-id testnames currstate currstatus newstate newstatus)))
@@ -134,11 +134,11 @@
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
   (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in)))
 
-(define (rmt:delete-test-records test-id)
-  (rmt:send-receive 'delete-test-records (list test-id)))
+(define (rmt:delete-test-records run-id test-id)
+  (rmt:send-receive 'delete-test-records (list run-id test-id)))
 
-(define (rmt:test-set-status-state test-id status state msg)
-  (rmt:send-receive 'test-set-status-state (list test-id status state msg)))
+(define (rmt:test-set-status-state run-id test-id status state msg)
+  (rmt:send-receive 'test-set-status-state (list run-id test-id status state msg)))
 
 (define (rmt:get-previous-test-run-record run-id test-name item-path)
   (rmt:send-receive 'get-previous-test-run-record (list run-id test-name item-path)))
@@ -152,11 +152,11 @@
 (define (rmt:test-get-records-for-index-file run-id test-name)
   (rmt:send-receive 'test-get-records-for-index-file (list  run-id test-name)))
 
-(define (rmt:get-testinfo-state-status test-id)
-  (rmt:send-receive 'get-testinfo-state-status (list test-id)))
+(define (rmt:get-testinfo-state-status run-id test-id)
+  (rmt:send-receive 'get-testinfo-state-status (list run-id test-id)))
 
-(define (rmt:test-set-log! test-id logf)
-  (if (string? logf)(rmt:general-call 'test-set-log logf test-id)))
+(define (rmt:test-set-log! run-id test-id logf)
+  (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
 (define (rmt:test-get-paths-matching-keynames-target-new keynames target res testpatt statepatt statuspatt runname)
   (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
@@ -169,11 +169,11 @@
 
 ;; Statistical queries
 
-(define (rmt:get-count-tests-running)
-  (rmt:send-receive 'get-count-tests-running '()))
+(define (rmt:get-count-tests-running run-id)
+  (rmt:send-receive 'get-count-tests-running (list run-id)))
 
-(define (rmt:get-count-tests-running-in-jobgroup jobgroup)
-  (rmt:send-receive 'get-count-tests-running-in-jobgroup (list jobgroup)))
+(define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
+  (rmt:send-receive 'get-count-tests-running-in-jobgroup (list run-id jobgroup)))
 
 (define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
   (rmt:send-receive 'roll-up-pass-fail-counts (list run-id test-name item-path status)))

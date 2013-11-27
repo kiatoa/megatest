@@ -18,15 +18,29 @@
    path                ;; path to database files/megatest area
    local))             ;; read-only local access
 
+;;
+;; Accessors for a dbstruct
+;;
 ;; get and set main db
 (define-inline (dbr:dbstruct-get-main  vec)    (vector-ref vec 0))
 (define-inline (dbr:dbstruct-set-main! vec db)(vector-set! vec 0 db))
+;; get the runs hash
+(define-inline (dbr:dbstruct-get-dbhash vec) (vector-ref vec 1))
+;; the string db
+(define-inline (dbr:dbstruct-get-strdb vec)    (vector-ref vec 2))
+(define-inline (dbr:dbstruct-set-strdb! vec db)(vector-set! vec 2 db))
+;; path
+(define-inline (dbr:dbstruct-get-path  vec)     (vector-ref vec 3))
+(define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
+;; local
+(define-inline (dbr:dbstruct-get-local vec)     (vector-ref vec 4))
+(define-inline (dbr:dbstruct-set-local! vec val)(vector-set! vec 4 val))
 
-;; get a rundb vector
+;; get a rundb vector, create it if not already existing
 (define (dbr:dbstruct-get-rundb-rec vec run-id)
-  (let* ((dbhash (vector-ref vec 1))
-	 (runvec (hash-table-ref/default dbhash run-id #f)))
-    (if runvec
+  (let* ((dbhash (dbr:dbstruct-get-dbhash vec))              ;; get the runs hash
+	 (runvec (hash-table-ref/default dbhash run-id #f))) ;; get the vector for run-id
+    (if (vector? runvec)
 	runvec
 	(let ((nvec  (vector #f #f -1 -1 -1 #f)))
 	  (hash-table-set! dbhash run-id nvec)
@@ -44,15 +58,15 @@
     (else -1)))
 
 ;; get/set rundb fields
-(define (dbr:dbstruct-get-runvec vec run-id field-name)
+(define (dbr:dbstruct-get-runvec-val vec run-id field-name)
   (let ((runvec   (dbr:dbstruct-get-rundb-rec vec run-id))
 	(fieldnum (dbr:dbstruct-field-name->num field-name)))
     ;; (vector-set! runvec (dbr:dbstruct-field-name->num 'inuse) #t)
     (vector-ref runvec fieldnum)))
 
-(define (dbr:dbstruct-set-runvec! vec run-id field-name val)
+(define (dbr:dbstruct-set-runvec-val! vec run-id field-name val)
   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-set! runvec (dbr:dbstruct-field-name->num field-name) runvec)))
+    (vector-set! runvec (dbr:dbstruct-field-name->num field-name) val)))
 
 ;; get/set inmemdb
 (define (dbr:dbstruct-get-inmemdb vec run-id)
@@ -62,18 +76,6 @@
 (define (dbr:dbstruct-set-inmemdb! vec run-id inmemdb)
   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
     (vector-set! runvec 1 inmemdb)))
-
-;; the string db
-(define-inline (dbr:dbstruct-get-strdb vec)    (vector-ref vec 2))
-(define-inline (dbr:dbstruct-set-strdb! vec db)(vector-set! vec 2 db))
-
-;; path
-(define-inline (dbr:dbstruct-get-path  vec)     (vector-ref vec 3))
-(define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
-
-;; local
-(define-inline (dbr:dbstruct-get-local vec)     (vector-ref vec 4))
-(define-inline (dbr:dbstruct-set-local! vec val)(vector-set! vec 4 val))
 
 
 (define (make-db:test)(make-vector 20))

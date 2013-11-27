@@ -65,9 +65,9 @@
 (define (db:done-with dbstruct run-id mod-read)
   (mutex-lock! *rundb-mutex*)
   (if (eq? mod-read 'mod)
-      (dbr:dbstruct-set-runvec! dbstruct run-id 'mtime (current-milliseconds))
-      (dbr:dbstruct-set-runvec! dbstruct run-id 'rtime (current-milliseconds)))
-  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #f)
+      (dbr:dbstruct-set-runvec-val! dbstruct run-id 'mtime (current-milliseconds))
+      (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rtime (current-milliseconds)))
+  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #f)
   (mutex-unlock! *rundb-mutex*))
 
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
@@ -124,12 +124,12 @@
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 0;")))
 	  (if (not dbexists)(db:initialize-run-id-db db))
-	  (dbr:dbstruct-set-runvec! dbstruct run-id 'rundb db)
-	  (dbr:dbstruct-set-runvec! dbstruct run-id 'inuse #t)
+	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
+	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
 	  (if local
 	      db
 	      (begin
-		(dbr:dbstruct-set-runvec! dbstruct run-id 'inmem inmem)
+		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem inmem)
 		(db:sync-tables db:sync-tests-only db inmem)
 		inmem))))))
 
@@ -205,8 +205,8 @@
 	 '("cpuload"        #f)
 	 '("diskfree"       #f)
 	 '("uname"          #f)
-	 '("rundir"         #f)
-	 '("shortdir"       #f)
+	 '("rundir_id"      #f)
+	 '("shortdir_id"    #f)
 	 '("item_path"      #f)
 	 '("state"          #f)
 	 '("status"         #f)
@@ -264,8 +264,8 @@
 	   '("cpuload"        #f)
 	   '("diskfree"       #f)
 	   '("uname"          #f)
-	   '("rundir"         #f)
-	   '("shortdir"       #f)
+	   '("rundir_id"      #f)
+	   '("shortdir_id"    #f)
 	   '("item_path"      #f)
 	   '("state"          #f)
 	   '("status"         #f)
@@ -481,8 +481,8 @@
                      cpuload      REAL      DEFAULT -1,
                      diskfree     INTEGER   DEFAULT -1,
                      uname        TEXT      DEFAULT 'n/a', 
-                     rundir       TEXT      DEFAULT 'n/a',
-                     shortdir     TEXT      DEFAULT '',
+                     rundir_id    INTEGER   DEFAULT -1,
+                     shortdir_id  INTEGER   DEFAULT -1,
                      item_path    TEXT      DEFAULT '',
                      state        TEXT      DEFAULT 'NOT_STARTED',
                      status       TEXT      DEFAULT 'FAIL',
@@ -1111,7 +1111,7 @@
 (define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (let* ((qryvalstr       (case qryvals
 			    ((shortlist) "id,run_id,testname,item_path,state,status")
-			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
+			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment")
 			    (else        qryvals)))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
@@ -1184,36 +1184,40 @@
 	  -1 "-" "-"))
 
 
-(define (db:get-tests-for-run-state-status db run-id testpatt)
+(define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
 	 (tests-match-qry (tests:match->sqlqry testpatt))
 	 (qry             (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
-    (sqlite3:for-each-row
-     (lambda (id testname item-path state status)
-       ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-       (set! res (cons (vector id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-") res)))
-     db 
-     qry
-     run-id)
+    (db:with-db dbstruct run-id #f
+		(lambda (db)
+		  (sqlite3:for-each-row
+		   (lambda (id testname item-path state status)
+		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+		     (set! res (cons (vector id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-") res)))
+		   db 
+		   qry
+		   run-id)))
     res))
 
-(define (db:get-testinfo-state-status db test-id)
+(define (db:get-testinfo-state-status dbstruct run-id test-id)
   (let ((res            #f))
-    (sqlite3:for-each-row
-     (lambda (run-id testname item-path state status)
-       ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-       (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
-     db 
-     "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
-     test-id)
+    (db:with-db dbstruct #f
+		(lambda (db)
+		  (sqlite3:for-each-row
+		   (lambda (run-id testname item-path state status)
+		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
+		   db 
+		   "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
+		   test-id)))
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
-(define (db:get-tests-for-runs-mindata db run-ids testpatt states status not-in)
-  (db:get-tests-for-runs db run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+(define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states status not-in)
+  (db:get-tests-for-runs dbstruct run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
 ;; Convert calling routines to get list of run-ids and loop, do not use the get-tests-for-runs
 ;;
@@ -1330,7 +1334,7 @@
      testname item-path)
     res))
 
-(define db:test-record-qry-selector "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment,realdir_id")
+(define db:test-record-qry-selector "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment,shortdir_id")
 
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir_id decoding? Decide, decode here or where used? For the moment decode where used.
@@ -1338,9 +1342,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final_logf comment short-dir-id)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final_logf comment short-dir-id)
 		       res)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE run_id=?;")
@@ -1352,9 +1356,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)))
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	 test-id)
@@ -1367,9 +1371,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment realdir-id)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
 			   res)))
      (db:get-db dbstruct run-id) 
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
@@ -1906,7 +1910,7 @@
 	   ;; by getting the tests with matching name we are looking only at the matching test 
 	   ;; and related sub items
 	   ;; next should be using mt:get-tests-for-run?
-	   (let ((tests             (db:get-tests-for-run-state-status db run-id waitontest-name))
+	   (let ((tests             (db:get-tests-for-run-state-status dbstruct run-id waitontest-name))
 		 (ever-seen         #f)
 		 (parent-waiton-met #f)
 		 (item-waiton-met   #f))

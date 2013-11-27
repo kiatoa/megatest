@@ -198,10 +198,10 @@
   (mt:process-triggers test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
+(define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (rmt:get-test-info-by-id test-id))
+	 (testdat     (rmt:get-test-info-by-id run-id test-id))
 	 (run-id      (db:test-get-run_id testdat))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
@@ -290,10 +290,10 @@
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rmt:general-call 'set-test-comment cmt test-id)))))
+	  (rmt:general-call 'set-test-comment run-id cmt test-id)))))
 
 (define (tests:test-set-toplog! run-id test-name logf) 
-  (rmt:general-call 'tests:test-set-toplog logf run-id test-name))
+  (rmt:general-call 'tests:test-set-toplog run-id logf run-id test-name))
 
 (define (tests:summarize-items run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
@@ -590,8 +590,8 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (rmt:get-test-info-by-id test-id)))
+(define (test-get-kill-request run-id test-id) ;; run-id test-name itemdat)
+  (let* ((testdat   (rmt:get-test-info-by-id run-id test-id)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -606,12 +606,12 @@
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
-  (rmt:general-call 'update-cpuload-diskfree cpuload diskfree test-id)
+(define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
+  (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id)
   (if minutes 
-      (rmt:general-call 'update-run-duration minutes test-id))
+      (rmt:general-call 'update-run-duration run-id minutes test-id))
   (if (and uname hostname)
-      (rmt:general-call 'update-uname-host uname hostname test-id)))
+      (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
 (define (tests:set-full-meta-info test-id run-id minutes work-area)
   (let* ((num-records 0)
@@ -620,7 +620,7 @@
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
     (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
+    (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
 	  
 (define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))

@@ -160,16 +160,16 @@
 ;;======================================================================
 
 ;; speed up for common cases with a little logic
-(define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
+(define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (rmt:general-call 'state-status-msg newstate newstatus newcomment test-id))
+    (rmt:general-call 'state-status-msg run-id newstate newstatus newcomment test-id))
    ((and newstate newstatus)
-    (rmt:general-call 'state-status newstate newstatus test-id))
+    (rmt:general-call 'state-status run-id newstate newstatus test-id))
    (else
-    (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
-    (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
-    (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
+    (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
+    (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
+    (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
    (mt:process-triggers test-id newstate newstatus)
    #t)
 
