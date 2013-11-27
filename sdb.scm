@@ -22,13 +22,8 @@
 (declare (unit sdb))
 
 ;; 
-(define (sdb:open #!key (fname #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
-	    (exit))))
-  (let* ((dbpath    (conc *toppath* "/db/" (if fname fname "sdb.db"))) ;; fname)
+(define (sdb:open fname)
+  (let* ((dbpath    fname)
 	 (dbexists  (let ((fe (file-exists? dbpath)))
 		      (if fe 
 			  fe
@@ -79,12 +74,12 @@
 
 ;; Numbers get passed though in both directions
 ;;
-(define (make-sdb:qry #!key (fname #f))
-  (let ((sdb    #f) ;; (sdb:open fname: fname))
+(define (make-sdb:qry fname)
+  (let ((sdb    #f)
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
-      (if (not sdb)(set! sdb (sdb:open fname: fname)))
+      (if (not sdb)(set! sdb (sdb:open fname)))
       (case cmd
 	((finalize) (if sdb
 			(begin

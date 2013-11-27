@@ -385,6 +385,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      ((http)
 		       (set! *transport-type 'http)
 		       (server:ensure-running)
+		       ;; Get rid of this
+		       (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
+		       (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+
 		       (client:launch))
 		      (else ;; (fs)
 		       (debug:print 0 "ERROR: Should NOT be getting here! fs transport is no longer supported")

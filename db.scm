@@ -83,7 +83,7 @@
 ;; K E E P   F I L E D B   I N   dbstruct
 ;;======================================================================
 
-(define (db:get-filedb dbstruct)
+(define (db:get-filedb dbstruct run-id)
   (let ((db (vector-ref dbstruct 2)))
     (if db
 	db
@@ -121,9 +121,13 @@
 	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
 	  (if write-access
 	      (begin
+		(if (not dbexists)
+		    (begin
+		      (db:initialize-run-id-db db)
+		      (sdb:initialize db) 
+		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 0;")))
-	  (if (not dbexists)(db:initialize-run-id-db db))
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
 	  (if local
@@ -159,6 +163,15 @@
 	  (dbr:dbstruct-set-main! dbstruct db)
 	  db))))
 
+;; Make the dbstruct, setup up auxillary db's and call for main db at least once
+;;
+(define (db:setup)
+  (let ((dbstruct (make-dbr:dbstruct path: *toppath*)))
+    (db:get-db dbstruct #f) ;; force one call to main
+    (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
+    (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+    dbstruct))
+
 ;; sync all touched runs to disk
 (define (db:sync-touched dbstruct)
   (for-each
@@ -183,20 +196,24 @@
        (if (sqlite3:database? rundb)
 	   (sqlite3:finalize! rundb)
 	   (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
-   (hash-table-values (vector-ref dbstruct 1))))
+   (hash-table-values (vector-ref dbstruct 1)))
+  (sdb:qry 'finalize! #f)
+  (filedb:finalize-db! *fdb*))
 
 (define (open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
 	 (handler   (make-busy-timeout 3600)))
     (db:initialize-run-id-db db)
+    (sdb:initialize db) ;; for future use
     (sqlite3:set-busy-handler! db handler)
-    (set! sdb:qry (make-sdb:qry)) ;; we open the normalization helpers here
-    (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     db))
 
 ;; just tests, test_steps and test_data tables
 (define db:sync-tests-only
   (list
+   (list "strs"
+	 '("id"             #f)
+	 '("str"            #f))
    (list "tests" 
 	 '("id"             #f)
 	 '("run_id"         #f)
@@ -1605,7 +1622,7 @@
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
-  (let ((db  (db:get-db dbstruct rid)))
+  (let ((db  (db:get-db dbstruct run-id)))
   (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
       (db:general-call db 'set-test-start-time (list test-id)))
   (if msg
@@ -1615,7 +1632,7 @@
 (define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
-      (let ((db (db:get-db dbstruct rid)))
+      (let ((db (db:get-db dbstruct run-id)))
 	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
 	(if (equal? status "RUNNING")
 	    (db:general-call db 'top-test-set-running (list run-id test-name))

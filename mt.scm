@@ -127,9 +127,10 @@
 ;;  T R I G G E R S
 ;;======================================================================
 
-(define (mt:process-triggers test-id newstate newstatus)
-  (let* ((test-dat      (rmt:get-test-info-by-id test-id))
-	 (test-rundir   (filedb:get-path *fdb* (db:test-get-rundir test-dat)))
+(define (mt:process-triggers run-id test-id newstate newstatus)
+  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
+	 (test-rundir   ;; (filedb:get-path *fdb*
+	  (db:test-get-rundir test-dat)) ;; )
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
@@ -170,7 +171,7 @@
     (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
     (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
     (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
-   (mt:process-triggers test-id newstate newstatus)
+   (mt:process-triggers run-id test-id newstate newstatus)
    #t)
 
 (define (mt:lazy-get-test-info-by-id test-id)

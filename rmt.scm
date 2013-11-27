@@ -258,8 +258,8 @@
 (define (rmt:testmeta-update-field test-name fld val)
   (rmt:send-receive 'testmeta-update-field (list test-name fld val)))
 
-(define (rmt:test-data-rollup test-id status)
-  (rmt:send-receive 'test-data-rollup (list test-id status)))
+(define (rmt:test-data-rollup run-id test-id status)
+  (rmt:send-receive 'test-data-rollup (list run-id test-id status)))
 
 (define (rmt:csv->test-data test-id csvdata)
   (rmt:send-receive 'csv->test-data (list test-id csvdata)))

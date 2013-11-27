@@ -520,7 +520,7 @@
 					    "-"))) "Server run"))
 		   (th3 (make-thread http-transport:keep-running "Keep running")))
 	      ;; Database connection
-	      (set! *inmemdb*  (make-dbr:dbstruct path: *toppath*))
+	      (set! *inmemdb*  (db:setup))
 	      (thread-start! th2)
 	      (thread-start! th3)
 	      (set! *didsomething* #t)

@@ -238,13 +238,13 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:test-set-status-state test-id real-status state (if waived waived comment))
-	  (mt:process-triggers test-id state real-status)))
+	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
+	  (mt:process-triggers run-id test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(rmt:test-data-rollup test-id status))
+	(rmt:test-data-rollup run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 

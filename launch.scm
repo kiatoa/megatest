@@ -286,14 +286,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! test-id next-state "WARN" 
+							  (tests:test-set-status! run-id test-id next-state "WARN" 
 									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									  #f))
 							 ((pass)
-							  (tests:test-set-status! test-id next-state "PASS" #f #f))
+							  (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
-							  (tests:test-set-status! test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -523,11 +523,14 @@
 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
 	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
-	       (curr-test-path (if testinfo (filedb:get-path *fdb* (db:test-get-rundir testinfo)) #f)))
+	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
+							     ;; (db:get-path dbstruct
+				   (db:test-get-rundir testinfo) ;; )
+				   #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
-	  (rmt:general-call 'test-set-rundir run-id lnkpath run-id testname "") ;; toptest-path)
+	  (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
 	      (begin
@@ -710,7 +713,7 @@
     ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     ;; (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
-    (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
