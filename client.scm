@@ -59,6 +59,12 @@
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
   (push-directory *toppath*) ;; This is probably NOT needed 
+  ;; clients get the sdb:qry proc created here
+  (if (not sdb:qry)
+      (begin
+	(set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
+	(sdb:qry 'setup #f)))
+
   (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
   (let* ((hostinfo  (open-run-close tasks:get-best-server tasks:open-db)))
     (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)

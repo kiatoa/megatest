@@ -23,14 +23,14 @@
 
 ;; 
 (define (sdb:open fname)
-  (let* ((dbpath    fname)
-	 (dbexists  (let ((fe (file-exists? dbpath)))
+  (let* ((dbpath    (pathname-directory fname))
+	 (dbexists  (let ((fe (file-exists? fname)))
 		      (if fe 
 			  fe
 			  (begin
-			    (create-directory (conc *toppath* "/db") #t)
+			    (create-directory dbpath #t)
 			    #f))))
-	 (sdb        (sqlite3:open-database dbpath))
+	 (sdb        (sqlite3:open-database fname))
 	 (handler   (make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! sdb handler)
     (if (not dbexists)
@@ -43,7 +43,7 @@
                            (id  INTEGER PRIMARY KEY,
                             str TEXT,
                         CONSTRAINT str UNIQUE (str));")
-  (sqlite3:execute sdb "CREATE INDEX strindx ON strs (str);"))
+  (sqlite3:execute sdb "CREATE INDEX IF NOT EXISTS strindx ON strs (str);"))
 
 ;; (define sumup (let ((a 0))(lambda (x)(set! a (+ x a)) a)))
 
@@ -79,8 +79,11 @@
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
-      (if (not sdb)(set! sdb (sdb:open fname)))
       (case cmd
+	((setup)   (set! sdb (if (not sdb)
+				 (sdb:open (if var var fname)))))
+	((setdb)    (set! sdb var))
+	((getdb)    sdb)
 	((finalize) (if sdb
 			(begin
 			  (sqlite3:finalize! sdb)
@@ -98,5 +101,7 @@
 			     (string->number var))
 			 (sdb:id->string sdb icache var)
 			 var))
+	((passid)    var)
+	((passstr)   var)
 	(else #f)))))
 

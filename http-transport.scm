@@ -433,11 +433,12 @@
 	    (rem-time   #f))
 	(if *inmemdb* (db:sync-touched *inmemdb*))
 	(set! sync-time  (- (current-milliseconds) start-time))
-	;; (debug:print 0 "SYNC: time= " sync-time)
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
-	(if (and (< rem-time 4)
+	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
+	(if (and (<= rem-time 4)
 		 (> rem-time 0))
-	    (thread-sleep! rem-time)))
+	    (thread-sleep! rem-time)
+	    (thread-sleep! 4))) ;; fallback for if the math is changed ...
 
       ;; (thread-sleep! 4) ;; no need to do this very often
 
@@ -462,9 +463,12 @@
       (tasks:server-update-heartbeat tdb spid)
       
       ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
+
+      ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
       (set! last-access *last-db-access*)
       (mutex-unlock! *heartbeat-mutex*)
+
       ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
       (if (and *server-run*
 	       (> (+ last-access server-timeout)
@@ -526,6 +530,7 @@
 	      (set! *didsomething* #t)
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
+    (sdb:qry 'finalize)
     (exit)))
 
 (define (http-transport:server-signal-handler signum)

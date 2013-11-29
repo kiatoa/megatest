@@ -89,6 +89,7 @@
 (define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
 (define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
 (define-inline (db:test-get-uname        vec) (vector-ref vec 9))
+;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
 (define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
 (define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
 (define-inline (db:test-get-run_duration vec) (vector-ref vec 12))

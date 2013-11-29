@@ -90,6 +90,7 @@
 	   (process-signal pid signal/kill)
 	   (thread-start! th1))
        '(#t "exit process started")))
+    ((sdb-qry)                      (apply sdb:qry params))
 
     ;; TESTMETA
     ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))

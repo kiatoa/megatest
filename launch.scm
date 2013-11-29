@@ -525,7 +525,7 @@
 	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
 							     ;; (db:get-path dbstruct
-				   (db:test-get-rundir testinfo) ;; )
+				   (rmt:sdb-qry 'getstr (db:test-get-rundir testinfo)) ;; )
 				   #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?

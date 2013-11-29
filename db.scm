@@ -165,11 +165,20 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
-(define (db:setup)
-  (let ((dbstruct (make-dbr:dbstruct path: *toppath*)))
+(define (db:setup #!key (local #f))
+  (let ((dbstruct (make-dbr:dbstruct path: *toppath* local: local)))
     (db:get-db dbstruct #f) ;; force one call to main
-    (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
-    (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+    (if (not sdb:qry)
+	(begin
+	  (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
+	  (sdb:qry 'setup #f)
+	  ;; Initialize with some known needed strings, NOTE: set this up to only execute on first db initialization
+	  (for-each
+	   (lambda (str)
+	     (sdb:qry 'get-id str))
+	   (list "" "logs/final.log"))))
+    ;; (sdb:qry 'setdb (
+    ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     dbstruct))
 
 ;; sync all touched runs to disk
@@ -197,8 +206,8 @@
 	   (sqlite3:finalize! rundb)
 	   (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
    (hash-table-values (vector-ref dbstruct 1)))
-  (sdb:qry 'finalize! #f)
-  (filedb:finalize-db! *fdb*))
+  (sdb:qry 'finalize! #f))
+  ;; (filedb:finalize-db! *fdb*))
 
 (define (open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
@@ -228,7 +237,7 @@
 	 '("state"          #f)
 	 '("status"         #f)
 	 '("attemptnum"     #f)
-	 '("final_logf"     #f)
+	 '("final_logf_id"  #f)
 	 '("logdat"         #f)
 	 '("run_duration"   #f)
 	 '("comment"        #f)
@@ -287,7 +296,7 @@
 	   '("state"          #f)
 	   '("status"         #f)
 	   '("attemptnum"     #f)
-	   '("final_logf"     #f)
+	   '("final_logf_id"  #f)
 	   '("logdat"         #f)
 	   '("run_duration"   #f)
 	   '("comment"        #f)
@@ -504,7 +513,7 @@
                      state        TEXT      DEFAULT 'NOT_STARTED',
                      status       TEXT      DEFAULT 'FAIL',
                      attemptnum   INTEGER   DEFAULT 0,
-                     final_logf   TEXT      DEFAULT 'logs/final.log',
+                     final_logf_id INTEGER  DEFAULT 1, -- 'logs/final.log',
                      logdat       TEXT      DEFAULT '', 
                      run_duration INTEGER   DEFAULT 0,
                      comment      TEXT      DEFAULT '',
@@ -1128,7 +1137,7 @@
 (define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (let* ((qryvalstr       (case qryvals
 			    ((shortlist) "id,run_id,testname,item_path,state,status")
-			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment")
+			    ((#f)        "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf_id,comment")
 			    (else        qryvals)))
 	 (res            '())
 	 ;; if states or statuses are null then assume match all when not-in is false
@@ -1233,8 +1242,20 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
-(define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states status not-in)
-  (db:get-tests-for-runs dbstruct run-ids testpatt states status not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+(define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
+  (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+
+(define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses #!key (not-in #f)(qryvals #f))
+  (let ((res '()))
+    (for-each 
+     (lambda (run-id)
+       (set! res (append 
+		  res 
+		  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f qryvals))))
+     (if run-ids
+	 run-ids
+	 (db:get-all-run-ids dbstruct)))
+    res))
 
 ;; Convert calling routines to get list of run-ids and loop, do not use the get-tests-for-runs
 ;;
@@ -1351,7 +1372,7 @@
      testname item-path)
     res))
 
-(define db:test-record-qry-selector "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf,comment,shortdir_id")
+(define db:test-record-qry-selector "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir_id,item_path,run_duration,final_logf_id,comment,shortdir_id")
 
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir_id decoding? Decide, decode here or where used? For the moment decode where used.
@@ -1359,9 +1380,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final_logf comment short-dir-id)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final-logf-id comment short-dir-id)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final_logf comment short-dir-id)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run-duration final-logf-id comment short-dir-id)
 		       res)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE run_id=?;")
@@ -1373,9 +1394,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)))
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	 test-id)
@@ -1388,9 +1409,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final_logf comment short-dir-id)
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
 			   res)))
      (db:get-db dbstruct run-id) 
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
@@ -1690,7 +1711,7 @@
 	'(test-set-rundir-by-test-id "UPDATE tests SET rundir_id=? WHERE id=?")        ;; DONE
 	'(test-set-rundir         "UPDATE tests SET rundir_id=? AND testname=? AND item_path=?;") ;; DONE
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=?;")                  ;; DONE
-	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
+	'(tests:test-set-toplog   "UPDATE tests SET final_logf_id=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;") ;; DONE
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")       ;; DONE
 	'(update-test-state       "UPDATE tests SET state=? WHERE state=? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
@@ -2023,7 +2044,7 @@
 	 (mainqry (conc "SELECT
               t.testname,r.id,runname," keysstr ",t.testname,
               t.item_path,tm.description,t.state,t.status,
-              final_logf,run_duration, 
+              final_logf_id,run_duration, 
               strftime('%m/%d/%Y %H:%M:%S',datetime(t.event_time,'unixepoch'),'localtime'),
               tm.tags,r.owner,t.comment,
               author,

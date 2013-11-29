@@ -360,7 +360,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-list-runs")))
 	(if (setup-for-run)
 	    (begin
-
+	      (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
@@ -386,8 +386,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (set! *transport-type 'http)
 		       (server:ensure-running)
 		       ;; Get rid of this
-		       (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
-		       (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 
 		       (client:launch))
 		      (else ;; (fs)
@@ -620,7 +618,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (print   "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
 				     "\n         uname:    " (sdb:qry 'getstr (db:test-get-uname test))
-				     "\n         rundir:   " (filedb:get-path *fdb* (db:test-get-rundir test))
+				     "\n         rundir:   " (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
+								      (db:test-get-rundir test))
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
@@ -1198,7 +1197,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;     (close-socket *runremote*))
 
 (if sdb:qry (sdb:qry 'finalize #f))
-(if *fdb*   (filedb:finalize-db! *fdb*))
+;; (if *fdb*   (filedb:finalize-db! *fdb*))
 
 (if (not *didsomething*)
     (debug:print 0 help))

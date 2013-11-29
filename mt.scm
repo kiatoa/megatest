@@ -129,13 +129,14 @@
 
 (define (mt:process-triggers run-id test-id newstate newstatus)
   (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
-	 (test-rundir   ;; (filedb:get-path *fdb*
-	  (db:test-get-rundir test-dat)) ;; )
+	 (test-rundir   (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
+				 (db:test-get-rundir test-dat))) ;; )
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
-    (if (and (file-exists? test-rundir)
+    (if (and test-rundir   ;; #f means no dir set yet
+	     (file-exists? test-rundir)
 	     (directory? test-rundir))
 	(begin
 	  (push-directory test-rundir)

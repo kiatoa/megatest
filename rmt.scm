@@ -91,6 +91,10 @@
 (define (rmt:sync-inmem->db)
   (rmt:send-receive 'sync-inmem->db '()))
 
+(define (rmt:sdb-qry qry val)
+  ;; add caching if qry is 'getid or 'getstr
+  (rmt:send-receive 'sdb-qry (list qry val)))
+
 ;;======================================================================
 ;;  K E Y S 
 ;;======================================================================
@@ -146,7 +150,7 @@
 (define (rmt:get-matching-previous-test-run-records run-id test-name item-path)
   (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path)))
 
-(define (rmt:test-get-logfile-info run-id test-name)
+(define (rmt:test-get-logfileg-info run-id test-name)
   (rmt:send-receive 'test-get-logfile-info (list run-id test-name)))
 
 (define (rmt:test-get-records-for-index-file run-id test-name)
