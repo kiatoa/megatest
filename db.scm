@@ -136,7 +136,9 @@
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
 	  (if local
-	      db
+	      (begin
+		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem db) ;; direct access ...
+		db)
 	      (begin
 		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem inmem)
 		(db:sync-tables db:sync-tests-only db inmem)
@@ -867,18 +869,17 @@
 ;; runpatts: patt1,patt2 ...
 ;;
 (define (db:get-runs dbstruct runpatt count offset keypatts)
-  (let* ((db         (db:get-db dbstruct #f))
-	 (res       '())
+  (let* ((res       '())
 	 (keys       (db:get-keys dbstruct))
 	 (runpattstr (db:patt->like "runname" runpatt))
 	 (remfields  (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header     (append keys remfields))
 	 (keystr     (conc (keys->keystr keys) ","
-		           (string-intersperse remfields ",")))
+			   (string-intersperse remfields ",")))
 	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE (" runpattstr ") " ;; runname LIKE ? "
-		           ;; Generate: " AND x LIKE 'keypatt' ..."
-		           (if (null? keypatts) ""
-		               (conc " AND "
+			   ;; Generate: " AND x LIKE 'keypatt' ..."
+			   (if (null? keypatts) ""
+			       (conc " AND "
 				     (string-join 
 				      (map (lambda (keypatt)
 					     (let ((key  (car keypatt))
@@ -886,20 +887,22 @@
 					       (db:patt->like key patt)))
 					   keypatts)
 				      " AND ")))
-		           " AND state != 'deleted' ORDER BY event_time DESC "
-		           (if (number? count)
-		               (conc " LIMIT " count)
-		               "")
-		           (if (number? offset)
-		               (conc " OFFSET " offset)
-		               ""))))
+			   " AND state != 'deleted' ORDER BY event_time DESC "
+			   (if (number? count)
+			       (conc " LIMIT " count)
+			       "")
+			   (if (number? offset)
+			       (conc " OFFSET " offset)
+			       ""))))
     (debug:print-info 11 "db:get-runs START qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
-    (sqlite3:for-each-row
-     (lambda (a . x)
-       (set! res (cons (apply vector a x) res)))
-     db
-     qrystr
-     )
+    (db:with-db dbstruct #f #f
+		(lambda (db)		
+		  (sqlite3:for-each-row
+		   (lambda (a . x)
+		     (set! res (cons (apply vector a x) res)))
+		   db
+		   qrystr
+		   )))
     (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
@@ -1186,13 +1189,15 @@
 				";"
 				)))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
-    (sqlite3:for-each-row 
-     (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-       (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
-     (db:get-db dbstruct run-id)
-     qry
-     run-id
-     )
+    (db:with-db dbstruct run-id #f
+		(lambda (db)
+		  (sqlite3:for-each-row 
+		   (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+		     (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+		   db
+		   qry
+		   run-id
+		   )))
     (case qryvals
       ((shortlist)(map db:test-short-record->norm res))
       ((#f)       res)
