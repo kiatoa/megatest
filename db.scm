@@ -66,12 +66,14 @@
 ;;     'read  read data
 ;;
 (define (db:done-with dbstruct run-id mod-read)
-  (mutex-lock! *rundb-mutex*)
-  (if (eq? mod-read 'mod)
-      (dbr:dbstruct-set-runvec-val! dbstruct run-id 'mtime (current-milliseconds))
-      (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rtime (current-milliseconds)))
-  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #f)
-  (mutex-unlock! *rundb-mutex*))
+  (if (not (sqlite3:database? dbstruct))
+      (begin
+	(mutex-lock! *rundb-mutex*)
+	(if (eq? mod-read 'mod)
+	    (dbr:dbstruct-set-runvec-val! dbstruct run-id 'mtime (current-milliseconds))
+	    (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rtime (current-milliseconds)))
+	(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #f)
+	(mutex-unlock! *rundb-mutex*))))
 
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
@@ -204,7 +206,7 @@
     db))
 
 ;; sync all touched runs to disk
-(define (db:sync-touched dbstruct)
+(define (db:sync-touched dbstruct #!key (force-sync #f))
   (let ((tot-synced 0))
     (for-each
      (lambda (runvec)
@@ -212,15 +214,17 @@
 	     (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
 	     (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
 	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem))))
-	 (if (> mtime stime)
-	     (let ((num-sunced (db:sync-tables db:sync-tests-only inmem rundb)))
+	 (if (or (> mtime stime) force-sync)
+	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem rundb)))
 	       (set! tot-synced (+ tot-synced num-synced))
-	       (vector-set! runvec (dbr:dbstruct-field-name->run 'stime (current-milliseconds)))))))
-     (hash-table-values (vector-ref dbstruct 1)))))
+	       (vector-set! runvec (dbr:dbstruct-field-name->num 'stime) (current-milliseconds))))))
+     (hash-table-values (vector-ref dbstruct 1)))
+    tot-synced))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   ;; finalize main.db
+  (db:sync-touched dbstruct force-sync: #t)
   (sqlite3:finalize! (db:get-db dbstruct #f))
   (for-each
    (lambda (runvec)
@@ -255,13 +259,13 @@
 	 '("cpuload"        #f)
 	 '("diskfree"       #f)
 	 '("uname"          #f)
-	 '("rundir"      #f)
-	 '("shortdir"    #f)
+	 '("rundir"         #f)
+	 '("shortdir"       #f)
 	 '("item_path"      #f)
 	 '("state"          #f)
 	 '("status"         #f)
 	 '("attemptnum"     #f)
-	 '("final_logf"  #f)
+	 '("final_logf"     #f)
 	 '("logdat"         #f)
 	 '("run_duration"   #f)
 	 '("comment"        #f)
@@ -269,7 +273,7 @@
 	 '("fail_count"     #f)
 	 '("pass_count"     #f)
 	 '("archived"       #f))
-   (list "test_steps"
+  (list "test_steps"
 	 '("id"             #f)
 	 '("test_id"        #f)
 	 '("stepname"       #f)
@@ -293,7 +297,7 @@
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
-(define (db:tbls db)
+(define (db:sync-main-list db)
   (let ((keys  (db:get-keys db)))
     (list
      (list "keys"
@@ -306,37 +310,6 @@
 	     (map (lambda (k)(list k #f))
 		  (append keys
 			  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count"))))
-     (list "tests" 
-	   '("id"             #f)
-	   '("run_id"         #f)
-	   '("testname"       #f)
-	   '("host"           #f)
-	   '("cpuload"        #f)
-	   '("diskfree"       #f)
-	   '("uname"          #f)
-	   '("rundir"         #f)
-	   '("shortdir"       #f)
-	   '("item_path"      #f)
-	   '("state"          #f)
-	   '("status"         #f)
-	   '("attemptnum"     #f)
-	   '("final_logf"     #f)
-	   '("logdat"         #f)
-	   '("run_duration"   #f)
-	   '("comment"        #f)
-	   '("event_time"     #f)
-	   '("fail_count"     #f)
-	   '("pass_count"     #f)
-	   '("archived"       #f))
-     (list "test_steps"
-	   '("id"             #f)
-	   '("test_id"        #f)
-	   '("stepname"       #f)
-	   '("state"          #f)
-	   '("status"         #f)
-	   '("event_time"     #f)
-	   '("comment"        #f)
-	   '("logfile"        #f))
      (list "test_meta"
 	   '("id"             #f)
 	   '("testname"       #f)
@@ -429,9 +402,6 @@
 	       (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
        (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
     tot-count))
-
-(define (db:sync-back)
-  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)) ;; (db:sync-to *inmemdb* *db*))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1427,16 +1397,18 @@
     res))
 
 (define (db:replace-test-records dbstruct run-id testrecs)
-  (let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
-	 (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
-	 (qry    (sqlite3:prepare (db:get-db dbstruct run-id) qrystr)))
-    (debug:print 8 "INFO: replace-test-records, qrystr=" qrystr)
-    (for-each 
-     (lambda (rec)
-       ;; (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ", "))
-       (apply sqlite3:execute qry (vector->list rec)))
-     testrecs)
-    (sqlite3:finalize! qry)))
+  (db:with-db dbstruct run-id #t 
+	      (lambda (db)
+		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
+		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
+		       (qry    (sqlite3:prepare db qrystr)))
+		  ;; (debug:print 8 "INFO: replace-test-records, qrystr=" qrystr)
+		  (for-each 
+		   (lambda (rec)
+		     (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ", "))
+		     (apply sqlite3:execute qry (vector->list rec)))
+		   testrecs)
+		  (sqlite3:finalize! qry)))))
 	
 
 ;; Get test data using test_id

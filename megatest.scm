@@ -1193,6 +1193,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	   (mtdb     (if toppath (db:open-megatest-db)))
 	   (run-ids  (if toppath (db:get-run-ids mtdb))))
+      ;; sync runs, test_meta etc.
+      (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
       (for-each 
        (lambda (run-id)
 	 (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
