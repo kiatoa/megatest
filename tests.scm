@@ -23,7 +23,7 @@
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
-(declare (uses sdb))
+;; (declare (uses sdb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -136,8 +136,10 @@
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
 	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
-	 (test-rundir (sdb:qry 'passstr (db:test-get-rundir testdat)))
-	 (prev-rundir (sdb:qry 'passstr (db:test-get-rundir prev-testdat)))
+	 (test-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir testdat)) ;; )
+	 (prev-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir prev-testdat)) ;; )
 	 (waivers     (configf:section-vars testconfig "waivers"))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")

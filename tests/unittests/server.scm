@@ -63,9 +63,8 @@
 (test "get tests (some data)"  1  (length (rmt:get-tests-for-run 1 "%" '() '() #f #f #f #f #f #f)))
 (test "get test id"            1  (rmt:get-test-id 1 "test1" ""))
 
-(print "SKIPPING sync back for now")
-;; (test "sync back"              #t (> (rmt:sync-inmem->db) 0))
-;; (test "get test id from main"  1  (db:get-test-id *db* 1 "test1" ""))
+(test "sync back"              #t (> (rmt:sync-inmem->db) 0))
+(test "get test id from main"  1  (db:get-test-id *db* 1 "test1" ""))
 
 (test "get keys"               #t (list? (rmt:get-keys)))
 (test "set comment"            #t (begin (rmt:general-call 'set-test-comment 1 "this is a comment" 1) #t))
@@ -80,8 +79,8 @@
 			    (list?   data)
 			    (vector? (car data)))))
 
-(test "get local testinfo" "test1" (vector-ref (db:get-testinfo-state-status *db* 1) 2))
-(test "get testinfo"       "test1" (vector-ref (rmt:get-testinfo-state-status 1) 2))
+(test "get local testinfo" "test1" (vector-ref (db:get-testinfo-state-status *db* 1 1) 2))
+(test "get testinfo"       "test1" (vector-ref (rmt:get-testinfo-state-status 1 1) 2))
 
 ;;======================================================================
 ;; D B

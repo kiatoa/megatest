@@ -530,7 +530,7 @@
 	      (set! *didsomething* #t)
 	      (thread-join! th2))
 	    (debug:print 0 "ERROR: Failed to setup for megatest")))
-    (sdb:qry 'finalize)
+    ;; (sdb:qry 'finalize)
     (exit)))
 
 (define (http-transport:server-signal-handler signum)

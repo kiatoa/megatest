@@ -20,7 +20,7 @@
 (declare (uses server))
 (declare (uses runs))
 (declare (uses rmt))
-(declare (uses filedb))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -129,8 +129,8 @@
 
 (define (mt:process-triggers run-id test-id newstate newstatus)
   (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
-	 (test-rundir   (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
-				 (db:test-get-rundir test-dat))) ;; )
+	 (test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
+	  (db:test-get-rundir test-dat)) ;; ) ;; )
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))

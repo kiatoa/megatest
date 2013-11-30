@@ -27,8 +27,8 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-(declare (uses sdb))
-(declare (uses filedb))
+;; (declare (uses sdb))
+;; (declare (uses filedb))
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
@@ -245,6 +245,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 			"-convert-to-norm"
 			"-convert-to-old"
+			"-import-megatest.db"
 
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -360,7 +361,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-list-runs")))
 	(if (setup-for-run)
 	    (begin
-	      (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
@@ -617,9 +618,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    (begin
 			      (print   "         cpuload:  " (db:test-get-cpuload test)
 				     "\n         diskfree: " (db:test-get-diskfree test)
-				     "\n         uname:    " (sdb:qry 'getstr (db:test-get-uname test))
-				     "\n         rundir:   " (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
-								      (db:test-get-rundir test))
+				     "\n         uname:    " ;; (sdb:qry 'getstr 
+				     (db:test-get-uname test) ;; )
+				     "\n         rundir:   " ;; (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
+				     (db:test-get-rundir test) ;; )
 				     )
 			      ;; Each test
 			      ;; DO NOT remote run
@@ -1175,7 +1177,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
 	     (for-each
 	      (lambda (item)
-		(let ((newval (sdb:qry 'getid (cadr item))))
+		(let ((newval ;; (sdb:qry 'getid 
+		       (cadr item))) ;; )
 		  (if (not (equal? newval (cadr item)))
 		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
 		  (sqlite3:execute qry newval (car item))))
@@ -1184,6 +1187,22 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (db:close-all dbstruct)
        (list "uname" "rundir" "final_logf" "comment"))
       (set! *didsomething* #t)))
+
+(if (args:get-arg "-import-megatest.db")
+    (let* ((toppath  (setup-for-run))
+	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
+	   (mtdb     (if toppath (db:open-megatest-db)))
+	   (run-ids  (if toppath (db:get-run-ids mtdb))))
+      (for-each 
+       (lambda (run-id)
+	 (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
+	   (debug:print 0 "INFO: Updating " (length testrecs) " records for run-id=" run-id)
+	   (db:replace-test-records dbstruct run-id testrecs)))
+       run-ids)
+      (set! *didsomething* #t)
+      (db:close-all dbstruct)))
+
+      
 
 ;;======================================================================
 ;; Exit and clean up
@@ -1196,7 +1215,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; 	 (socket? *runremote*))
 ;;     (close-socket *runremote*))
 
-(if sdb:qry (sdb:qry 'finalize #f))
+;; (if sdb:qry (sdb:qry 'finalize #f))
 ;; (if *fdb*   (filedb:finalize-db! *fdb*))
 
 (if (not *didsomething*)

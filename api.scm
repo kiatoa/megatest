@@ -72,7 +72,7 @@
 				      (db:with-db dbstruct run-id #t ;; these are all for modifying the db
 						  (lambda (db)
 						    (db:general-call db stmtname realparams)))))
-    ((sync-inmem->db)               (db:sync-back))
+    ((sync-inmem->db)               (db:sync-touched dbstruct))
     ((kill-server)
      (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
      (let ((hostname (car  *runremote*))

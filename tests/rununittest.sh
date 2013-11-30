@@ -9,7 +9,7 @@
 # Clean setup
 #
 rm -f simplerun/megatest.db simplerun/monitor.db simplerun/db/monitor.db
-rm -rf simplelinks/ simpleruns/
+rm -rf simplelinks/ simpleruns/ simplerun/db/
 mkdir -p simplelinks simpleruns
 (cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm)
 

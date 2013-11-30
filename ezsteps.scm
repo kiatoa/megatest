@@ -18,8 +18,8 @@
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
-(declare (uses sdb))
-(declare (uses filedb))
+;; (declare (uses sdb))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -27,7 +27,8 @@
 (include "run_records.scm")
 
 (define (ezsteps:run-from testdat start-step-name run-one)
-  (let* ((test-run-dir  (filedb:get-path *fdb* (db:test-get-rundir testdat)))
+  (let* ((test-run-dir  ;; (filedb:get-path *fdb* 
+	  (db:test-get-rundir testdat)) ;; )
 	 (testconfig    (read-config (conc test-run-dir "/testconfig") #f #t environ-patt: "pre-launch-env-vars"))
 	 (ezstepslst    (hash-table-ref/default testconfig "ezsteps" '()))
 	 (run-mutex     (make-mutex))

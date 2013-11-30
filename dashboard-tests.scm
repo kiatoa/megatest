@@ -28,8 +28,8 @@
 (declare (uses gutils))
 (declare (uses rmt))
 (declare (uses ezsteps))
-(declare (uses sdb))
-(declare (uses filedb))
+;; (declare (uses sdb))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -78,7 +78,8 @@
 			 (iup:label "TestComment                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (sdb:qry 'getstr (db:test-get-comment testdat))))
+			   ;; (sdb:qry 'getstr 
+			   (db:test-get-comment testdat))) ;; )
 	    (store-label "testid"
 			 (iup:label "TestId                             "
 				    #:expand "HORIZONTAL")
@@ -185,11 +186,14 @@
 	   (list
 	    ;; NOTE: Yes, the host can change!
 	    (store-label "HostName"
-			 (iup:label (sdb:qry 'getstr (db:test-get-host testdat)) #:expand "HORIZONTAL")
+			 (iup:label ;; (sdb:qry 'getstr 
+			  (db:test-get-host testdat) ;; )
+			  #:expand "HORIZONTAL")
 			 (lambda (testdat)(db:test-get-host testdat)))
 	    (store-label "Uname"
 			 (iup:label "                                                   " #:expand "HORIZONTAL")
-			 (lambda (testdat)(sdb:qry 'getstr (db:test-get-uname testdat))))
+			 (lambda (testdat) ;; (sdb:qry 'getstr 
+			   (db:test-get-uname testdat))) ;; )
 	    (store-label "DiskFree"
 			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))
@@ -528,7 +532,8 @@
 				 (set! testdat newtestdat)
 				 (set! teststeps    (dashboard-tests:get-compressed-steps db test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
-				 (set! rundir       (filedb:get-path *fdb* (db:test-get-rundir testdat)))
+				 (set! rundir       ;; (filedb:get-path *fdb* 
+				       (db:test-get-rundir testdat)) ;; )
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
