@@ -1338,7 +1338,7 @@
 						  (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 					      ))
 				      ;; Only delete the records *after* removing the directory. If things fail we have a record 
-				      (rmt:delete-test-records (db:test-get-id test))
+				      (rmt:delete-test-records (db:test-get-run_id test)(db:test-get-id test))
 				      (if (not (null? tal))
 					  (loop (car tal)(cdr tal))))))
 			       ((set-state-status)

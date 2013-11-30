@@ -99,18 +99,18 @@
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-test-db-by-test-id-local test-id #!key (work-area #f))
+(define (tdb:open-test-db-by-test-id-local dbstruct run-id test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(open-run-close db:test-get-rundir-from-test-id #f test-id))))
+			(db:test-get-rundir-from-test-id dbstruct run-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-run-close-db-by-test-id-local test-id work-area proc . params)
+(define (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id work-area proc . params)
   (let* ((test-path (if work-area
 			work-area
-			(open-run-close db:test-get-rundir-from-test-id #f test-id)))
+			(db:test-get-rundir-from-test-id dbstruct run-id test-id)))
 	 (tdb        (open-test-db test-path)))
     (apply proc tdb params)))
 
@@ -359,8 +359,8 @@
 		     (string<? (conc time-a)(conc time-b))))))))
 
 ;; 
-(define (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (tdb:open-test-db-by-test-id-local test-id work-area: work-area)))
+(define (tdb:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (tdb:open-test-db-by-test-id dbstruct run-id test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

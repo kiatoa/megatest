@@ -49,10 +49,10 @@
   license GPL, Copyright (C) Matt Welland 2013
 
 Usage: dashboard [options]
-  -h                : this help
-  -server host:port : connect to host:port instead of db access
-  -test testid      : control test identified by testid
-  -guimonitor       : control panel for runs
+  -h                   : this help
+  -server host:port    : connect to host:port instead of db access
+  -test run-id,test-id : control test identified by testid
+  -guimonitor          : control panel for runs
 
 Misc
   -rows N         : set number of rows
@@ -1363,7 +1363,8 @@ Misc
 						  (let* ((toolpath (car (argv)))
 							 (buttndat (hash-table-ref *buttondat* button-key))
 							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
-							 (cmd  (conc toolpath " -test " test-id "&")))
+							 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+							 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
 					;(print "Launching " cmd)
 						    (system cmd))))))
 	  (hash-table-set! *buttondat* button-key (vector 0 "100 100 100" button-key #f #f)) 
@@ -1497,13 +1498,16 @@ Misc
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
- ((args:get-arg "-test")
-  (let ((testid (string->number (args:get-arg "-test"))))
-    (if (and (number? testid)
-	     (>= testid 0))
-	(examine-test testid)
+ ((args:get-arg "-test") ;; run-id,test-id
+  (let* ((dat     (map string->number (string-split (args:get-arg "-test") ",")))
+	 (run-id  (car dat))
+	 (test-id (cadr dat)))
+    (if (and (number? run-id)
+	     (number? test-id)
+	     (>= test-id 0))
+	(examine-test run-id test-id)
 	(begin
-	  (debug:print 3 "INFO: tried to open test with invalid test-id. " (args:get-arg "-test"))
+	  (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
   (gui-monitor *db*))

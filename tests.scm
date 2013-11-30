@@ -615,19 +615,20 @@
   (if (and uname hostname)
       (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
-(define (tests:set-full-meta-info test-id run-id minutes work-area)
+;; This one is for running with no db access (i.e. via rmt: internally)
+(define (tests:set-full-meta-info  test-id run-id minutes work-area)
   (let* ((num-records 0)
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
+    (tdb:update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
 	  
 (define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)))
+    (tdb:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)))
 	 
 ;;======================================================================
 ;; A R C H I V I N G

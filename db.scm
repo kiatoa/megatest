@@ -326,84 +326,92 @@
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 (define (db:sync-tables tbls fromdb todb)
-  (let ((stmts       (make-hash-table)) ;; table-field => stmt
-	(all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
-	(numrecs     (make-hash-table))
-	(start-time  (current-milliseconds))
-	(tot-count   0))
-    (for-each ;; table
-     (lambda (tabledat)
-       (let* ((tablename  (car tabledat))
-	      (fields     (cdr tabledat))
-	      (num-fields (length fields))
-	      (field->num (make-hash-table))
-	      (num->field (apply vector (map car fields)))
-	      (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
-				" FROM " tablename ";"))
-	      (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
-				" VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
-	      (fromdat    '())
-	      (todat      (make-hash-table))
-	      (count      0))
+  (cond
+   ((not fromdb) (debug:print 0 "ERROR: db:sync-tables called with fromdb missing") -1)
+   ((not todb)   (debug:print 0 "ERROR: db:sync-tables called with todb missing") -2)
+   ((not (sqlite3:database? fromdb))
+    (debug:print 0 "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
+   ((not (sqlite3:database? todb))
+    (debug:print 0 "ERROR: db:sync-tables called with todb not a database " todb) -4)
+   (else
+    (let ((stmts       (make-hash-table)) ;; table-field => stmt
+	  (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+	  (numrecs     (make-hash-table))
+	  (start-time  (current-milliseconds))
+	  (tot-count   0))
+      (for-each ;; table
+       (lambda (tabledat)
+	 (let* ((tablename  (car tabledat))
+		(fields     (cdr tabledat))
+		(num-fields (length fields))
+		(field->num (make-hash-table))
+		(num->field (apply vector (map car fields)))
+		(full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
+				  " FROM " tablename ";"))
+		(full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
+				  " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
+		(fromdat    '())
+		(todat      (make-hash-table))
+		(count      0))
 
-	 ;; set up the field->num table
-	 (for-each
-	  (lambda (field)
-	    (hash-table-set! field->num field count)
-	    (set! count (+ count 1)))
-	  fields)
+	   ;; set up the field->num table
+	   (for-each
+	    (lambda (field)
+	      (hash-table-set! field->num field count)
+	      (set! count (+ count 1)))
+	    fields)
 
-	 ;; read the source table
-	 (sqlite3:for-each-row
-	  (lambda (a . b)
-	    (set! fromdat (cons (apply vector a b) fromdat)))
-	  fromdb
-	  full-sel)
+	   ;; read the source table
+	   (sqlite3:for-each-row
+	    (lambda (a . b)
+	      (set! fromdat (cons (apply vector a b) fromdat)))
+	    fromdb
+	    full-sel)
 
-	 (debug:print 0 "INFO: found " (length fromdat) " records to sync")
+	   (debug:print 0 "INFO: found " (length fromdat) " records to sync")
 
-	 ;; read the target table
-	 (sqlite3:for-each-row
-	  (lambda (a . b)
-	    (hash-table-set! todat a (apply vector a b)))
-	  todb
-	  full-sel)
-
-	 ;; first pass implementation, just insert all changed rows
-	 (let ((stmth (sqlite3:prepare todb full-ins)))
-	   (sqlite3:with-transaction
+	   ;; read the target table
+	   (sqlite3:for-each-row
+	    (lambda (a . b)
+	      (hash-table-set! todat a (apply vector a b)))
 	    todb
-	    (lambda ()
-	      (for-each ;; 
-	       (lambda (fromrow)
-		 (let* ((a    (vector-ref fromrow 0))
-			(curr (hash-table-ref/default todat a #f))
-			(same #t))
-		   (let loop ((i 0))
-		     (if (or (not curr)
-			     (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
-			 (set! same #f))
-		     (if (and same
-			      (< i (- num-fields 1)))
-			 (loop (+ i 1))))
-		   (if (not same)
-		       (begin
-			 (apply sqlite3:execute stmth (vector->list fromrow))
-			 (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
-	       fromdat)))
-	   (sqlite3:finalize! stmth))))
-     tbls)
-    (let ((runtime (- (current-milliseconds) start-time)))
-      (debug:print 0 "INFO: db sync, total run time " runtime " ms")
-      (for-each 
-       (lambda (dat)
-	 (let ((tblname (car dat))
-	       (count   (cdr dat)))
-	   (set! tot-count (+ tot-count count))
-	   (if (> count 0)
-	       (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
-       (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
-    tot-count))
+	    full-sel)
+
+	   ;; first pass implementation, just insert all changed rows
+	   (let ((stmth (sqlite3:prepare todb full-ins)))
+	     (sqlite3:with-transaction
+	      todb
+	      (lambda ()
+		(for-each ;; 
+		 (lambda (fromrow)
+		   (let* ((a    (vector-ref fromrow 0))
+			  (curr (hash-table-ref/default todat a #f))
+			  (same #t))
+		     (let loop ((i 0))
+		       (if (or (not curr)
+			       (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
+			   (set! same #f))
+		       (if (and same
+				(< i (- num-fields 1)))
+			   (loop (+ i 1))))
+		     (if (not same)
+			 (begin
+			   (apply sqlite3:execute stmth (vector->list fromrow))
+			   (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+		 fromdat)))
+	     (sqlite3:finalize! stmth))))
+       tbls)
+      (let ((runtime (- (current-milliseconds) start-time)))
+	(debug:print 0 "INFO: db sync, total run time " runtime " ms")
+	(for-each 
+	 (lambda (dat)
+	   (let ((tblname (car dat))
+		 (count   (cdr dat)))
+	     (set! tot-count (+ tot-count count))
+	     (if (> count 0)
+		 (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
+	 (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
+      tot-count))))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -854,15 +862,6 @@
 	  (debug:print 0 "ERROR: Called without all necessary keys")
 	  #f))))
 
-(define (db:get-all-run-ids db)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (run-id)
-       (set! res (cons run-id res)))
-     db 
-     "SELECT DISTINCT run_id FROM tests;")
-    res))
-
 ;; replace header and keystr with a call to runs:get-std-run-fields
 ;;
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
@@ -950,21 +949,21 @@
     ;; First get all the runname/run-ids
     (sqlite3:for-each-row
      (lambda (run-id runname)
-       (set! runs-info (cons (list runname run-id) runs-info)))
+       (set! runs-info (cons (list run-id runname) runs-info)))
      (db:get-db dbstruct #f)
      "SELECT id,runname FROM runs;")
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
-       (let ((run-name (cadr run-info))
-	     (run-id   (car  run-info)))
+       (let ((run-id   (car  run-info))
+	     (run-name (cadr run-info)))
 	 (sqlite3:for-each-row
 	  (lambda (state count)
 	    (if (string? state)
 		(let* ((stateparts (string-split state "|"))
 		       (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
 		  (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
-		  (set! res (cons (list runname newstate count) res)))))
+		  (set! res (cons (list run-name newstate count) res)))))
 	  (db:get-db dbstruct run-id)
 	  "SELECT state||'|'||status AS s,count(id) FROM tests AS t ORDER BY s DESC;" )
     ;; (set! res (reverse res))
@@ -1483,7 +1482,7 @@
      (if logfile logfile "")))) ;; )
    
 ;; db-get-test-steps-for-run
-(define (db:get-steps-for-test db run-id test-id)
+(define (db:get-steps-for-test dbstruct run-id test-id)
   (let* ((db (db:get-db dbstruct run-id))
 	 (res '()))
     (sqlite3:for-each-row 
@@ -1494,7 +1493,7 @@
      test-id)
     (reverse res)))
 
-(define (db:get-steps-data db run-id test-id)
+(define (db:get-steps-data dbstruct run-id test-id)
   (let ((db  (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row 
@@ -1788,7 +1787,7 @@
 			       killserver
 			       ))
 
-(define (db:login db calling-path calling-version client-signature)
+(define (db:login dbstruct calling-path calling-version client-signature)
   (if (and (equal? calling-path *toppath*)
 	   (equal? megatest-version calling-version))
       (begin
@@ -1796,27 +1795,12 @@
 	'(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
       (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))
 
-(define (db:process-write db request-item)
-  (let ((stmt-key (vector-ref request-item 0))
-	(query    (vector-ref request-item 1))
-	(params   (vector-ref request-item 2))
-	(queryh   (sqlite3:prepare db query)))
-    (apply sqlite3:execute stmt params)
-    #f))
-;; DISABLING FOR NOW 
-;; DISABLING FOR NOW (define *number-of-writes*         0)
-;; DISABLING FOR NOW (define *writes-total-delay*       0)
-;; DISABLING FOR NOW (define *total-non-write-delay*    0)
-;; DISABLING FOR NOW (define *number-non-write-queries* 0)
-;; DISABLING FOR NOW 
-;; DISABLING FOR NOW ;; The queue is a list of vectors where the zeroth slot indicates the type of query to
-;; DISABLING FOR NOW ;; apply and the second slot is the time of the query and the third entry is a list of 
 (define (db:general-call db stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
 				       (string->symbol stmtname)
 				       stmtname)
 				   db:queries)))
-		 (if q (car q) #f))))
+ 		 (if q (car q) #f))))
     (apply sqlite3:execute db query params)
     #t))
 
@@ -1825,8 +1809,9 @@
 ;; 
 ;; Run this server-side
 ;;
-(define (db:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+(define (db:get-previous-test-run-record dbstruct run-id test-name item-path)
+  (let* ((db      (db:get-db dbstruct #f)) ;; 
+	 (keys    (db:get-keys db))
 	 (selstr  (string-intersperse  keys ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f))
@@ -1864,8 +1849,9 @@
 ;;
 ;; Run this remotely!!
 ;;
-(define (db:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
+(define (db:get-matching-previous-test-run-records dbstruct run-id test-name item-path)
+  (let* ((db      (db:get-db dbstruct #f))
+	 (keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
@@ -1891,7 +1877,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct run-id hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -1944,7 +1930,7 @@
 (define (db:testmeta-update-field dbstruct testname field value)
   (sqlite3:execute (db:get-db dbstruct #f) (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
 
-(define (db:testmeta-get-all db)
+(define (db:testmeta-get-all dbstruct)
   (let ((res '()))
     (sqlite3:for-each-row
      (lambda (a . b)

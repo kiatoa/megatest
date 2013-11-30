@@ -222,7 +222,7 @@
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
-(define (set-fields-panel db test-id testdat #!key (db #f))
+(define (set-fields-panel dbstruct run-id test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
 	(newstate   #f))
@@ -231,7 +231,7 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(iup:textbox #:action (lambda (val a b)
-					(db:test-set-state-status-by-id db test-id #f #f b)
+					(rmt:test-set-state-status-by-id run-id test-id #f #f b)
 					;; IDEA: Just set a variable with the proc to call?
 					(set! newcomment b))
 			     #:value (db:test-get-comment testdat)
@@ -242,7 +242,7 @@
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (db:test-set-state-status-by-id db test-id state #f #f)
+								    (rmt:test-set-state-status-by-id run-id test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -420,8 +420,8 @@
 		      (else #f)))))
       res))
 
-(define (dashboard-tests:get-compressed-steps db test-id)
-  (let* ((steps-data  (db:get-steps-for-test db test-id))
+(define (dashboard-tests:get-compressed-steps dbstruct run-id test-id)
+  (let* ((steps-data  (db:get-steps-for-test dbstruct run-id test-id))
 	 (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
@@ -450,11 +450,10 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (conc *toppath* "db/main.db"))
-	 (db            (make-dbr:dbstruct path: *toppath* local: #t))
-	 (tdb           (tdb:open-test-db-by-test-id-local test-id))
-	 (testdat       (db:get-test-info-by-id db test-id))
+(define (examine-test run-id test-id) ;; run-id run-key origtest)
+  (let* ((db-path       (conc *toppath* "/db/" run-id ".db"))
+	 (dbstruct      (make-dbr:dbstruct path: *toppath* local: #t))
+	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
@@ -462,22 +461,23 @@
 	(begin
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
-	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (db:get-run-info db run-id) #f))
+	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
+	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
+	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
+	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        logfile)
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps db test-id) '()))
+	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (db:testmeta-get-record db testname)))
+				  (let ((tm (db:testmeta-get-record dbstruct testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -525,12 +525,12 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (db:get-test-info-by-id db test-id )))))
+						     (db:get-test-info-by-id dbstruct run-id test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dashboard-tests:get-compressed-steps db test-id))
+				 (set! teststeps    (dashboard-tests:get-compressed-steps dbstruct run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
@@ -646,7 +646,7 @@
 			      (iup:vbox ; #:expand "YES"
 			       ;; The run and test info
 			       (iup:hbox  ; #:expand "YES"
-				(run-info-panel db keydat testdat runname)
+				(run-info-panel dbstruct keydat testdat runname)
 				(test-info-panel testdat store-label widgets)
 				(test-meta-panel testmeta store-meta))
 			       (host-info-panel testdat store-label)
@@ -664,7 +664,7 @@
 					   (apply 
 					    iup:hbox
 					    (list command-text-box command-launch-button))))
-			       (set-fields-panel db test-id testdat)
+			       (set-fields-panel dbstruct run-id test-id testdat)
 			       (let ((tabs 
 				      (iup:tabs
 				       ;; Replace here with matrix
@@ -772,7 +772,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (tdb:open-run-close-db-by-test-id-local test-id #f tdb:read-test-data test-id "%")))
+										    (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id #f tdb:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
