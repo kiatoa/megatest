@@ -175,14 +175,6 @@
    (mt:process-triggers run-id test-id newstate newstatus)
    #t)
 
-(define (mt:lazy-get-test-info-by-id test-id)
-  (let* ((tdat (hash-table-ref/default *test-info* test-id #f)))
-    (if (and tdat 
-	     (< (current-seconds)(+ (vector-ref tdat 0) 10)))
-	(vector-ref tdat 1)
-	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
-	(cdb:get-test-info-by-id *runremote* test-id))))
-
 (define (mt:lazy-read-test-config test-name)
   (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))
     (if tconf

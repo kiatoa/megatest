@@ -1592,28 +1592,6 @@
 ;; Misc. test related queries
 ;;======================================================================
 
-;; MUST BE CALLED local!
-;;
-(define (db:test-get-paths-matching keynames target fnamepatt #!key (res '()))
-  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
-  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
-	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
-	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
-	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
-	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
-					testpatt
-					statepatt
-					statuspatt
-					runname)))
-    (if fnamepatt
-	(apply append 
-	       (map (lambda (p)
-		      (if (directory-exists? p)
-			  (glob (conc p "/" fnamepatt))
-			  '()))
-		    paths-from-db))
-	paths-from-db)))
-
 (define (db:test-get-paths-matching-keynames-target-new dbstruct keynames target res testpatt statepatt statuspatt runname)
   (let* ((row-ids '())
 	 (keystr (string-intersperse 
@@ -1625,7 +1603,7 @@
 	 (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';")))
 	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
-    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstqry=" tstqry)
+    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" tstsqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -1736,8 +1714,9 @@
                                     ELSE status
                                     END WHERE id=?;") ;; DONE
 	'(test-set-log            "UPDATE tests SET final_logf=? WHERE id=?;")      ;; DONE
-	'(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")        ;; DONE
-	'(test-set-rundir         "UPDATE tests SET rundir=? AND testname=? AND item_path=?;") ;; DONE
+	;; '(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")        ;; DONE
+	;; '(test-set-rundir         "UPDATE tests SET rundir=? AND testname=? AND item_path=?;") ;; DONE
+	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=?;")
 	'(delete-tests-in-state   "DELETE FROM tests WHERE state=?;")                  ;; DONE
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;") ;; DONE

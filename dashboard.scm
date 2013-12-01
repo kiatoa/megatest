@@ -143,7 +143,7 @@ Misc
 (define *status-ignore-hash* (make-hash-table))
 (define *state-ignore-hash*  (make-hash-table))
 
-(define *db-file-path* (conc *toppath* "/megatest.db"))
+(define *db-file-path* (conc *toppath* "/db/main.db"))
 
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
@@ -1418,14 +1418,14 @@ Misc
 
 ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
-(define *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db")))
+(define *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db")))
 (define *last-recalc-ended-time* 0)
 
 (define (dashboard:been-changed)
-  (> (file-modification-time (conc *toppath* "/megatest.db")) *last-db-update-time*))
+  (> (file-modification-time (conc *toppath* "/db/main.db")) *last-db-update-time*))
 
 (define (dashboard:set-db-update-time)
-  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/megatest.db"))))
+  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db"))))
 
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
   (or please-update-buttons

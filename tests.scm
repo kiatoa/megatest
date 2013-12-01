@@ -195,9 +195,9 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! test-id state status)
-  (rmt:test-set-status-state test-id status state #f)
-  (mt:process-triggers test-id state status))
+(define (tests:test-force-state-status! run-id test-id state status)
+  (rmt:test-set-status-state run-id test-id status state #f)
+  (mt:process-triggers run-id test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
 (define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
@@ -280,8 +280,8 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    ;; This was run remote, don't think that makes sense.
-	    (db:csv->test-data #f test-id
+	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
+	    (rmt:csv->test-data run-id test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
@@ -388,6 +388,29 @@
 		  (tests:test-set-toplog! run-id test-name outputfilename)
 		  )))))))
 
+;; MUST BE CALLED local!
+;;
+(define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
+  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
+  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
+					testpatt
+					statepatt
+					statuspatt
+					runname)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (if (directory-exists? p)
+			  (glob (conc p "/" fnamepatt))
+			  '()))
+		    paths-from-db))
+	paths-from-db)))
+
+			      
 ;;======================================================================
 ;; Gather data from test/task specifications
 ;;======================================================================
@@ -469,7 +492,7 @@
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
 	      (test-id     (rmt:get-test-id run-id test-name item-path))
-	      (tdat        (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -486,7 +509,7 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
-				      (wtdat          (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -616,19 +639,19 @@
       (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
 ;; This one is for running with no db access (i.e. via rmt: internally)
-(define (tests:set-full-meta-info  test-id run-id minutes work-area)
+(define (tests:set-full-meta-info test-id run-id minutes work-area)
   (let* ((num-records 0)
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tdb:update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
+    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
 	  
 (define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (tdb:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)))
+    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)))
 	 
 ;;======================================================================
 ;; A R C H I V I N G

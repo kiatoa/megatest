@@ -13,7 +13,7 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras)
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -153,7 +153,7 @@
 	  (tests:set-full-meta-info test-id run-id 0 work-area)
 
 	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
-	  (tests:test-force-state-status! test-id "REMOTEHOSTSTART" "n/a")
+	  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 	  (if (args:get-arg "-xterm")
@@ -181,7 +181,7 @@
 				 
 
 				 (thread-sleep! 0.3)
-				 (tests:test-force-state-status! test-id "RUNNING" "n/a")
+				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
 				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
@@ -239,7 +239,7 @@
 						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
-						   (rmt:teststep-set-status! test-id stepname "start" "-" #f #f)
+						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -256,7 +256,7 @@
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
-						       (rmt:teststep-set-status! test-id stepname "end" exinfo #f logfna))
+						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
 							 (rmt:test-set-log! test-id (conc stepname ".html")))
 						     ;; set the test final status
@@ -358,7 +358,7 @@
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 					     (if keep-going
 						 (loop (calc-minutes)))))))
-				   (tests:update-central-meta-info test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
+				   (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
@@ -371,7 +371,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (rmt:get-testinfo-state-status test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (rmt:get-testinfo-state-status run-id test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -502,7 +502,7 @@
 
     ;; Update the rundir path in the test record for all
     ;; (cdb:test-set-rundir-by-test-id *runremote* test-id (filedb:register-path *fdb* lnkpathf))
-    (rmt:general-call 'test-set-rundir-by-test-id run-id lnkpathf test-id)
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -518,26 +518,6 @@
     ;; This wass highly inefficient, one db write for every subtest, potentially
     ;; thousands of unnecessary updates, cache the fact it was set and don't set it 
     ;; again. 
-
-    ;; NB - This is not working right - some top tests are not getting the path set!!!
-
-    (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
-	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
-							     ;; (db:get-path dbstruct
-				   ;; (rmt:sdb-qry 'getstr 
-				   (db:test-get-rundir testinfo) ;; ) ;; )
-				   #f)))
-	  (hash-table-set! *toptest-paths* testname curr-test-path)
-	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
-	  (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
-	  (if (or (not curr-test-path)
-		  (not (directory-exists? toptest-path)))
-	      (begin
-		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
-		(create-directory toptest-path #t)
-		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
     ;; Now create the link from the test path to the link tree, however
     ;; if the test is iterated it is necessary to create the parent path
@@ -570,6 +550,35 @@
 	   (exit 1))
 	 (create-symbolic-link toptest-path lnkpath)))
     
+    ;; NB - This was not working right - some top tests are not getting the path set!!!
+    ;;
+    ;; Do the setting of this record after the paths are created so that the shortdir can 
+    ;; be set to the real directory location. This is safer for future clean up if the link
+    ;; tree is damaged or lost.
+    ;; 
+    (if (not (hash-table-ref/default *toptest-paths* testname #f))
+	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
+	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
+							     ;; (db:get-path dbstruct
+				   ;; (rmt:sdb-qry 'getstr 
+				   (db:test-get-rundir testinfo) ;; ) ;; )
+				   #f)))
+	  (hash-table-set! *toptest-paths* testname curr-test-path)
+	  ;; NB// Was this for the test or for the parent in an iterated test?
+	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
+	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
+			    (if (file-exists? lnkpath)
+				(resolve-pathname lnkpath)
+				lnkpath)
+			    testname "")
+	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
+	  (if (or (not curr-test-path)
+		  (not (directory-exists? toptest-path)))
+	      (begin
+		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
+		(create-directory toptest-path #t)
+		(hash-table-set! *toptest-paths* testname toptest-path)))))
+
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
     (if (not not-iterated) ;; this is an iterated test

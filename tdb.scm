@@ -189,12 +189,12 @@
 ;; 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (tdb:load-test-data test-id)
+(define (tdb:load-test-data run-id test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (rmt:csv->test-data test-id lin)
+	  (rmt:csv->test-data run-id test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
@@ -359,8 +359,8 @@
 		     (string<? (conc time-a)(conc time-b))))))))
 
 ;; 
-(define (tdb:update-testdat-meta-info dbstruct run-id test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (tdb:open-test-db-by-test-id dbstruct run-id test-id work-area: work-area)))
+(define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

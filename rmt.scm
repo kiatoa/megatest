@@ -113,7 +113,12 @@
   (rmt:send-receive 'get-test-id (list run-id testname item-path)))
 
 (define (rmt:get-test-info-by-id run-id test-id)
-  (rmt:send-receive 'get-test-info-by-id (list run-id test-id)))
+  (if (and (number? run-id)(number? test-id))
+      (rmt:send-receive 'get-test-info-by-id (list run-id test-id))
+      (begin
+	(debug:print 0 "ERROR: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
+	(print-call-chain)
+	#f)))
 
 (define (rmt:test-get-rundir-from-test-id run-id test-id)
   (rmt:send-receive 'test-get-rundir-from-test-id (list run-id test-id)))
@@ -133,7 +138,12 @@
   (rmt:send-receive 'set-tests-state-status (list run-id testnames currstate currstatus newstate newstatus)))
 
 (define (rmt:get-tests-for-run run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
-  (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)))
+  (if (number? run-id)
+      (rmt:send-receive 'get-tests-for-run (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))
+      (begin
+	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
+	(print-call-chain)
+	'())))
 
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
   (rmt:send-receive 'get-tests-for-runs-mindata (list run-ids testpatt states status not-in)))
@@ -232,13 +242,13 @@
 (define (rmt:get-steps-for-test test-id)
   (rmt:send-receive 'get-steps-data (list test-id)))
 
-(define (rmt:teststep-set-status! test-id teststep-name state-in status-in comment logfile)
+(define (rmt:teststep-set-status! run-id test-id teststep-name state-in status-in comment logfile)
   (let* ((state     (items:check-valid-items "state" state-in))
 	 (status    (items:check-valid-items "status" status-in)))
     (if (or (not state)(not status))
 	(debug:print 3 "WARNING: Invalid " (if status "status" "state")
 		     " value \"" (if status state-in status-in) "\", update your validvalues section in megatest.config"))
-    (rmt:send-receive 'teststep-set-status! (list test-id teststep-name state-in status-in comment logfile))))
+    (rmt:send-receive 'teststep-set-status! (list run-id test-id teststep-name state-in status-in comment logfile))))
 
 (define (rmt:get-steps-for-test test-id)
   (rmt:send-receive 'get-steps-for-test (list test-id)))
@@ -265,5 +275,5 @@
 (define (rmt:test-data-rollup run-id test-id status)
   (rmt:send-receive 'test-data-rollup (list run-id test-id status)))
 
-(define (rmt:csv->test-data test-id csvdata)
-  (rmt:send-receive 'csv->test-data (list test-id csvdata)))
+(define (rmt:csv->test-data run-id test-id csvdata)
+  (rmt:send-receive 'csv->test-data (list run-id test-id csvdata)))

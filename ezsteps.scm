@@ -35,6 +35,7 @@
 	 (rollup-status 0)
 	 (exit-info     (vector #t #t #t))
 	 (test-id       (db:test-get-id testdat))
+	 (run-id        (db:test-get-run_id testdat))
 	 (test-name     (db:test-get-testname testdat))
 	 (kill-job      #f)) ;; for future use (on re-factoring with launch.scm code
     (let loop ((count 5))
@@ -82,7 +83,7 @@
 		  (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 		  
 		  (debug:print 4 "script: " script)
-		  (rmt:teststep-set-status! #f test-id stepname "start" "-" #f #f)
+		  (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
 		  ;; now launch
 		  (let ((pid (process-run script)))
 		    (let processloop ((i 0))
@@ -99,7 +100,7 @@
 				  ))
 		    (let ((exinfo (vector-ref exit-info 2))
 			  (logfna (if logpro-used (conc stepname ".html") "")))
-		      (rmt:teststep-set-status! #f test-id stepname "end" exinfo #f logfna))
+		      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 		    (if logpro-used
 			(rmt:test-set-log! test-id (conc stepname ".html")))
 		    ;; set the test final status
@@ -141,7 +142,7 @@
 	  ;; Once done with step/steps update the test record
 	  ;;
 	  (let* ((item-path (db:test-get-item-path testdat)) ;; (item-list->path itemdat))
-		 (testinfo  (cdb:get-test-info-by-id *runremote* test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
+		 (testinfo  (rmt:get-testinfo-by-id run-id test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
 	    ;; Am I completed?
 	    (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		(let ((new-state  (if kill-job "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
