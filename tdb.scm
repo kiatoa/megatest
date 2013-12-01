@@ -198,7 +198,7 @@
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
-  (rmt:test-data-rollup test-id #f))
+  (rmt:test-data-rollup run-id test-id #f))
 
 (define (tdb:get-prev-tol-for-test tdb test-id category variable)
   ;; Finish me?
