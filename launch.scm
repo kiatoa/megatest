@@ -258,7 +258,7 @@
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
-							 (rmt:test-set-log! test-id (conc stepname ".html")))
+							 (rmt:test-set-log! run-id test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -389,7 +389,8 @@
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
 		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
-		    (tests:test-set-status! test-id 
+		    (tests:test-set-status! run-id 
+					    test-id 
 					    new-state
 					    new-status
 					    (args:get-arg "-m") #f)

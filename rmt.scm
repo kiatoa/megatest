@@ -160,7 +160,7 @@
 (define (rmt:get-matching-previous-test-run-records run-id test-name item-path)
   (rmt:send-receive 'get-matching-previous-test-run-records (list run-id test-name item-path)))
 
-(define (rmt:test-get-logfileg-info run-id test-name)
+(define (rmt:test-get-logfile-info run-id test-name)
   (rmt:send-receive 'test-get-logfile-info (list run-id test-name)))
 
 (define (rmt:test-get-records-for-index-file run-id test-name)
@@ -193,7 +193,7 @@
   (rmt:send-receive 'roll-up-pass-fail-counts (list run-id test-name item-path status)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
-  (rmt:general-call 'update-fail-pass-counts run-id test-name run-id test-name run-id test-name))
+  (rmt:general-call 'update-fail-pass-counts (list run-id test-name run-id test-name run-id test-name)))
 
 ;;======================================================================
 ;;  R U N S

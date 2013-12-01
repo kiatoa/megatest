@@ -1029,7 +1029,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(let* ((msg    (args:get-arg "-m"))
 		       (numoth (length (hash-table-keys otherdata))))
 		  ;; Convert to rpc inside the tests:test-set-status! call, not here
-		  (tests:test-set-status! test-id state newstatus msg otherdata work-area: work-area))))
+		  (tests:test-set-status! run-id test-id state newstatus msg otherdata work-area: work-area))))
 	  (if (sqlite3:database? db)(sqlite3:finalize! db))
 	  (set! *didsomething* #t))))
 

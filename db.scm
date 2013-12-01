@@ -1138,69 +1138,74 @@
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
-  (let* ((qryvalstr       (case qryvals
-			    ((shortlist) "id,run_id,testname,item_path,state,status")
-			    ((#f)        db:test-record-qry-selector) ;; "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
-			    (else        qryvals)))
-	 (res            '())
-	 ;; if states or statuses are null then assume match all when not-in is false
-	 (states-qry      (if (null? states) 
-			      #f
-			      (conc " state "  
-				    (if not-in
-					" NOT IN ('"
-					" IN ('") 
-				    (string-intersperse states   "','")
-				    "')")))
-	 (statuses-qry    (if (null? statuses)
-			      #f
-			      (conc " status "
-				    (if not-in 
-					" NOT IN ('"
-					" IN ('") 
-				    (string-intersperse statuses "','")
-				    "')")))
-	 (states-statuses-qry 
-	  (cond 
-	   ((and states-qry statuses-qry)
-	    (conc " AND ( " states-qry " AND " statuses-qry " ) "))
-	   (states-qry  
-	    (conc " AND " states-qry))
-	   (statuses-qry 
-	    (conc " AND " statuses-qry))
-	   (else "")))
-	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT " qryvalstr
-				" FROM tests WHERE run_id=? AND state != 'DELETED' "
-				states-statuses-qry
-				(if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
-				(case sort-by
-				  ((rundir)      " ORDER BY length(rundir) ")
-				  ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
-				  ((statestatus) (conc " ORDER BY state " (if  sort-order (conc sort-order ",") "") " status "))
-				  ((event_time)  " ORDER BY event_time ")
-				  (else          (if (string? sort-by)
-						     (conc " ORDER BY " sort-by " ")
-						     " ")))
-				(if sort-order sort-order " ")
-				(if limit  (conc " LIMIT " limit)   " ")
-				(if offset (conc " OFFSET " offset) " ")
-				";"
-				)))
-    (debug:print-info 8 "db:get-tests-for-run qry=" qry)
-    (db:with-db dbstruct run-id #f
-		(lambda (db)
-		  (sqlite3:for-each-row 
-		   (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-		     (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
-		   db
-		   qry
-		   run-id
-		   )))
-    (case qryvals
-      ((shortlist)(map db:test-short-record->norm res))
-      ((#f)       res)
-      (else       res))))
+  (if (not (number? run-id))
+      (begin
+	(debug:print 0 "ERROR: call to db:get-tests-for-run with bad run-id=" run-id)
+	(print-call-chain)
+	'())
+      (let* ((qryvalstr       (case qryvals
+				((shortlist) "id,run_id,testname,item_path,state,status")
+				((#f)        db:test-record-qry-selector) ;; "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
+				(else        qryvals)))
+	     (res            '())
+	     ;; if states or statuses are null then assume match all when not-in is false
+	     (states-qry      (if (null? states) 
+				  #f
+				  (conc " state "  
+					(if not-in
+					    " NOT IN ('"
+					    " IN ('") 
+					(string-intersperse states   "','")
+					"')")))
+	     (statuses-qry    (if (null? statuses)
+				  #f
+				  (conc " status "
+					(if not-in 
+					    " NOT IN ('"
+					    " IN ('") 
+					(string-intersperse statuses "','")
+					"')")))
+	     (states-statuses-qry 
+	      (cond 
+	       ((and states-qry statuses-qry)
+		(conc " AND ( " states-qry " AND " statuses-qry " ) "))
+	       (states-qry  
+		(conc " AND " states-qry))
+	       (statuses-qry 
+		(conc " AND " statuses-qry))
+	       (else "")))
+	     (tests-match-qry (tests:match->sqlqry testpatt))
+	     (qry             (conc "SELECT " qryvalstr
+				    " FROM tests WHERE run_id=? AND state != 'DELETED' "
+				    states-statuses-qry
+				    (if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+				    (case sort-by
+				      ((rundir)      " ORDER BY length(rundir) ")
+				      ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
+				      ((statestatus) (conc " ORDER BY state " (if  sort-order (conc sort-order ",") "") " status "))
+				      ((event_time)  " ORDER BY event_time ")
+				      (else          (if (string? sort-by)
+							 (conc " ORDER BY " sort-by " ")
+							 " ")))
+				    (if sort-order sort-order " ")
+				    (if limit  (conc " LIMIT " limit)   " ")
+				    (if offset (conc " OFFSET " offset) " ")
+				    ";"
+				    )))
+	(debug:print-info 8 "db:get-tests-for-run run-id=" run-id ", qry=" qry)
+	(db:with-db dbstruct run-id #f
+		    (lambda (db)
+		      (sqlite3:for-each-row 
+		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
+			 (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+		       db
+		       qry
+		       run-id
+		       )))
+	(case qryvals
+	  ((shortlist)(map db:test-short-record->norm res))
+	  ((#f)       res)
+	  (else       res)))))
 
 (define (db:test-short-record->norm inrec)
   ;;  "id,run_id,testname,item_path,state,status"
@@ -1656,14 +1661,14 @@
       (db:general-call db 'state-status-msg (list state status msg test-id))
 	(db:general-call db 'state-status     (list state status test-id)))))
 
-(define (db:roll-up-pass-fail-counts db run-id test-name item-path status)
+(define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
       (let ((db (db:get-db dbstruct run-id)))
-	(db:general-call db 'update-pass-fail-counts (list run-id test-name run-id test-name run-id test-name))
+	(db:general-call db 'update-pass-fail-counts (list test-name test-name test-name))
 	(if (equal? status "RUNNING")
-	    (db:general-call db 'top-test-set-running (list run-id test-name))
-	    (db:general-call db 'top-test-set-per-pf-counts (list run-id test-name run-id test-name run-id test-name)))
+	    (db:general-call db 'top-test-set-running (list test-name))
+	    (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name test-name)))
 	#f)
       #f))
 
