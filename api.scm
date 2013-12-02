@@ -73,23 +73,23 @@
 						  (lambda (db)
 						    (db:general-call db stmtname realparams)))))
     ((sync-inmem->db)               (db:sync-touched dbstruct force-sync: #t))
-    ((kill-server)
-     (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
-     (let ((hostname (car  *runremote*))
-	   (port     (cadr *runremote*))
-	   (pid      (if (null? params) #f (car params)))
-	   (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
-       (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
-       (debug:print-info 1 "current pid=" (current-process-id))
-       (open-run-close tasks:server-deregister tasks:open-db 
-		       hostname
-		       port: port)
-       (set! *server-run* #f)
-       (thread-sleep! 3)
-       (if pid 
-	   (process-signal pid signal/kill)
-	   (thread-start! th1))
-       '(#t "exit process started")))
+    ;; ((kill-server)
+    ;;  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
+    ;;  (let ((hostname (car  *runremote*))
+    ;;        (port     (cadr *runremote*))
+    ;;        (pid      (if (null? params) #f (car params)))
+    ;;        (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
+    ;;    (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+    ;;    (debug:print-info 1 "current pid=" (current-process-id))
+    ;;    (open-run-close tasks:server-deregister tasks:open-db 
+    ;;     	       hostname
+    ;;     	       port: port)
+    ;;    (set! *server-run* #f)
+    ;;    (thread-sleep! 3)
+    ;;    (if pid 
+    ;;        (process-signal pid signal/kill)
+    ;;        (thread-start! th1))
+    ;;    '(#t "exit process started")))
     ((sdb-qry)                      (apply sdb:qry params))
 
     ;; TESTMETA

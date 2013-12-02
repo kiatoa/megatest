@@ -115,7 +115,7 @@
    "available"                ;; state
    (common:version-signature) ;; mt_version
    -1                         ;; interface
-   -1                         ;; transport
+   "http"                     ;; transport
    run-id
    ))
 

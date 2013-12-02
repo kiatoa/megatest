@@ -372,26 +372,22 @@
 	 (debug:print-info 11 "got res=" res)
 	 res)))))
 
-(define (http-transport:client-connect iface port)
+(define (http-transport:client-connect run-id iface port)
   (let* ((login-res   #f)
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
 	 (serverdat   (list iface port uri-dat uri-api-dat)))
-    (set! *runremote* serverdat) ;; may or may not be good ...
-    (set! login-res (rmt:login))
+    (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
+    (set! login-res (rmt:login run-id))
     (if (and (list? login-res)
 	     (car login-res))
 	(begin
 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-	  (set! *runremote* serverdat)
+	  (hash-table-set! *runremote* run-id serverdat)
 	  serverdat)
 	(begin
 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
 	  (exit 1)))))
-;; 	  (set! *runremote* #f)
-;; 	  (set! *transport-type* 'fs)
-;; 	  #f))))
-
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.

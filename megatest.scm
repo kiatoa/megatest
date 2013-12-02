@@ -366,7 +366,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-show-cmdinfo"
 		       "-list-runs")))
 	(if (setup-for-run)
-	    (begin
+	    (let ((run-id    (and (args:get-arg "-run-id")
+				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
@@ -391,10 +392,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (case chosen-transport
 		      ((http)
 		       (set! *transport-type 'http)
-		       (server:ensure-running)
-		       ;; Get rid of this
-
-		       (client:launch))
+		       (if run-id (server:ensure-running run-id))
+		       (client:launch run-id))
 		      (else ;; (fs)
 		       (debug:print 0 "ERROR: Should NOT be getting here! fs transport is no longer supported")
 		       (set! *transport-type* 'fs)

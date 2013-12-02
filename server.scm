@@ -119,15 +119,15 @@
      (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
      result)))
 
-(define (server:ensure-running)
-  (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
+(define (server:ensure-running run-id)
+  (let loop ((servers  (open-run-close tasks:get-server tasks:open-db run-id))
 	     (trycount 0))
     (if (or (not servers)
 	    (null? servers))
 	(begin
 	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 	      (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-				 " -server - -daemonize")))
+				 " -server - -daemonize -run-id " run-id)))
 		(debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
 		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
 		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own

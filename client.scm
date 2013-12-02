@@ -52,39 +52,44 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup #!key (numtries 3))
+(define (client:setup run-id #!key (numtries 3))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
-  (push-directory *toppath*) ;; This is probably NOT needed 
+  ;; (push-directory *toppath*) ;; This is probably NOT needed 
   ;; clients get the sdb:qry proc created here
   ;; (if (not sdb:qry)
   ;;     (begin
   ;;       (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
   ;;       (sdb:qry 'setup #f)))
-
-  (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
-  (let* ((hostinfo  (open-run-close tasks:get-best-server tasks:open-db)))
-    (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-    (set! *transport-type* (if hostinfo 
-    			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
-			       'fs))
-    (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
-    (case *transport-type* 
-      ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-      ((http)
-       (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				      (tasks:hostinfo-get-port hostinfo)))
-      ((zmq)
-       (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				     (tasks:hostinfo-get-port      hostinfo)
-				     (tasks:hostinfo-get-pubport   hostinfo)))
-      (else  ;; default to fs
-       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
-       (exit)))
-    (pop-directory)))
+  (let ((hostinfo (and run-id (hash-table-ref/default *runremote* run-id #f))))
+    (debug:print-info 11 "for run-id=" run-id ", *transport-type* is " *transport-type*)
+    (if hostinfo
+	hostinfo ;; have hostinfo - just return it
+	(let* ((hostinfo  (open-run-close tasks:get-server tasks:open-db run-id))
+	       (transport (if hostinfo 
+			      (string->symbol (tasks:hostinfo-get-transport hostinfo))
+			      'http)))
+	  (hash-table-set! *runremote* run-id hostinfo)
+	  (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
+	  (debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
+	  (case *transport-type* 
+	    ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+	    ((http)
+	     ;; this saves the hostinfo in the *runremote* hash and returns it
+	     (http-transport:client-connect run-id 
+					    (tasks:hostinfo-get-interface hostinfo)
+					    (tasks:hostinfo-get-port hostinfo)))
+	    ((zmq)
+	     (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
+					   (tasks:hostinfo-get-port      hostinfo)
+					   (tasks:hostinfo-get-pubport   hostinfo)))
+	    (else  ;; default to fs
+	     (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
+	     (exit)))))))
+;;	  (pop-directory)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
@@ -105,11 +110,14 @@
      (thread-join! th2))))
 
 ;; client:launch
-(define (client:launch)
+;; Need to set the signal handler somewhere other than here as this
+;; routine will go away.
+;;
+(define (client:launch run-id)
   (set-signal-handler! signal/int client:signal-handler)
-   (if (client:setup)
-       (debug:print-info 2 "connected as client")
-       (begin
-	 (debug:print 0 "ERROR: Failed to connect as client")
-	 (exit))))
+  (if (client:setup run-id)
+      (debug:print-info 2 "connected as client")
+      (begin
+	(debug:print 0 "ERROR: Failed to connect as client")
+	(exit))))
 
