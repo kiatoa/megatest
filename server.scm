@@ -44,7 +44,7 @@
 ;;
 
 ;; all routes though here end in exit ...
-(define (server:launch transport)
+(define (server:launch transport run-id)
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -54,8 +54,8 @@
   (set! *transport-type* transport)
   (case transport
     ;; ((fs)   (exit)) ;; there is no "fs" server transport
-    ((fs http) (http-transport:launch))
-    ((zmq)     (zmq-transport:launch))
+    ((fs http) (http-transport:launch run-id))
+    ((zmq)     (zmq-transport:launch run-id))
     (else
      (debug:print "WARNING: unrecognised transport " transport)
      (exit))))

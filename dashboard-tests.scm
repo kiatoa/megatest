@@ -142,7 +142,7 @@
   (let* ((run-id     (db:test-get-run_id testdat))
 	 (rundat     (db:get-run-info db run-id))
 	 (header     (db:get-header rundat))
-	 (event_time (db:get-value-by-header (db:get-row rundat)
+	 (event_time (db:get-value-by-header (db:get-rows rundat)
 					     (db:get-header rundat)
 					     "event_time")))
     (iup:frame 
@@ -464,7 +464,7 @@
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
 	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
-	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
+	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
 	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))

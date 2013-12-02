@@ -477,7 +477,7 @@
 ;;
 (define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat)
   (let* ((item-path (item-list->path itemdat))
-	 (runname  (db:get-value-by-header (db:get-row run-info)
+	 (runname  (db:get-value-by-header (db:get-rows run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end

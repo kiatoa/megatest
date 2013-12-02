@@ -172,7 +172,7 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
-(define (db:setup #!key (local #f))
+(define (db:setup run-id #!key (local #f))
   (let ((dbstruct (make-dbr:dbstruct path: *toppath* local: local)))
     (db:get-db dbstruct #f) ;; force one call to main
     ;; (if (not sdb:qry)
@@ -774,9 +774,8 @@
 	(set! *db-keys* res)
 	res)))
 
-;; 
+;; look up values in a header/data structure
 (define (db:get-value-by-header row header field)
-  (debug:print-info 4 "db:get-value-by-header row: " row " header: " header " field: " field)
   (if (null? header) #f
       (let loop ((hed (car header))
 		 (tal (cdr header))
@@ -784,6 +783,11 @@
 	(if (equal? hed field)
 	    (vector-ref row n)
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
+
+;; Accessors for the header/data structure
+;; get rows and header from 
+(define (db:get-header vec)(vector-ref vec 0))
+(define (db:get-rows   vec)(vector-ref vec 1))
 
 ;;======================================================================
 ;;  R U N S
@@ -977,7 +981,7 @@
 ;; get runs by list of criteria
 ;; register a test run with the db
 ;;
-;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;; Use: (db:get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
 (define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
@@ -1015,7 +1019,7 @@
 		   runnamepatt)))
     (vector header res)))
 
-;; use (get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;; use (get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 (define (db:get-run-info dbstruct run-id)
   ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
   ;;    (hash-table-ref *run-info-cache* run-id)

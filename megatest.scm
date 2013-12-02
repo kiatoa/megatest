@@ -32,6 +32,7 @@
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
+(declare (uses tasks)) ;; only used for debugging.
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -203,6 +204,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-test-files"  ;; -test-paths is for listing all
 			"-load"        ;; load and exectute a scheme file
 			"-dumpmode"
+			"-run-id"
 			) 
 		 (list  "-h"
 			"-version"
@@ -345,9 +347,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;;
     (let ((tl        (setup-for-run))
 	  (transport (or (configf:lookup *configdat* "setup" "transport")
-			 (args:get-arg "-transport" "http"))))
-      (debug:print 2 "Launching server using transport " transport)
-      (server:launch (string->symbol transport)))
+			 (args:get-arg "-transport" "http")))
+	  (run-id    (and (args:get-arg "-run-id")
+			  (string->number (args:get-arg "-run-id")))))
+      (debug:print 2 "Launching server using transport " transport " for run-id=" run-id)
+      (if run-id
+	  (server:launch (string->symbol transport) run-id)
+	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
     ;;

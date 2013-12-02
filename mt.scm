@@ -39,7 +39,7 @@
 ;; get runs by list of criteria
 ;; register a test run with the db
 ;;
-;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
 (define (mt:get-runs-by-patt keys runnamepatt targpatt)

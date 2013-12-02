@@ -1,16 +1,16 @@
 #
 # run some tests
 
-BINPATH=$(shell readlink -m $(PWD)/../bin)
-MEGATEST=$(BINPATH)/megatest
-DASHBOARD=$(BINPATH)/dashboard
-PATH := $(BINPATH):$(PATH)
-RUNNAME := $(shell date +w%V.%u.%H.%M)
-IPADDR := "-"
-# Set SERVER to "-server -"
-SERVER  = 
-DEBUG   = 1
-LOGGING = 
+BINPATH   = $(shell readlink -m $(PWD)/../bin)
+MEGATEST  = $(BINPATH)/megatest
+DASHBOARD = $(BINPATH)/dashboard
+PATH     := $(BINPATH):$(PATH)
+RUNNAME  := $(shell date +w%V.%u.%H.%M)
+IPADDR   := "-"
+RUNID    := 1
+SERVER    = 
+DEBUG     = 1
+LOGGING   = 
 
 OS  = $(shell grep ID /etc/*-release|cut -d= -f2)
 FS  = $(shell df -T .|tail -1|awk '{print $$2}')
@@ -24,7 +24,7 @@ all : test1 test2 test3 test4 test5 test6 test7 test8 test9
 
 server :
 	cd ..;make;make install
-	cd fullrun;../../bin/megatest -server - -debug 22
+	cd fullrun;../../bin/megatest -server - -debug 22 -run-id $(RUNID)
 
 stopserver :
 	cd ..;make && make install

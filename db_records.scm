@@ -111,10 +111,6 @@
 (define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
 (define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
 
-;; get rows and header from 
-(define-inline (db:get-header vec)(vector-ref vec 0))
-(define-inline (db:get-rows   vec)(vector-ref vec 1))
-
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
 ;;
 (define (make-db:mintest)(make-vector 7))
@@ -210,9 +206,6 @@
 (define-inline (tdb:step-stable-set-end!       vec val)(vector-set! vec 2 val))
 (define-inline (tdb:step-stable-set-status!    vec val)(vector-set! vec 3 val))
 (define-inline (tdb:step-stable-set-runtime!   vec val)(vector-set! vec 4 val))
-
-;; use this one for db-get-run-info
-(define-inline (db:get-row    vec)(vector-ref vec 1))
 
 ;; The data structure for handing off requests via wire
 (define (make-cdb:packet)(make-vector 6))
