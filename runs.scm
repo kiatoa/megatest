@@ -167,7 +167,10 @@
 		  (else 0)))
   (let* ((num-running             (cdb:remote-run db:get-count-tests-running #f))
 	 (num-running-in-jobgroup (cdb:remote-run db:get-count-tests-running-in-jobgroup #f jobgroup))
-	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
+	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
+				    (if (string? jobg-count)
+					(string->number jobg-count)
+					jobg-count))))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
     (if (not (eq? *last-num-running-tests* num-running))
@@ -188,8 +191,9 @@
 				 ;; than the limit then cannot run more jobs of this kind
 				 ((and job-group-limit
 				       (>= num-running-in-jobgroup job-group-limit))
-				  (debug:print 1 "WARNING: number of jobs " num-running-in-jobgroup 
-					       " in " jobgroup " exceeded, will not run " (tests:testqueue-get-testname test-record))
+				  (if (runs:lownoise (conc "maxjobgroup " jobgroup) 60)
+				      (debug:print 1 "WARNING: number of jobs " num-running-in-jobgroup 
+						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
@@ -1472,7 +1476,7 @@
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
 	       (cdb:remote-run db:testmeta-update-field #f test-name fld val)))))
-     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
+     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)("jobgroup" 10)))))
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)

@@ -1247,7 +1247,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted');")
     res))
 
 (define (db:get-count-tests-running-for-run-id db run-id)
@@ -1256,7 +1256,7 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND id=?;" run-id)
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" run-id)
     res))
 
 (define (db:get-running-stats db)
@@ -1276,7 +1276,7 @@
 	 (lambda (count)
 	   (set! res count))
 	 db
-	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
+	 "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART')
              AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
 	 jobgroup)
 	res)))
@@ -2014,9 +2014,9 @@
 (define (db:testmeta-get-record db testname)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags)
-       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags)))
-     db "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags FROM test_meta WHERE testname=?;"
+     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
+       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
+     db "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
      testname)
     res))
 
