@@ -433,13 +433,13 @@
 	    (rem-time   #f))
 	(if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
 	(set! sync-time  (- (current-milliseconds) start-time))
-	(set! rem-time (quotient (- 4000 sync-time) 1000))
+	(set! rem-time (/ (- 4000 sync-time) 1000))
 	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
 	(if (and (<= rem-time 4)
 		 (> rem-time 0))
 	    (thread-sleep! rem-time)
 	    (thread-sleep! 4))) ;; fallback for if the math is changed ...
-
+      
       ;; (thread-sleep! 4) ;; no need to do this very often
 
       (if (< count 1) ;; 3x3 = 9 secs aprox

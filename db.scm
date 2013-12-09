@@ -111,7 +111,7 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((rdb (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+  (let ((rdb (dbr:dbstruct-get-runvec-val dbstruct run-id 'inmem))) ;; dbr:dbstruct-get-runvec-val 
     (if rdb
 	rdb
 	(let* ((local        (dbr:dbstruct-get-local dbstruct))
