@@ -1351,14 +1351,23 @@
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
   (if (not jobgroup)
       0 ;; 
-      (let ((res 0))
+      (let ((res        0)
+	    (testnames '()))
 	(sqlite3:for-each-row
-	 (lambda (count)
-	   (set! res count))
-	 (db:get-db dbstruct run-id)
-	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
-             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
+	 (lambda (testname)
+	   (set! testnames (cons testname testnames)))
+	 (db:get-db dbstruct #f)
+	 "SELECT testname FROM test_meta WHERE jobgroup=?;" 
 	 jobgroup)
+	(if (not (null? testnames))
+	    (sqlite3:for-each-row
+	     (lambda (count)
+	       (set! res count))
+	     (db:get-db dbstruct run-id)
+	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART')"
+		   " AND testname in ('"
+		   (string-intersperse testnames "','")
+		   "');")))
 	res)))
 
 ;; done with run when:
@@ -1899,10 +1908,10 @@
 (define (db:testmeta-get-record dbstruct testname)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags)
-       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags)))
+     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
+       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
      (db:get-db dbstruct #f)
-     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags FROM test_meta WHERE testname=?;"
+     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
      testname)
     res))
 
