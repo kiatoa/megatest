@@ -800,7 +800,7 @@
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
 	     (tconfig     (tests:testqueue-get-testconfig test-record))
-	     (jobgroup    (config-lookup tconfig "requirements" "jobgroup"))
+	     (jobgroup    (config-lookup tconfig "test_meta" "jobgroup"))
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 			    (if m (string->symbol m) 'normal)))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
