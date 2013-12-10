@@ -1464,7 +1464,7 @@
   (let ((currrecord (cdb:remote-run db:testmeta-get-record #f test-name)))
     (if (not currrecord)
 	(begin
-	  (set! currrecord (make-vector 10 #f))
+	  (set! currrecord (make-vector 11 #f))
 	  (cdb:remote-run db:testmeta-add-record #f test-name)))
     (for-each 
      (lambda (key)
