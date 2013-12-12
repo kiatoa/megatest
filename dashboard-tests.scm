@@ -75,7 +75,14 @@
 			 (iup:label "TestComment                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (db:test-get-comment testdat)))
+			   (let ((newcomment (db:test-get-comment testdat)))
+			     (if *dashboard-comment-share-slot*
+				 (if (not (equal? (iup:attribute *dashboard-comment-share-slot* "VALUE")
+						  newcomment))
+				     (iup:attribute-set! *dashboard-comment-slot*
+							 "VALUE"
+							 newcomment)))
+			     newcomment)))
 	    (store-label "testid"
 			 (iup:label "TestId                             "
 				    #:expand "HORIZONTAL")
@@ -211,6 +218,7 @@
     ((vector-ref *state-status* 1) status color)))
 
 (define *dashboard-test-db* #t)
+(define *dashboard-comment-share-slot* #f)
 
 ;;======================================================================
 ;; Set fields 
@@ -218,17 +226,21 @@
 (define (set-fields-panel test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
-	(newstate   #f))
+	(newstate   #f)
+	(wtxtbox    #f))
     (iup:frame
      #:title "Set fields"
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
-		(iup:textbox #:action (lambda (val a b)
-					;; IDEA: Just set a variable with the proc to call?
-					(open-run-close db:test-set-state-status-by-id db test-id #f #f b)
-					(set! newcomment b))
-			     #:value (db:test-get-comment testdat)
-			     #:expand "HORIZONTAL"))
+		(let ((txtbox (iup:textbox #:action (lambda (val a b)
+						      ;; IDEA: Just set a variable with the proc to call?
+						      (open-run-close db:test-set-state-status-by-id db test-id #f #f b)
+						      (set! newcomment b))
+					   #:value (db:test-get-comment testdat)
+					   #:expand "HORIZONTAL")))
+		  (set! wtxtbox txtbox)
+		  txtbox))
+		  
       (apply iup:hbox
 	     (iup:label "STATE:" #:size "30x")
 	     (let* ((btns  (map (lambda (state)
@@ -257,8 +269,16 @@
 							 #:action (lambda (x)
 								    (let ((t (iup:attribute x "TITLE")))
 								      (if (equal? t "WAIVED")
-									  (iup:show (dashboard-tests:waiver testdat (lambda (c)
-														      (set! newcomment c))))
+									  (iup:show (dashboard-tests:waiver testdat 
+													    (if wtxtbox (iup:attribute wtxtbox "VALUE") #f)
+													    (lambda (c)
+													      (set! newcomment c)
+													      (if wtxtbox 
+														  (begin
+														    (iup:attribute-set! wtxtbox "VALUE" c)
+														    (if (not *dashboard-comment-share-slot*)
+															(set! *dashboard-comment-share-slot* wtxtbox)))
+														  ))))
 									  (begin
 									    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
 									    (db:test-set-status! testdat status))))))))
@@ -309,7 +329,7 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver testdat cmtcmd)
+(define (dashboard-tests:waiver testdat ovrdval cmtcmd)
   (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
@@ -319,7 +339,7 @@
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment matches " wpatt))
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment does not match " wpatt))
 						)))
-			     #:value (db:test-get-comment testdat)
+			     #:value (if ovrdval ovrdval (db:test-get-comment testdat))
 			     #:expand "HORIZONTAL"))
 	 (dlog  #f))
     (set! dlog (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
