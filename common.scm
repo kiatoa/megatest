@@ -101,7 +101,7 @@
   (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ" "STUCK"))
 
 (define *common:std-statuses*
-  (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD"))
+  (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP" "DELETED" "STUCK/DEAD" "ABORT"))
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
@@ -428,4 +428,5 @@
    ((equal? status "KILLED")  "orange")
    ((equal? status "KILLREQ") "purple")
    ((equal? status "RUNNING") "blue")
+   ((equal? status "ABORT")   "brown")
    (else "black")))
