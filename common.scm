@@ -348,7 +348,7 @@
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
   (let ((envvars (get-environment-variables))
-        (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]")))
+        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (key)

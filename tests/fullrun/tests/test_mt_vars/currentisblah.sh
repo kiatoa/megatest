@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-grep -e '^CURRENT' megatest.sh | grep /tmp/nada
+grep -e '^export CURRENT' megatest.sh | grep /tmp/nada

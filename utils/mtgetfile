@@ -20,7 +20,7 @@ megatest $fullparams -repl <<EOF
 		  ((not scriptn)  "missing file name to find")
 		  (else #f))))
   (if errmsg
-      (begin
+      (begin 
 	(print "THEPATH: Missing required switch: " errmsg)
 	(print "THEPATH: Usage: mtgetfile -target target scriptname [searchpath]")
 	(exit)))
