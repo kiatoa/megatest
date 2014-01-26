@@ -1,83 +1,96 @@
 Road Map
 ========
 
-Note: This road-map is tentative and subject to change without notice.
+Note 1: This road-map is tentative and subject to change without notice.
 
-ww32
+Note 2: Starting over. Old plan is commented out.
+
+Current Items
+-------------
+
+ww05
 ~~~~
 
-. Rerun step and or subsequent steps from gui
-. Refresh test area files from gui
-. Clean and re-run button
-. Clean up STATE and STATUS handling.
-.. Dashboard and Test control panel are reverse order - choose and fix
-.. Move seldom used states and status to drop down selector
-. Access test control panel when clicking on Run Summary tests
-. Feature: -generate-index-tree
-. Change specifing of state and status to use STATE1/STATUS1,STATE2/STATUS2
+. Runs register in tasks table in monitor.db
+. Server polls tasks table for next action
+. Change run loop to execute in server, triggered by call to polling of tasks table
 
-ww33
-~~~~
 
-. http api available for use with Perl, Ruby etc. scripts
-. megatest.config setup entries for:
-.. run launching (e.g. /bin/sh %CMD% > /dev/null)
-.. browser "konqueror %FNAME%
-
-ww34
-~~~~
-
-. Mark dependent tests for clean/rerun -rerun-downstream
-. On run start check for defunct tests in RUNNING, LAUNCHED or REMOTEHOSTSTART and correct or notify
-. Fix: refresh of gui sometimes fails on last item (race condition?)
-
-ww35
-~~~~
-
-. refdb: Add export of csv, json and sexp
-. Convert to using call-with-environment-variables where possible. Should allow handling of parallel runs in same process.
-. Re-work text interface wizards. Several bugs on record. Possibly convert to gui based.
-. Add to testconfig requirements section; launchlimiter scriptname, calls scriptname to check if ok to launch test
-. Refactor Run Summary view, currently very clumsy
-. Add option to show steps in Run Summary view
-
-ww36
-~~~~
-
-. Refactor guis for resizeablity
-. Add filters to Run Summary view and Run Control view
-. Add to megatest.config or testconfig; rerunok STATE/STATUS,STATE/STATUS...
-. Launch gates for diskspace; /path/one>1G,/path/two>200M,/tmp>5G,#{scheme *toppath*}>1G
-
-Bin List
-~~~~~~~~
-
-.	Quality improvements
-..	Server stutters occasionally
-..	Large number of items or tests still has some issues.
-..	Code refactoring
-..	Replace remote process with true API using json (supports Web app also)
-.	Streamline the gui
-..	Everything resizable
-..	Less clutter
-..	Tool tips
-..	Filters on Run Summary, Summary and Run Control panel
-..	Built in log viewer (partially implemented)
-..	Refactor the test control panel
-.	Help and documentation
-..	Complete the user manual (I’ve been working on this lately).
-..	Online help in the gui
-.	Streamlined install
-..	Deployed version (download a location independent ready to run binary bundle)
-..	Install Makefile (in progress, needed for Mike to install on VMs)
-..	Added option to compile IUP (needed for VMs)
-.	Server side run launching
-.	Support for re-running, cleaning etc. of individual steps (ezsteps makes this very easy to implement).
-.	Launch process needs built in daemonizing (easy to do, just need to test it thoroughly).
-.	Wizards for creating tests, regression areas (current ones are text only and limited).
-.	Fully functional built in web service (currently you can browse runs but it is very simplistic).
-.	Wildcards in runconfigs: e.g. [p1271/9/%/%]
-.	Gui panels for editing megatest.config and runconfigs.config
-.	Fully isolated tests (no use of NFS to see regression area files)
-.	Windows version
+// ww32
+// ~~~~
+// 
+// . Rerun step and or subsequent steps from gui
+// . Refresh test area files from gui
+// . Clean and re-run button
+// . Clean up STATE and STATUS handling.
+// .. Dashboard and Test control panel are reverse order - choose and fix
+// .. Move seldom used states and status to drop down selector
+// . Access test control panel when clicking on Run Summary tests
+// . Feature: -generate-index-tree
+// . Change specifing of state and status to use STATE1/STATUS1,STATE2/STATUS2
+// 
+// ww33
+// ~~~~
+// 
+// . http api available for use with Perl, Ruby etc. scripts
+// . megatest.config setup entries for:
+// .. run launching (e.g. /bin/sh %CMD% > /dev/null)
+// .. browser "konqueror %FNAME%
+// 
+// ww34
+// ~~~~
+// 
+// . Mark dependent tests for clean/rerun -rerun-downstream
+// . On run start check for defunct tests in RUNNING, LAUNCHED or REMOTEHOSTSTART and correct or notify
+// . Fix: refresh of gui sometimes fails on last item (race condition?)
+// 
+// ww35
+// ~~~~
+// 
+// . refdb: Add export of csv, json and sexp
+// . Convert to using call-with-environment-variables where possible. Should allow handling of parallel runs in same process.
+// . Re-work text interface wizards. Several bugs on record. Possibly convert to gui based.
+// . Add to testconfig requirements section; launchlimiter scriptname, calls scriptname to check if ok to launch test
+// . Refactor Run Summary view, currently very clumsy
+// . Add option to show steps in Run Summary view
+// 
+// ww36
+// ~~~~
+// 
+// . Refactor guis for resizeablity
+// . Add filters to Run Summary view and Run Control view
+// . Add to megatest.config or testconfig; rerunok STATE/STATUS,STATE/STATUS...
+// . Launch gates for diskspace; /path/one>1G,/path/two>200M,/tmp>5G,#{scheme *toppath*}>1G
+// 
+// Bin List
+// ~~~~~~~~
+// 
+// .	Quality improvements
+// ..	Server stutters occasionally
+// ..	Large number of items or tests still has some issues.
+// ..	Code refactoring
+// ..	Replace remote process with true API using json (supports Web app also)
+// .	Streamline the gui
+// ..	Everything resizable
+// ..	Less clutter
+// ..	Tool tips
+// ..	Filters on Run Summary, Summary and Run Control panel
+// ..	Built in log viewer (partially implemented)
+// ..	Refactor the test control panel
+// .	Help and documentation
+// ..	Complete the user manual (I’ve been working on this lately).
+// ..	Online help in the gui
+// .	Streamlined install
+// ..	Deployed version (download a location independent ready to run binary bundle)
+// ..	Install Makefile (in progress, needed for Mike to install on VMs)
+// ..	Added option to compile IUP (needed for VMs)
+// .	Server side run launching
+// .	Support for re-running, cleaning etc. of individual steps (ezsteps makes this very easy to implement).
+// .	Launch process needs built in daemonizing (easy to do, just need to test it thoroughly).
+// .	Wizards for creating tests, regression areas (current ones are text only and limited).
+// .	Fully functional built in web service (currently you can browse runs but it is very simplistic).
+// .	Wildcards in runconfigs: e.g. [p1271/9/%/%]
+// .	Gui panels for editing megatest.config and runconfigs.config
+// .	Fully isolated tests (no use of NFS to see regression area files)
+// .	Windows version
 

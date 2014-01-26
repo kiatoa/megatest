@@ -697,11 +697,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    "-runtests" 
    "run a test" 
    (lambda (target runname keys keyvals)
-     (runs:run-tests target
+     ;; Insert this run into the tasks queue
+     (open-run-close tasks:add tasks:open-db 
+		     "runtests" 
+		     user
+		     target
 		     runname
 		     (args:get-arg "-runtests")
-		     user
-		     args:arg-hash))))
+		     #f))))
+;;      (runs:run-tests target
+;; 		     runname
+;; 		     (args:get-arg "-runtests")
+;; 		     user
+;; 		     args:arg-hash))))
 
 ;;======================================================================
 ;; Rollup into a run

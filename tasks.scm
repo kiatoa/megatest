@@ -41,8 +41,7 @@
                                 state TEXT DEFAULT 'new',
                                 target TEXT DEFAULT '',
                                 name TEXT DEFAULT '',
-                                test TEXT DEFAULT '',
-                                item TEXT DEFAULT '',
+                                testpatt TEXT DEFAULT '',
                                 keylock TEXT,
                                 params TEXT,
                                 creation_time TIMESTAMP,
@@ -275,8 +274,8 @@
     res))
 
 ;; register a task
-(define (tasks:add mdb action owner target runname test item params)
-  (sqlite3:execute mdb "INSERT INTO tasks_queue (action,owner,state,target,name,test,item,params,creation_time,execution_time)
+(define (tasks:add mdb action owner target runname testpatt params)
+  (sqlite3:execute mdb "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
                        VALUES (?,?,'new',?,?,?,?,?,strftime('%s','now'),0);" 
 		   action
 		   owner
