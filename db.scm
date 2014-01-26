@@ -1337,7 +1337,7 @@
      (lambda (count)
        (set! res count))
      (db:get-db dbstruct run-id)
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted');")
     res))
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
@@ -1360,7 +1360,7 @@
 	 (lambda (count)
 	   (set! res count))
 	 (db:get-db dbstruct run-id)
-	 "SELECT count(id) FROM tests WHERE state = 'RUNNING' OR state = 'LAUNCHED' OR state = 'REMOTEHOSTSTART'
+	 "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART')
              AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
 	 jobgroup)
 	res)))
@@ -1903,10 +1903,10 @@
 (define (db:testmeta-get-record dbstruct testname)
   (let ((res #f))
     (sqlite3:for-each-row
-     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags)
-       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags)))
+     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
+       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
      (db:get-db dbstruct #f)
-     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags FROM test_meta WHERE testname=?;"
+     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
      testname)
     res))
 

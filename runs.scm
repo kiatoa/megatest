@@ -167,7 +167,10 @@
 		  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
-	 (job-group-limit         (config-lookup *configdat* "jobgroups" jobgroup)))
+	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
+				    (if (string? jobg-count)
+					(string->number jobg-count)
+					jobg-count))))
     (if (> (+ num-running num-running-in-jobgroup) 0)
 	(set! *runs:can-run-more-tests-count* (+ *runs:can-run-more-tests-count* 1)))
     (if (not (eq? *last-num-running-tests* num-running))
@@ -188,8 +191,9 @@
 				 ;; than the limit then cannot run more jobs of this kind
 				 ((and job-group-limit
 				       (>= num-running-in-jobgroup job-group-limit))
-				  (debug:print 1 "WARNING: number of jobs " num-running-in-jobgroup 
-					       " in " jobgroup " exceeded, will not run " (tests:testqueue-get-testname test-record))
+				  (if (runs:lownoise (conc "maxjobgroup " jobgroup) 60)
+				      (debug:print 1 "WARNING: number of jobs " num-running-in-jobgroup 
+						   " in jobgroup \"" jobgroup "\" exceeds limit of " job-group-limit))
 				  #t)
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
@@ -792,7 +796,7 @@
       (let* ((test-record (hash-table-ref test-records hed))
 	     (test-name   (tests:testqueue-get-testname test-record))
 	     (tconfig     (tests:testqueue-get-testconfig test-record))
-	     (jobgroup    (config-lookup tconfig "requirements" "jobgroup"))
+	     (jobgroup    (config-lookup tconfig "test_meta" "jobgroup"))
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 			    (if m (string->symbol m) 'normal)))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
@@ -1459,7 +1463,7 @@
   (let ((currrecord (rmt:testmeta-get-record test-name)))
     (if (not currrecord)
 	(begin
-	  (set! currrecord (make-vector 10 #f))
+	  (set! currrecord (make-vector 11 #f))
 	  (rmt:testmeta-add-record test-name)))
     (for-each 
      (lambda (key)
@@ -1471,7 +1475,7 @@
 	     (begin
 	       (print "Updating " test-name " " fld " to " val)
 	       (rmt:testmeta-update-field test-name fld val)))))
-     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)))))
+     '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)("jobgroup" 10)))))
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)

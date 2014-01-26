@@ -9,3 +9,5 @@ waiton    runfirst
 MANYITEMS [system (env > envfile.txt;echo aa ab ac ad ae af ag ah ai)]
 # BORKED  
 
+[test_meta]
+jobgroup sqlite3

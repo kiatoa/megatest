@@ -1005,7 +1005,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
 			  ;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid htmllogfile))))
-			  (rmt:test-set-log! test-id htmllogfile)))
+			  (rmt:test-set-log! run-id test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (rmt:teststep-set-status! run-id test-id stepname "end" exitstat msg logfile))
 		    )))
