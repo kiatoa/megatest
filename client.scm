@@ -52,7 +52,7 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup run-id #!key (numtries 3))
+(define (client:setup run-id #!key (remaining-tries 3))
   (if (not *toppath*)
       (if (not (setup-for-run))
 	  (begin
@@ -73,27 +73,32 @@
 			      (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			      'http)))
 	  (if (not hostinfo)
+	      (if (> remaining-tries 0)
+		  (begin
+		    (server:ensure-running run-id)
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))
+		  (begin
+		    (debug:print 0 "ERROR: Expected to be able to connect to a server by now. No server available for run-id = " run-id)
+		    (exit 1)))
 	      (begin
-		(debug:print 0 "ERROR: Expected to be able to connect to a server by now. No server available for run-id = " run-id)
-		(exit 1)))
-	  (hash-table-set! *runremote* run-id hostinfo)
-	  (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-	  (debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
-	  (case *transport-type* 
-	    ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-	    ((http)
-	     ;; this saves the hostinfo in the *runremote* hash and returns it
-	     (http-transport:client-connect run-id 
-					    (tasks:hostinfo-get-interface hostinfo)
-					    (tasks:hostinfo-get-port hostinfo)))
-	    ((zmq)
-	     (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-					   (tasks:hostinfo-get-port      hostinfo)
-					   (tasks:hostinfo-get-pubport   hostinfo)))
-	    (else  ;; default to fs
-	     (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
-	     (exit)))))))
-;;	  (pop-directory)))
+		(hash-table-set! *runremote* run-id hostinfo)
+		(debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
+		(debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
+		(case *transport-type* 
+		  ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+		  ((http)
+		   ;; this saves the hostinfo in the *runremote* hash and returns it
+		   (http-transport:client-connect run-id 
+						  (tasks:hostinfo-get-interface hostinfo)
+						  (tasks:hostinfo-get-port hostinfo)))
+		  ((zmq)
+		   (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
+						 (tasks:hostinfo-get-port      hostinfo)
+						 (tasks:hostinfo-get-pubport   hostinfo)))
+		  (else  ;; default to fs
+		   (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
+		   (exit)))))))))
+    ;;	  (pop-directory)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
