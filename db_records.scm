@@ -10,10 +10,11 @@
 ;;            |-fdb.db
 ;;            |-1.db
 ;;            |-<N>.db
+;;
 (define (make-dbr:dbstruct #!key (path #f)(local #f))
   (vector
    #f                  ;; the main db (contains runs, test_meta etc.) NOT CACHED IN MEM
-   (make-hash-table)   ;; run-id => [ rundb inmemdb last-mod last-read last-sync ]
+   (make-hash-table)   ;; run-id => [ rundb inmemdb last-mod last-read last-sync refdb ]
    #f                  ;; the global string db (use for state, status etc.)
    path                ;; path to database files/megatest area
    local))             ;; read-only local access
@@ -41,8 +42,8 @@
   (let* ((dbhash (dbr:dbstruct-get-dbhash vec))              ;; get the runs hash
 	 (runvec (hash-table-ref/default dbhash run-id #f))) ;; get the vector for run-id
     (if (vector? runvec)
-	runvec ;;           rundb inmemdb last-mod last-read last-sync in-use
-	(let ((nvec  (vector #f      #f       -1       -1       -1       #f)))
+	runvec ;;           rundb inmemdb last-mod last-read last-sync in-use refdb
+	(let ((nvec  (vector #f      #f       -1       -1       -1       #f     #f)))
 	  (hash-table-set! dbhash run-id nvec)
 	  nvec))))
 
@@ -55,6 +56,7 @@
     ((rtime) 3) ;; last read time
     ((stime) 4) ;; last sync time
     ((inuse) 5) ;; is the db currently in use, #t yes, #f no.
+    ((refdb) 6) ;; the db used for reference (can be on disk or inmem)
     (else -1)))
 
 ;; get/set rundb fields

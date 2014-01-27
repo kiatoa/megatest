@@ -43,7 +43,9 @@
      (debug:print 0 "ERROR: Not yet (re)supported")
      (exit 1))
     ((fs http)
-     (let* ((connection-info (client:setup run-id))
+     ;; if run-id is #f send the request to run-id = 0 server. This will be for main.db
+     ;;
+     (let* ((connection-info (client:setup (if run-id run-id 0)))
 	    (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
 	    (res (http-transport:client-api-send-receive connection-info cmd jparams)))
        (if res
@@ -94,6 +96,10 @@
 (define (rmt:sdb-qry qry val run-id)
   ;; add caching if qry is 'getid or 'getstr
   (rmt:send-receive 'sdb-qry run-id (list qry val)))
+
+;; NOT COMPLETED
+(define (rmt:runtests user run-id testpatt params)
+  (rmt:send-receive 'runtests run-id testpatt))
 
 ;;======================================================================
 ;;  K E Y S 
@@ -209,8 +215,9 @@
 (define (rmt:get-run-info run-id)
   (rmt:send-receive 'get-run-info run-id (list run-id)))
 
+;; Use the special run-id == #f scenario here since there is no run yet
 (define (rmt:register-run keyvals runname state status user)
-  (rmt:send-receive 'register-run (list keyvals runname state status user)))
+  (rmt:send-receive 'register-run #f (list keyvals runname state status user)))
     
 (define (rmt:get-run-name-from-id run-id)
   (rmt:send-receive 'get-run-name-from-id run-id (list run-id)))

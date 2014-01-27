@@ -8,11 +8,22 @@ Note 2: Starting over. Old plan is commented out.
 Current Items
 -------------
 
-ww05
-~~~~
+ww05 - migrate to inmem-db
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Keep as much the same as possible. Add internal reference to almost
+eliminate contention on db(s). 
+
+. Add internal reference db
+. Verify that actions are accessing correct db
+.. -runtests  - inmem
+.. -list-runs - local (but not megatest.db)
+.. dashboard  - local (but not megatest.db)
+. Mirror db to /var/tmp...
+. Dashboard read db from per-run db.
+. Dashboard read db from /var/tmp
 . Runs register in tasks table in monitor.db
-. Server polls tasks table for next action
+. Server polls tasks table for next action (in addition?)
 . Change run loop to execute in server, triggered by call to polling of tasks table
 
 

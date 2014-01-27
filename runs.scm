@@ -203,7 +203,6 @@
 ;;              FIXME: error out if /patt specified
 ;;            
 (define (runs:run-tests target runname test-patts user flags) ;; test-names
-  (common:clear-caches) ;; clear all caches
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
@@ -1492,6 +1491,7 @@
 (define (runs:rollup-run keys runname user keyvals)
   (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
   (let* ((db              #f)
+	 ;; register run operates on the main db
 	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user))
 	 (prev-tests      (rmt:get-matching-previous-test-run-records new-run-id "%" "%"))
 	 (curr-tests      (mt:get-tests-for-run new-run-id "%/%" '() '()))

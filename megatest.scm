@@ -392,8 +392,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (case chosen-transport
 		      ((http)
 		       (set! *transport-type 'http)
-		       (if run-id (server:ensure-running run-id))
-		       (client:launch run-id))
+		       ;; if we have a run-id (why would we?) start the server for that run.
+		       ;; otherwise it is up to other calls to start the server(s) dynamically
+		       (if run-id 
+			   (begin
+			     (server:ensure-running run-id)
+			     (client:launch run-id))
+			   (begin
+			     ;; without run-id we'll start a server for "0"
+			     (server:ensure-running 0)
+			     (client:launch 0))))
 		      (else ;; (fs)
 		       (debug:print 0 "ERROR: Should NOT be getting here! fs transport is no longer supported")
 		       (set! *transport-type* 'fs)
@@ -697,19 +705,22 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
    "-runtests" 
    "run a test" 
    (lambda (target runname keys keyvals)
+     ;;
+     ;; May or may not implement it this way ...
+     ;;
      ;; Insert this run into the tasks queue
-     (open-run-close tasks:add tasks:open-db 
-		     "runtests" 
-		     user
-		     target
+     ;; (open-run-close tasks:add tasks:open-db 
+     ;;    	     "runtests" 
+     ;;    	     user
+     ;;    	     target
+     ;;    	     runname
+     ;;    	     (args:get-arg "-runtests")
+     ;;    	     #f))))
+     (runs:run-tests target
 		     runname
 		     (args:get-arg "-runtests")
-		     #f))))
-;;      (runs:run-tests target
-;; 		     runname
-;; 		     (args:get-arg "-runtests")
-;; 		     user
-;; 		     args:arg-hash))))
+		     user
+		     args:arg-hash))))
 
 ;;======================================================================
 ;; Rollup into a run

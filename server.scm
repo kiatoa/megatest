@@ -140,7 +140,7 @@
 		(debug:print-info 0 "Waiting for server to start")
 		(thread-sleep! 4)))
 	  (if (< trycount 10)
-	      (loop (open-run-close tasks:get-best-server tasks:open-db) 
+	      (loop (open-run-close tasks:get-server tasks:open-db run-id) 
 		    (+ trycount 1))
 	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
 	(debug:print 2 "INFO: Server(s) running " servers)

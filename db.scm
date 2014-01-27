@@ -119,6 +119,7 @@
 	       (dbpath       (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
+	       (refdb        (if local #f (db:open-inmem-db)))
 	       (db           (sqlite3:open-database dbpath))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
@@ -142,6 +143,8 @@
 	      (begin
 		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem inmem)
 		(db:sync-tables db:sync-tests-only db inmem)
+		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'refdb refdb)
+		(db:sync-tables db:sync-tests-only db refdb)
 		inmem))))))
 
 ;; This routine creates the db. It is only called if the db is not already opened
@@ -175,16 +178,6 @@
 (define (db:setup run-id #!key (local #f))
   (let ((dbstruct (make-dbr:dbstruct path: *toppath* local: local)))
     (db:get-db dbstruct #f) ;; force one call to main
-    ;; (if (not sdb:qry)
-    ;;     (begin
-    ;;       (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
-    ;;       (sdb:qry 'setup #f)
-    ;;       ;; Initialize with some known needed strings, NOTE: set this up to only execute on first db initialization
-    ;;       (for-each
-    ;;        (lambda (str)
-    ;;          (sdb:qry 'get-id str))
-    ;;        (list "" "logs/final.log"))))
-    ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
@@ -834,11 +827,11 @@
 			comparator)))
 
 
-;; register a test run with the db
-(define (db:register-run dbstruct keyvals runname state status user)
-  (debug:print 3 "runs:register-run runname: " runname " state: " state " status: " status " user: " user)
-  (let* ((db        (db:get-db dbstruct #f))
-	 (keys      (map car keyvals))
+;; register a test run with the db, this accesses the main.db and does NOT
+;; use server api
+;;
+(define (db:register-run db keyvals runname state status user)
+  (let* ((keys      (map car keyvals))
 	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
