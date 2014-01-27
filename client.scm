@@ -72,6 +72,10 @@
 	       (transport (if hostinfo 
 			      (string->symbol (tasks:hostinfo-get-transport hostinfo))
 			      'http)))
+	  (if (not hostinfo)
+	      (begin
+		(debug:print 0 "ERROR: Expected to be able to connect to a server by now. No server available for run-id = " run-id)
+		(exit 1)))
 	  (hash-table-set! *runremote* run-id hostinfo)
 	  (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
 	  (debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))

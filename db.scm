@@ -830,8 +830,9 @@
 ;; register a test run with the db, this accesses the main.db and does NOT
 ;; use server api
 ;;
-(define (db:register-run db keyvals runname state status user)
-  (let* ((keys      (map car keyvals))
+(define (db:register-run dbstruct keyvals runname state status user)
+  (let* ((db        (db:get-db dbstruct #f))
+	 (keys      (map car keyvals))
 	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
 	 (andstr    (if (> (length keys) 0) " AND " ""))
