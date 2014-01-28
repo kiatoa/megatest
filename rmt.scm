@@ -110,8 +110,8 @@
 (define (rmt:get-key-val-pairs run-id)
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
-(define (rmt:get-keys run-id)
-  (rmt:send-receive 'get-keys run-id '()))
+(define (rmt:get-keys)
+  (rmt:send-receive 'get-keys #f '()))
 
 ;;======================================================================
 ;;  T E S T S
@@ -229,22 +229,25 @@
   (rmt:send-receive 'delete-run run-id (list run-id)))
 
 (define (rmt:delete-old-deleted-test-records)
-  (rmt:send-receive 'delete-old-deleted-test-records '()))
+  (rmt:send-receive 'delete-old-deleted-test-records #f '()))
 
 (define (rmt:get-runs runpatt count offset keypatts)
-  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
+  (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
 
 (define (rmt:get-runs runpatt count offset keypatts)
-  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
+  (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
 
 (define (rmt:get-all-run-ids)
   (rmt:send-receive 'get-all-run-ids #f '()))
 
 (define (rmt:lock/unlock-run run-id lock unlock user)
-  (rmt:send-receive 'lock/unlock-run (list run-id lock unlock user)))
+  (rmt:send-receive 'lock/unlock-run #f (list run-id lock unlock user)))
 
 (define (rmt:update-run-event_time run-id)
-  (rmt:send-receive 'update-run-event_time (list run-id)))
+  (rmt:send-receive 'update-run-event_time #f (list run-id)))
+
+(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
+  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
 
 ;;======================================================================
 ;;  S T E P S

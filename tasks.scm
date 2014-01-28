@@ -205,16 +205,25 @@
           ORDER BY start_time DESC LIMIT 1;" (common:version-signature) run-id)
     res))
 
+;; (define (tasks:get-all-servers mdb)
+;;   (let ((res  '()))
+;;     (sqlite3:for-each-row
+;;      (lambda (id interface port pubport transport pid hostname)
+;;        (set! res (cons (vector id interface port pubport transport pid hostname) res)))
+;;      mdb
+;;      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
+;;           WHERE strftime('%s','now')-heartbeat < 10 
+;;           AND mt_version=? 
+;;           ORDER BY start_time DESC;" (common:version-signature))
+;;     res))
+
 (define (tasks:get-all-servers mdb)
-  (let ((res  #f))
+  (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id interface port pubport transport pid hostname)
-       (set! res (cons (vector id interface port pubport transport pid hostname) res)))
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport)
+       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport) res)))
      mdb
-     "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
-          WHERE strftime('%s','now')-heartbeat < 10 
-          AND mt_version=? 
-          ORDER BY start_time DESC;" (common:version-signature))
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport FROM servers ORDER BY start_time DESC;")
     res))
 
 (define (tasks:kill-server status hostname port pid transport)

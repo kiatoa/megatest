@@ -95,7 +95,7 @@
   (let* ((target      (or (args:get-arg "-reqtarg")
 			  (args:get-arg "-target")
 			  (get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (rmt:get-keys run-id)))
+	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
     ;; get the info from the db and put it in the cache
