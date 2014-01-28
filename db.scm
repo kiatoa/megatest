@@ -111,7 +111,7 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((rdb (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+  (let ((rdb (dbr:dbstruct-get-runvec-val dbstruct run-id 'inmem))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if rdb
 	rdb
 	(let* ((local        (dbr:dbstruct-get-local dbstruct))
@@ -133,7 +133,7 @@
 		      ;; (sdb:initialize db) 
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
-		(sqlite3:execute db "PRAGMA synchronous = 0;")))
+		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
 	  (if local
@@ -936,6 +936,15 @@
     (debug:print-info 11 "db:get-num-runs END " runpatt)
     numruns))
 
+(define (db:get-all-run-ids dbstruct)
+  (let ((run-ids '()))
+    (sqlite3:for-each-row
+     (lambda (run-id)
+       (set! run-ids (cons run-id run-ids)))
+     (db:get-db dbstruct #f)
+     "SELECT id FROM runs WHERE state != 'deleted';")
+    run-ids))
+
 ;; get some basic run stats
 ;;
 ;; ( (runname (( state  count ) ... ))
@@ -1331,7 +1340,8 @@
      (lambda (count)
        (set! res count))
      (db:get-db dbstruct run-id)
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
+     run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
     res))
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
@@ -1349,14 +1359,24 @@
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
   (if (not jobgroup)
       0 ;; 
-      (let ((res 0))
+      (let ((res        0)
+	    (testnames '()))
+	;; get the testnames
 	(sqlite3:for-each-row
-	 (lambda (count)
-	   (set! res count))
-	 (db:get-db dbstruct run-id)
-	 "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART')
-             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
+	 (lambda (testname)
+	   (set! testnames (cons testname testnames)))
+	 (db:get-db dbstruct #f)
+	 "SELECT testname FROM test_meta WHERE jobgroup=?"
 	 jobgroup)
+	;; get the jobcount NB// EXTEND THIS TO OPPERATE OVER ALL RUNS?
+	(if (not (null? testnames))
+	    (sqlite3:for-each-row
+	     (lambda (count)
+	       (set! res count))
+	     (db:get-db dbstruct run-id)
+	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
+		   (string-intersperse testnames "','")
+		   "');")))
 	res)))
 
 ;; done with run when:

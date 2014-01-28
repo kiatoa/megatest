@@ -119,8 +119,9 @@
    ))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state='available' AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state='running'   AND (strftime('%s','now') - heartbeat)  > 10 AND run_id=?;" run-id))
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id)
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state='running' AND (strftime('%s','now') - heartbeat)  > 10 AND run_id=?;" run-id)
+  )
   
 
 (define (tasks:server-set-state! mdb server-id state)
@@ -202,6 +203,18 @@
           WHERE strftime('%s','now')-heartbeat < 10 
           AND mt_version=? AND run_id=? AND state='running'
           ORDER BY start_time DESC LIMIT 1;" (common:version-signature) run-id)
+    res))
+
+(define (tasks:get-all-servers mdb)
+  (let ((res  #f))
+    (sqlite3:for-each-row
+     (lambda (id interface port pubport transport pid hostname)
+       (set! res (cons (vector id interface port pubport transport pid hostname) res)))
+     mdb
+     "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
+          WHERE strftime('%s','now')-heartbeat < 10 
+          AND mt_version=? 
+          ORDER BY start_time DESC;" (common:version-signature))
     res))
 
 (define (tasks:kill-server status hostname port pid transport)

@@ -52,6 +52,7 @@
     ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
     ((delete-run)                   (apply db:delete-run dbstruct params))
     ((get-runs)                     (apply db:get-runs dbstruct params))
+    ((get-all-run-ids)              (db:get-all-run-ids dbstruct))
     ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
     ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
     ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))

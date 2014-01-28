@@ -154,9 +154,12 @@
 	'())))
 
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (apply append (map (lambda (run-id)
-		       (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
-		     run-ids)))
+  (let ((run-id-list (if run-ids
+			 run-ids
+			 (rmt:get-all-run-ids))))
+    (apply append (map (lambda (run-id)
+			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
+		       run-id-list))))
 
 (define (rmt:delete-test-records run-id test-id)
   (rmt:send-receive 'delete-test-records run-id (list run-id test-id)))
@@ -231,8 +234,11 @@
 (define (rmt:get-runs runpatt count offset keypatts)
   (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
 
-(define (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)
-  (rmt:send-receive 'get-runs-by-patt (list keys runnamepatt targpatt offset limit)))
+(define (rmt:get-runs runpatt count offset keypatts)
+  (rmt:send-receive 'get-runs (list runpatt count offset keypatts)))
+
+(define (rmt:get-all-run-ids)
+  (rmt:send-receive 'get-all-run-ids #f '()))
 
 (define (rmt:lock/unlock-run run-id lock unlock user)
   (rmt:send-receive 'lock/unlock-run (list run-id lock unlock user)))
@@ -278,13 +284,13 @@
 	'())))
 
 (define (rmt:testmeta-add-record testname)
-  (rmt:send-receive 'testmeta-add-record (list testname)))
+  (rmt:send-receive 'testmeta-add-record #f (list testname)))
 
 (define (rmt:testmeta-get-record testname)
-  (rmt:send-receive 'testmeta-get-record (list testname)))
+  (rmt:send-receive 'testmeta-get-record #f (list testname)))
 
 (define (rmt:testmeta-update-field test-name fld val)
-  (rmt:send-receive 'testmeta-update-field (list test-name fld val)))
+  (rmt:send-receive 'testmeta-update-field #f (list test-name fld val)))
 
 (define (rmt:test-data-rollup run-id test-id status)
   (rmt:send-receive 'test-data-rollup run-id (list run-id test-id status)))
