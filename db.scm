@@ -132,7 +132,7 @@
 		      ;; (sdb:initialize db) 
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
-		(sqlite3:execute db "PRAGMA synchronous = 0;")))
+		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
 	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
 	  (if local
