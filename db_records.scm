@@ -11,73 +11,98 @@
 ;;            |-1.db
 ;;            |-<N>.db
 ;;
-(define (make-dbr:dbstruct #!key (path #f)(local #f))
-  (vector
-   #f                  ;; the main db (contains runs, test_meta etc.) NOT CACHED IN MEM
-   (make-hash-table)   ;; run-id => [ rundb inmemdb last-mod last-read last-sync refdb ]
-   #f                  ;; the global string db (use for state, status etc.)
-   path                ;; path to database files/megatest area
-   local))             ;; read-only local access
-
 ;;
 ;; Accessors for a dbstruct
 ;;
-;; get and set main db
-(define-inline (dbr:dbstruct-get-main  vec)    (vector-ref vec 0))
-(define-inline (dbr:dbstruct-set-main! vec db)(vector-set! vec 0 db))
-;; get the runs hash
-(define-inline (dbr:dbstruct-get-dbhash vec) (vector-ref vec 1))
-;; the string db
-(define-inline (dbr:dbstruct-get-strdb vec)    (vector-ref vec 2))
-(define-inline (dbr:dbstruct-set-strdb! vec db)(vector-set! vec 2 db))
-;; path
-(define-inline (dbr:dbstruct-get-path  vec)     (vector-ref vec 3))
-(define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
-;; local
-(define-inline (dbr:dbstruct-get-local vec)     (vector-ref vec 4))
-(define-inline (dbr:dbstruct-set-local! vec val)(vector-set! vec 4 val))
 
-;; get a rundb vector, create it if not already existing
-(define (dbr:dbstruct-get-rundb-rec vec run-id)
-  (let* ((dbhash (dbr:dbstruct-get-dbhash vec))              ;; get the runs hash
-	 (runvec (hash-table-ref/default dbhash run-id #f))) ;; get the vector for run-id
-    (if (vector? runvec)
-	runvec ;;           rundb inmemdb last-mod last-read last-sync in-use refdb
-	(let ((nvec  (vector #f      #f       -1       -1       -1       #f     #f)))
-	  (hash-table-set! dbhash run-id nvec)
-	  nvec))))
+(define-inline (dbr:dbstruct-get-main    vec)    (vector-ref  vec 0))
+(define-inline (dbr:dbstruct-get-strdb   vec)    (vector-ref  vec 1))
+(define-inline (dbr:dbstruct-get-path    vec)    (vector-ref  vec 2))
+(define-inline (dbr:dbstruct-get-local   vec)    (vector-ref  vec 3))
+(define-inline (dbr:dbstruct-get-rundb   vec)    (vector-ref  vec 4))
+(define-inline (dbr:dbstruct-get-inmem   vec)    (vector-ref  vec 5))
+(define-inline (dbr:dbstruct-get-mtime   vec)    (vector-ref  vec 6))
+(define-inline (dbr:dbstruct-get-rtime   vec)    (vector-ref  vec 7))
+(define-inline (dbr:dbstruct-get-stime   vec)    (vector-ref  vec 8))
+(define-inline (dbr:dbstruct-get-inuse   vec)    (vector-ref  vec 9))
+(define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10))
 
-;;  [ rundb inmemdb last-mod last-read last-sync ]
-(define-inline (dbr:dbstruct-field-name->num field-name)
-  (case field-name
-    ((rundb) 0) ;; the on-disk db
-    ((inmem) 1) ;; the in-memory db
-    ((mtime) 2) ;; last modification time
-    ((rtime) 3) ;; last read time
-    ((stime) 4) ;; last sync time
-    ((inuse) 5) ;; is the db currently in use, #t yes, #f no.
-    ((refdb) 6) ;; the db used for reference (can be on disk or inmem)
-    (else -1)))
+(define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
+(define-inline (dbr:dbstruct-set-strdb!  vec val)(vector-set! vec 1 val))
+(define-inline (dbr:dbstruct-set-path!   vec val)(vector-set! vec 2 val))
+(define-inline (dbr:dbstruct-set-local!  vec val)(vector-set! vec 3 val))
+(define-inline (dbr:dbstruct-set-rundb!  vec val)(vector-set! vec 4 val))
+(define-inline (dbr:dbstruct-set-inmem!  vec val)(vector-set! vec 5 val))
+(define-inline (dbr:dbstruct-set-mtime!  vec val)(vector-set! vec 6 val))
+(define-inline (dbr:dbstruct-set-rtime!  vec val)(vector-set! vec 7 val))
+(define-inline (dbr:dbstruct-set-stime!  vec val)(vector-set! vec 8 val))
+(define-inline (dbr:dbstruct-set-inuse!  vec val)(vector-set! vec 9 val))
+(define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
 
-;; get/set rundb fields
-(define (dbr:dbstruct-get-runvec-val vec run-id field-name)
-  (let ((runvec   (dbr:dbstruct-get-rundb-rec vec run-id))
-	(fieldnum (dbr:dbstruct-field-name->num field-name)))
-    ;; (vector-set! runvec (dbr:dbstruct-field-name->num 'inuse) #t)
-    (vector-ref runvec fieldnum)))
+;; constructor for dbstruct
+;;
+(define (make-dbr:dbstruct #!key (path #f)(local #f))
+  (let ((v (make-vector 11 #f)))
+    (dbr:dbstruct-set-path! v path)
+    (dbr:dbstruct-set-local! v local)
+    v))
 
-(define (dbr:dbstruct-set-runvec-val! vec run-id field-name val)
-  (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-set! runvec (dbr:dbstruct-field-name->num field-name) val)))
-
-;; get/set inmemdb
-(define (dbr:dbstruct-get-inmemdb vec run-id)
-  (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-ref runvec 1)))
-
-(define (dbr:dbstruct-set-inmemdb! vec run-id inmemdb)
-  (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
-    (vector-set! runvec 1 inmemdb)))
+;; ;; get and set main db
+;; (define-inline (dbr:dbstruct-get-main  vec)    (vector-ref vec 0))
+;; (define-inline (dbr:dbstruct-set-main! vec db)(vector-set! vec 0 db))
+;; ;; get the runs hash
+;; (define-inline (dbr:dbstruct-get-dbhash vec) (vector-ref vec 1))
+;; ;; the string db
+;; (define-inline (dbr:dbstruct-get-strdb vec)    (vector-ref vec 2))
+;; (define-inline (dbr:dbstruct-set-strdb! vec db)(vector-set! vec 2 db))
+;; ;; path
+;; (define-inline (dbr:dbstruct-get-path  vec)     (vector-ref vec 3))
+;; (define-inline (dbr:dbstruct-set-path! vec path)(vector-set! vec 3))
+;; ;; local
+;; (define-inline (dbr:dbstruct-get-local vec)     (vector-ref vec 4))
+;; (define-inline (dbr:dbstruct-set-local! vec val)(vector-set! vec 4 val))
+;; 
+;; ;; get a rundb vector, create it if not already existing
+;; (define (dbr:dbstruct-get-rundb-rec vec run-id)
+;;   (let* ((dbhash (dbr:dbstruct-get-dbhash vec))              ;; get the runs hash
+;; 	 (runvec (hash-table-ref/default dbhash run-id #f))) ;; get the vector for run-id
+;;     (if (vector? runvec)
+;; 	runvec ;;           rundb inmemdb last-mod last-read last-sync in-use refdb
+;; 	(let ((nvec  (vector #f      #f       -1       -1       -1       #f     #f)))
+;; 	  (hash-table-set! dbhash run-id nvec)
+;; 	  nvec))))
+;; 
+;; ;;  [ rundb inmemdb last-mod last-read last-sync ]
+;; (define-inline (dbr:dbstruct-field-name->num field-name)
+;;   (case field-name
+;;     ((rundb) 0) ;; the on-disk db
+;;     ((inmem) 1) ;; the in-memory db
+;;     ((mtime) 2) ;; last modification time
+;;     ((rtime) 3) ;; last read time
+;;     ((stime) 4) ;; last sync time
+;;     ((inuse) 5) ;; is the db currently in use, #t yes, #f no.
+;;     ((refdb) 6) ;; the db used for reference (can be on disk or inmem)
+;;     (else -1)))
+;; 
+;; ;; get/set rundb fields
+;; (define (dbr:dbstruct-get-runvec-val vec run-id field-name)
+;;   (let ((runvec   (dbr:dbstruct-get-rundb-rec vec run-id))
+;; 	(fieldnum (dbr:dbstruct-field-name->num field-name)))
+;;     ;; (vector-set! runvec (dbr:dbstruct-field-name->num 'inuse) #t)
+;;     (vector-ref runvec fieldnum)))
+;; 
+;; (define (dbr:dbstruct-set-runvec-val! vec run-id field-name val)
+;;   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
+;;     (vector-set! runvec (dbr:dbstruct-field-name->num field-name) val)))
+;; 
+;; ;; get/set inmemdb
+;; (define (dbr:dbstruct-get-inmemdb vec run-id)
+;;   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
+;;     (vector-ref runvec 1)))
+;; 
+;; (define (dbr:dbstruct-set-inmemdb! vec run-id inmemdb)
+;;   (let ((runvec (dbr:dbstruct-get-rundb-rec vec run-id)))
+;;     (vector-set! runvec 1 inmemdb)))
 
 
 (define (make-db:test)(make-vector 20))

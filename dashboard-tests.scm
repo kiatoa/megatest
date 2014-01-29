@@ -239,9 +239,9 @@
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
 		(let ((txtbox (iup:textbox #:action (lambda (val a b)
-					(rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
 						      ;; IDEA: Just set a variable with the proc to call?
-						      (open-run-close db:test-set-state-status-by-id db test-id #f #f b)
+						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
 						      (set! newcomment b))
 					   #:value (db:test-get-comment testdat)
 					   #:expand "HORIZONTAL")))
@@ -287,7 +287,7 @@
 															(set! *dashboard-comment-share-slot* wtxtbox)))
 														  ))))
 									  (begin
-									    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
+									    (rmt:test-set-state-status-by-id run-id test-id #f status #f)
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -368,7 +368,7 @@
 					   (if (or (not wpatt)
 						   (string-match wregx comment))
 					       (begin
-						 (open-run-close db:test-set-state-status-by-id #f test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))

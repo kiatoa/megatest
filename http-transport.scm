@@ -159,7 +159,7 @@
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
 	 (print "ERROR: Tried and tried but could not start the server")))
    ;; any error in following steps will result in a retry
-   (set! *runremote* (list ipaddrstr portnum))
+   (set! *server-info* (list ipaddrstr portnum))
    (open-run-close tasks:server-set-interface-port 
 		   tasks:open-db 
 		   server-id 
@@ -401,7 +401,7 @@
 				 (last-sdat  "not this"))
                         (let ((sdat #f))
                           (mutex-lock! *heartbeat-mutex*)
-                          (set! sdat *runremote*)
+                          (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
                           (if (and sdat
 				   (not changed)
@@ -444,7 +444,7 @@
       
       ;; Check that iface and port have not changed (can happen if server port collides)
       (mutex-lock! *heartbeat-mutex*)
-      (set! sdat *runremote*)
+      (set! sdat *server-info*)
       (mutex-unlock! *heartbeat-mutex*)
       
       (if (or (not (equal? sdat (list iface port)))

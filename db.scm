@@ -70,9 +70,9 @@
       (begin
 	(mutex-lock! *rundb-mutex*)
 	(if (eq? mod-read 'mod)
-	    (dbr:dbstruct-set-runvec-val! dbstruct run-id 'mtime (current-milliseconds))
-	    (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rtime (current-milliseconds)))
-	(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #f)
+	    (dbr:dbstruct-set-mtime! dbstruct (current-milliseconds))
+	    (dbr:dbstruct-set-rtime! dbstruct (current-milliseconds)))
+	(dbr:dbstruct-set-inuse! dbstruct #f)
 	(mutex-unlock! *rundb-mutex*))))
 
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
@@ -111,11 +111,11 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((rdb (dbr:dbstruct-get-runvec-val dbstruct run-id 'inmem))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+  (let ((rdb (dbr:dbstruct-get-inmem dbstruct))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if rdb
 	rdb
 	(let* ((local        (dbr:dbstruct-get-local dbstruct))
-	       (toppath      (dbr:dbstruct-get-path dbstruct))
+	       (toppath      (dbr:dbstruct-get-path  dbstruct))
 	       (dbpath       (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
@@ -134,16 +134,16 @@
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
-	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'rundb db)
-	  (dbr:dbstruct-set-runvec-val! dbstruct run-id 'inuse #t)
+	  (dbr:dbstruct-set-rundb! dbstruct db)
+	  (dbr:dbstruct-set-inuse! dbstruct #t)
 	  (if local
 	      (begin
-		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem db) ;; direct access ...
+		(dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
 		db)
 	      (begin
-		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'inmem inmem)
+		(dbr:dbstruct-set-inmem! dbstruct inmem)
 		(db:sync-tables db:sync-tests-only db inmem)
-		(dbr:dbstruct-set-runvec-val! dbstruct run-id 'refdb refdb)
+		(dbr:dbstruct-set-refdb! dbstruct refdb)
 		(db:sync-tables db:sync-tests-only db refdb)
 		inmem))))))
 
@@ -201,6 +201,7 @@
     db))
 
 ;; sync all touched runs to disk
+;;
 (define (db:sync-touched dbstruct #!key (force-sync #f))
   (let ((tot-synced 0))
     (for-each
@@ -208,29 +209,41 @@
        (let ((mtime (vector-ref runvec (dbr:dbstruct-field-name->num 'mtime)))
 	     (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
 	     (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
-	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem))))
+	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem)))
+	     (refdb (vector-ref runvec (dbr:dbstruct-field-name->num 'refdb))))
 	 (if (or (> mtime stime) force-sync)
-	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem rundb)))
+	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
 	       (set! tot-synced (+ tot-synced num-synced))
 	       (vector-set! runvec (dbr:dbstruct-field-name->num 'stime) (current-milliseconds))))))
      (hash-table-values (vector-ref dbstruct 1)))
     tot-synced))
+
+;; sync run to disk if touched
+;;
+(define (db:sync-touched dbstruct #!key (force-sync #f))
+  (let ((mtime (dbr:dbstruct-get-mtime dbstruct))
+	(stime (dbr:dbstruct-get-stime dbstruct))
+	(rundb (dbr:dbstruct-get-rundb dbstruct))
+	(inmem (dbr:dbstruct-get-inmem dbstruct))
+	(refdb (dbr:dbstruct-get-refdb dbstruct)))
+    (if (or (not (number? mtime))
+	    (not (number? stime))
+	    (> mtime stime)
+	    force-sync)
+	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
+	  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+	  num-synced)
+	0)))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   ;; finalize main.db
   (db:sync-touched dbstruct force-sync: #t)
   (sqlite3:finalize! (db:get-db dbstruct #f))
-  (for-each
-   (lambda (runvec)
-     (let ((rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb))))
-       (if (sqlite3:database? rundb)
-	   (sqlite3:finalize! rundb)
-	   (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
-   (hash-table-values (vector-ref dbstruct 1)))
-  ;; (sdb:qry 'finalize! #f)
-  )
-  ;; (filedb:finalize-db! *fdb*))
+  (let ((rundb (dbr:dbstruct-get-rundb dbstruct)))
+    (if (sqlite3:database? rundb)
+	(sqlite3:finalize! rundb)
+	(debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
@@ -318,7 +331,7 @@
 	   '("jobgroup"       #f)))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
-(define (db:sync-tables tbls fromdb todb)
+(define (db:sync-tables tbls fromdb todb . slave-dbs)
   (cond
    ((not fromdb) (debug:print 0 "ERROR: db:sync-tables called with fromdb missing") -1)
    ((not todb)   (debug:print 0 "ERROR: db:sync-tables called with todb missing") -2)
@@ -371,28 +384,31 @@
 	    full-sel)
 
 	   ;; first pass implementation, just insert all changed rows
-	   (let ((stmth (sqlite3:prepare todb full-ins)))
-	     (sqlite3:with-transaction
-	      todb
-	      (lambda ()
-		(for-each ;; 
-		 (lambda (fromrow)
-		   (let* ((a    (vector-ref fromrow 0))
-			  (curr (hash-table-ref/default todat a #f))
-			  (same #t))
-		     (let loop ((i 0))
-		       (if (or (not curr)
-			       (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
-			   (set! same #f))
-		       (if (and same
-				(< i (- num-fields 1)))
-			   (loop (+ i 1))))
-		     (if (not same)
-			 (begin
-			   (apply sqlite3:execute stmth (vector->list fromrow))
-			   (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
-		 fromdat)))
-	     (sqlite3:finalize! stmth))))
+	   (for-each 
+	    (lambda (targdb)
+	      (let ((stmth (sqlite3:prepare targdb full-ins)))
+		(sqlite3:with-transaction
+		 targdb
+		 (lambda ()
+		   (for-each ;; 
+		    (lambda (fromrow)
+		      (let* ((a    (vector-ref fromrow 0))
+			     (curr (hash-table-ref/default todat a #f))
+			     (same #t))
+			(let loop ((i 0))
+			  (if (or (not curr)
+				  (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
+			      (set! same #f))
+			  (if (and same
+				   (< i (- num-fields 1)))
+			      (loop (+ i 1))))
+			(if (not same)
+			    (begin
+			      (apply sqlite3:execute stmth (vector->list fromrow))
+			      (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+		    fromdat)))
+		(sqlite3:finalize! stmth)))
+	    (append (list todb) slave-dbs))))
        tbls)
       (let ((runtime (- (current-milliseconds) start-time)))
 	(debug:print 0 "INFO: db sync, total run time " runtime " ms")
@@ -1325,7 +1341,7 @@
       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
     (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
 				    test-id))))
-    (mt:process-triggers test-id newstate newstatus)))
+    (mt:process-triggers run-id test-id newstate newstatus)))
 
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
