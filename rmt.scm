@@ -47,7 +47,7 @@
      ;;
      (let* ((connection-info (client:setup (if run-id run-id 0)))
 	    (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	    (res (http-transport:client-api-send-receive connection-info cmd jparams)))
+	    (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
        (if res
 	   (db:string->obj res) ;; (rmt:json-str->dat res)
 	   (begin

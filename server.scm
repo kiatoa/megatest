@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils)
 ;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
@@ -127,12 +127,14 @@
 	(begin
 	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 	      (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-				 " -server - -daemonize -run-id " run-id)))
+				 " -server - -run-id " run-id " &> " run-id ".log &")))
 		(debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
 		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
 		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
 		;; if there is an existing server
+		(push-directory *toppath*)
 		(system cmdln)
+		(pop-directory)
 		(thread-sleep! 3)
 		;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
 		)
