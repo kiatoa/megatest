@@ -46,7 +46,7 @@
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright (C) Matt Welland 2013
+  license GPL, Copyright (C) Matt Welland 2012-2014
 
 Usage: dashboard [options]
   -h                   : this help
@@ -88,7 +88,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *db*  (make-dbr:dbstruct path: *toppath* local: #t))
+(define *dbstruct-local*  (make-dbr:dbstruct path: *toppath* local: #t))
 
 ;; (define sdb:qry (make-sdb:qry)) ;;  'init #f)
 
@@ -101,15 +101,15 @@ Misc
 ;; 	(client:launch)))
 
 ;; HACK ALERT: this is a hack, please fix.
-(define *read-only* (not (file-read-access? (conc *toppath* "/megatest.db"))))
-;; (client:setup *db*)
+(define *read-only* (not (file-read-access? (conc *toppath* "db/main.db"))))
+;; (client:setup *dbstruct-local*)
 
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (db:get-keys *db*))
+(define *keys*   (db:get-keys *dbstruct-local*))
 ;; (define *keys*   (cdb:remote-run db:get-keys #f))
-;; (define *keys*   (db:get-keys   *db*))
+;; (define *keys*   (db:get-keys   *dbstruct-local*))
 
 (define *dbkeys*  (append *keys* (list "runname")))
 
@@ -122,8 +122,8 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (db:get-num-runs *db* "%"))
-;; (define *tot-run-count* (db:get-num-runs *db* "%"))
+(define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
+;; (define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
 
 ;; Update management
 ;;
@@ -209,7 +209,7 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (db:get-runs *db* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	 (allruns     (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 				      *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
@@ -228,7 +228,7 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests       (db:get-tests-for-run *db* run-id testnamepatt states statuses
+		       (tests       (db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
 							  #f #f
 							  *hide-not-hide*
 							  sort-by
@@ -236,7 +236,7 @@ Misc
 							  'shortlist))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
-		       (key-vals    (db:get-key-vals *db* run-id)))
+		       (key-vals    (db:get-key-vals *dbstruct-local* run-id)))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
@@ -563,7 +563,7 @@ Misc
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (db:get-targets *db*))
+	 (db-target-dat (db:get-targets *dbstruct-local*))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (all-targets   (append db-targets
@@ -828,7 +828,7 @@ Misc
 					    (dashboard:update-run-command))))
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
-					    (runs-for-targ (db:get-runs-by-patt *db* *keys* "%" target #f #f))
+					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f))
 					    (runs-header   (vector-ref runs-for-targ 0))
 					    (runs-dat      (vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
@@ -1221,7 +1221,7 @@ Misc
 		(set! *hide-not-hide-button* hideit)
 		hideit))
 	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)(if *db* (db:close-all *db*))(exit)))
+	      (iup:button "Quit"      #:action (lambda (obj)(if *dbstruct-local* (db:close-all *dbstruct-local*))(exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update)))
 	      (iup:button "Collapse"  #:action (lambda (obj)
@@ -1440,8 +1440,13 @@ Misc
 (let ((db (tasks:open-db)))
   (sqlite3:finalize! db))
 
+(define (dashboard:get-youngest-run-db-mod-time)
+  (apply max (map (lambda (filen)
+		    (file-modification-time filen))
+		  (glob (conc *toppath* "/db/*.db")))))
+
 (define (dashboard:run-update x)
-  (let* ((modtime         (file-modification-time *db-file-path*))
+  (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))
 	 (monitor-modtime (file-modification-time *monitor-db-path*))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
@@ -1493,8 +1498,8 @@ Misc
 	(begin
 	  (lambda (x)
 	    (on-exit (lambda ()
-		       (if *db* (db:close-all *db*))))
-	    (examine-run *db* runid)))
+		       (if *dbstruct-local* (db:close-all *dbstruct-local*))))
+	    (examine-run *dbstruct-local* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
@@ -1510,9 +1515,9 @@ Misc
 	  (debug:print 3 "INFO: tried to open test with invalid run-id,test-id. " (args:get-arg "-test"))
 	  (exit 1)))))
  ((args:get-arg "-guimonitor")
-  (gui-monitor *db*))
+  (gui-monitor *dbstruct-local*))
  (else
-  (set! uidat (make-dashboard-buttons *db* *num-runs* *num-tests* *dbkeys*))
+  (set! uidat (make-dashboard-buttons *dbstruct-local* *num-runs* *num-tests* *dbkeys*))
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
@@ -1531,4 +1536,4 @@ Misc
 		       1))))
 
 (iup:main-loop)
-(db:close-all *db*)
+(db:close-all *dbstruct-local*)
