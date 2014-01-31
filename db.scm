@@ -111,11 +111,13 @@
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let ((rdb (dbr:dbstruct-get-inmem dbstruct))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
+  (let* ((local  (dbr:dbstruct-get-local dbstruct))
+	 (rdb    (if local
+		     (dbr:dbstruct-get-localdb dbstruct run-id)
+		     (dbr:dbstruct-get-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if rdb
 	rdb
-	(let* ((local        (dbr:dbstruct-get-local dbstruct))
-	       (toppath      (dbr:dbstruct-get-path  dbstruct))
+	(let* ((toppath      (dbr:dbstruct-get-path  dbstruct))
 	       (dbpath       (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
@@ -138,7 +140,7 @@
 	  (dbr:dbstruct-set-inuse! dbstruct #t)
 	  (if local
 	      (begin
-		(dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
+		(dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
 		db)
 	      (begin
 		(dbr:dbstruct-set-inmem! dbstruct inmem)
@@ -240,10 +242,17 @@
   ;; finalize main.db
   (db:sync-touched dbstruct force-sync: #t)
   (sqlite3:finalize! (db:get-db dbstruct #f))
-  (let ((rundb (dbr:dbstruct-get-rundb dbstruct)))
-    (if (sqlite3:database? rundb)
-	(sqlite3:finalize! rundb)
-	(debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database"))))
+  (let* ((local (dbr:dbstruct-get-local dbstruct))
+	 (rundb (dbr:dbstruct-get-rundb dbstruct)))
+    (if local
+	(for-each
+	 (lambda (db)
+	   (if (sqlite3:database? db)
+	       (sqlite3:finalize! db)))
+	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct)))
+	(if (sqlite3:database? rundb)
+	    (sqlite3:finalize! rundb)
+	    (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database")))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))

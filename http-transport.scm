@@ -307,9 +307,10 @@
      (begin
        ;; TODO: Send this output to a log file so it isn't lost when running as daemon
        (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
-       (server:ensure-running run-id)
        (if (> numretries 0)
-	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1))))
+	   (begin
+	     (if (> (random 100) 80)(server:ensure-running run-id)) ;; every so often try starting a server
+	     (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
        ;; set up the http-client here

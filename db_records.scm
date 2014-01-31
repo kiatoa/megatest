@@ -26,6 +26,7 @@
 (define-inline (dbr:dbstruct-get-stime   vec)    (vector-ref  vec 8))
 (define-inline (dbr:dbstruct-get-inuse   vec)    (vector-ref  vec 9))
 (define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10))
+(define-inline (dbr:dbstruct-get-locdbs  vec)    (vector-ref  vec 11))
 
 (define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
 (define-inline (dbr:dbstruct-set-strdb!  vec val)(vector-set! vec 1 val))
@@ -38,14 +39,22 @@
 (define-inline (dbr:dbstruct-set-stime!  vec val)(vector-set! vec 8 val))
 (define-inline (dbr:dbstruct-set-inuse!  vec val)(vector-set! vec 9 val))
 (define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
+(define-inline (dbr:dbstruct-set-locdbs! vec val)(vector-set! vec 11 val))
 
 ;; constructor for dbstruct
 ;;
 (define (make-dbr:dbstruct #!key (path #f)(local #f))
-  (let ((v (make-vector 11 #f)))
+  (let ((v (make-vector 12 #f)))
     (dbr:dbstruct-set-path! v path)
     (dbr:dbstruct-set-local! v local)
+    (dbr:dbstruct-set-locdbs! v (make-hash-table))
     v))
+
+(define (dbr:dbstruct-get-localdb v run-id)
+  (hash-table-ref/default (dbr:dbstruct-get-locdbs v) run-id #f))
+
+(define (dbr:dbstruct-set-localdb! v run-id db)
+  (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
 
 ;; ;; get and set main db
 ;; (define-inline (dbr:dbstruct-get-main  vec)    (vector-ref vec 0))
