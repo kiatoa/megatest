@@ -1,0 +1,47 @@
+digraph G {
+    subgraph cluster_0 {
+        node [style=filled];
+	
+	start_client -> find_server;
+	find_server -> connect [label=found];
+
+	find_server -> start_server[label=not_found];
+	start_server -> delay;
+
+	connect -> read_write;
+	read_write -> timeout -> "server_dead?";
+	read_write -> wrong_server -> delay;
+	read_write -> read_write;
+	
+	"server_dead?" -> remove_record [label="yes (too many tries)"];
+	remove_record -> find_server;
+	"server_dead?" -> delay [label=no];
+
+	delay -> find_server;	
+
+        label = "client";
+        color=green;
+    }
+
+    subgraph cluster_1 {
+        node [style=filled];
+	
+	start_server -> "server_running?";
+	"server_running?" -> set_available [label="no"];
+	"server_running?" -> delay_10s [label="yes"];
+	delay_10s -> "still_running?";
+	"still_running?" -> exit [label=yes];
+	"still_running?" -> ping_server;
+	ping_server -> "server_running?" [label=alive];
+	ping_server -> remove_server_record [label=dead];
+	remove_server_record -> set_available;
+	handle_requests -> read_write;
+
+	set_available -> avail_delay [label="delay 3s"];
+	avail_delay -> handle_requests;
+	
+        label = "server";
+        color=brown;
+    }
+    read_write -> handle_requests;
+}

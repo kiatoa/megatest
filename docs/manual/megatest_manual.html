@@ -789,8 +789,52 @@ sqlite3 database.</p></div>
 <h2 id="_current_items">Current Items</h2>
 <div class="sectionbody">
 <div class="sect2">
-<h3 id="_ww05">ww05</h3>
+<h3 id="_ww05_migrate_to_inmem_db">ww05 - migrate to inmem-db</h3>
+<div class="paragraph"><p>Keep as much the same as possible. Add internal reference to almost
+eliminate contention on db(s).</p></div>
 <div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+Add internal reference db
+</p>
+</li>
+<li>
+<p>
+Verify that actions are accessing correct db
+</p>
+<div class="olist loweralpha"><ol class="loweralpha">
+<li>
+<p>
+-runtests  - inmem
+</p>
+</li>
+<li>
+<p>
+-list-runs - local (but not megatest.db)
+</p>
+</li>
+<li>
+<p>
+dashboard  - local (but not megatest.db)
+</p>
+</li>
+</ol></div>
+</li>
+<li>
+<p>
+Mirror db to /var/tmp&#8230;
+</p>
+</li>
+<li>
+<p>
+Dashboard read db from per-run db.
+</p>
+</li>
+<li>
+<p>
+Dashboard read db from /var/tmp
+</p>
+</li>
 <li>
 <p>
 Runs register in tasks table in monitor.db
@@ -798,7 +842,7 @@ Runs register in tasks table in monitor.db
 </li>
 <li>
 <p>
-Server polls tasks table for next action
+Server polls tasks table for next action (in addition?)
 </p>
 </li>
 <li>
@@ -1085,6 +1129,14 @@ waiver_1         logpro        lookittmp.log
 <pre><tt>$MT_MEGATEST -env2file .ezsteps/${stepname}</tt></pre>
 </div></div>
 </div>
+<div class="sect2">
+<h3 id="_megatest_internals">Megatest Internals</h3>
+<div class="imageblock graphviz">
+<div class="content">
+<img src="server.png" alt="server.png" />
+</div>
+</div>
+</div>
 </div>
 </div>
 <div class="sect1">
@@ -1168,7 +1220,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2014-01-25 21:45:40 MST
+Last updated 2014-02-09 20:08:35 MST
 </div>
 </div>
 </body>
