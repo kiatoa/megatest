@@ -1,23 +1,32 @@
 digraph G {
+
+    // put client after server so server_start node is visible
+    //
     subgraph cluster_0 {
         node [style=filled];
 	
-	start_client -> find_server;
-	find_server -> connect [label=found];
+	start_client -> lookup_server;
+	lookup_server -> connect [label=found];
 
-	find_server -> start_server[label=not_found];
-	start_server -> delay;
+	lookup_server -> "server_available?";
+	"server_available?" -> delay [label=yes];
+	"server_available?" -> client_start_server [label=no];
 
-	connect -> read_write;
+	client_start_server -> delay;
+
+	connect -> login;
+	login -> read_write [label=success];
+	login -> "server_dead?" [label=fail];
+
 	read_write -> timeout -> "server_dead?";
 	read_write -> wrong_server -> delay;
-	read_write -> read_write;
+	// read_write -> read_write;
 	
 	"server_dead?" -> remove_record [label="yes (too many tries)"];
-	remove_record -> find_server;
+	remove_record -> lookup_server;
 	"server_dead?" -> delay [label=no];
 
-	delay -> find_server;	
+	delay -> lookup_server;	
 
         label = "client";
         color=green;
@@ -28,20 +37,31 @@ digraph G {
 	
 	start_server -> "server_running?";
 	"server_running?" -> set_available [label="no"];
-	"server_running?" -> delay_10s [label="yes"];
-	delay_10s -> "still_running?";
-	"still_running?" -> exit [label=yes];
-	"still_running?" -> ping_server;
-	ping_server -> "server_running?" [label=alive];
+	"server_running?" -> delay_2s [label="yes"];
+	delay_2s -> "still_running?";
+	"still_running?" -> ping_server [label=yes];
+	"still_running?" -> set_available [label=no];
+	ping_server -> exit [label=alive];
 	ping_server -> remove_server_record [label=dead];
 	remove_server_record -> set_available;
-	handle_requests -> read_write;
-
 	set_available -> avail_delay [label="delay 3s"];
-	avail_delay -> handle_requests;
+	avail_delay -> "first_in_queue?";
+
+	"first_in_queue?" -> set_running [label=yes];
+	set_running -> handle_requests;
+	"first_in_queue?" -> "server_running?" [label=no];
+
+	handle_requests -> start_shutdown [label="no traffic"];
+	handle_requests -> shutdown_request;
+	start_shutdown -> shutdown_delay;
+	shutdown_request -> shutdown_delay;
+	shutdown_delay -> exit;
 	
         label = "server";
         color=brown;
     }
+
+    client_start_server -> start_server;
+    handle_requests -> read_write;
     read_write -> handle_requests;
 }
