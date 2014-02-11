@@ -2,8 +2,13 @@
 
 (use regex srfi-69 srfi-13)
 
-(define targs (string-split (cadddr (argv)) ","))
+(define targs #f) 
 (define files (cddddr (argv)))
+
+(let ((targdat (cadddr (argv))))
+  (if (equal? targdat "-")
+      (set! targs files)
+      (set! targs (string-split targdat ","))))
 
 (define filedat-defns (make-hash-table))
 (define filedat-usages (make-hash-table))
