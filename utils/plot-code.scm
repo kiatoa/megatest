@@ -1,6 +1,6 @@
 #!/mfs/pkgs/chicken/4.8.0.5/bin/csi -nbq
 
-(use regex srfi-69)
+(use regex srfi-69 srfi-13)
 
 (define targs (string-split (cadddr (argv)) ","))
 (define files (cddddr (argv)))
@@ -17,6 +17,9 @@
   (with-output-to-port (current-error-port)
     (lambda ()
       (apply print data))))
+
+(print-err "Making graph for files: " (string-intersperse targs ", "))
+(print-err "Looking at files: " (string-intersperse files ", "))
 
 ;; Gather the functions
 ;;
@@ -49,19 +52,24 @@
 
 (define breadcrumbs (make-hash-table))
 
-(print-err "Make the quick check regex")
-(define have-function-rx (regexp (conc "(" (string-intersperse all-fns "|")
-				       ")")))
+(define (have-function inl)
+  (let loop ((hed (car all-fns))
+	     (tal (cdr all-fns)))
+    (if (string-contains inl hed)
+	#t
+	(if (null? tal)
+	    #f
+	    (loop (car tal)(cdr tal))))))
 
 (define (look-for-all-calls inl fnname)
-  (if (string-search have-function-rx inl)
+  (if (have-function inl) ;; (string-search have-function-rx inl)
       (let loop ((hed (car all-fns))
 		 (tal (cdr all-fns))
 		 (res '()))
-	(let ((match (string-match (hash-table-ref all-regexs fnname) inl)))
+	(let ((match (string-match (hash-table-ref all-regexs hed) inl)))
 	  (if match
 	      (let ((newres (cons hed res)))
-		(if (not (null? tal))
+		(if (null? tal)
 		    newres
 		    (loop (car tal)
 			  (cdr tal)
@@ -78,35 +86,49 @@
 
 (for-each
  (lambda (fname)
-   (print-err "Processing file " fname)
-   (print "subgraph cluster_" curr-cluster-num " {")
-   (set! curr-cluster-num (+ curr-cluster-num 1))
-   (with-input-from-file fname
-     (lambda ()
-       (with-output-to-port (current-error-port)
-	 (lambda ()
-	   (print "Analyzing file " fname)))
-       (print "label=\"" fname "\";")
-       (let loop ((inl    (read-line))
-		  (fnname "toplevel"))
-	 (if (not (eof-object? inl))
-	     (let ((match (string-match defn-rx inl)))
-	       (if match
-		   (let ((func-name (cadr match)))
-		     (print "\"" func-name "\";")
-		     (hash-table-set! breadcrumbs func-name #t)
-		     (loop (read-line)
-			   func-name))
-		   (let ((calls (look-for-all-calls inl fnname)))
-		     (if (not (null? calls))
-			 (set! function-calls (cons (list fnname calls) function-calls)))
-			 ;; (print "Function: " fnname " calls: " calls))
-		     (loop (read-line) fnname))))))))
-   (print "}"))
+   (let ((last-func #f))
+     (print-err "Processing file " fname)
+     (print "subgraph cluster_" curr-cluster-num " {")
+     (set! curr-cluster-num (+ curr-cluster-num 1))
+     (with-input-from-file fname
+       (lambda ()
+	 (with-output-to-port (current-error-port)
+	   (lambda ()
+	     (print "Analyzing file " fname)))
+	 (print "label=\"" fname "\";")
+	 (let loop ((inl    (read-line))
+		    (fnname "toplevel")
+		    (allcalls '()))
+	   (if (eof-object? inl)
+	       (begin
+		 (set! function-calls (cons (list fnname allcalls) function-calls))
+		 (for-each 
+		  (lambda (call-name)
+		    (hash-table-set! breadcrumbs call-name #t))
+		  allcalls)
+		 (print-err "function: " fnname " allcalls: " allcalls))
+	       (let ((match (string-match defn-rx inl)))
+		 (if match
+		     (let ((func-name (cadr match)))
+		       (if last-func
+			   (print "\"" func-name "\" -> \"" last-func "\";")
+			   (print "\"" func-name "\";"))
+		       (set! last-func func-name)
+		       (hash-table-set! breadcrumbs func-name #t)
+		       (loop (read-line)
+			     func-name
+			     allcalls))
+		     (let ((calls (look-for-all-calls inl fnname)))
+		       (loop (read-line) fnname (append allcalls calls)))))))))
+     (print "}")))
  targs)
+
+(print-err "breadcrumbs: " (hash-table-keys breadcrumbs))
+(print-err "function-calls: " function-calls)
 
 (for-each 
  (lambda (function-call)
+   (print-err "function-call: " function-call)
    (let ((fnname (car function-call))
 	 (calls  (cadr function-call)))
      (for-each
@@ -118,4 +140,4 @@
 
 (print "}")
 
-;; (exit)
+(exit)
