@@ -105,7 +105,7 @@
   (sqlite3:execute 
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
-                   VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?, strftime('%s','now'),?,        ?,        ?);"
+                   VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?,-1,?,        ?,        ?);"
    (current-process-id)       ;; pid
    (get-host-name)            ;; hostname
    -1                         ;; port

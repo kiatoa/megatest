@@ -48,8 +48,11 @@ digraph G {
 	avail_delay -> "first_in_queue?";
 
 	"first_in_queue?" -> set_running [label=yes];
-	set_running -> handle_requests;
-	"first_in_queue?" -> "server_running?" [label=no];
+	set_running -> get_next_port -> handle_requests;
+	"first_in_queue?" -> "dead_entry_in_queue?" [label=no];
+	"dead_entry_in_queue?" -> "server_running?" [label=no];
+	"dead_entry_in_queue?" -> "remove_dead_entries" [label=yes];
+	remove_dead_entries -> "server_running?";
 
 	handle_requests -> start_shutdown [label="no traffic"];
 	handle_requests -> shutdown_request;

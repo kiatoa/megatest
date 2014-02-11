@@ -52,6 +52,9 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
+;;
+;; lookup_server, 
+;;
 (define (client:setup run-id #!key (remaining-tries 3))
   (if (not *toppath*)
       (if (not (setup-for-run))

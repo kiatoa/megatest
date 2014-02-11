@@ -44,6 +44,9 @@
 ;;
 
 ;; all routes though here end in exit ...
+;;
+;; start_server
+;;
 (define (server:launch transport run-id)
   (if (not *toppath*)
       (if (not (setup-for-run))

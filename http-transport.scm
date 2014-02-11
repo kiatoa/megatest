@@ -156,6 +156,9 @@
 	 (begin 
 	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
+
+	   ;; get_next_port goes here
+
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
 	 (print "ERROR: Tried and tried but could not start the server")))
    ;; any error in following steps will result in a retry
@@ -373,6 +376,9 @@
 	 (debug:print-info 11 "got res=" res)
 	 res)))))
 
+;;
+;; connect
+;;
 (define (http-transport:client-connect run-id iface port)
   (let* ((login-res   #f)
 	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
@@ -423,6 +429,9 @@
 			       (* 60 60 (string->number tmo))
 			       ;; default to three days
 			       (* 3 24 60 60)))))
+    ;;
+    ;; set_running
+    ;;
     (tasks:server-set-state! tdb server-id "running")
     (let loop ((count 0))
       ;; Use this opportunity to sync the inmemdb to db
@@ -457,7 +466,11 @@
       
       ;; NOTE: Get rid of this mechanism! It really is not needed...
       ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
-      (tasks:server-update-heartbeat tdb server-id)
+
+      ;;
+      ;; NOT USED ANY MORE
+      ;;
+      ;; (tasks:server-update-heartbeat tdb server-id)
       
       ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
 
@@ -467,6 +480,9 @@
       (mutex-unlock! *heartbeat-mutex*)
 
       ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
+      ;;
+      ;; no_traffic
+      ;;
       (if (and *server-run*
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
@@ -478,6 +494,9 @@
 	    ;; need to delete only *my* server entry (future use)
 	    (set! *time-to-exit* #t)
 	    (if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
+	    ;;
+	    ;; start_shutdown
+	    ;;
 	    ( tasks:server-set-state! tdb server-id "shutting-down")
 	    (thread-sleep! 5)
 	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
@@ -500,6 +519,9 @@
 	    (exit))))))
 
 ;; all routes though here end in exit ...
+;;
+;; start_server? 
+;;
 (define (http-transport:launch run-id)
   (set! *run-id*   run-id)
   (if (not *toppath*)
@@ -510,8 +532,14 @@
   (debug:print-info 2 "Starting the standalone server")
   (if (args:get-arg "-daemonize")
       (daemon:ize))
+  ;;
+  ;; set_available
+  ;;
   (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
     (if (not server-id)
+	;;
+	;; remove_dead_entry?
+	;;
 	(begin
 	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db))
