@@ -4,4 +4,4 @@ ping ping -c 5 $PINGHOST
 
 # Iteration for your tests are controlled by the items section
 [items]
-PINGHOST [system refdb getrownames cfg machines]
+PINGHOST [system refdb getrownames $CFG_TYPE machines]

@@ -9,4 +9,4 @@ mode itemwait
 
 # Iteration for your tests are controlled by the items section
 [items]
-TARGETHOST [system refdb getrownames cfg machines]
+TARGETHOST [system refdb getrownames $CFG_TYPE machines]
