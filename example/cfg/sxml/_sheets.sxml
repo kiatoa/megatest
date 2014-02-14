@@ -28,9 +28,8 @@
  (urn:oasis:names:tc:opendocument:xmlns:office:1.0:document-meta
    (@ (urn:oasis:names:tc:opendocument:xmlns:office:1.0:version "1.2"))
    (urn:oasis:names:tc:opendocument:xmlns:office:1.0:meta
-     (http://purl.org/dc/elements/1.1/:date "2014-02-14T05:57:11Z")
      (urn:oasis:names:tc:opendocument:xmlns:meta:1.0:creation-date
-       "2014-02-14T05:56:56Z")))
+       "2014-02-14T06:12:52Z")))
  (http://www.gnumeric.org/v10.dtd:Calculation
    (@ (MaxIterations "100")
       (ManualRecalc "0")
