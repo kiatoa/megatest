@@ -1,0 +1,6 @@
+;; Analyze the output from diskspace.sh
+;;
+(expect:error in    "LogFileBody" = 0 "Insufficient space" #/ERROR: available space is less/)
+(expect:error in    "LogFileBody" = 0 "Any error"         #/err/i)
+(expect:required in "LogFileBody" > 1 "Sucess signature"  #/INFO: space available/)
+

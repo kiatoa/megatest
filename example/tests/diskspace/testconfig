@@ -1,0 +1,8 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+hostname  hostname
+diskspace diskspace.sh
+
+# Iteration for your tests are controlled by the items section
+[items]
+TARGETHOST [system refdb getrownames cfg machines]
