@@ -87,7 +87,7 @@
 		(hash-table-set! *runremote* run-id hostinfo)
 		(debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
 		(debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
-		(client:start run-id transport server-info)))))))
+		(client:start run-id transport hostinfo)))))))
 
 (define (client:start run-id transport server-info)
   (case transport

@@ -222,9 +222,10 @@
      (lambda (id interface port pubport transport pid hostname)
        (set! res (vector id interface port pubport transport pid hostname)))
      mdb
+     ;; removed:
+     ;; strftime('%s','now')-heartbeat < 10 AND 
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
-          WHERE strftime('%s','now')-heartbeat < 10 
-          AND mt_version=? AND run_id=? AND state='running'
+          WHERE mt_version=? AND run_id=? AND state='running'
           ORDER BY start_time DESC LIMIT 1;" (common:version-signature) run-id)
     res))
 
