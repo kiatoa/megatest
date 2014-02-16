@@ -48,20 +48,16 @@
 ;; start_server
 ;;
 (define (server:launch transport run-id)
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
-	    (exit))))
-  (debug:print-info 2 "Starting server using " transport " transport")
-  (set! *transport-type* transport)
-  (case transport
-    ;; ((fs)   (exit)) ;; there is no "fs" server transport
-    ((fs http) (http-transport:launch run-id))
-    ((zmq)     (zmq-transport:launch run-id))
-    (else
-     (debug:print "WARNING: unrecognised transport " transport)
-     (exit))))
+  (let ((server-running (server:check-if-running run-id transport)))
+    (if server-running
+	;; a server is already running
+	(exit)
+	(case transport
+	  ((http) (http-transport:launch run-id))
+	  ((zmq)  (zmq-transport:launch run-id))
+	  (else
+	   (debug:print "WARNING: unrecognised transport " transport)
+	   (exit))))))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
@@ -150,3 +146,12 @@
 	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
 	(debug:print 2 "INFO: Server(s) running " servers)
 	)))
+
+(define (server:check-if-running run-id transport)
+  (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
+	     (trycount 0))
+    (if server
+	;; note: client:start will set *runremote*. this needs to be changed
+	;;       also, client:start will login to the server, also need to change that.
+	(client:start run-id transport server)
+	#f)))

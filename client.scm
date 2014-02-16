@@ -53,7 +53,7 @@
 ;;
 ;; client:setup
 ;;
-;; lookup_server, 
+;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup run-id #!key (remaining-tries 3))
   (if (not *toppath*)
@@ -87,21 +87,23 @@
 		(hash-table-set! *runremote* run-id hostinfo)
 		(debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
 		(debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
-		(case *transport-type* 
-		  ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-		  ((http)
-		   ;; this saves the hostinfo in the *runremote* hash and returns it
-		   (http-transport:client-connect run-id 
-						  (tasks:hostinfo-get-interface hostinfo)
-						  (tasks:hostinfo-get-port hostinfo)))
-		  ((zmq)
-		   (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-						 (tasks:hostinfo-get-port      hostinfo)
-						 (tasks:hostinfo-get-pubport   hostinfo)))
-		  (else  ;; default to fs
-		   (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " exiting now.")
-		   (exit)))))))))
-    ;;	  (pop-directory)))
+		(client:start run-id transport server-info)))))))
+
+(define (client:start run-id transport server-info)
+  (case transport
+    ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
+    ((http)
+     ;; this saves the server-info in the *runremote* hash and returns it
+     (http-transport:client-connect run-id 
+				    (tasks:hostinfo-get-interface server-info)
+				    (tasks:hostinfo-get-port server-info)))
+    ((zmq)
+     (zmq-transport:client-connect (tasks:hostinfo-get-interface server-info)
+				   (tasks:hostinfo-get-port      server-info)
+				   (tasks:hostinfo-get-pubport   server-info)))
+    (else  ;; default to fs
+     (debug:print 0 "ERROR: unrecognised transport type " transport )
+     #f)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)

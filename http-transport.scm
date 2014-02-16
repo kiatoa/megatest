@@ -394,7 +394,7 @@
 	  serverdat)
 	(begin
 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
-	  (exit 1)))))
+	  #f))))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -524,12 +524,6 @@
 ;;
 (define (http-transport:launch run-id)
   (set! *run-id*   run-id)
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
-	    (exit))))
-  (debug:print-info 2 "Starting the standalone server")
   (if (args:get-arg "-daemonize")
       (daemon:ize))
   ;;
@@ -537,32 +531,26 @@
   ;;
   (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
     (if (not server-id)
-	;;
-	;; remove_dead_entry?
-	;;
 	(begin
 	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db))
-	(if *toppath* 
-	    (let* ((th2 (make-thread (lambda ()
-				       (http-transport:run 
-					(if (args:get-arg "-server")
-					    (args:get-arg "-server")
-					    "-")
-					run-id
-					server-id)) "Server run"))
-		   (th3 (make-thread (lambda ()
-				       (http-transport:keep-running server-id))
-				     "Keep running")))
-	      ;; Database connection
-	      (set! *inmemdb*  (db:setup run-id))
-	      (thread-start! th2)
-	      (thread-start! th3)
-	      (set! *didsomething* #t)
-	      (thread-join! th2))
-	    (debug:print 0 "ERROR: Failed to setup for megatest")))
-    ;; (sdb:qry 'finalize)
-    (exit)))
+	(let* ((th2 (make-thread (lambda ()
+				   (http-transport:run 
+				    (if (args:get-arg "-server")
+					(args:get-arg "-server")
+					"-")
+				    run-id
+				    server-id)) "Server run"))
+	       (th3 (make-thread (lambda ()
+				   (http-transport:keep-running server-id))
+				 "Keep running")))
+	  ;; Database connection
+	  (set! *inmemdb*  (db:setup run-id))
+	  (thread-start! th2)
+	  (thread-start! th3)
+	  (set! *didsomething* #t)
+	  (thread-join! th2)
+	  (exit)))))
 
 (define (http-transport:server-signal-handler signum)
   (handle-exceptions
