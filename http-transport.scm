@@ -62,29 +62,15 @@
 
 (define (http-transport:run hostn run-id server-id)
   (debug:print 2 "Attempting to start the server ...")
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
-	    (exit))))
-  (let* (;; (iface           (if (string=? "-" hostn)
-	 ;;        	      #f ;; (get-host-name) 
-	 ;;        	      hostn))
-	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
+  (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port    (if (and (args:get-arg "-port")
-				 (string->number (args:get-arg "-port")))
-			    (string->number (args:get-arg "-port"))
-			    (if (and (config-lookup  *configdat* "server" "port")
-				     (string->number (config-lookup  *configdat* "server" "port")))
-				(string->number (config-lookup  *configdat* "server" "port"))
-				(+ 5000 (random 1001)))))
-	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
+	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
+	 (link-tree-path  (config-lookup *configdat* "setup" "linktree")))
     (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path

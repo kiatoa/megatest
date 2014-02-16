@@ -136,6 +136,29 @@
 (define (tasks:server-set-interface-port mdb server-id interface port)
   (sqlite3:execute mdb "UPDATE servers SET interface=?,port=? WHERE id=?;" interface port server-id))
 
+(define (tasks:server-get-next-port mdb)
+  (let ((res         #f)
+	(port-param  (if (and (args:get-arg "-port")
+			      (string->number (args:get-arg "-port")))
+			 (string->number (args:get-arg "-port"))
+			 #f))
+	(config-port (if (and (config-lookup  *configdat* "server" "port")
+			      (string->number (config-lookup  *configdat* "server" "port")))
+			 (string->number (config-lookup  *configdat* "server" "port"))
+			 #f)))
+    (sqlite3:for-each-row
+     (lambda (port)
+       (set! res (+ port 1))) ;; set to next
+     mdb
+     "SELECT max(port) FROM servers;")
+    (cond
+     ((and port-param res)   (if (> res port-param) res port-param))
+     (port-param             port-param)
+     ((and config-port res)  (if (> res config-port) res config-port))
+     (config-port            config-port)
+     ((and res (> res 8080)) res)
+     (else                   (+ 5000 (random 1001))))))
+
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
