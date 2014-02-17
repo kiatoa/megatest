@@ -235,9 +235,11 @@
      exn
      (begin
        (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
-       (thread-sleep! 2)
        (if (> numretries 0)
-	   (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))))
+	   (begin
+	     (thread-sleep! 2)
+	     (http-transport:client-send-receive serverdat msg numretries: (- numretries 1)))
+	   #f))
      (begin
        (debug:print-info 11 "fullurl=" fullurl "\n")
        ;; set up the http-client here
@@ -295,13 +297,15 @@
      exn
      (begin
        ;; TODO: Send this output to a log file so it isn't lost when running as daemon
-       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
        (if (> numretries 0)
+	   ;; on the zeroeth retry do not print the error message - this allows the call to be used as a ping (no junk on output).
 	   (begin
+	     (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
 	     (if (> (random 100) 80)(server:ensure-running run-id)) ;; every so often try starting a server
-	     (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))))
+	     (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
+	   #f))
      (begin
-       (debug:print-info 11 "fullurl=" fullurl "\n")
+       (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 5)
        ;; consider all requests indempotent
@@ -366,12 +370,11 @@
 ;; connect
 ;;
 (define (http-transport:client-connect run-id iface port)
-  (let* ((login-res   #f)
-	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+  (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (serverdat   (list iface port uri-dat uri-api-dat)))
+	 (serverdat   (list iface port uri-dat uri-api-dat))
+	 (login-res   (rmt:login-no-auto-client-setup serverdat run-id)))
     (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
-    (set! login-res (rmt:login run-id))
     (if (and (list? login-res)
 	     (car login-res))
 	(begin
@@ -450,16 +453,6 @@
 	    (set! iface (car sdat))
 	    (set! port  (cadr sdat))))
       
-      ;; NOTE: Get rid of this mechanism! It really is not needed...
-      ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
-
-      ;;
-      ;; NOT USED ANY MORE
-      ;;
-      ;; (tasks:server-update-heartbeat tdb server-id)
-      
-      ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-
       ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
       (mutex-lock! *heartbeat-mutex*)
       (set! last-access *last-db-access*)
@@ -512,12 +505,10 @@
   (set! *run-id*   run-id)
   (if (args:get-arg "-daemonize")
       (daemon:ize))
-  ;;
-  ;; set_available
-  ;;
   (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
     (if (not server-id)
 	(begin
+	  ;; since we didn't get the server lock we are going to clean up and bail out
 	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db))
 	(let* ((th2 (make-thread (lambda ()

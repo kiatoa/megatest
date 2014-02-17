@@ -123,7 +123,6 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|fs      : use http or direct access for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
   -stop-server id         : stop server specified by id (see output of -list-servers), use
@@ -190,7 +189,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":units"
 			;; misc
 			"-server"
-			"-transport"
 			"-stop-server"
 			"-port"
 			"-extract-ods"
@@ -292,12 +290,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (process:children #f))
 		      (original-exit exit-code)))))
 
-;; Force default transport to fs
-;; (if ;; (and (or (args:get-arg "-list-targets")
-;;     ;;          (args:get-arg "-list-db-targets"))
-;;  (not (args:get-arg "-transport"))
-;;  (hash-table-set! args:arg-hash "-transport" "fs"))
-
 ;;======================================================================
 ;; Misc setup stuff
 ;;======================================================================
@@ -346,13 +338,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; Server? Start up here.
     ;;
     (let ((tl        (setup-for-run))
-	  (transport (or (configf:lookup *configdat* "setup" "transport")
-			 (args:get-arg "-transport" "http")))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
-      (debug:print 2 "Launching server using transport " transport " for run-id=" run-id)
       (if run-id
-	  (server:launch (string->symbol transport) run-id)
+	  (server:launch run-id)
 	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
@@ -373,39 +362,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 "Server connection not needed")
-		  ;; ok, so lets connect to the server
-		  (let* ((transport-from-config   (configf:lookup *configdat* "setup" "transport"))
-			 (transport-from-cmdln    (args:get-arg "-transport"))
-			 (transport-from-cmdinfo  (if (getenv "MT_CMDINFO")
-						      (let ((res (assoc 'transport 
-									(read
-									 (open-input-string 
-									  (base64:base64-decode
-									   (getenv "MT_CMDINFO")))))))
-							(if res (cadr res) #f))
-						      #f))
-			 (chosen-transport        (string->symbol (or transport-from-cmdln
-								      transport-from-cmdinfo
-								      transport-from-config
-								      "fs"))))
-		    (debug:print 2 "chosen-transport: " chosen-transport " have; config=" transport-from-config ", cmdln=" transport-from-cmdln ", cmdinfo=" transport-from-cmdinfo)
-		    (case chosen-transport
-		      ((http)
-		       (set! *transport-type 'http)
-		       ;; if we have a run-id (why would we?) start the server for that run.
-		       ;; otherwise it is up to other calls to start the server(s) dynamically
-		       (if run-id 
-			   (begin
-			     (server:ensure-running run-id)
-			     (client:launch run-id))
-			   (begin
-			     ;; without run-id we'll start a server for "0"
-			     (server:ensure-running 0)
-			     (client:launch 0))))
-		      (else ;; (fs)
-		       (debug:print 0 "ERROR: Should NOT be getting here! fs transport is no longer supported")
-		       (set! *transport-type* 'fs)
-		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
+		  (begin
+		    (if run-id 
+			(begin
+			  (server:ensure-running run-id)
+			  (client:launch run-id))
+			(begin
+			  ;; without run-id we'll start a server for "0"
+			  (server:ensure-running 0)
+			  (client:launch 0)))))))))
+
+;; MAY STILL NEED THIS
+;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -763,7 +731,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
-	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -776,7 +743,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (toppath   (assoc/default 'toppath   cmdinfo)))
 	  (change-directory toppath)
 	  ;; (set! *runremote* runremote)
-	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -814,7 +780,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
-	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -826,7 +791,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (target    (args:get-arg "-target")))
 	  (change-directory testpath)
 	  ;; (set! *runremote* runremote)
-	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -896,7 +860,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(exit 5))
       (let* ((cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	     ;; (runremote (assoc/default 'runremote cmdinfo))
-	     (transport (assoc/default 'transport cmdinfo))
 	     (testpath  (assoc/default 'testpath  cmdinfo))
 	     (test-name (assoc/default 'test-name cmdinfo))
 	     (runscript (assoc/default 'runscript cmdinfo))
@@ -908,8 +871,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (db        #f))
 	(change-directory testpath)
 	;; (set! *runremote* runremote)
-	;; The transport is handled earlier in the loading process of megatest.
-	;; (set! *transport-type* (string->symbol transport))
 	(if (not (setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
@@ -947,7 +908,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
-	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -960,7 +920,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
 	  ;; (set! *runremote* runremote)
-	  ;; (set! *transport-type* (string->symbol transport))
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")

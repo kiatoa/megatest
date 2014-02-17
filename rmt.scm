@@ -38,24 +38,23 @@
 ;; vars is a json string encoding the parameters for the call
 ;;
 (define (rmt:send-receive cmd run-id params)
-  (case *transport-type* 
-    ((fs-aint-here)
-     (debug:print 0 "ERROR: Not yet (re)supported")
-     (exit 1))
-    ((fs http)
-     ;; if run-id is #f send the request to run-id = 0 server. This will be for main.db
-     ;;
-     (let* ((connection-info (client:setup (if run-id run-id 0)))
-	    (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	    (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
-       (if res
-	   (db:string->obj res) ;; (rmt:json-str->dat res)
-	   (begin
-	     (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
-	     #f))))
-    (else
-     (debug:print 0 "ERROR: Transport " *transport-type* " not yet (re)supported")
-     (exit 1))))
+  (let* ((connection-info (client:setup (if run-id run-id 0)))
+	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+    (if res
+	(db:string->obj res) ;; (rmt:json-str->dat res)
+	(begin
+	  (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
+	  #f))))
+
+(define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
+  (let* ((jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 0)))
+    (if res
+	(db:string->obj res) ;; (rmt:json-str->dat res)
+	(begin
+	  (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
+	  #f))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)
@@ -79,8 +78,13 @@
 ;;======================================================================
 
 (define (rmt:login run-id)
-  (rmt:send-receive 'login run-id (list *toppath* megatest-version *my-client-signature*)))
+  (rmt:send-receive 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
 
+;; This login does no retries under the hood - it acts a bit like a ping.
+;;
+(define (rmt:login-no-auto-client-setup connection-info run-id)
+  (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
+  
 (define (rmt:kill-server run-id)
   (rmt:send-receive 'kill-server run-id (list run-id)))
 

@@ -96,7 +96,8 @@
   (let ((res '())
 	(best #f))
     (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-    (tasks:server-set-available mdb run-id)
+    (if (tasks:less-than-two-available mdb run-id)
+	(tasks:server-set-available mdb run-id))
     (thread-sleep! 2) ;; Try removing this. It may not be needed.
     (tasks:server-am-i-the-server? mdb run-id)))
 	
@@ -118,11 +119,20 @@
    run-id
    ))
 
+(define (tasks:less-than-two-available mdb run-id)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (num-in-queue)
+       (set! res num-in-queue))
+     mdb
+     "SELECT count(id) FROM servers WHERE run_id=?;"
+     run-id)
+    res))
+
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
   (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state='running' AND (strftime('%s','now') - heartbeat)  > 10 AND run_id=?;" run-id)
-  )
-  
+  (if (server:check-if-running run-id)
+      (sqlite3:execute mdb "DELETE FROM servers WHERE run_id=?;" run-id)))
 
 (define (tasks:server-set-state! mdb server-id state)
   (sqlite3:execute mdb "UPDATE servers SET state=? WHERE id=?;" state server-id))
@@ -193,28 +203,6 @@
      run-id)
     (vector header res)))
 
-(define (tasks:server-update-heartbeat mdb server-id)
-  (debug:print-info 1 "Heart beat update of server id=" server-id)
-  (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 "WARNING: probable timeout on monitor.db access")
-     (thread-sleep! 1)
-     (tasks:server-update-heartbeat mdb server-id))
-   (sqlite3:execute mdb "UPDATE servers SET heartbeat=strftime('%s','now') WHERE id=?;" server-id)))
-
-;; alive servers keep the heartbeat field upto date with seconds every 6 or so seconds
-(define (tasks:server-alive? mdb server-id #!key (iface #f)(hostname #f)(port #f)(pid #f))
-  (let* ((server-id  (if server-id 
-			 server-id
-			 (tasks:server-get-server-id mdb hostname iface port pid)))
-	 (heartbeat-delta 99e9))
-    (sqlite3:for-each-row
-     (lambda (delta)
-       (set! heartbeat-delta delta))
-     mdb "SELECT strftime('%s','now')-heartbeat FROM servers WHERE id=?;" server-id)
-    (< heartbeat-delta 10)))
-
 (define (tasks:get-server mdb run-id)
   (let ((res  #f)
 	(best #f))
@@ -229,18 +217,6 @@
           ORDER BY start_time DESC LIMIT 1;" (common:version-signature) run-id)
     res))
 
-;; (define (tasks:get-all-servers mdb)
-;;   (let ((res  '()))
-;;     (sqlite3:for-each-row
-;;      (lambda (id interface port pubport transport pid hostname)
-;;        (set! res (cons (vector id interface port pubport transport pid hostname) res)))
-;;      mdb
-;;      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
-;;           WHERE strftime('%s','now')-heartbeat < 10 
-;;           AND mt_version=? 
-;;           ORDER BY start_time DESC;" (common:version-signature))
-;;     res))
-
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
@@ -250,7 +226,7 @@
      "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport FROM servers ORDER BY start_time DESC;")
     res))
 
-(define (tasks:kill-server status hostname port pid transport)
+(define (tasks:kill-server status hostname port pid)
   (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
   (if port
       (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
@@ -271,9 +247,7 @@
 	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
 	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
 	      (let ((serverdat (list hostname port)))
-	      	(case (if (string? transport) (string->symbol transport) transport)
-	      	  ((http)(http-transport:client-connect hostname port))
-	      	  (else  (debug:print "ERROR: remote stopping servers of type " transport " not supported yet")))
+		(http-transport:client-connect hostname port)
 	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
       (begin
 	(if status 

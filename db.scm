@@ -1814,13 +1814,17 @@
 			       killserver
 			       ))
 
-(define (db:login dbstruct calling-path calling-version client-signature)
-  (if (and (equal? calling-path *toppath*)
-	   (equal? megatest-version calling-version))
-      (begin
-	(hash-table-set! *logged-in-clients* client-signature (current-seconds))
-	'(#t "successful login"))      ;; path matches - pass! Should vet the caller at this time ...
-      (list #f (conc "Login failed due to mismatch paths: " calling-path ", " *toppath*))))
+(define (db:login dbstruct calling-path calling-version run-id client-signature)
+  (cond 
+   ((not (equal? calling-path *toppath*))
+    (list #f "Login failed due to mismatch paths: " calling-path ", " *toppath*))
+   ((not (equal? *run-id* run-id))
+    (list #f "Login failed due to mismatch run-id: " run-id ", " *run-id*))
+   ((not (equal? megatest-version calling-version))
+    (list #f "Login failed due to mismatch megatest version: " calling-version ", " megatest-version))
+   (else
+    (hash-table-set! *logged-in-clients* client-signature (current-seconds))
+    '(#t "successful login"))))
 
 (define (db:general-call db stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)

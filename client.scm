@@ -56,25 +56,10 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup run-id #!key (remaining-tries 3))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
-	    (exit))))
-  ;; (push-directory *toppath*) ;; This is probably NOT needed 
-  ;; clients get the sdb:qry proc created here
-  ;; (if (not sdb:qry)
-  ;;     (begin
-  ;;       (set! sdb:qry (make-sdb:qry (conc *toppath* "/db/strings.db"))) ;; we open the normalization helpers here
-  ;;       (sdb:qry 'setup #f)))
   (let ((hostinfo (and run-id (hash-table-ref/default *runremote* run-id #f))))
-    (debug:print-info 11 "for run-id=" run-id ", *transport-type* is " *transport-type*)
     (if hostinfo
 	hostinfo ;; have hostinfo - just return it
-	(let* ((hostinfo  (open-run-close tasks:get-server tasks:open-db run-id))
-	       (transport (if hostinfo 
-			      (string->symbol (tasks:hostinfo-get-transport hostinfo))
-			      'http)))
+	(let* ((hostinfo  (open-run-close tasks:get-server tasks:open-db run-id)))
 	  (if (not hostinfo)
 	      (if (> remaining-tries 0)
 		  (begin
@@ -86,24 +71,13 @@
 	      (begin
 		(hash-table-set! *runremote* run-id hostinfo)
 		(debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-		(debug:print-info 11 "Using transport type of " transport (if hostinfo (conc " to connect to " hostinfo) ""))
-		(client:start run-id transport hostinfo)))))))
+		(client:start run-id hostinfo)))))))
 
-(define (client:start run-id transport server-info)
-  (case transport
-    ;; ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-    ((http)
-     ;; this saves the server-info in the *runremote* hash and returns it
-     (http-transport:client-connect run-id 
-				    (tasks:hostinfo-get-interface server-info)
-				    (tasks:hostinfo-get-port server-info)))
-    ((zmq)
-     (zmq-transport:client-connect (tasks:hostinfo-get-interface server-info)
-				   (tasks:hostinfo-get-port      server-info)
-				   (tasks:hostinfo-get-pubport   server-info)))
-    (else  ;; default to fs
-     (debug:print 0 "ERROR: unrecognised transport type " transport )
-     #f)))
+(define (client:start run-id server-info)
+  ;; this saves the server-info in the *runremote* hash and returns it
+  (http-transport:client-connect run-id 
+				 (tasks:hostinfo-get-interface server-info)
+				 (tasks:hostinfo-get-port server-info)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)

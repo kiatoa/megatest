@@ -47,17 +47,11 @@
 ;;
 ;; start_server
 ;;
-(define (server:launch transport run-id)
-  (let ((server-running (server:check-if-running run-id transport)))
-    (if server-running
-	;; a server is already running
-	(exit)
-	(case transport
-	  ((http) (http-transport:launch run-id))
-	  ((zmq)  (zmq-transport:launch run-id))
-	  (else
-	   (debug:print "WARNING: unrecognised transport " transport)
-	   (exit))))))
+(define (server:launch run-id)
+  (if (server:check-if-running run-id)
+      ;; a server is already running
+      (exit)
+      (http-transport:launch run-id)))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
@@ -104,33 +98,17 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
-  ;; (send-message pubsock target send-more: #t)
-  ;; (send-message pubsock 
-  (case *transport-type*
-    ((fs) result)
-    ((http)(db:obj->string (vector success/fail query-sig result)))
-    ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
-       (send-message pub-socket return-addr send-more: #t)
-       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
-    (else 
-     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
-     result)))
+  (db:obj->string (vector success/fail query-sig result)))
 
 (define (server:ensure-running run-id)
-  (let loop ((servers  (open-run-close tasks:get-server tasks:open-db run-id))
+  (let loop ((server  (open-run-close tasks:get-server tasks:open-db run-id))
 	     (trycount 0))
-    (if (or (not servers)
-	    (null? servers))
+    (if (not server)
 	(begin
 	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
 	      (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
 				 " -server - -run-id " run-id " &> " *toppath* "/db/" run-id ".log &")))
 		(debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
-		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
-		;; if there is an existing server
 		(push-directory *toppath*)
 		(system cmdln)
 		(pop-directory)
@@ -144,14 +122,16 @@
 	      (loop (open-run-close tasks:get-server tasks:open-db run-id) 
 		    (+ trycount 1))
 	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
-	(debug:print 2 "INFO: Server(s) running " servers)
-	)))
+	(debug:print 2 "INFO: Server(s) running " server))))
 
-(define (server:check-if-running run-id transport)
+(define (server:check-if-running run-id)
   (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
 	     (trycount 0))
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
-	(client:start run-id transport server)
+	;;
+	;; client:start returns #t if login was successful.
+	;;
+	(client:start run-id server)
 	#f)))
