@@ -133,5 +133,11 @@
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(client:start run-id server)
+	(let ((res (client:start run-id server)))
+	  ;; if the server didn't respond we must remove the record
+	  (if res
+	      res
+	      (begin
+		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id)
+		res)))
 	#f)))

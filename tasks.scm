@@ -127,12 +127,15 @@
      mdb
      "SELECT count(id) FROM servers WHERE run_id=?;"
      run-id)
-    res))
+    (< res 3)))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
   (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id)
   (if (server:check-if-running run-id)
       (sqlite3:execute mdb "DELETE FROM servers WHERE run_id=?;" run-id)))
+
+(define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=?;" run-id))
 
 (define (tasks:server-set-state! mdb server-id state)
   (sqlite3:execute mdb "UPDATE servers SET state=? WHERE id=?;" state server-id))
@@ -211,10 +214,10 @@
        (set! res (vector id interface port pubport transport pid hostname)))
      mdb
      ;; removed:
-     ;; strftime('%s','now')-heartbeat < 10 AND 
+     ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
-          WHERE mt_version=? AND run_id=? AND state='running'
-          ORDER BY start_time DESC LIMIT 1;" (common:version-signature) run-id)
+          WHERE run_id=? AND state='running'
+          ORDER BY start_time DESC LIMIT 1;" run-id) ;; (common:version-signature) run-id)
     res))
 
 (define (tasks:get-all-servers mdb)
