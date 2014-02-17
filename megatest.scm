@@ -341,7 +341,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
-	  (server:launch run-id)
+	  (begin
+	    (server:launch run-id)
+	    (set! *didsomething* #t))
 	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate

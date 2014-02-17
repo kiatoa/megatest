@@ -53,6 +53,11 @@
       (exit)
       (http-transport:launch run-id)))
 
+(define (server:launch-no-exit run-id)
+  (if (server:check-if-running run-id)
+      #t ;; if running
+      (http-transport:launch run-id)))
+
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
 ;;======================================================================

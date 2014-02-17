@@ -266,6 +266,8 @@
 				  (begin
 				    (debug:print 0 "WARNING: communication with the server timed out.")
 				    (mutex-unlock! *http-mutex*)
+				    ;; Maybe the server died? Try starting it up.
+				    (server:ensure-running run-id)
 				    (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))
 				    (if (< numretries 3) ;; on last try just exit
 					(begin
@@ -287,6 +289,13 @@
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
 (define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 30))
+  (if (not serverdat) ;; get #f, something went wrong. try starting the server again and reconnecting
+      (begin
+	;; try to restart the server and then reconnect
+	(server:ensure-running run-id)
+	(hash-table-delete! *runremote* run-id)
+	(client:setup run-id)
+	(set! serverdat (hash-table-ref/default *runremote* run-id #f))))
   (let* ((fullurl    (if (list? serverdat)
 			 (cadddr serverdat) ;; this is the uri for /api
 			 (begin
@@ -300,8 +309,11 @@
        (if (> numretries 0)
 	   ;; on the zeroeth retry do not print the error message - this allows the call to be used as a ping (no junk on output).
 	   (begin
-	     (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
-	     (if (> (random 100) 80)(server:ensure-running run-id)) ;; every so often try starting a server
+	     (print "ERROR IN http-transport:client-api-send-receive " ((condition-property-accessor 'exn 'message) exn))
+	     ;; try to restart the server and then reconnect
+	     (server:ensure-running run-id)
+	     (hash-table-delete! *runremote* run-id)
+	     (client:setup run-id)
 	     (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
 	   #f))
      (begin
@@ -352,7 +364,7 @@
 				  (begin
 				    (debug:print 0 "WARNING: communication with the server timed out.")
 				    (mutex-unlock! *http-mutex*)
-				    (http-transport:client-api-send-receive serverdat cmd params numretries: (- numretries 1))
+				    (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1))
 				    (if (< numretries 3) ;; on last try just exit
 					(begin
 					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
