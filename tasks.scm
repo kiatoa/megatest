@@ -93,20 +93,13 @@
 (define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
 (define (tasks:server-lock-slot mdb run-id)
-  (let loop ((res       #f)
-	     (num-tries 0))
-    (if (and (< num-tries 5)
-	     (not res))
-	(begin
-	  (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-	  (if (< (tasks:num-in-available-state mdb run-id) 4)
-	      (tasks:server-set-available mdb run-id))
-	  (thread-sleep! 2) ;; Try removing this. It may not be needed.
-	  (loop (tasks:server-am-i-the-server? mdb run-id)
-		(+ num-tries 1)))
-	res)))
-	
-      
+  (tasks:server-clean-out-old-records-for-run-id mdb run-id)
+  (if (< (tasks:num-in-available-state mdb run-id) 4)
+      (begin 
+	(tasks:server-set-available mdb run-id)
+	(thread-sleep! 2) ;; Try removing this. It may not be needed.
+	(tasks:server-am-i-the-server? mdb run-id))
+      #f))      
 	
 ;; register that this server may come online (first to register goes though with the process)
 (define (tasks:server-set-available mdb run-id)
@@ -137,12 +130,14 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 10 AND run_id=?;" run-id)
-  (if (server:check-if-running run-id)
-      (sqlite3:execute mdb "DELETE FROM servers WHERE run_id=?;" run-id)))
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 10 AND run_id=?;" run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
   (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=?;" run-id))
+
+(define (tasks:server-force-clean-run-record mdb run-id iface port)
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
+		   run-id iface port))
 
 (define (tasks:server-set-state! mdb server-id state)
   (sqlite3:execute mdb "UPDATE servers SET state=? WHERE id=?;" state server-id))

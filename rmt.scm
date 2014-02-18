@@ -38,23 +38,24 @@
 ;; vars is a json string encoding the parameters for the call
 ;;
 (define (rmt:send-receive cmd run-id params)
-  (let* ((connection-info (client:setup (if run-id run-id 0)))
-	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
+  (let* ((connection-info (hash-table-ref/default *runremote* run-id #f))
+	 (jparams         (db:obj->string params))
 	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
-	(begin
-	  (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
-	  #f))))
+	(let ((new-connection-info (client:setup run-id)))
+	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+	  (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)))))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 0)))
+	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 3)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
-	(begin
-	  (debug:print 0 "ERROR: Bad value from http-transport:client-api-send-receive " res)
-	  #f))))
+	(let ((connection-info (client:setup run-id)))
+	  ;; something went wrong, try setting up the client again and then resend
+	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+	  (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)

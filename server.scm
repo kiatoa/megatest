@@ -48,15 +48,15 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  (if (server:check-if-running run-id)
-      ;; a server is already running
-      (exit)
-      (http-transport:launch run-id)))
+  ;; (if (server:check-if-running run-id)
+  ;; a server is already running
+  ;; (exit)
+  (http-transport:launch run-id))
 
-(define (server:launch-no-exit run-id)
-  (if (server:check-if-running run-id)
-      #t ;; if running
-      (http-transport:launch run-id)))
+;; (define (server:launch-no-exit run-id)
+;;   (if (server:check-if-running run-id)
+;;       #t ;; if running
+;;       (http-transport:launch run-id)))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
@@ -105,33 +105,18 @@
 (define (server:reply return-addr query-sig success/fail result)
   (db:obj->string (vector success/fail query-sig result)))
 
-(define (server:ensure-running run-id)
-  (let loop ((server  (open-run-close tasks:get-server tasks:open-db run-id))
-	     (trycount 0))
-    (if (not server)
-	(begin
-	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
-	      (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-				 " -server - -run-id " run-id " &> " *toppath* "/db/" run-id ".log &")))
-		(debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
-		(push-directory *toppath*)
-		(system cmdln)
-		(pop-directory)
-		(thread-sleep! 3)
-		;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-		)
-	      (begin
-		(debug:print-info 0 "Waiting for server to start")
-		(thread-sleep! 4)))
-	  (if (< trycount 10)
-	      (loop (open-run-close tasks:get-server tasks:open-db run-id) 
-		    (+ trycount 1))
-	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
-	(debug:print 2 "INFO: Server(s) running " server))))
+(define (server:try-running run-id)
+  (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
+		     " -server - -run-id " run-id " &> " *toppath* "/db/" run-id ".log &")))
+    (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
+    (push-directory *toppath*)
+    (system cmdln)
+    (pop-directory)))
 
 (define (server:check-if-running run-id)
   (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
 	     (trycount 0))
+    (thread-sleep! 2)
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.

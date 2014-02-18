@@ -56,25 +56,53 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup run-id #!key (remaining-tries 3))
-  (let ((hostinfo (and run-id (hash-table-ref/default *runremote* run-id #f))))
-    (if hostinfo
-	hostinfo ;; have hostinfo - just return it
-	(let* ((hostinfo  (open-run-close tasks:get-server tasks:open-db run-id)))
-	  (if (not hostinfo)
-	      (if (> remaining-tries 0)
+  (if (<= remaining-tries 0)
+      (begin
+	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+	(exit 1))
+      (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
+	(if server-dat
+	    (let ((start-res (http-transport:client-connect run-id
+							    (tasks:hostinfo-get-interface server-dat)
+							    (tasks:hostinfo-get-port      server-dat))))
+	      (if start-res ;; sucessful login?
 		  (begin
-		    (server:ensure-running run-id)
-		    (client:setup run-id remaining-tries: (- remaining-tries 1)))
-		  (begin
-		    (debug:print 0 "ERROR: Expected to be able to connect to a server by now. No server available for run-id = " run-id)
-		    (exit 1)))
-	      (begin
-		(hash-table-set! *runremote* run-id hostinfo)
-		(debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-		(client:start run-id hostinfo)))))))
+		    (hash-table-set! *runremote* run-id server-dat)
+		    server-dat)
+		  (begin    ;; login failed
+		    (hash-table-delete! *runremote* run-id)
+		    (open-run-close tasks:server-force-clean-run-record
+				    tasks:open-db
+				    run-id 
+				    (tasks:hostinfo-get-interface server-dat)
+				    (tasks:hostinfo-get-port      server-dat))
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
+	      (if server-dat
+		  (let ((start-res (http-transport:client-connect run-id
+								  (tasks:hostinfo-get-interface server-dat)
+								  (tasks:hostinfo-get-port      server-dat))))
+		    (if start-res
+			(begin
+			  (hash-table-set! *runremote* run-id server-dat)
+			  server-dat)
+			(begin    ;; login failed
+			  (hash-table-delete! *runremote* run-id)
+			  (open-run-close tasks:server-force-clean-run-record
+					  tasks:open-db
+					  run-id 
+					  (tasks:hostinfo-get-interface server-dat)
+					  (tasks:hostinfo-get-port      server-dat))
+			  (server:try-running run-id)
+			  (thread-sleep! 3) ;; give server a little time to start up
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		  (begin    ;; no server registered
+		    (server:try-running run-id)
+		    (thread-sleep! 3) ;; give server a little time to start up
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
+;; keep this as a function to ease future 
 (define (client:start run-id server-info)
-  ;; this saves the server-info in the *runremote* hash and returns it
   (http-transport:client-connect run-id 
 				 (tasks:hostinfo-get-interface server-info)
 				 (tasks:hostinfo-get-port server-info)))
