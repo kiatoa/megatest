@@ -204,7 +204,7 @@
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
 	 (testdat     (rmt:get-test-info-by-id run-id test-id))
-	 (test-name   (db:test-get-testname   testdat))
+	 (test-name   (db:test-get-testname  testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
