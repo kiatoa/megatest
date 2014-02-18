@@ -316,11 +316,8 @@
 			       ;; (* 3 24 60 60) ;; default to three days
 			       (* 60 60)         ;; default to one hour
 			       ))))
-    ;;
-    ;; set_running
-    ;;
-    (tasks:server-set-state! tdb server-id "running")
-    (let loop ((count 0))
+    (let loop ((count         0)
+	       (server-state 'available))
       ;; Use this opportunity to sync the inmemdb to db
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)
@@ -334,10 +331,14 @@
 	    (thread-sleep! rem-time)
 	    (thread-sleep! 4))) ;; fallback for if the math is changed ...
 
-      ;; (thread-sleep! 4) ;; no need to do this very often
+      ;;
+      ;; set_running after our first pass through
+      ;;
+      (if (eq? server-state 'available)
+	  (tasks:server-set-state! tdb server-id "running"))
 
       (if (< count 1) ;; 3x3 = 9 secs aprox
-	  (loop (+ count 1)))
+	  (loop (+ count 1) 'running))
       
       ;; Check that iface and port have not changed (can happen if server port collides)
       (mutex-lock! *heartbeat-mutex*)
@@ -365,7 +366,7 @@
 		  (current-seconds)))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-	    (loop 0))
+	    (loop 0 server-state))
 	  (begin
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
