@@ -37,10 +37,6 @@
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
 
-;; client:login serverdat
-(define (client:login serverdat)
-  (cdb:login serverdat *toppath* (client:get-signature)))
-
 ;; Not currently used! But, I think it *should* be used!!!
 (define (client:logout serverdat)
   (let ((ok (and (socket? serverdat)
@@ -56,34 +52,64 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup #!key (numtries 3))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
-	    (exit))))
-  (push-directory *toppath*) ;; This is probably NOT needed 
-  (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
-  (let* ((hostinfo  (open-run-close tasks:get-best-server tasks:open-db)))
-    (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-    (set! *transport-type* (if hostinfo 
-    			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
-			       'fs))
-    (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
-    (case *transport-type* 
-      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-      ((http)
-       (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				      (tasks:hostinfo-get-port hostinfo)))
-      ((zmq)
-       (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				     (tasks:hostinfo-get-port      hostinfo)
-				     (tasks:hostinfo-get-pubport   hostinfo)))
-      (else  ;; default to fs
-       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " attempting to continue with fs")
-       (set! *transport-type* 'fs)
-       (set! *megatest-db*    (open-db))))
-    (pop-directory)))
+;;
+;; lookup_server, need to remove *runremote* stuff
+;;
+(define (client:setup run-id #!key (remaining-tries 10))
+  (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
+  (if (<= remaining-tries 0)
+      (begin
+	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+	(exit 1))
+      (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
+	(if server-dat
+	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
+							    (tasks:hostinfo-get-interface server-dat)
+							    (tasks:hostinfo-get-port      server-dat))))
+	      (if start-res ;; sucessful login?
+		  (begin
+		    (hash-table-set! *runremote* run-id start-res)
+		    start-res)
+		  (begin    ;; login failed
+		    (hash-table-delete! *runremote* run-id)
+		    (open-run-close tasks:server-force-clean-run-record
+				    tasks:open-db
+				    run-id 
+				    (tasks:hostinfo-get-interface server-dat)
+				    (tasks:hostinfo-get-port      server-dat))
+		    (thread-sleep! 5)
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
+	      (if server-dat
+		  (let ((start-res (http-transport:client-connect run-id
+								  (tasks:hostinfo-get-interface server-dat)
+								  (tasks:hostinfo-get-port      server-dat))))
+		    (if start-res
+			(begin
+			  (hash-table-set! *runremote* run-id start-res)
+			  start-res)
+			(begin    ;; login failed
+			  (hash-table-delete! *runremote* run-id)
+			  (open-run-close tasks:server-force-clean-run-record
+					  tasks:open-db
+					  run-id 
+					  (tasks:hostinfo-get-interface server-dat)
+					  (tasks:hostinfo-get-port      server-dat))
+			  (thread-sleep! 2)
+			  (server:try-running run-id)
+			  (thread-sleep! 5) ;; give server a little time to start up
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		  (begin    ;; no server registered
+		    (thread-sleep! 2)
+		    (server:try-running run-id)
+		    (thread-sleep! 5) ;; give server a little time to start up
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+
+;; keep this as a function to ease future 
+(define (client:start run-id server-info)
+  (http-transport:client-connect run-id 
+				 (tasks:hostinfo-get-interface server-info)
+				 (tasks:hostinfo-get-port server-info)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
@@ -104,11 +130,14 @@
      (thread-join! th2))))
 
 ;; client:launch
-(define (client:launch)
+;; Need to set the signal handler somewhere other than here as this
+;; routine will go away.
+;;
+(define (client:launch run-id)
   (set-signal-handler! signal/int client:signal-handler)
-   (if (client:setup)
-       (debug:print-info 2 "connected as client")
-       (begin
-	 (debug:print 0 "ERROR: Failed to connect as client")
-	 (exit))))
+  (if (client:setup run-id)
+      (debug:print-info 2 "connected as client")
+      (begin
+	(debug:print 0 "ERROR: Failed to connect as client")
+	(exit))))
 

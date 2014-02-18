@@ -19,9 +19,11 @@
 (declare (unit tests))
 (declare (uses lock-queue))
 (declare (uses db))
+(declare (uses tdb))
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
+;; (declare (uses sdb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -129,102 +131,15 @@
 		    (loop (car tal)(cdr tal)(cons qry res)))))))
       #f))
 
-;; get the previous record for when this test was run where all keys match but runname
-;; returns #f if no such test found, returns a single test record if found
-;; 
-;; Run this server-side
-;;
-(define (test:get-previous-test-run-record db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse  keys ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
-	 (keyvals #f))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	#f
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; for each run starting with the most recent look to see if there is a matching test
-	  ;; if found then return that matching test record
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) #f
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path)'() '() #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
-		  (if (and (null? results)
-			   (not (null? tal)))
-		      (loop (car tal)(cdr tal))
-		      (if (null? results) #f
-			  (car results))))))))))
-    
-;; get the previous records for when these tests were run where all keys match but runname
-;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
-;; can use wildcards. Also can likely be factored in with get test paths?
-;;
-;; Run this remotely!!
-;;
-(define (test:get-matching-previous-test-run-records db run-id test-name item-path)
-  (let* ((keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
-	 (keyvals #f)
-	 (tests-hash (make-hash-table)))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	'()
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; collect all matching tests for the runs then
-	  ;; extract the most recent test and return that.
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals 
-		       ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
-			       ", item-path " item-path " results: " (intersperse results "\n"))
-		  ;; Keep only the youngest of any test/item combination
-		  (for-each 
-		   (lambda (testdat)
-		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
-			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
-		       (if (or (not stored-test)
-			       (and stored-test
-				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
-			   ;; this test is younger, store it in the hash
-			   (hash-table-set! tests-hash full-testname testdat))))
-		   results)
-		  (if (null? tal)
-		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
-		      (loop (car tal)(cdr tal))))))))))
-
 ;; Check for waiver eligibility
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
 	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
-	 (test-rundir (db:test-get-rundir testdat))
-	 (prev-rundir (db:test-get-rundir prev-testdat))
+	 (test-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir testdat)) ;; )
+	 (prev-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir prev-testdat)) ;; )
 	 (waivers     (configf:section-vars testconfig "waivers"))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
@@ -280,18 +195,15 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! test-id state status)
-  (cdb:test-set-status-state *runremote* test-id status state #f)
-  (mt:process-triggers test-id state status))
+(define (tests:test-force-state-status! run-id test-id state status)
+  (rmt:test-set-status-state run-id test-id status state #f)
+  (mt:process-triggers run-id test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
-  (debug:print-info 4 "tests:test-set-status! test-id=" test-id ", state=" state ", status=" status ", dat=" dat)
-  (let* ((db          #f)
-	 (real-status status)
+(define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
+  (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (cdb:get-test-info-by-id *runremote* test-id))
-	 (run-id      (db:test-get-run_id testdat))
+	 (testdat     (rmt:get-test-info-by-id run-id test-id))
 	 (test-name   (db:test-get-testname   testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
@@ -302,7 +214,7 @@
 	 ;;  2. Add test for testconfig waiver propagation control here
 	 ;;
 	 (prev-test   (if (equal? status "FAIL")
-			  (cdb:remote-run test:get-previous-test-run-record #f run-id test-name item-path)
+			  (rmt:get-previous-test-run-record run-id test-name item-path)
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
@@ -327,13 +239,13 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (cdb:test-set-status-state *runremote* test-id real-status state (if waived waived comment))
-	  (mt:process-triggers test-id state real-status)))
+	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
+	  (mt:process-triggers run-id test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(db:test-data-rollup #f test-id status work-area: work-area))
+	(rmt:test-data-rollup run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -367,32 +279,30 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    ;; This was run remote, don't think that makes sense.
-	    (db:csv->test-data #f test-id
+	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
+	    (rmt:csv->test-data run-id test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(mt:roll-up-pass-fail-counts run-id test-name item-path status))
+	(rmt:roll-up-pass-fail-counts run-id test-name item-path status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (cdb:remote-run db:test-set-comment #f test-id cmt)))
-    ))
+	  (rmt:general-call 'set-test-comment run-id cmt test-id)))))
 
+(define (tests:test-set-toplog! run-id test-name logf) 
+  (rmt:general-call 'tests:test-set-toplog run-id logf run-id test-name))
 
-(define (tests:test-set-toplog! db run-id test-name logf) 
-  (cdb:client-call *runremote* 'tests:test-set-toplog #t 2 logf run-id test-name))
-
-(define (tests:summarize-items db run-id test-id test-name force)
+(define (tests:summarize-items run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
   ;;   1. logf is "log/final.log
   ;;   2. logf is same as outputfilename
   (let* ((outputfilename (conc "megatest-rollup-" test-name ".html"))
 	 (orig-dir       (current-directory))
-	 (logf-info      (cdb:remote-run db:test-get-logfile-info #f run-id test-name))
+	 (logf-info      (rmt:test-get-logfile-info run-id test-name))
 	 (logf           (if logf-info (cadr logf-info) #f))
 	 (path           (if logf-info (car  logf-info) #f)))
     ;; This query finds the path and changes the directory to it for the test
@@ -402,14 +312,13 @@
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
-	(print "No such path: " path))
+	(debug:print 0 "ERROR: summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
     (debug:print 4 "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
 	(begin
-	  (if ;; (not (obtain-dot-lock outputfilename 1 5 7)) ;; retry every second for 20 seconds, call it dead after 30 seconds and steal the lock
-              (not (lock-queue:wait-turn outputfilename test-id))
+	  (if (not (lock-queue:wait-turn outputfilename test-id))
 	      (print "Not updating " outputfilename " as another test item has signed up for the job")
 	      (begin
 		(print "Obtained lock for " outputfilename)
@@ -418,7 +327,7 @@
 		      (statecounts (make-hash-table))
 		      (outtxt "")
 		      (tot    0)
-		      (testdat (cdb:remote-run db:test-get-records-for-index-file #f run-id test-name)))
+		      (testdat (rmt:test-get-records-for-index-file run-id test-name)))
 		  (with-output-to-port
 		      oup
 		    (lambda ()
@@ -469,14 +378,38 @@
 		      (print "<table cellspacing=\"0\" border=\"1\">" 
 			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
 			     outtxt "</table></body></html>")
-		      (release-dot-lock outputfilename)))
+		      ;; (release-dot-lock outputfilename)
+		      ))
 		  (close-output-port oup)
 		  (lock-queue:release-lock outputfilename test-id)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! db run-id test-name outputfilename)
+		  (tests:test-set-toplog! run-id test-name outputfilename)
 		  )))))))
 
+;; MUST BE CALLED local!
+;;
+(define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
+  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
+  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
+					testpatt
+					statepatt
+					statuspatt
+					runname)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (if (directory-exists? p)
+			  (glob (conc p "/" fnamepatt))
+			  '()))
+		    paths-from-db))
+	paths-from-db)))
+
+			      
 ;;======================================================================
 ;; Gather data from test/task specifications
 ;;======================================================================
@@ -557,8 +490,8 @@
 	      (item-path   (tests:testqueue-get-item_path test-record))
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
-	      (test-id     (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path))
-	      (tdat        (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (test-id     (rmt:get-test-id run-id test-name item-path))
+	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -574,8 +507,8 @@
 	       (if keep-test
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
-			       (let* ((parent-test-id (cdb:remote-run db:get-test-id-cached #f run-id waiton ""))
-				      (wtdat          (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
+				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -681,8 +614,8 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id))) ;; run-id test-name item-path)))
+(define (test-get-kill-request run-id test-id) ;; run-id test-name itemdat)
+  (let* ((testdat   (rmt:get-test-info-by-id run-id test-id)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -697,57 +630,28 @@
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
-  ;; This is a good candidate for threading the requests to enable
-  ;; transactionized write at the server
-  (cdb:tests-update-cpuload-diskfree *runremote* test-id cpuload diskfree)
+(define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
+  (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id)
   (if minutes 
-      (cdb:tests-update-run-duration *runremote* test-id minutes))
+      (rmt:general-call 'update-run-duration run-id minutes test-id))
   (if (and uname hostname)
-      (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
+      (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
-(define (tests:set-full-meta-info db test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
-  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
+;; This one is for running with no db access (i.e. via rmt: internally)
+(define (tests:set-full-meta-info test-id run-id minutes work-area)
+  (let* ((num-records 0)
 	 (cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
+    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
+    (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
 	  
-(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
-  ;; DOES cdb:remote-run under the hood!
+(define (tests:set-partial-meta-info test-id run-id minutes work-area)
   (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory))))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-    ;; Update central with uname and hostname = #f
-    ;; Is this one of the performance problems? This info should come from testdat-meta anyway
-    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
-  ))
+    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)))
 	 
-(define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
-    (if (sqlite3:database? tdb)
-	(begin
-	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"
-			   cpuload diskfree minutes)
-	  (sqlite3:finalize! tdb))
-	(debug:print 2 "Can't update testdat.db for test " test-id " read-only or non-existant"))))
-    
-(define (tests:testdat-get-testinfo db test-id work-area)
-   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area))
-	 (res         '()))
-     (if (sqlite3:database? tdb)
-	 (begin
-	   (sqlite3:for-each-row
-	    (lambda (update-time cpuload diskfree run-duration)
-	      (set! res (cons (vector update-time cpuload diskfree run-duration) res)))
-	    tdb
-	    "SELECT update_time,cpuload,diskfree,run_duration FROM test_rundat ORDER BY update_time ASC;")
-	   (sqlite3:finalize! tdb)))
-     res))
-
 ;;======================================================================
 ;; A R C H I V I N G
 ;;======================================================================

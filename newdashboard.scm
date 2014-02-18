@@ -570,9 +570,9 @@ Misc
 
 (define *current-window-id* 0)
 
-(define (newdashboard)
+(define (newdashboard dbstruct)
   (let* ((data     (make-hash-table))
-	 (keys     (cdb:remote-run db:get-keys #f))
+	 (keys     (db:get-keys dbstruct))
 	 (runname  "%")
 	 (testpatt "%")
 	 (keypatts (map (lambda (k)(list k "%")) keys))

@@ -13,7 +13,7 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras)
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -21,6 +21,9 @@
 (declare (uses common))
 (declare (uses configf))
 (declare (uses db))
+;; (declare (uses sdb))
+(declare (uses tdb))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -93,7 +96,7 @@
 	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
 	  ;; (set! *runremote* runremote)
 	  ;; (set! *transport-type* (string->symbol transport))
-	  (set! keys       (cdb:remote-run db:get-keys #f))
+	  (set! keys       (rmt:get-keys))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
@@ -147,10 +150,10 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-full-meta-info #f test-id run-id 0 work-area)
+	  (tests:set-full-meta-info test-id run-id 0 work-area)
 
 	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
-	  (tests:test-force-state-status! test-id "REMOTEHOSTSTART" "n/a")
+	  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 	  (if (args:get-arg "-xterm")
@@ -178,7 +181,7 @@
 				 
 
 				 (thread-sleep! 0.3)
-				 (tests:test-force-state-status! test-id "RUNNING" "n/a")
+				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
 				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
@@ -236,8 +239,7 @@
 						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
-						   ;; DO NOT remote
-						   (db:teststep-set-status! #f test-id stepname "start" "-" #f #f work-area: work-area)
+						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
 						     (let processloop ((i 0))
@@ -254,10 +256,9 @@
 								   ))
                                                      (let ((exinfo (vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
-						       ;; testing if procedures called in a remote call cause problems (ans: no or so I suspect)
-						       (db:teststep-set-status! #f test-id stepname "end" exinfo #f logfna work-area: work-area))
+						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
-							 (cdb:test-set-log! *runremote*  test-id (conc stepname ".html")))
+							 (rmt:test-set-log! run-id test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
 									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -285,14 +286,14 @@
 							 ((warn)
 							  (set! rollup-status 2)
 							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! test-id next-state "WARN" 
+							  (tests:test-set-status! run-id test-id next-state "WARN" 
 									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 									  #f))
 							 ((pass)
-							  (tests:test-set-status! test-id next-state "PASS" #f #f))
+							  (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
 							 (else ;; 'fail
 							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
-							  (tests:test-set-status! test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
+							  (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
@@ -307,10 +308,10 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
-				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
+				   (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
-				       (set! kill-job? (or (test-get-kill-request test-id) ;; run-id test-name itemdat))
+				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 									       (time-exceeded (> run-seconds runtlim)))
 									  (if time-exceeded
@@ -319,7 +320,7 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-partial-meta-info #f test-id run-id minutes work-area)
+				       (tests:set-partial-meta-info test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -346,20 +347,18 @@
 						   ;;     (system (conc "kill -9 -" pid))))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (tests:test-set-status! test-id "KILLED"  "FAIL"
+						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
 								     (args:get-arg "-m") #f)
-						     (sqlite3:finalize! tdb)
 						     (exit 1) ;; IS THIS NECESSARY OR WISE???
 						     )))
 					     (set! kill-tries (+ 1 kill-tries))
 					     (mutex-unlock! m)))
-				       ;; (sqlite3:finalize! db)
 				       (if keep-going
 					   (begin
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
 					     (if keep-going
 						 (loop (calc-minutes)))))))
-				   (tests:update-central-meta-info test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
+				   (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
 	    (set! job-thread th2)
@@ -368,14 +367,11 @@
 	    (thread-join! th2)
 	    (set! keep-going #f)
 	    (thread-join! th1)
-	    ;; (thread-sleep! 1)
-	    ;; (thread-terminate! th1) ;; Not sure if this is a good idea
 	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
-	    ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (cdb:remote-run db:get-testinfo-state-status #f test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (rmt:get-testinfo-state-status run-id test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -393,7 +389,8 @@
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
 		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
-		    (tests:test-set-status! test-id 
+		    (tests:test-set-status! run-id 
+					    test-id 
 					    new-state
 					    new-status
 					    (args:get-arg "-m") #f)
@@ -406,7 +403,7 @@
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
-		  (tests:summarize-items #f run-id test-id test-name #f))) ;; don't force - just update if no
+		  (tests:summarize-items run-id test-id test-name #f))) ;; don't force - just update if no
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
@@ -429,7 +426,12 @@
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(if *toppath*
-	    (setenv "MT_RUN_AREA_HOME" *toppath*) ;; to be deprecated
+	    (let ((dbdir (conc *toppath* "/db")))
+	      (handle-exceptions
+	       exn
+	       (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+	       (if (not (directory-exists? dbdir))(create-directory dbdir)))
+	      (setenv "MT_RUN_AREA_HOME" *toppath*))
 	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
   *toppath*)
 
@@ -475,7 +477,7 @@
 ;;
 (define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat)
   (let* ((item-path (item-list->path itemdat))
-	 (runname  (db:get-value-by-header (db:get-row run-info)
+	 (runname  (db:get-value-by-header (db:get-rows run-info)
 					   (db:get-header run-info)
 					   "runname"))
 	 ;; convert back to db: from rdb: - this is always run at server end
@@ -500,7 +502,8 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    (cdb:test-set-rundir-by-test-id *runremote* test-id lnkpathf)
+    ;; (cdb:test-set-rundir-by-test-id *runremote* test-id (filedb:register-path *fdb* lnkpathf))
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -516,21 +519,6 @@
     ;; This wass highly inefficient, one db write for every subtest, potentially
     ;; thousands of unnecessary updates, cache the fact it was set and don't set it 
     ;; again. 
-
-    ;; NB - This is not working right - some top tests are not getting the path set!!!
-
-    (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (cdb:get-test-info-by-id *runremote* test-id)) ;;  run-id testname item-path))
-	       (curr-test-path (if testinfo (db:test-get-rundir testinfo) #f)))
-	  (hash-table-set! *toptest-paths* testname curr-test-path)
-	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  (cdb:test-set-rundir! *runremote* run-id testname "" lnkpath) ;; toptest-path)
-	  (if (or (not curr-test-path)
-		  (not (directory-exists? toptest-path)))
-	      (begin
-		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
-		(create-directory toptest-path #t)
-		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
     ;; Now create the link from the test path to the link tree, however
     ;; if the test is iterated it is necessary to create the parent path
@@ -563,6 +551,35 @@
 	   (exit 1))
 	 (create-symbolic-link toptest-path lnkpath)))
     
+    ;; NB - This was not working right - some top tests are not getting the path set!!!
+    ;;
+    ;; Do the setting of this record after the paths are created so that the shortdir can 
+    ;; be set to the real directory location. This is safer for future clean up if the link
+    ;; tree is damaged or lost.
+    ;; 
+    (if (not (hash-table-ref/default *toptest-paths* testname #f))
+	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
+	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
+							     ;; (db:get-path dbstruct
+				   ;; (rmt:sdb-qry 'getstr 
+				   (db:test-get-rundir testinfo) ;; ) ;; )
+				   #f)))
+	  (hash-table-set! *toptest-paths* testname curr-test-path)
+	  ;; NB// Was this for the test or for the parent in an iterated test?
+	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
+	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
+			    (if (file-exists? lnkpath)
+				(resolve-pathname lnkpath)
+				lnkpath)
+			    testname "")
+	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
+	  (if (or (not curr-test-path)
+		  (not (directory-exists? toptest-path)))
+	      (begin
+		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
+		(create-directory toptest-path #t)
+		(hash-table-set! *toptest-paths* testname toptest-path)))))
+
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
     (if (not not-iterated) ;; this is an iterated test
@@ -583,20 +600,11 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print 0 "ERROR:  Failed to re-create link " linktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
-    ;; I suspect this section was deleting test directories under some 
-    ;; wierd sitations? This doesn't make sense - reenabling the rm -f 
-    ;; I honestly don't remember *why* this chunk was needed...
-    ;; (let ((testlink (conc lnkpath "/" testname)))
-    ;;   (if (and (file-exists? testlink)
-    ;;            (or (regular-file? testlink)
-    ;;     	   (symbolic-link? testlink)))
-    ;;       (system (conc "rm -f " testlink)))
-    ;;   (system  (conc "ln -sf " test-path " " testlink)))
     (if (directory? test-path)
 	(begin
 	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
@@ -669,7 +677,7 @@
 	 (mt-bindir-path #f)
 	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
+	 (testinfo   (rmt:get-test-info-by-id run-id test-id))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
@@ -716,7 +724,7 @@
     ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
     ;; (open-run-close db:delete-test-step-records db test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
-    (tests:test-set-status! test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

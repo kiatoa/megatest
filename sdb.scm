@@ -22,23 +22,16 @@
 (declare (unit sdb))
 
 ;; 
-(define (sdb:open) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
-	    (exit))))
-  (let* ((dbpath    (conc *toppath* "/db/sdb.db")) ;; fname)
-	 (dbexists  (let ((fe (file-exists? dbpath)))
+(define (sdb:open fname)
+  (let* ((dbpath    (pathname-directory fname))
+	 (dbexists  (let ((fe (file-exists? fname)))
 		      (if fe 
 			  fe
 			  (begin
-			    (create-directory (conc *toppath* "/db") #t)
+			    (create-directory dbpath #t)
 			    #f))))
-	 (sdb        (sqlite3:open-database dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   136000))))
+	 (sdb        (sqlite3:open-database fname))
+	 (handler   (make-busy-timeout 136000)))
     (sqlite3:set-busy-handler! sdb handler)
     (if (not dbexists)
 	(sdb:initialize sdb))
@@ -50,7 +43,7 @@
                            (id  INTEGER PRIMARY KEY,
                             str TEXT,
                         CONSTRAINT str UNIQUE (str));")
-  (sqlite3:execute sdb "CREATE INDEX strindx ON strs (str);"))
+  (sqlite3:execute sdb "CREATE INDEX IF NOT EXISTS strindx ON strs (str);"))
 
 ;; (define sumup (let ((a 0))(lambda (x)(set! a (+ x a)) a)))
 
@@ -79,16 +72,26 @@
 	 "SELECT str FROM strs WHERE id=?;" id))
     str))
 
-(define sdb:qry
+;; Numbers get passed though in both directions
+;;
+(define (make-sdb:qry fname)
   (let ((sdb    #f)
 	(scache (make-hash-table))
 	(icache (make-hash-table)))
     (lambda (cmd var)
-      (if (not sdb)(set! sdb (sdb:open)))
       (case cmd
-	((init)      (if (not sdb)(set! sdb (sdb:open))))
-	((finalize!) (if sdb (sqlite3:finalize! sdb)))
-	((getid)     (let ((id (sdb:string->id sdb scache var)))
+	((setup)   (set! sdb (if (not sdb)
+				 (sdb:open (if var var fname)))))
+	((setdb)    (set! sdb var))
+	((getdb)    sdb)
+	((finalize) (if sdb
+			(begin
+			  (sqlite3:finalize! sdb)
+			  (set! sdb #f))))
+	((getid)     (let ((id (if (or (number? var)
+				       (string->number var))
+				   var
+				   (sdb:string->id sdb scache var))))
 		       (if id
 			   id
 			   (begin
@@ -98,5 +101,7 @@
 			     (string->number var))
 			 (sdb:id->string sdb icache var)
 			 var))
+	((passid)    var)
+	((passstr)   var)
 	(else #f)))))
 

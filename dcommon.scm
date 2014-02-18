@@ -377,11 +377,11 @@
 
     general-matrix))
 
-(define (dcommon:run-stats)
+(define (dcommon:run-stats dbstruct)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (mt:get-run-stats))
+			 (let* ((run-stats    (db:get-run-stats dbstruct))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))

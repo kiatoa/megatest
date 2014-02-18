@@ -1,15 +1,16 @@
 #
 # run some tests
 
-BINPATH=$(shell readlink -m $(PWD)/../bin)
-MEGATEST=$(BINPATH)/megatest
-PATH := $(BINPATH):$(PATH)
-RUNNAME := $(shell date +w%V.%u.%H.%M)
-IPADDR := "-"
-# Set SERVER to "-server -"
-SERVER  = 
-DEBUG   = 1
-LOGGING = 
+BINPATH   = $(shell readlink -m $(PWD)/../bin)
+MEGATEST  = $(BINPATH)/megatest
+DASHBOARD = $(BINPATH)/dashboard
+PATH     := $(BINPATH):$(PATH)
+RUNNAME  := $(shell date +w%V.%u.%H.%M)
+IPADDR   := "-"
+RUNID    := 1
+SERVER    = 
+DEBUG     = 1
+LOGGING   = 
 
 OS  = $(shell grep ID /etc/*-release|cut -d= -f2)
 FS  = $(shell df -T .|tail -1|awk '{print $$2}')
@@ -23,7 +24,7 @@ all : test1 test2 test3 test4 test5 test6 test7 test8 test9
 
 server :
 	cd ..;make;make install
-	cd fullrun;../../bin/megatest -server - -debug 22
+	cd fullrun;../../bin/megatest -server - -debug $(DEBUG) -run-id $(RUNID)
 
 stopserver :
 	cd ..;make && make install
@@ -37,11 +38,6 @@ test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
 
 test1 : cleanprep
-	rm -f simplerun/megatest.db
-	rm -rf simplelinks/ simpleruns/
-	mkdir -p simplelinks simpleruns
-	cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm
-	cd simplerun;echo '(load "../tests.scm")' | $(MEGATEST) -repl -debug $(DEBUG)
 
 test2 : fullprep
 	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
@@ -113,23 +109,23 @@ test9 : minsetup test9a test9b test9c test9d test9e
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
-	cd mintest;megatest -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9b :
 	@echo Run simple mintest d with one waiton c
-	cd mintest;megatest -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
-	cd mintest;megatest -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
 	@echo Run an itemized test with no items
-	cd mintest;megatest -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9e :
 	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
-	cd mintest;megatest -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously
@@ -148,10 +144,10 @@ test11 :
 minsetup : 
 	cd ..;make && make install
 	mkdir -p mintest/runs mintest/links
-	cd mintest;megatest -stop-server 0
-	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
+	cd mintest;$(MEGATEST) -stop-server 0
+	cd mintest;$(MEGATEST) -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3
-	cd mintest;dashboard -rows 18 &
+	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
@@ -164,10 +160,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -transport fs -rows 20 &
-
-dashboard-http : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -transport http -rows 20 &
+	cd fullrun && $(BINPATH)/dashboard -rows 20 &
 
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
@@ -177,11 +170,11 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -f */megatest.db */logging.db */monitor.db || true
+	rm -rf *run/db/* */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* || true
 	killall -v mtest dboard || true
 
 hardkill : kill
-	sleep 5;killall -v mtest main.sh dboard -9
+	sleep 2;killall -v mtest main.sh dboard -9
 
 listservers :
 	cd fullrun;$(MEGATEST) -list-servers

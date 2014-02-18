@@ -206,7 +206,7 @@
 										  (string-intersperse res " "))))))
 							    (hash-table-set! res curr-section-name 
 									     (config:assoc-safe-add alist
-												    key 
+									   			    key 
 												    (case allow-system
 												      ((return-procs) val-proc)
 												      ((return-string) cmd)
@@ -220,9 +220,12 @@
 									       val)))
 							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
 							     (if envar
-								 (begin
-								   ;; (debug:print-info 4 "read-config key=" key ", val=" val ", realval=" realval)
-								   (setenv key realval)))
+								 (if (and (string? realval)(string? key))
+								     (handle-exceptions
+								      exn
+								      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" realval)
+								      (setenv key realval))
+								     (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" realval)))
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval))
 							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))

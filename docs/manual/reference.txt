@@ -4,6 +4,7 @@ Reference
 
 The First Chapter of the Second Part
 ------------------------------------
+
 Chapters grouped into book parts are at level 1 and can contain
 sub-sections.
 

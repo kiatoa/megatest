@@ -6,9 +6,10 @@ SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
-	   fs-transport.scm http-transport.scm \
+	   fs-transport.scm http-transport.scm filedb.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
-	   tree.scm ezsteps.scm lock-queue.scm sdb.scm
+	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
+	   rmt.scm api.scm tdb.scm
 
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
@@ -107,7 +108,7 @@ $(PREFIX)/bin/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-$(PREFIX)/bin/nbload : utils/nbload
+$(PREFIX)/bin/loadrunner : utils/loadrunner
 	$(INSTALL) $< $@
 	chmod a+x $@
 
@@ -131,7 +132,7 @@ $(PREFIX)/bin/dboard : dboard $(FILES)
 	chmod a+x $(PREFIX)/bin/dashboard
 
 install : bin $(PREFIX)/bin/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-          $(PREFIX)/bin/nbfind $(PREFIX)/bin/nbload $(PREFIX)/bin/newdboard $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm $(PREFIX)/bin/revtagfsl
+          $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/newdboard $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm $(PREFIX)/bin/revtagfsl
 
 deploytarg/apropos.so : Makefile
 	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
