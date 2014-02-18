@@ -94,13 +94,12 @@
 
 (define (tasks:server-lock-slot mdb run-id)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (server:check-if-running run-id)
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
 	(thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
-      #f))      
+      #f))
 	
 ;; register that this server may come online (first to register goes though with the process)
 (define (tasks:server-set-available mdb run-id)

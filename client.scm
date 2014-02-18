@@ -55,20 +55,21 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 3))
+(define (client:setup run-id #!key (remaining-tries 10))
+  (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
   (if (<= remaining-tries 0)
       (begin
 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	(exit 1))
       (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
 	(if server-dat
-	    (let ((start-res (http-transport:client-connect run-id
+	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
 							    (tasks:hostinfo-get-interface server-dat)
 							    (tasks:hostinfo-get-port      server-dat))))
 	      (if start-res ;; sucessful login?
 		  (begin
-		    (hash-table-set! *runremote* run-id server-dat)
-		    server-dat)
+		    (hash-table-set! *runremote* run-id start-res)
+		    start-res)
 		  (begin    ;; login failed
 		    (hash-table-delete! *runremote* run-id)
 		    (open-run-close tasks:server-force-clean-run-record
@@ -76,6 +77,7 @@
 				    run-id 
 				    (tasks:hostinfo-get-interface server-dat)
 				    (tasks:hostinfo-get-port      server-dat))
+		    (thread-sleep! 5)
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
 	      (if server-dat
@@ -84,8 +86,8 @@
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
 			(begin
-			  (hash-table-set! *runremote* run-id server-dat)
-			  server-dat)
+			  (hash-table-set! *runremote* run-id start-res)
+			  start-res)
 			(begin    ;; login failed
 			  (hash-table-delete! *runremote* run-id)
 			  (open-run-close tasks:server-force-clean-run-record
@@ -93,12 +95,14 @@
 					  run-id 
 					  (tasks:hostinfo-get-interface server-dat)
 					  (tasks:hostinfo-get-port      server-dat))
+			  (thread-sleep! 2)
 			  (server:try-running run-id)
-			  (thread-sleep! 3) ;; give server a little time to start up
+			  (thread-sleep! 5) ;; give server a little time to start up
 			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 		  (begin    ;; no server registered
+		    (thread-sleep! 2)
 		    (server:try-running run-id)
-		    (thread-sleep! 3) ;; give server a little time to start up
+		    (thread-sleep! 5) ;; give server a little time to start up
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
 ;; keep this as a function to ease future 

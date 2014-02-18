@@ -402,6 +402,10 @@
   (set! *run-id*   run-id)
   (if (args:get-arg "-daemonize")
       (daemon:ize))
+  (if (server:check-if-running run-id)
+      (begin
+	(debug:print 0 "INFO: Server for run-id " run-id " already running")
+	(exit 0)))
   (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
     (if (not server-id)
 	(begin

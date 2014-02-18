@@ -37,18 +37,32 @@
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
-(define (rmt:send-receive cmd run-id params)
-  (let* ((connection-info (hash-table-ref/default *runremote* run-id #f))
+(define (rmt:send-receive cmd rid params)
+  (let* ((run-id  (if rid rid 0))
+	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+			    (if cinfo
+				cinfo
+				(let loop ((numtries 100))
+				  (thread-sleep! 1)
+				  (let ((res (client:setup run-id)))
+				    (if res 
+					res
+					(if (> numtries 0)
+					    (loop (- numtries 1))
+					    (begin
+					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
+					      (exit 1)))))))))
 	 (jparams         (db:obj->string params))
 	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
 	(let ((new-connection-info (client:setup run-id)))
 	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-	  (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)))))
+	  (rmt:send-receive cmd run-id params)))))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
-  (let* ((jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
+  (let* ((run-id   (if run-id run-id 0))
+	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
 	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 3)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)

@@ -105,9 +105,11 @@
 (define (server:reply return-addr query-sig success/fail result)
   (db:obj->string (vector success/fail query-sig result)))
 
+;; > file 2>&1 
 (define (server:try-running run-id)
-  (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-		     " -server - -run-id " run-id " &> " *toppath* "/db/" run-id ".log &")))
+  (let* ((rand-name (random 100))
+	 (cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
+		     " -server - -run-id " run-id " name=" rand-name " > " *toppath* "/db/" run-id "-" rand-name ".log 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (system cmdln)
