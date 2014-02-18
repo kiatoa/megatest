@@ -52,10 +52,8 @@
 	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 3)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
-	(let ((connection-info (client:setup run-id)))
-	  ;; something went wrong, try setting up the client again and then resend
-	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-	  (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)))))
+	;; this one does NOT keep trying
+	res)))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)

@@ -220,19 +220,6 @@
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
 (define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 30))
-  ;; (let loop ((sdat  serverdat)
-  ;;            (tries 10))
-  ;;   (if (not sdat) ;; get #f, something went wrong. try starting the server again and reconnecting
-  ;;       (begin
-  ;;         ;; try to restart the server and then reconnect
-  ;;         ;; (hash-table-delete! *runremote* run-id) ;; this should be taken care of by client:setup
-  ;;         (thread-sleep! 1)
-  ;;         (if (> tries 0)
-  ;;             (let ((newsdat (client:setup run-id)))
-  ;;       	(set! serverdat newsdat)
-  ;;       	(loop newsdat (- tries 1)))
-  ;;             (debug:print 0 "ERROR: could not connect to or start a server for run-id " run-id)))))
-  ;; (debug:print 0 "serverdat=" serverdat)
   (let* ((fullurl    (if (list? serverdat)
 			 (cadddr serverdat) ;; this is the uri for /api
 			 (begin
@@ -242,72 +229,31 @@
     (handle-exceptions
      exn
      #f
-     ;; (begin
-       ;; TODO: Send this output to a log file so it isn't lost when running as daemon
-       ;; (if (> numretries 0)
-	;;    ;; on the zeroeth retry do not print the error message - this allows the call to be used as a ping (no junk on output).
-	;;    (begin
-	;;      (print "ERROR IN http-transport:client-api-send-receive " ((condition-property-accessor 'exn 'message) exn))
-	;;      ;; try to restart the server and then reconnect
-	;;      ;; (hash-table-delete! *runremote* run-id)
-	;;      ;; (client:setup run-id)
-	;;      ;; (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
-	;;      #f) ;; simply return #f to indicate failure. The caller will need to do the retry.
-	;;    #f))
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 5)
        ;; consider all requests indempotent
        (retry-request? (lambda (request)
-			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
-       ;; (set! numretries (- numretries 1))
-       ;;  		 #t))
+			 #t))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.
-
-       ;; (with-input-from-request "http://localhost/echo-service"
-       ;;                  '((test . "value")) read-string)
-
        (let* ((send-recieve (lambda ()
-			;;       (let ((dat #f)
-			;; 	    (cleanup (http-transport:get-time-to-cleanup)))
-			;; 	(if cleanup 
-			;; 	    (http-transport:inc-requests-and-prep-to-close-all-connections)
-			;; 	    (http-transport:inc-requests-count))
-			;; 	;; Do the actual data transfer NB// KEPP THIS IN SYNC WITH http-transport:client-send-receive
-				 (mutex-lock! *http-mutex*)
-				 (set! res (with-input-from-request ;; was dat
-					   fullurl 
-					   (list (cons 'key "thekey")
-						 (cons 'cmd cmd)
-						 (cons 'params params))
-					   read-string))
-				 ;; Shouldn't this be a call to the managed call-all-connections stuff above?
-				(close-all-connections!)
-				(mutex-unlock! *http-mutex*)
-				))
-	                          ;; (if cleanup
-				  ;;   ;; mutex already set
-				  ;;   (begin
-				  ;;     (set! res dat)
-				  ;;     (http-transport:dec-requests-count-and-close-all-connections))
-				  ;;   (http-transport:dec-requests-count
-				  ;;    (lambda ()
-				  ;;      (set! res dat)))))))
+			      (mutex-lock! *http-mutex*)
+			      (set! res (with-input-from-request ;; was dat
+					 fullurl 
+					 (list (cons 'key "thekey")
+					       (cons 'cmd cmd)
+					       (cons 'params params))
+					 read-string))
+			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
+			      (close-all-connections!)
+			      (mutex-unlock! *http-mutex*)
+			      ))
 	      (time-out     (lambda ()
 			      (thread-sleep! 45)
 			      #f))
-			      ;; (if (not res)
-			      ;;     (begin
-			      ;;       (debug:print 0 "WARNING: communication with the server timed out.")
-			      ;;       (mutex-unlock! *http-mutex*)
-			      ;;       (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1))
-			      ;;       (if (< numretries 3) ;; on last try just exit
-			      ;;   	(begin
-			      ;;   	  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
-			      ;;   	  (exit 1)))))))
 	      (th1 (make-thread send-recieve "with-input-from-request"))
 	      (th2 (make-thread time-out     "time out")))
 	 (thread-start! th1)

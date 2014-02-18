@@ -94,6 +94,7 @@
 
 (define (tasks:server-lock-slot mdb run-id)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id)
+  (server:check-if-running run-id)
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
