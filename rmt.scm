@@ -46,7 +46,7 @@
 				  (thread-sleep! 1)
 				  (let ((res (client:setup run-id)))
 				    (if res 
-					res
+					(hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
 					(if (> numtries 0)
 					    (loop (- numtries 1))
 					    (begin
@@ -202,11 +202,16 @@
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
+;; NOTE: This will open and access ALL run databases. 
+;;
 (define (rmt:test-get-paths-matching-keynames-target-new keynames target res testpatt statepatt statuspatt runname)
-  (let ((run-ids (rmt:get-run-ids-matching keynames target res)))
+  (let ((run-ids (rmt:get-all-run-ids))) ;; (rmt:get-run-ids-matching keynames target res)))
     (apply append (lambda (run-id)
 		    (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
 	   run-ids)))
+
+(define (rmt:get-run-ids-matching keynames target res)
+  (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
 
 (define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
   (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode)))

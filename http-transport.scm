@@ -313,8 +313,9 @@
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
-			       ;; default to three days
-			       (* 3 24 60 60)))))
+			       ;; (* 3 24 60 60) ;; default to three days
+			       (* 60 60)         ;; default to one hour
+			       ))))
     ;;
     ;; set_running
     ;;
