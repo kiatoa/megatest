@@ -97,7 +97,7 @@
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
-	(thread-sleep! 2) ;; Try removing this. It may not be needed.
+	(thread-sleep! 0.2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
@@ -130,7 +130,7 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 10 AND run_id=?;" run-id))
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 100 AND run_id=?;" run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
   (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=?;" run-id))
@@ -186,12 +186,15 @@
 	 (hostname (db:get-value-by-header first header "hostname"))
 	 (pid      (db:get-value-by-header first header "pid"))
 	 (priority (db:get-value-by-header first header "priority")))
-    (debug:print 0 "INFO: am-i-the-server got record " first)
     ;; for now a basic check. add tiebreaking by priority later
-    (if (and (equal? hostname (get-host-name))
-	     (equal? pid      (current-process-id)))
-	id
-	#f)))
+    (let* ((my-pid (current-process-id))
+	   (res (if (and (equal? hostname (get-host-name))
+			 (equal? pid       my-pid))
+		    id
+		    #f)))
+      (debug:print 0 "INFO: am-i-the-server got record " first ", my-pid: " my-pid ", pid: " pid ", result: " res)
+      res)))
+      
 	     
 ;; Use: (db:get-value-by-header (car (db:get-rows dat)) (db:get-header dat) "fieldname")
 ;;  to extract info from the structure returned

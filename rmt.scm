@@ -46,7 +46,7 @@
 				  (thread-sleep! 1)
 				  (let ((res (client:setup run-id)))
 				    (if res 
-					(hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
+					(hash-table-ref *runremote* run-id) ;; client:setup filled this in (hopefully)
 					(if (> numtries 0)
 					    (loop (- numtries 1))
 					    (begin

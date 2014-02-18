@@ -269,15 +269,15 @@
 (define (http-transport:client-connect run-id iface port)
   (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (serverdat   (list iface port uri-dat uri-api-dat))
-	 (login-res   (rmt:login-no-auto-client-setup serverdat run-id)))
-    (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
+	 (server-dat  (list iface port uri-dat uri-api-dat))
+	 (login-res   (rmt:login-no-auto-client-setup server-dat run-id)))
+    ;; (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
     (if (and (list? login-res)
 	     (car login-res))
 	(begin
 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-	  (hash-table-set! *runremote* run-id serverdat)
-	  serverdat)
+	  (hash-table-set! *runremote* run-id server-dat)
+	  server-dat)
 	(begin
 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
 	  #f))))

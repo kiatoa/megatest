@@ -109,27 +109,33 @@
 (define (server:try-running run-id)
   (let* ((rand-name (random 100))
 	 (cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-		     " -server - -run-id " run-id " name=" rand-name " > " *toppath* "/db/" run-id "-" rand-name ".log 2>&1 &")))
+		     " -server - -run-id " run-id " name=" rand-name " > " *toppath* "/db/" run-id
+		     ".log 2>&1 &")))
+		     ;; ".log &" )))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (system cmdln)
     (pop-directory)))
 
 (define (server:check-if-running run-id)
-  (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
-	     (trycount 0))
+  (let loop ((server-info (open-run-close tasks:get-server tasks:open-db run-id))
+	     (trycount    0))
     (thread-sleep! 2)
-    (if server
+    (if server-info
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (client:start run-id server)))
+	(let ((res (http-transport:client-connect
+		    run-id 
+		    (tasks:hostinfo-get-interface server-info)
+		    (tasks:hostinfo-get-port server-info))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      res
 	      (begin
+		(debug:print 0 "WARNING: running server not reachable, removing record: " server-info)
 		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id)
 		res)))
 	#f)))

@@ -56,51 +56,49 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup run-id #!key (remaining-tries 10))
-  (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
   (if (<= remaining-tries 0)
       (begin
 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	(exit 1))
       (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
+	(thread-sleep! 1) ;; try to avoid race conditons
 	(if server-dat
-	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
-							    (tasks:hostinfo-get-interface server-dat)
-							    (tasks:hostinfo-get-port      server-dat))))
-	      (if start-res ;; sucessful login?
-		  (begin
-		    (hash-table-set! *runremote* run-id start-res)
-		    start-res)
+	    (let ((new-dat (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
+							    (car  server-dat)
+							    (cadr server-dat))))
+	      (if new-dat ;; sucessful login?
+		  new-dat
 		  (begin    ;; login failed
+		    (debug:print 0 "INFO: login failed in client:setup with existing server-dat: " server-dat ", new-dat: " new-dat ", cleaning out records and then trying again")
 		    (hash-table-delete! *runremote* run-id)
 		    (open-run-close tasks:server-force-clean-run-record
 				    tasks:open-db
 				    run-id 
-				    (tasks:hostinfo-get-interface server-dat)
-				    (tasks:hostinfo-get-port      server-dat))
+				    (car  server-dat)
+				    (cadr server-dat))
 		    (thread-sleep! 5)
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
-	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
-	      (if server-dat
-		  (let ((start-res (http-transport:client-connect run-id
-								  (tasks:hostinfo-get-interface server-dat)
-								  (tasks:hostinfo-get-port      server-dat))))
-		    (if start-res
-			(begin
-			  (hash-table-set! *runremote* run-id start-res)
-			  start-res)
+	    (let* ((server-info (open-run-close tasks:get-server tasks:open-db run-id)))
+	      (if server-info
+		  (let ((new-dat (http-transport:client-connect run-id
+								  (tasks:hostinfo-get-interface server-info)
+								  (tasks:hostinfo-get-port      server-info))))
+		    (if new-dat
+			new-dat
 			(begin    ;; login failed
+			  (debug:print 0 "INFO: login failed in client:setup with no existing server-dat: " server-dat ", new-dat: " new-dat ", and server-info: " server-info ", cleaning out records and then trying again")
 			  (hash-table-delete! *runremote* run-id)
 			  (open-run-close tasks:server-force-clean-run-record
 					  tasks:open-db
 					  run-id 
 					  (tasks:hostinfo-get-interface server-dat)
 					  (tasks:hostinfo-get-port      server-dat))
-			  (thread-sleep! 2)
+			  ;; (thread-sleep! 2)
 			  (server:try-running run-id)
 			  (thread-sleep! 5) ;; give server a little time to start up
 			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 		  (begin    ;; no server registered
-		    (thread-sleep! 2)
+		    ;; (thread-sleep! 2)
 		    (server:try-running run-id)
 		    (thread-sleep! 5) ;; give server a little time to start up
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
