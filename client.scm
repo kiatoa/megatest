@@ -55,7 +55,7 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 10))
+(define (client:setup run-id #!key (remaining-tries 20) (failed-connects 0))
   (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
   (if (<= remaining-tries 0)
       (begin
@@ -64,19 +64,24 @@
       (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
 	(if server-dat
 	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
-							    (tasks:hostinfo-get-interface server-dat)
-							    (tasks:hostinfo-get-port      server-dat))))
+							    (car  server-dat)
+							    (cadr server-dat))))
 	      (if start-res ;; sucessful login?
 		  start-res
-		  (begin    ;; login failed
-		    (hash-table-delete! *runremote* run-id)
-		    (open-run-close tasks:server-force-clean-run-record
-				    tasks:open-db
-				    run-id 
-				    (tasks:hostinfo-get-interface server-dat)
-				    (tasks:hostinfo-get-port      server-dat))
-		    (thread-sleep! 5)
-		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		  (if (and (< remaining-tries 10)
+			   (odd? remaining-tries))
+		      (begin    ;; login failed
+			(hash-table-delete! *runremote* run-id)
+			(open-run-close tasks:server-force-clean-run-record
+					tasks:open-db
+					run-id 
+					(car  server-dat)
+					(cadr server-dat))
+			(thread-sleep! 5)
+			(client:setup run-id remaining-tries: (- remaining-tries 1)))
+		      (begin
+			(thread-sleep! 5)
+			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
 	      (if server-dat
 		  (let ((start-res (http-transport:client-connect run-id
@@ -84,17 +89,22 @@
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
 			start-res
-			(begin    ;; login failed
-			  (hash-table-delete! *runremote* run-id)
-			  (open-run-close tasks:server-force-clean-run-record
-					  tasks:open-db
-					  run-id 
-					  (tasks:hostinfo-get-interface server-dat)
-					  (tasks:hostinfo-get-port      server-dat))
-			  (thread-sleep! 2)
-			  (server:try-running run-id)
-			  (thread-sleep! 5) ;; give server a little time to start up
-			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+			(if (and (< remaining-tries 10)
+				 (odd? remaining-tries))
+			    (begin    ;; login failed
+			      (hash-table-delete! *runremote* run-id)
+			      (open-run-close tasks:server-force-clean-run-record
+					      tasks:open-db
+					      run-id 
+					      (tasks:hostinfo-get-interface server-dat)
+					      (tasks:hostinfo-get-port      server-dat))
+			      (thread-sleep! 2)
+			      (server:try-running run-id)
+			      (thread-sleep! 5) ;; give server a little time to start up
+			      (client:setup run-id remaining-tries: (- remaining-tries 1)))
+			    (begin
+			      (thread-sleep! 5)
+			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
 		  (begin    ;; no server registered
 		    (thread-sleep! 2)
 		    (server:try-running run-id)
