@@ -2,15 +2,15 @@
 [maxload]
 zeus 0.40000000000000002
 xena 0.20000000000000001
-myth1 0.01
+myth2 0.01
 hades 1
 [minfree]
 zeus 1000
 xena 20000
-myth1 300000
+myth2 300000
 hades 4000000
 [reqprocs]
 zeus mfsmount mythbackend mfschunkserver
 xena mfsmount
-myth1 mfsmount mythfrontend mfschunkserver
+myth2 mfsmount mythfrontend mfschunkserver
 hades mfsmount mfsmetalogger mfschunkserver
