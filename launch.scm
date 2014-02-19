@@ -92,10 +92,6 @@
 	       (rollup-status 0))
 	  (change-directory top-path)
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
-	  ;; Setup the *runremote* global var
-	  (if *runremote* (debug:print 2 "ERROR: I'm not expecting *runremote* to be set at this time"))
-	  ;; (set! *runremote* runremote)
-	  ;; (set! *transport-type* (string->symbol transport))
 	  (set! keys       (rmt:get-keys))
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
@@ -371,7 +367,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (rmt:get-testinfo-state-status run-id test-id))) ;;;(cdb:get-test-info-by-id *runremote* test-id))) ;; )) ;; run-id test-name item-path)))
+		   (testinfo  (rmt:get-testinfo-state-status run-id test-id)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -396,10 +392,6 @@
 					    (args:get-arg "-m") #f)
 		    ;; need to update the top test record if PASS or FAIL and this is a subtest
 		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
-		    ;; (if (not (equal? item-path ""))
-		    ;;     (begin
-		    ;;       (thread-sleep! 0.1) ;; give other processes an opportunity to access the db as rollup is lower priority
-		    ;;       (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status)))
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
 	      (if (not (equal? item-path ""))
@@ -502,7 +494,6 @@
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
     ;; Update the rundir path in the test record for all
-    ;; (cdb:test-set-rundir-by-test-id *runremote* test-id (filedb:register-path *fdb* lnkpathf))
     (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
@@ -566,7 +557,6 @@
 				   #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
-	  ;;(cdb:test-set-rundir! *runremote* run-id testname "" (filedb:register-path *fdb* lnkpath)) ;; toptest-path)
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (file-exists? lnkpath)
 				(resolve-pathname lnkpath)
@@ -702,7 +692,6 @@
 		    (with-output-to-string
 		      (lambda () ;; (list 'hosts     hosts)
 			(write (list (list 'testpath  test-path)
-				     ;; (list 'runremote *runremote*)
 				     (list 'transport (conc *transport-type*))
 				     (list 'serverinf *server-info*)
 				     (list 'toppath   *toppath*)

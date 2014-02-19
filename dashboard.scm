@@ -90,16 +90,6 @@ Misc
 
 (define *dbstruct-local*  (make-dbr:dbstruct path: *toppath* local: #t))
 
-;; (define sdb:qry (make-sdb:qry)) ;;  'init #f)
-
-;; (if (args:get-arg "-host")
-;;     (begin
-;;       (set! *runremote* (string-split (args:get-arg "-host" ":")))
-;;       (client:launch))
-;;     (if (not (args:get-arg "-use-server"))
-;; 	(set! *transport-type* 'fs) ;; force fs access
-;; 	(client:launch)))
-
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? (conc *toppath* "db/main.db"))))
 ;; (client:setup *dbstruct-local*)

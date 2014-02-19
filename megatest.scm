@@ -740,7 +740,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (target    (args:get-arg "-target"))
 	       (toppath   (assoc/default 'toppath   cmdinfo)))
 	  (change-directory toppath)
-	  ;; (set! *runremote* runremote)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -788,7 +787,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target")))
 	  (change-directory testpath)
-	  ;; (set! *runremote* runremote)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -868,7 +866,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	;; (set! *runremote* runremote)
 	(if (not (setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
@@ -917,7 +914,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  ;; (set! *runremote* runremote)
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
@@ -934,7 +930,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (tdb:load-test-data run-id test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid logfname))))
 		(rmt:test-set-log! run-id test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
@@ -980,7 +975,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  ;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid htmllogfile))))
 			  (rmt:test-set-log! run-id test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (rmt:teststep-set-status! run-id test-id stepname "end" exitstat msg logfile))
@@ -1187,19 +1181,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if *runremote* (close-all-connections!))
 
-;; this is the socket if we are a client
-;; (if (and *runremote*
-;; 	 (socket? *runremote*))
-;;     (close-socket *runremote*))
-
-;; (if sdb:qry (sdb:qry 'finalize #f))
-;; (if *fdb*   (filedb:finalize-db! *fdb*))
-
 (if (not *didsomething*)
     (debug:print 0 help))
 
-;; (if *runremote* (rpc:close-all-connections!))
-    
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
