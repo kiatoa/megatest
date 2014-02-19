@@ -67,9 +67,7 @@
 							    (tasks:hostinfo-get-interface server-dat)
 							    (tasks:hostinfo-get-port      server-dat))))
 	      (if start-res ;; sucessful login?
-		  (begin
-		    (hash-table-set! *runremote* run-id start-res)
-		    start-res)
+		  start-res
 		  (begin    ;; login failed
 		    (hash-table-delete! *runremote* run-id)
 		    (open-run-close tasks:server-force-clean-run-record
@@ -85,9 +83,7 @@
 								  (tasks:hostinfo-get-interface server-dat)
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
-			(begin
-			  (hash-table-set! *runremote* run-id start-res)
-			  start-res)
+			start-res
 			(begin    ;; login failed
 			  (hash-table-delete! *runremote* run-id)
 			  (open-run-close tasks:server-force-clean-run-record

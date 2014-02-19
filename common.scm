@@ -25,6 +25,13 @@
 ;; (include "margs.scm")
 
 (define getenv get-environment-variable)
+(define (safe-setenv key val)
+  (if (and (string? val)(string? key))
+      (handle-exceptions
+       exn
+       (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)
+       (setenv key val))
+      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))

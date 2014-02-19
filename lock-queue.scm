@@ -50,20 +50,28 @@
     db))
 
 (define (lock-queue:set-state db test-id newstate)
-  (sqlite3:execute db "UPDATE queue SET state=? WHERE test_id=?;"
-		   newstate
-		   test-id))
+  (handle-exceptions
+   exn
+   (thread-sleep! 30)
+   (lock-queue:set-state db test-id newstate)
+   (sqlite3:execute db "UPDATE queue SET state=? WHERE test_id=?;"
+		    newstate
+		    test-id)))
 
 (define (lock-queue:any-younger? db mystart test-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (tid)
-       ;; Actually this should not be needed as mystart cannot be simultaneously less than and test-id same as 
-       (if (not (equal? tid test-id)) 
-	   (set! res tid)))
-     db
-     "SELECT test_id FROM queue WHERE start_time > ?;" mystart)
-    res))
+  (handle-exceptions
+   exn
+   (thread-sleep! 30)
+   (lock-queue:any-younger? db mystart test-id)
+   (let ((res #f))
+     (sqlite3:for-each-row
+      (lambda (tid)
+	;; Actually this should not be needed as mystart cannot be simultaneously less than and test-id same as 
+	(if (not (equal? tid test-id)) 
+	    (set! res tid)))
+      db
+      "SELECT test_id FROM queue WHERE start_time > ?;" mystart)
+     res)))
 
 (define (lock-queue:get-lock db test-id)
   (let ((res       #f)
