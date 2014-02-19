@@ -40,6 +40,9 @@
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
+;; Disabled help items
+;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
+;;                            from prior runs with same keys
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -58,10 +61,10 @@ Launching and managing runs
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
-                            from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
+  -set-run-status status  : sets status for run to status, requires -target and :runname
+  -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
@@ -192,6 +195,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-env2file"
 			"-setvars"
 			"-set-state-status"
+			"-set-run-status"
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
@@ -226,6 +230,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-show-runconfig"
 			"-show-config"
 			"-show-cmdinfo"
+			"-get-run-status"
+
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -380,30 +386,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (else ;; (fs)
 		       (set! *transport-type* 'fs)
 		       (set! *megatest-db* (open-db))))))))))
-;; 		    (cond
-;; 		     ;; command line overrides other mechanisms
-;; 		     (transport-from-cmdln
-;; 		      (if (equal? transport-from-cmdln "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     ;; cmdinfo is second priority
-;; 		     (transport-from-cmdinfo
-;; 		      (if (equal? transport-from-cmdinfo "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     ;; config file is next highest priority for determinining transport
-;; 		     (transport-from-config
-;; 		      (if (equal? transport-from-config "fs")
-;; 			  (set! *transport-type* 'fs)
-;; 			  (begin
-;; 			    (server:ensure-running)
-;; 			    (client:launch))))
-;; 		     (else
-;; 		      (set! *transport-type* 'fs)))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -487,20 +469,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 
 (if (args:get-arg "-show-runconfig")
-    (let ((data (full-runconfigs-read)))
-      ;; keep this one local
-      (cond
-       ((not (args:get-arg "-dumpmode"))
-	(pp (hash-table->alist data)))
-       ((string=? (args:get-arg "-dumpmode") "json")
+    (let ((tl (setup-for-run)))
+      (push-directory *toppath*)
+      (let ((data (full-runconfigs-read)))
+	;; keep this one local
+	(cond
+	 ((not (args:get-arg "-dumpmode"))
+	  (pp (hash-table->alist data)))
+	 ((string=? (args:get-arg "-dumpmode") "json")
 	(json-write data))
-       (else
-	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
-      (set! *didsomething* #t)))
+	 (else
+	  (debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	(set! *didsomething* #t))
+      (pop-directory)))
 
 (if (args:get-arg "-show-config")
     (let ((tl   (setup-for-run))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
+      (push-directory *toppath*)
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))
@@ -509,7 +495,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(json-write data))
        (else
 	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
-      (set! *didsomething* #t)))
+      (set! *didsomething* #t)
+      (pop-directory)))
 
 (if (args:get-arg "-show-cmdinfo")
     (if (getenv "MT_CMDINFO")
@@ -568,6 +555,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "set state and status"
      (lambda (target runname keys keyvals)
        (operate-on 'set-state-status))))
+
+(if (or (args:get-arg "-set-run-status")
+	(args:get-arg "-get-run-status"))
+    (general-run-call
+     "-set-run-status"
+     "set run status"
+     (lambda (target runname keys keyvals)
+       (let* ((runsdat  (cdb:remote-run db:get-runs-by-patt #f keys runname (or (args:get-arg "-target")
+									       (args:get-arg "-reqtarg")) #f #f))
+	      (header   (vector-ref runsdat 0))
+	      (rows     (vector-ref runsdat 1)))
+	 (if (null? rows)
+	     (begin
+	       (debug:print-info 0 "No matching run found.")
+	       (exit 1))
+	     (let* ((row      (car (vector-ref runsdat 1)))
+		    (run-id   (db:get-value-by-header row header "id")))
+	       (if (args:get-arg "-set-run-status")
+		   (cdb:remote-run db:set-run-status #f run-id (args:get-arg "-set-run-status"))
+		   (print (open-run-close db:get-run-status #f run-id))
+		   )))))))
 
 ;;======================================================================
 ;; Query runs

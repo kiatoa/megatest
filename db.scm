@@ -907,6 +907,19 @@
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
+(define (db:set-run-status db run-id status)
+  (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))
+
+(define (db:get-run-status db run-id)
+  (let ((res "n/a"))
+    (sqlite3:for-each-row 
+     (lambda (status)
+       (set! res status))
+     db 
+     "SELECT status FROM runs WHERE id=?;" 
+     run-id)
+    res))
+
 (define (db:get-run-ids db)
   (let ((res '()))
     (sqlite3:for-each-row
