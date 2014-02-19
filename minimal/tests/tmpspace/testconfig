@@ -1,0 +1,27 @@
+[ezsteps]
+
+df [ `df -m /tmp | grep /tmp | awk '{print $3}'` -gt 200000 ]
+
+[items]
+TARGETHOST chlr10722 \
+           chlr15003 \
+           chlr13406 \
+           chlr12539 \
+           chlr12713 \
+           chlr11407 \
+           chlr14713 \
+           chlr11440 \
+           chlr11417 \
+           chlr14709 \
+           chlr11722 \
+           chlr11445 \
+           chlr11421 \
+           chlr11404
+
+[test_meta]
+author mrwellan
+owner  mrwellan
+description  Check for available space in /tmp
+tags Utility 
+reviewed ww50.3
+
