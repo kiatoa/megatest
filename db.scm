@@ -80,16 +80,17 @@
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
   (let* ((db    (db:get-db dbstruct run-id))
-	 (proc  (lambda ()
-		  (let ((res (apply proc db params)))
-		    (db:done-with dbstruct run-id r/w)
-		    res))))
-    (handle-exceptions
-     exn
-     (begin
-       (thread-sleep! 10)
-       (proc))
-     (proc))))
+	 )
+    ;; (proc2 (lambda ()
+    (let ((res (apply proc db params)))
+      (db:done-with dbstruct run-id r/w)
+      res)))
+;;     (handle-exceptions
+;;      exn
+;;      (begin
+;;        (thread-sleep! 10)
+;;        (proc2))
+;;      (proc2))))
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -1193,12 +1194,12 @@
 ;;
 (define (db:get-prev-run-ids dbstruct run-id)
   (let* ((keyvals (rmt:get-key-val-pairs run-id))
-	 (kvalues (cdr keyvals))
+	 (kvalues (map cadr keyvals))
 	 (keys    (rmt:get-keys))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
     (let ((prev-run-ids '()))
       (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
-       (lambda ()
+       (lambda (db)
 	 (apply sqlite3:for-each-row
 		(lambda (id)
 		  (set! prev-run-ids (cons id prev-run-ids)))
