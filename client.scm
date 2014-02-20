@@ -71,12 +71,12 @@
 		  (if (and (< remaining-tries 10)
 			   (odd? remaining-tries))
 		      (begin    ;; login failed
-			(hash-table-delete! *runremote* run-id)
-			(open-run-close tasks:server-force-clean-run-record
-					tasks:open-db
-					run-id 
-					(car  server-dat)
-					(cadr server-dat))
+			;; (hash-table-delete! *runremote* run-id)
+			;; (open-run-close tasks:server-force-clean-run-record
+			;; 		tasks:open-db
+			;; 		run-id 
+			;; 		(car  server-dat)
+			;; 		(cadr server-dat))
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: (- remaining-tries 1)))
 		      (begin

@@ -122,8 +122,8 @@
 ;;  K E Y S 
 ;;======================================================================
 
-;; These should not require run-id but it is more consistent to have it. 
-;; run-id can theoretically be #f but how to handle that is not yet done.
+;; These require run-id because the values come from the run!
+;;
 (define (rmt:get-key-val-pairs run-id)
   (rmt:send-receive 'get-key-val-pairs run-id (list run-id)))
 
@@ -184,8 +184,8 @@
 (define (rmt:test-set-status-state run-id test-id status state msg)
   (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
 
-(define (rmt:get-previous-test-run-record run-id test-name item-path)
-  (rmt:send-receive 'get-previous-test-run-record run-id (list run-id test-name item-path)))
+;; (define (rmt:get-previous-test-run-record run-id test-name item-path)
+;;   (rmt:send-receive 'get-previous-test-run-record run-id (list run-id test-name item-path)))
 
 (define (rmt:get-matching-previous-test-run-records run-id test-name item-path)
   (rmt:send-receive 'get-matching-previous-test-run-records run-id (list run-id test-name item-path)))
@@ -202,12 +202,15 @@
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
+(define (rmt:get-run-ids-matching-target keynames target res testpatt statepatt statuspatt)
+  (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res testpatt statepatt statuspatt)))
+
 ;; NOTE: This will open and access ALL run databases. 
 ;;
 (define (rmt:test-get-paths-matching-keynames-target-new keynames target res testpatt statepatt statuspatt runname)
-  (let ((run-ids (rmt:get-all-run-ids))) ;; (rmt:get-run-ids-matching keynames target res)))
+  (let ((run-ids (rmt:get-run-ids-matching-target keynames target res testpatt statepatt statuspatt)))
     (apply append (lambda (run-id)
-		    (rmt:send-receive 'test-get-paths-matching-keynames-target-new (list keynames target res testpatt statepatt statuspatt runname)))
+		    (rmt:send-receive 'test-get-paths-matching-keynames-target-new run-id (list keynames target res testpatt statepatt statuspatt runname)))
 	   run-ids)))
 
 (define (rmt:get-run-ids-matching keynames target res)
@@ -262,6 +265,9 @@
 (define (rmt:get-all-run-ids)
   (rmt:send-receive 'get-all-run-ids #f '()))
 
+(define (rmt:get-prev-run-ids run-id)
+  (rmt:send-receive 'get-prev-run-ids #f (list run-id)))
+
 (define (rmt:lock/unlock-run run-id lock unlock user)
   (rmt:send-receive 'lock/unlock-run #f (list run-id lock unlock user)))
 
@@ -270,6 +276,37 @@
 
 (define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
+
+;;======================================================================
+;; M U L T I R U N   Q U E R I E S
+;;======================================================================
+
+;; get the previous record for when this test was run where all keys match but runname
+;; returns #f if no such test found, returns a single test record if found
+;; 
+;; Run this at the client end since we have to connect to multiple run-id dbs
+;;
+(define (rmt:get-previous-test-run-record run-id test-name item-path)
+  (let* ((keyvals (rmt:get-key-val-pairs run-id))
+	 (keys    (rmt:get-keys))
+	 (selstr  (string-intersperse  keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
+    (if (not keyvals)
+	#f
+	(let ((prev-run-ids (rmt:get-prev-run-ids run-id)))
+	  ;; for each run starting with the most recent look to see if there is a matching test
+	  ;; if found then return that matching test record
+	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
+	  (if (null? prev-run-ids) #f
+	      (let loop ((hed (car prev-run-ids))
+			 (tal (cdr prev-run-ids)))
+		(let ((results (rmt:get-tests-for-run hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
+		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
+		  (if (and (null? results)
+			   (not (null? tal)))
+		      (loop (car tal)(cdr tal))
+		      (if (null? results) #f
+			  (car results))))))))))
 
 ;;======================================================================
 ;;  S T E P S
