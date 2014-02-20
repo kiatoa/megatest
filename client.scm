@@ -100,7 +100,7 @@
 					      (tasks:hostinfo-get-port      server-dat))
 			      (thread-sleep! 2)
 			      (server:try-running run-id)
-			      (thread-sleep! 5) ;; give server a little time to start up
+			      (thread-sleep! 10) ;; give server a little time to start up
 			      (client:setup run-id remaining-tries: (- remaining-tries 1)))
 			    (begin
 			      (thread-sleep! 5)
@@ -108,7 +108,7 @@
 		  (begin    ;; no server registered
 		    (thread-sleep! 2)
 		    (server:try-running run-id)
-		    (thread-sleep! 5) ;; give server a little time to start up
+		    (thread-sleep! 10) ;; give server a little time to start up
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
 ;; keep this as a function to ease future 

@@ -1193,7 +1193,7 @@
 ;;
 (define (db:get-prev-run-ids dbstruct run-id)
   (let* ((keyvals (rmt:get-key-val-pairs run-id))
-	 (kvalues (make cdr keyvals))
+	 (kvalues (cdr keyvals))
 	 (keys    (rmt:get-keys))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
     (let ((prev-run-ids '()))
@@ -1685,7 +1685,7 @@
 ;; Misc. test related queries
 ;;======================================================================
 
-(define (db:get-run-ids-matching-target dbstruct keynames target res testpatt statepatt statuspatt)
+(define (db:get-run-ids-matching-target dbstruct keynames target res runname testpatt statepatt statuspatt)
   (let* ((row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
@@ -1693,9 +1693,9 @@
 		       keynames 
 		       (string-split target "/"))
 		  " AND "))
-	 (testqry (tests:match->sqlqry testpatt))
+	 ;; (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
-    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" tstsqry)
+    ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -1704,7 +1704,8 @@
     row-ids))
 
 (define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
-  (let ((tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
+  (let* ((testqry (tests:match->sqlqry testpatt))
+	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
     (sqlite3:for-each-row 
      (lambda (p)
        (set! res (cons p res)))

@@ -202,16 +202,17 @@
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
-(define (rmt:get-run-ids-matching-target keynames target res testpatt statepatt statuspatt)
-  (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res testpatt statepatt statuspatt)))
+(define (rmt:get-run-ids-matching-target keynames target res runname testpatt statepatt statuspatt)
+  (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res runname testpatt statepatt statuspatt)))
 
 ;; NOTE: This will open and access ALL run databases. 
 ;;
 (define (rmt:test-get-paths-matching-keynames-target-new keynames target res testpatt statepatt statuspatt runname)
-  (let ((run-ids (rmt:get-run-ids-matching-target keynames target res testpatt statepatt statuspatt)))
-    (apply append (lambda (run-id)
-		    (rmt:send-receive 'test-get-paths-matching-keynames-target-new run-id (list keynames target res testpatt statepatt statuspatt runname)))
-	   run-ids)))
+  (let ((run-ids (rmt:get-run-ids-matching-target keynames target res runname testpatt statepatt statuspatt)))
+    (apply append 
+	   (map (lambda (run-id)
+		  (rmt:send-receive 'test-get-paths-matching-keynames-target-new run-id (list run-id keynames target res testpatt statepatt statuspatt runname)))
+	   run-ids))))
 
 (define (rmt:get-run-ids-matching keynames target res)
   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))

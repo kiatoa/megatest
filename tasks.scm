@@ -130,7 +130,7 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 10 AND run_id=?;" run-id))
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
   (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=?;" run-id))
