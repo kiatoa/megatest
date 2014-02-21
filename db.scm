@@ -907,8 +907,10 @@
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
-(define (db:set-run-status db run-id status)
-  (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))
+(define (db:set-run-status db run-id status #!key (msg #f))
+  (if msg
+      (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
+      (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id)))
 
 (define (db:get-run-status db run-id)
   (let ((res "n/a"))

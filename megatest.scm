@@ -573,7 +573,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (let* ((row      (car (vector-ref runsdat 1)))
 		    (run-id   (db:get-value-by-header row header "id")))
 	       (if (args:get-arg "-set-run-status")
-		   (cdb:remote-run db:set-run-status #f run-id (args:get-arg "-set-run-status"))
+		   (cdb:remote-run db:set-run-status #f run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
 		   (print (open-run-close db:get-run-status #f run-id))
 		   )))))))
 
