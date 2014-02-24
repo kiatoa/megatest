@@ -55,7 +55,7 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 20) (failed-connects 0))
+(define (client:setup run-id #!key (remaining-tries 10) (failed-connects 0))
   (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
   (if (<= remaining-tries 0)
       (begin
@@ -68,7 +68,7 @@
 							    (cadr server-dat))))
 	      (if start-res ;; sucessful login?
 		  start-res
-		  (if (eq? remaining-tries 6)
+		  (if (eq? remaining-tries 4)
 		      (begin    ;; login failed
 			(hash-table-delete! *runremote* run-id)
 			(open-run-close tasks:server-force-clean-run-record
@@ -77,7 +77,7 @@
 			 		(car  server-dat)
 			 		(cadr server-dat))
 			(thread-sleep! 5)
-			(client:setup run-id remaining-tries: (- remaining-tries 1)))
+			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 		      (begin
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
@@ -88,7 +88,7 @@
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
 			start-res
-			(if (eq? remaining-tries 6)
+			(if (eq? remaining-tries 2)
 			    (begin    ;; login failed
 			      (hash-table-delete! *runremote* run-id)
 			      (open-run-close tasks:server-force-clean-run-record
@@ -99,7 +99,7 @@
 			      (thread-sleep! 2)
 			      (server:try-running run-id)
 			      (thread-sleep! 10) ;; give server a little time to start up
-			      (client:setup run-id remaining-tries: (- remaining-tries 1)))
+			      (client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 			    (begin
 			      (thread-sleep! 5)
 			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
