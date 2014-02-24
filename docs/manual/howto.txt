@@ -8,6 +8,29 @@ Tricks
 This section is a compendium of a various useful tricks for debugging,
 configuring and generally getting the most out of Megatest.
 
+Limiting your running jobs
+--------------------------
+
+The following example will limit a test in the jobgroup "group1" to no more than 10 tests simultaneously.
+
+In your testconfig:
+
+----------------
+[test_meta]
+jobgroup group1
+----------------
+
+In your megatest.config:
+
+---------------
+[jobgroups]
+group1 10
+custdes 4
+---------------
+
+
+
+
 Debugging Tricks
 ----------------
 

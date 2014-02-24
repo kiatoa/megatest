@@ -66,11 +66,11 @@ test4 : cleanprep
 test5 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
 	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
-	cd fullrun;sleep 4;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
-	cd fullrun;sleep 8;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
-	cd fullrun;sleep 12;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-	cd fullrun;sleep 16;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-	cd fullrun;sleep 20;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &
+	cd fullrun;sleep 3;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
+	cd fullrun;sleep 6;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
+	cd fullrun;sleep 9;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
+	cd fullrun;sleep 12;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+	cd fullrun;sleep 15;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &
 
 # MUST ADD THIS BACK IN ASAP!!!!
 	# cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
