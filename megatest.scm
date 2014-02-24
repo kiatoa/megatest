@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -112,6 +112,7 @@ Queries
   -show-cmdinfo           : dump the command info for a test (run in test environment)
 
 Misc 
+  -start-dir path         : switch to this directory before running megatest
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -update-meta            : update the tests metadata for all tests
@@ -186,6 +187,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":tol"
 			":units"
 			;; misc
+			"-start-dir"
 			"-server"
 			"-transport"
 			"-stop-server"
@@ -255,6 +257,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (print help)
       (exit)))
+
+(if (args:get-arg "-start-dir")
+    (if (file-exists? (args:get-arg "-start-dir"))
+	(change-directory (args:get-arg "-start-dir"))
+	(begin
+	  (debug:print 0 "ERROR: non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (exit 1))))
 
 (if (args:get-arg "-version")
     (begin

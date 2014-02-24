@@ -9,14 +9,17 @@
 ;;  PURPOSE.
 ;;======================================================================
 
+(use trace)
+
 (define (debug:calc-verbosity vstr)
   (cond
-   (vstr
-    (let ((debugvals (string-split vstr ",")))
-      (if (> (length debugvals) 1)
-	  (map string->number debugvals)
-	  (string->number (car debugvals)))))
-   ((args:get-arg "-v")    2)
+   ((string-match "^\\s*$" vstr) #f)
+   (vstr (let ((debugvals (string-split vstr ",")))
+	   (cond
+	    ((> (length debugvals) 1)(map string->number debugvals))
+	    ((> (length debugvals) 0)(string->number (car debugvals)))
+	    (else #f))))
+    ((args:get-arg "-v")   2)
    ((args:get-arg "-q")    0)
    (else                   1)))
 
@@ -25,7 +28,7 @@
   (if (not (or (number? verbosity)
 	       (list?   verbosity)))
       (begin
-	(print "ERROR: Invalid debug value " vstr)
+	(print "ERROR: Invalid debug value \"" vstr "\"")
 	#f)
       #t))
 
@@ -40,6 +43,8 @@
 		      (getenv "MT_DEBUG_MODE"))))
     (set! *verbosity* (debug:calc-verbosity debugstr))
     (debug:check-verbosity *verbosity* debugstr)
+    ;; if we were handed a bad verbosity rule then we will override it with 1 and continue
+    (if (not *verbosity*)(set! *verbosity* 1))
     (if (or (args:get-arg "-debug")
 	    (not (getenv "MT_DEBUG_MODE")))
 	(setenv "MT_DEBUG_MODE" (if (list? *verbosity*)
