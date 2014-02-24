@@ -68,15 +68,14 @@
 							    (cadr server-dat))))
 	      (if start-res ;; sucessful login?
 		  start-res
-		  (if (and (< remaining-tries 10)
-			   (odd? remaining-tries))
+		  (if (eq? remaining-tries 6)
 		      (begin    ;; login failed
-			;; (hash-table-delete! *runremote* run-id)
-			;; (open-run-close tasks:server-force-clean-run-record
-			;; 		tasks:open-db
-			;; 		run-id 
-			;; 		(car  server-dat)
-			;; 		(cadr server-dat))
+			(hash-table-delete! *runremote* run-id)
+			(open-run-close tasks:server-force-clean-run-record
+			 		tasks:open-db
+			 		run-id 
+			 		(car  server-dat)
+			 		(cadr server-dat))
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: (- remaining-tries 1)))
 		      (begin
@@ -89,8 +88,7 @@
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
 			start-res
-			(if (and (< remaining-tries 10)
-				 (odd? remaining-tries))
+			(if (eq? remaining-tries 6)
 			    (begin    ;; login failed
 			      (hash-table-delete! *runremote* run-id)
 			      (open-run-close tasks:server-force-clean-run-record
