@@ -12,10 +12,10 @@ bigbig :
 	done
 
 bigrun :
-	$(MEGATEST) -runtests bigrun -target a/bigrun :runname a
+	$(MEGATEST) -runtests bigrun -target a/bigrun :runname a$(shell date +%V)
 
 bigrun2 :
-	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a 
+	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a$(shell date +%V)
 
 dashboard : 
 	$(DASHBOARD) -rows 20 &

@@ -125,7 +125,7 @@
      (lambda (num-in-queue)
        (set! res num-in-queue))
      mdb
-     "SELECT count(id) FROM servers WHERE run_id=?;"
+     "SELECT count(id) FROM servers WHERE run_id=? AND state = 'available';"
      run-id)
     res))
 
@@ -204,7 +204,7 @@
      (lambda (a . b)
        (set! res (cons (apply vector a b) res)))
      mdb
-     (conc "SELECT " selstr " FROM servers WHERE run_id=? ORDER BY start_time DESC;")
+     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running') ORDER BY start_time DESC;")
      run-id)
     (vector header res)))
 
