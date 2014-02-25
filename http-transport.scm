@@ -408,13 +408,19 @@
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
-  (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
+  (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
+	     (remtries  4))
     (if (not server-id)
-	(begin
-	  ;; since we didn't get the server lock we are going to clean up and bail out
-	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
-	  )
+	(if (> remtries 0)
+	    (begin
+	      (thread-sleep! 2)
+	      (loop (open-run-close tasks:server-lock-slot tasks:open-db run-id)
+		    (- remtries 1)))
+	    (begin
+	      ;; since we didn't get the server lock we are going to clean up and bail out
+	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
+	      ))
 	(let* ((th2 (make-thread (lambda ()
 				   (http-transport:run 
 				    (if (args:get-arg "-server")
