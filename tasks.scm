@@ -130,49 +130,64 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 30 AND run_id=?;" run-id))
+  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 300 AND run_id=?;" run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=?;" run-id))
+  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state = 'running' AND run_id=?;" run-id))
 
 (define (tasks:server-force-clean-run-record mdb run-id iface port)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
+  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
 		   run-id iface port))
+
+(define (tasks:server-delete-records-for-this-pid mdb)
+  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE hostname=? AND pid=?;" (get-host-name) (current-process-id)))
+
+(define (tasks:server-delete-record mdb server-id)
+  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE id=?;" server-id)
+  ;; use this opportuntity to clean out records over one month old
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;"))
 
 (define (tasks:server-set-state! mdb server-id state)
   (sqlite3:execute mdb "UPDATE servers SET state=? WHERE id=?;" state server-id))
 
-(define (tasks:server-delete-record! mdb server-id)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE id=?;" server-id))
-
-(define (tasks:server-delete-records-for-this-pid mdb)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE hostname=? AND pid=?;" (get-host-name) (current-process-id)))
-
 (define (tasks:server-set-interface-port mdb server-id interface port)
   (sqlite3:execute mdb "UPDATE servers SET interface=?,port=? WHERE id=?;" interface port server-id))
 
+;; Get random port not used in long time
+;;
 (define (tasks:server-get-next-port mdb)
-  (let ((res         #f)
-	(port-param  (if (and (args:get-arg "-port")
-			      (string->number (args:get-arg "-port")))
-			 (string->number (args:get-arg "-port"))
-			 #f))
-	(config-port (if (and (config-lookup  *configdat* "server" "port")
-			      (string->number (config-lookup  *configdat* "server" "port")))
-			 (string->number (config-lookup  *configdat* "server" "port"))
-			 #f)))
+  (let* ((lownum        30000)
+	(highnum        64000)
+	(used-ports     '())
+	(get-rand-port  (lambda ()
+			  (+ lownum (random (- highnum lownum)))))
+	(port-param     (if (and (args:get-arg "-port")
+				 (string->number (args:get-arg "-port")))
+			    (string->number (args:get-arg "-port"))
+			    #f))
+	;; (config-port    (if (and (config-lookup  *configdat* "server" "port")
+	;; 			 (string->number (config-lookup  *configdat* "server" "port")))
+	;; 		    (string->number (config-lookup  *configdat* "server" "port"))
+	;; 		    #f))
+	)
     (sqlite3:for-each-row
      (lambda (port)
-       (set! res (+ port 1))) ;; set to next
+       (set! used-ports (cons port used-ports)))
      mdb
-     "SELECT max(port) FROM servers;")
+     "SELECT port FROM servers;")
     (cond
      ((and port-param res)   (if (> res port-param) res port-param))
      (port-param             port-param)
-     ((and config-port res)  (if (> res config-port) res config-port))
-     (config-port            config-port)
-     ((and res (> res 8080)) res)
-     (else                   (+ 5000 (random 1001))))))
+     ;; ((and config-port res)  (if (> res config-port) res config-port))
+     ;; (config-port            config-port)
+     (else
+      (let loop ((port     (get-rand-port))
+		 (remtries 100))
+	(if (member port used-ports)
+	    (if (> remtries 0)
+		(loop (get-rand-port)(- remtries 1))
+		(get-rand-port))
+	    port))))))
 
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))

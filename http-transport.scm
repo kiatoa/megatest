@@ -393,7 +393,7 @@
 				     *number-non-write-queries*))
 			      " ms")
 	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    (tasks:server-delete-record! tdb server-id)
+	    (tasks:server-delete-record tdb server-id)
 	    (exit))))))
 
 ;; all routes though here end in exit ...
@@ -413,7 +413,8 @@
 	(begin
 	  ;; since we didn't get the server lock we are going to clean up and bail out
 	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db))
+	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db)
+	  )
 	(let* ((th2 (make-thread (lambda ()
 				   (http-transport:run 
 				    (if (args:get-arg "-server")

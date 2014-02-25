@@ -59,3 +59,11 @@ user is responsible for setting STATE and STATUS
 runscript main.csh
 -------------------
 
+Debugging Server Problems
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+----------------
+sudo lsof -i
+sudo netstat -lptu
+sudo netstat -tulpn
+----------------
