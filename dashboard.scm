@@ -982,13 +982,17 @@ Misc
   (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
     (iup:vbox
      (iup:split
-      ;; #:value 500
+      #:value 500
       (iup:frame 
        #:title "General Info"
-       (iup:hbox 
-	(dcommon:keys-matrix rawconfig)
-	(dcommon:general-info)
-	))
+       (iup:vbox
+	(iup:hbox
+	 (iup:label "Area Path")
+	 (iup:textbox #:value *toppath* #:expand "HORIZONTAL"))
+	(iup:hbox 
+	 (dcommon:keys-matrix rawconfig)
+	 (dcommon:general-info)
+	 )))
       (iup:frame
        #:title "Server"
        (dcommon:servers-table)))

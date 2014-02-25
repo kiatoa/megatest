@@ -360,20 +360,20 @@
 			 #:alignment1 "ALEFT"
 			 #:expand "YES" ;; "HORIZONTAL"
 			 #:numcol 1
-			 #:numlin 3
+			 #:numlin 2
 			 #:numcol-visible 1
-			 #:numlin-visible 3)))
-    (iup:attribute-set! general-matrix "WIDTH1" "200")
+			 #:numlin-visible 2)))
+    (iup:attribute-set! general-matrix "WIDTH1" "150")
     (iup:attribute-set! general-matrix "0:1" "About this Megatest area") 
     ;; User (this is not always obvious - it is common to run as a different user
     (iup:attribute-set! general-matrix "1:0" "User")
     (iup:attribute-set! general-matrix "1:1" (current-user-name))
     ;; Megatest area
-    (iup:attribute-set! general-matrix "2:0" "Area")
-    (iup:attribute-set! general-matrix "2:1" *toppath*)
+    ;; (iup:attribute-set! general-matrix "2:0" "Area")
+    ;; (iup:attribute-set! general-matrix "2:1" *toppath*)
     ;; Megatest version
-    (iup:attribute-set! general-matrix "3:0" "Version")
-    (iup:attribute-set! general-matrix "3:1" megatest-version)
+    (iup:attribute-set! general-matrix "2:0" "Version")
+    (iup:attribute-set! general-matrix "2:1" (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
 
     general-matrix))
 
@@ -447,9 +447,9 @@
 	 (servers-matrix (iup:matrix #:expand "YES"
 				     #:numcol 7
 				     #:numcol-visible 7
-				     #:numlin-visible 3
+				     #:numlin-visible 5
 				     ))
-	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "State" "Transport"))
+	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
 			   (let ((servers (open-run-close tasks:get-all-servers tasks:open-db)))
 			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
@@ -468,15 +468,14 @@
 						   (vector-ref server 1) ;; Pid
 						   (vector-ref server 2) ;; Hostname
 						   (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
-						   (vector-ref server 5) ;; Pubport
+						   (seconds->hr-min-sec (- (current-seconds)(vector-ref server 6)))
+						   ;; (vector-ref server 5) ;; Pubport
 						   ;; (vector-ref server 10) ;; Last beat
 						   ;; (vector-ref server 6) ;; Start time
 						   ;; (vector-ref server 7) ;; Priority
 						   ;; (vector-ref server 8) ;; State
-						   (if (< (vector-ref server 10) 20) ;; Status (Please redo this properly!)
-						       "alive"
-						       "dead")
-						   (vector-ref server 11)  ;; Transport
+						   (vector-ref server 8) ;; State
+						   (vector-ref server 12)  ;; RunId
 						   )))
 				  (for-each (lambda (val)
 					      ;; (print "rownum: " rownum " colnum: " colnum " val: " val)
@@ -495,35 +494,37 @@
 	      colnames)
     (set! dashboard:update-servers-table updater) 
     ;; (iup:attribute-set! servers-matrix "WIDTHDEF" "40")
-    (iup:hbox
-     (iup:vbox
-      (iup:button "Start"
-		  ;; #:size "50x"
-		  #:expand "YES"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -server - &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd))))
-      (iup:button "Stop"
-		  #:expand "YES"
-		  ;; #:size "50x"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -stop-server 0 &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd))))
-      (iup:button "Restart"
-		  #:expand "YES"
-		  ;; #:size "50x"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -stop-server 0;megatest -server - &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd)))))
-      servers-matrix
-     )))
-  
+   ;;  (iup:hbox
+   ;;   (iup:vbox
+   ;;    (iup:button "Start"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:expand "YES"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -server - &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd))))
+   ;;    (iup:button "Stop"
+   ;;      	  #:expand "YES"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -stop-server 0 &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd))))
+   ;;    (iup:button "Restart"
+   ;;      	  #:expand "YES"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -stop-server 0;megatest -server - &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd)))))
+   ;;    servers-matrix
+   ;;   )))
+    servers-matrix
+    ))
+
 ;; The main menu
 (define (dcommon:main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)

@@ -157,7 +157,7 @@
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
    (start-server bind-address: ipaddrstr port: portnum)
-   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
+   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
 
 ;;======================================================================
@@ -393,7 +393,7 @@
 				     *number-non-write-queries*))
 			      " ms")
 	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    (tasks:server-delete-record tdb server-id)
+	    (tasks:server-delete-record tdb server-id " http-transport:keep-running")
 	    (exit))))))
 
 ;; all routes though here end in exit ...
@@ -413,7 +413,7 @@
 	(begin
 	  ;; since we didn't get the server lock we are going to clean up and bail out
 	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db)
+	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
 	  )
 	(let* ((th2 (make-thread (lambda ()
 				   (http-transport:run 

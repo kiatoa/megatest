@@ -75,7 +75,8 @@
 			 		tasks:open-db
 			 		run-id 
 			 		(car  server-dat)
-			 		(cadr server-dat))
+			 		(cadr server-dat)
+					" client:setup (server-dat=#t)")
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 		      (begin
@@ -95,7 +96,8 @@
 					      tasks:open-db
 					      run-id 
 					      (tasks:hostinfo-get-interface server-dat)
-					      (tasks:hostinfo-get-port      server-dat))
+					      (tasks:hostinfo-get-port      server-dat)
+					      " client:setup (server-dat = #f)")
 			      (thread-sleep! 2)
 			      (server:try-running run-id)
 			      (thread-sleep! 10) ;; give server a little time to start up

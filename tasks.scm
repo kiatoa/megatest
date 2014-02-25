@@ -93,7 +93,7 @@
 (define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
 (define (tasks:server-lock-slot mdb run-id)
-  (tasks:server-clean-out-old-records-for-run-id mdb run-id)
+  (tasks:server-clean-out-old-records-for-run-id mdb run-id " tasks:server-lock-slot")
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
@@ -129,29 +129,33 @@
      run-id)
     res))
 
-(define (tasks:server-clean-out-old-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 300 AND run_id=?;" run-id))
+(define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 300 AND run_id=?;"
+		   (conc "defunct" tag) run-id))
 
-(define (tasks:server-force-clean-running-records-for-run-id mdb run-id)
-  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state = 'running' AND run_id=?;" run-id))
+(define (tasks:server-force-clean-running-records-for-run-id mdb run-id tag)
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=?;"
+		   (conc "defunct" tag) run-id))
 
-(define (tasks:server-force-clean-run-record mdb run-id iface port)
-  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
-		   run-id iface port))
+(define (tasks:server-force-clean-run-record mdb run-id iface port tag)
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state = 'running' AND run_id=? AND interface=? AND port=?;"
+		   (conc "defunct" tag) run-id iface port))
 
-(define (tasks:server-delete-records-for-this-pid mdb)
-  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE hostname=? AND pid=?;" (get-host-name) (current-process-id)))
+(define (tasks:server-delete-records-for-this-pid mdb tag)
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE hostname=? AND pid=?;"
+		   (conc "defunct" tag) (get-host-name) (current-process-id)))
 
-(define (tasks:server-delete-record mdb server-id)
-  (sqlite3:execute mdb "UPDATE servers SET state='defunct' WHERE id=?;" server-id)
+(define (tasks:server-delete-record mdb server-id tag) 
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
+		   (conc "defunct" tag) server-id)
   ;; use this opportuntity to clean out records over one month old
   (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;"))
 
 (define (tasks:server-set-state! mdb server-id state)
-  (sqlite3:execute mdb "UPDATE servers SET state=? WHERE id=?;" state server-id))
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;" state server-id))
 
 (define (tasks:server-set-interface-port mdb server-id interface port)
-  (sqlite3:execute mdb "UPDATE servers SET interface=?,port=? WHERE id=?;" interface port server-id))
+  (sqlite3:execute mdb "UPDATE servers SET interface=?,port=?,heartbeat=strftime('%s','now') WHERE id=?;" interface port server-id))
 
 ;; Get random port not used in long time
 ;;
@@ -240,10 +244,11 @@
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
-     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport)
-       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport) res)))
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
+       ;;                       0   1        2         3    4       5          6        7     8          9          10        11     12
+       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
      mdb
-     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport FROM servers ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
 
 (define (tasks:kill-server status hostname port pid)

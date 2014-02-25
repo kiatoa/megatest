@@ -131,6 +131,7 @@
 	  (if res
 	      res
 	      (begin
-		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id)
+		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id 
+				" server:check-if-running")
 		res)))
 	#f)))
