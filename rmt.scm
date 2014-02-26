@@ -87,6 +87,16 @@
 ;;======================================================================
 
 ;;======================================================================
+;;  S E R V E R
+;;======================================================================
+
+(define (rmt:kill-server run-id)
+  (rmt:send-receive 'kill-server run-id (list run-id)))
+
+(define (rmt:start-server run-id)
+  (rmt:send-receive 'start-server 0 (list run-id)))
+
+;;======================================================================
 ;;  M I S C
 ;;======================================================================
 
@@ -98,9 +108,6 @@
 (define (rmt:login-no-auto-client-setup connection-info run-id)
   (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
   
-(define (rmt:kill-server run-id)
-  (rmt:send-receive 'kill-server run-id (list run-id)))
-
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
 ;;

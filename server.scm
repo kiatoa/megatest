@@ -48,15 +48,7 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  ;; (if (server:check-if-running run-id)
-  ;; a server is already running
-  ;; (exit)
   (http-transport:launch run-id))
-
-;; (define (server:launch-no-exit run-id)
-;;   (if (server:check-if-running run-id)
-;;       #t ;; if running
-;;       (http-transport:launch run-id)))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
@@ -65,27 +57,6 @@
 ;; We don't want to flush the queue if it was just flushed
 (define *server:last-write-flush* (current-milliseconds))
 
-;; Flush the queue every third of a second. Can we assume that setup-for-run 
-;; has already been done?
-;; (define (server:write-queue-handler)
-;;   (if (setup-for-run)
-;;       (let ((db (open-db)))
-;; 	(let loop ()
-;; 	  (let ((last-write-flush-time #f))
-;; 	    (mutex-lock! *incoming-mutex*)
-;; 	    (set! last-write-flush-time *server:last-write-flush*)
-;; 	    (mutex-unlock! *incoming-mutex*)
-;; 	    (if (> (- (current-milliseconds) last-write-flush-time) 10)
-;; 		(begin
-;; 		  (mutex-lock! *db:process-queue-mutex*)
-;; 		  (db:process-cached-writes db)
-;; 		  (mutex-unlock! *db:process-queue-mutex*)
-;; 		  (thread-sleep! 0.005))))
-;; 	  (loop)))
-;;       (begin
-;; 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
-;; 	(exit 1))))
-    
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
@@ -105,16 +76,39 @@
 (define (server:reply return-addr query-sig success/fail result)
   (db:obj->string (vector success/fail query-sig result)))
 
-;; > file 2>&1 
-(define (server:try-running run-id)
-  (let* ((rand-name (random 100))
+;; Given a run id start a server process    ### NOTE ### > file 2>&1 
+;; if the run-id is zero and the target-host is set 
+;; try running on that host
+;;
+(define  (server:run run-id)
+  (let* ((target-host (configf:lookup *configdat* "server" "homehost" ))
 	 (cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-		    ;; " -server - -run-id " run-id " name=" rand-name " > " *toppath* "/db/" run-id "-" rand-name ".log 2>&1 &")))
 		      " -server - -run-id " run-id " >> " *toppath* "/db/" run-id ".log 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (system cmdln)
+    (if target-host
+	(begin
+	  (set-environment-variable "TARGETHOST" target-host)
+	  (system (conc "nbfake " cmdln)))
+	(system cmdln))
     (pop-directory)))
+
+;; kind start up of servers, wait 40 seconds before allowing another server for a given
+;; run-id to be launched
+(define (server:kind-run run-id)
+  (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
+    (if (or (not last-run-time)
+	    (> (- (current-seconds) last-run-time) 40))
+	(begin
+	  (server:run run-id)
+	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
+
+;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
+;; 
+(define (server:try-running run-id)
+  (if (eq? run-id 0)
+      (server:run run-id)
+      (rmt:start-server run-id)))
 
 (define (server:check-if-running run-id)
   (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))

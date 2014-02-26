@@ -106,10 +106,15 @@
 			      (thread-sleep! 5)
 			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
 		  (begin    ;; no server registered
-		    (thread-sleep! 2)
-		    (server:try-running run-id)
-		    (thread-sleep! 10) ;; give server a little time to start up
-		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+		    (thread-sleep! 2) 
+		    (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 2)
+			(begin
+			  (server:try-running run-id)
+			  (thread-sleep! 10) ;; give server a little time to start up
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))
+			(begin
+			  (thread-sleep! 10)
+			  (client:setup run-id remaining-tries: remainint-tries))))))))))
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)

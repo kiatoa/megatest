@@ -69,6 +69,7 @@
 (define *db-write-access*   #t)
 (define *inmemdb*           #f)
 (define *run-id*            #f)
+(define *server-kind-run*   (make-hash-table))
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here

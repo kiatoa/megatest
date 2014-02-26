@@ -146,7 +146,9 @@
 	   ;; get_next_port goes here
 
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
-	 (print "ERROR: Tried and tried but could not start the server")))
+	 (begin
+	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum " http-transport:try-start-server")
+	   (print "ERROR: Tried and tried but could not start the server"))))
    ;; any error in following steps will result in a retry
    (set! *server-info* (list ipaddrstr portnum))
    (open-run-close tasks:server-set-interface-port 
