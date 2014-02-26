@@ -314,7 +314,8 @@
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
 			       ;; (* 3 24 60 60) ;; default to three days
-			       (* 60 1)         ;; default to one minute
+			       ;; (* 60 1)         ;; default to one minute
+			       (* 60 60 25)      ;; default to one day and one hour
 			       ))))
     (let loop ((count         0)
 	       (server-state 'available))
