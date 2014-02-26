@@ -988,7 +988,7 @@
 	 (keys       (db:get-keys dbstruct))
 	 (header     keys) ;; (map key:get-fieldname keys))
 	 (keystr     (keys->keystr keys))
-	 (qrystr     (conc "SELECT " keystr " FROM runs;"))
+	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE state != 'deleted';"))
 	 (seen       (make-hash-table)))
     (sqlite3:for-each-row
      (lambda (a . x)
@@ -1036,7 +1036,7 @@
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
      (db:get-db dbstruct #f)
-     "SELECT id,runname FROM runs;")
+     "SELECT id,runname FROM runs WHERE state != 'deleted';")
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
@@ -1219,7 +1219,7 @@
 		(lambda (id)
 		  (set! prev-run-ids (cons id prev-run-ids)))
 		db
-		(conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append kvalues (list run-id)))))
+		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;") (append kvalues (list run-id)))))
       prev-run-ids)))
 
 ;;======================================================================
@@ -1505,7 +1505,7 @@
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
 		       res)))
      (db:get-db dbstruct run-id)
-     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE run_id=?;")
+     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
      run-id)
     res))
 

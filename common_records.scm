@@ -13,8 +13,9 @@
 
 (define (debug:calc-verbosity vstr)
   (cond
+   ((not vstr) #f)
    ((string-match "^\\s*$" vstr) #f)
-   (vstr (let ((debugvals (string-split vstr ",")))
+    (vstr (let ((debugvals (string-split vstr ",")))
 	   (cond
 	    ((> (length debugvals) 1)(map string->number debugvals))
 	    ((> (length debugvals) 0)(string->number (car debugvals)))

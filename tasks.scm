@@ -148,8 +148,10 @@
 (define (tasks:server-delete-record mdb server-id tag) 
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
 		   (conc "defunct" tag) server-id)
-  ;; use this opportuntity to clean out records over one month old
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;"))
+  ;; use this opportuntity to clean out records over one month old or over 10 minutes old with port = -1 (i.e. a never used placeholder)
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;")
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state like 'defunct%' AND port=-1 AND (strftime('%s','now') - start_time) > 600;")
+  )
 
 (define (tasks:server-set-state! mdb server-id state)
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;" state server-id))
