@@ -13,14 +13,15 @@
 
 (define (debug:calc-verbosity vstr)
   (cond
-   ((not vstr) #f)
-   ((string-match "^\\s*$" vstr) #f)
-    (vstr (let ((debugvals (string-split vstr ",")))
-	   (cond
-	    ((> (length debugvals) 1)(map string->number debugvals))
-	    ((> (length debugvals) 0)(string->number (car debugvals)))
-	    (else #f))))
-    ((args:get-arg "-v")   2)
+   ((number? vstr) vstr)
+   ((not (string?  vstr))   1)
+   ;; ((string-match  "^\\s*$" vstr) 1)
+   (vstr           (let ((debugvals  (filter number? (map string->number (string-split vstr ",")))))
+		     (cond
+		      ((> (length debugvals) 1) debugvals)
+		      ((> (length debugvals) 0)(car debugvals))
+		      (else 1))))
+   ((args:get-arg "-v")   2)
    ((args:get-arg "-q")    0)
    (else                   1)))
 

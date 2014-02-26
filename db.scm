@@ -470,8 +470,9 @@
 
 ;; (define open-run-close 
 (define open-run-close ;; (if (debug:debug-mode 2)
-			   open-run-close-no-exception-handling)
-			 ;;  open-run-close-exception-handling))
+		;;	   open-run-close-no-exception-handling
+			   open-run-close-exception-handling)
+;;)
 
 (define (db:initialize-main-db db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...

@@ -43,12 +43,13 @@
 			    (if cinfo
 				cinfo
 				(let loop ((numtries 100))
-				  (thread-sleep! 1)
 				  (let ((res (client:setup run-id)))
 				    (if res 
 					(hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
 					(if (> numtries 0)
-					    (loop (- numtries 1))
+					    (begin
+					      (thread-sleep! 10)
+					      (loop (- numtries 1)))
 					    (begin
 					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
 					      (exit 1)))))))))

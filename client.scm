@@ -61,27 +61,30 @@
       (begin
 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	(exit 1))
-      (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
-	(if server-dat
-	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
-							    (car  server-dat)
-							    (cadr server-dat))))
+      (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
+	(if host-info
+	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over host-info and connection result!
+							    (car  host-info)
+							    (cadr host-info))))
 	      (if start-res ;; sucessful login?
 		  start-res
-		  (if (eq? remaining-tries 4)
+		  (if (member remaining-tries '(3 4 6))
 		      (begin    ;; login failed
+			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
 			(hash-table-delete! *runremote* run-id)
 			(open-run-close tasks:server-force-clean-run-record
 			 		tasks:open-db
 			 		run-id 
-			 		(car  server-dat)
-			 		(cadr server-dat)
-					" client:setup (server-dat=#t)")
+			 		(car  host-info)
+			 		(cadr host-info)
+					" client:setup (host-info=#t)")
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 		      (begin
+			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
 			(thread-sleep! 5)
 			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
+	    ;; YUK: rename server-dat here
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
 	      (if server-dat
 		  (let ((start-res (http-transport:client-connect run-id
@@ -89,32 +92,38 @@
 								  (tasks:hostinfo-get-port      server-dat))))
 		    (if start-res
 			start-res
-			(if (eq? remaining-tries 2)
+			(if (member remaining-tries '(2 5))
 			    (begin    ;; login failed
+			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 			      (hash-table-delete! *runremote* run-id)
 			      (open-run-close tasks:server-force-clean-run-record
 					      tasks:open-db
 					      run-id 
 					      (tasks:hostinfo-get-interface server-dat)
 					      (tasks:hostinfo-get-port      server-dat)
-					      " client:setup (server-dat = #f)")
+					      " client:setup (server-dat = #t)")
 			      (thread-sleep! 2)
 			      (server:try-running run-id)
 			      (thread-sleep! 10) ;; give server a little time to start up
 			      (client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 			    (begin
+			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 			      (thread-sleep! 5)
 			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
 		  (begin    ;; no server registered
-		    (thread-sleep! 2) 
-		    (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 2)
+		    (if (eq? remaining-tries 2)
 			(begin
-			  (server:try-running run-id)
+			  ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+			  (client:setup run-id remaining-tries: 10))
+			(begin
+			  (thread-sleep! 2) 
+			  (debug:print 25 "INFO: client:setup start-res (not defined here), run-id=" run-id ", server-dat=" server-dat)
+			  (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 3)
+			      (begin
+				;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+				(server:try-running run-id)))
 			  (thread-sleep! 10) ;; give server a little time to start up
-			  (client:setup run-id remaining-tries: (- remaining-tries 1)))
-			(begin
-			  (thread-sleep! 10)
-			  (client:setup run-id remaining-tries: remainint-tries))))))))))
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)

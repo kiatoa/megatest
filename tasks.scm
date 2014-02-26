@@ -130,7 +130,7 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 300 AND run_id=?;"
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
 		   (conc "defunct" tag) run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id tag)

@@ -478,10 +478,13 @@
 						   (vector-ref server 12)  ;; RunId
 						   )))
 				  (for-each (lambda (val)
-					      ;; (print "rownum: " rownum " colnum: " colnum " val: " val)
-					      (iup:attribute-set! servers-matrix (conc rownum ":" colnum) val)
-					      (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))
-					      (set! colnum (+ 1 colnum)))
+					      (let* ((row-col (conc rownum ":" colnum))
+						     (curr-val (iup:attribute servers-matrix row-col)))
+						(if (not (equal? (conc val) curr-val))
+						    (begin
+						      (iup:attribute-set! servers-matrix row-col val)
+						      (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))))
+						(set! colnum (+ 1 colnum))))
 					    vals)
 				  (set! rownum (+ rownum 1)))
 				 (iup:attribute-set! servers-matrix "REDRAW" "ALL"))

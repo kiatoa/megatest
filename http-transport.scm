@@ -147,7 +147,7 @@
 
 	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
 	 (begin
-	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum " http-transport:try-start-server")
+	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
 	   (print "ERROR: Tried and tried but could not start the server"))))
    ;; any error in following steps will result in a retry
    (set! *server-info* (list ipaddrstr portnum))
@@ -159,7 +159,7 @@
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
    (start-server bind-address: ipaddrstr port: portnum)
-   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum " http-transport:try-start-server")
+   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
 
 ;;======================================================================
@@ -273,10 +273,10 @@
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
 	 (serverdat   (list iface port uri-dat uri-api-dat))
 	 (login-res   (rmt:login-no-auto-client-setup serverdat run-id)))
-    (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
     (if (and (list? login-res)
 	     (car login-res))
 	(begin
+	  (hash-table-set! *runremote* run-id serverdat)
 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
 	  (hash-table-set! *runremote* run-id serverdat)
 	  serverdat)
