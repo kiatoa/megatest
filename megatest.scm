@@ -134,6 +134,7 @@ Misc
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
+  -ping run-id|host:port  : ping server, exit with 0 if found
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -209,6 +210,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-load"        ;; load and exectute a scheme file
 			"-dumpmode"
 			"-run-id"
+			"-ping"
 			) 
 		 (list  "-h"
 			"-version"
@@ -342,6 +344,34 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (common:get-disks) )
 	"\n"))
       (set! *didsomething* #t)))
+
+(if (args:get-arg "-ping")
+    (let* ((run-id    (string->number (args:get-arg "-run-id")))
+	   (host-port (let ((slst (string-split   (args:get-arg "-ping") ":")))
+			(if (eq? (length slst) 2)
+			    (list (car slst)(string->number (cadr slst)))
+			    #f)))
+	   (toppath   (setup-for-run)))
+      (if (not run-id)
+	  (begin
+	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (print "ERROR: No run-id")
+	    (exit 1))
+	  (if (not host-port)
+	      (begin
+		(debug:print 0 "ERROR: argument to -ping is host:port, got " (args:get-arg "-ping"))
+		(print "ERROR: bad host:port")
+		(exit 1))
+	      (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		(if (and (list? login-res)
+			 (car login-res))
+		    (begin
+		      (print "LOGIN_OK")
+		      (exit 0))
+		    (begin
+		      (print "LOGIN_FAILED")
+		      (exit 1))))))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)

@@ -268,21 +268,22 @@
 ;;
 ;; connect
 ;;
-(define (http-transport:client-connect run-id iface port)
+(define (http-transport:client-connect iface port)
   (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (serverdat   (list iface port uri-dat uri-api-dat))
-	 (login-res   (rmt:login-no-auto-client-setup serverdat run-id)))
-    (if (and (list? login-res)
-	     (car login-res))
-	(begin
-	  (hash-table-set! *runremote* run-id serverdat)
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-	  (hash-table-set! *runremote* run-id serverdat)
-	  serverdat)
-	(begin
-	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
-	  #f))))
+	 (server-dat  (list iface port uri-dat uri-api-dat)))
+;;	 (login-res   (server:ping-server run-id server-dat))) ;; login-no-auto-client-setup server-dat run-id)))
+    server-dat))
+;;     (if (and (list? login-res)
+;; 	     (car login-res))
+;; 	(begin
+;; 	  (hash-table-set! *runremote* run-id server-dat)
+;; 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
+;; 	  (hash-table-set! *runremote* run-id server-dat)
+;; 	  server-dat)
+;; 	(begin
+;; 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
+;; 	  #f))))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.

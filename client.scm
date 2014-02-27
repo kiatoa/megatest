@@ -63,11 +63,14 @@
 	(exit 1))
       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
 	(if host-info
-	    (let ((start-res (http-transport:client-connect run-id ;; NB// confusion over host-info and connection result!
-							    (car  host-info)
-							    (cadr host-info))))
-	      (if start-res ;; sucessful login?
-		  start-res
+	    (let* ((iface     (car  host-info))
+		   (port      (cadr host-info))
+		   (start-res (http-transport:client-connect iface port))
+		   (ping-res  (server:ping-server run-id iface port)))
+	      (if ping-res   ;; sucessful login?
+		  (begin
+		    (hash-table-set! *runremote* run-id start-res)
+		    start-res)  ;; return the server info
 		  (if (member remaining-tries '(3 4 6))
 		      (begin    ;; login failed
 			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
@@ -87,11 +90,14 @@
 	    ;; YUK: rename server-dat here
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
 	      (if server-dat
-		  (let ((start-res (http-transport:client-connect run-id
-								  (tasks:hostinfo-get-interface server-dat)
-								  (tasks:hostinfo-get-port      server-dat))))
+		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+			 (port      (tasks:hostinfo-get-port      server-dat))
+			 (start-res (http-transport:client-connect iface port))
+			 (ping-res  (server:ping-server run-id iface port)))
 		    (if start-res
-			start-res
+			(begin
+			  (hash-table-set! *runremote* run-id start-res)
+			  start-res)
 			(if (member remaining-tries '(2 5))
 			    (begin    ;; login failed
 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
@@ -127,8 +133,7 @@
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)
-  (http-transport:client-connect run-id 
-				 (tasks:hostinfo-get-interface server-info)
+  (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
 				 (tasks:hostinfo-get-port server-info)))
 
 ;; client:signal-handler

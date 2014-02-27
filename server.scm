@@ -82,7 +82,7 @@
 ;;
 (define  (server:run run-id)
   (let* ((target-host (configf:lookup *configdat* "server" "homehost" ))
-	 (cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
+	 (cmdln (conc (common:get-megatest-exe)
 		      " -server - -run-id " run-id " >> " *toppath* "/db/" run-id ".log 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
@@ -129,3 +129,16 @@
 				" server:check-if-running")
 		res)))
 	#f)))
+
+(define (server:ping-server run-id iface port)
+  (with-input-from-pipe 
+   (conc (common:get-megatest-exe) " -run-id " run-id " -ping " (conc iface ":" port))
+   (lambda ()
+     (let loop ((inl (read-line))
+		(res "NOREPLY"))
+       (if (eof-object? inl)
+	   (case (string->symbol res)
+	     ((NOREPLY)  #f)
+	     ((LOGIN_OK) #t)
+	     (else       #f))
+	   (loop (read-line) inl))))))

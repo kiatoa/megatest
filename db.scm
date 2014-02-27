@@ -13,25 +13,17 @@
 ;; Database access
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp) ;;  rpc)
-;; (import (prefix rpc rpc:))
-
+(require-extension (srfi 18) extras tcp)
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
-
-;; Note, try to remove this dependency 
-;; (use zmq)
 
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
 (declare (uses ods))
-(declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
-;; (declare (uses sdb))
-;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")

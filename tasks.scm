@@ -274,7 +274,7 @@
 	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
 	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
 	      (let ((serverdat (list hostname port)))
-		(http-transport:client-connect hostname port)
+		(hash-table-set! *runremote* run-id (http-transport:client-connect hostname port))
 	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
       (begin
 	(if status 
