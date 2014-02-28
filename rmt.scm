@@ -54,7 +54,7 @@
 					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
 					      (exit 1)))))))))
 	 (jparams         (db:obj->string params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	 (res     (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
 	(let ((new-connection-info (client:setup run-id)))

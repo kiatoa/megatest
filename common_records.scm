@@ -60,7 +60,8 @@
 	(lambda ()
 	  (if *logging*
 	      (db:log-event (apply conc params))
-	      (apply print "pid:" (current-process-id) " " params)
+	      ;; (apply print "pid:" (current-process-id) " " params)
+	      (apply print params)
 	      )))))
 
 (define (debug:print-info n . params)
@@ -70,7 +71,8 @@
 	  (let ((res (format#format #f "INFO: (~2d) ~a" n (apply conc params))))
 	    (if *logging*
 		(db:log-event res)
-		(apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
+		;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
+		(apply print "INFO: (" n ") " params) ;; res)
 		))))))
 
 ;; if a value is printable (i.e. string or number) return the value

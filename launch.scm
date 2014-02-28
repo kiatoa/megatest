@@ -316,7 +316,8 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:set-partial-meta-info test-id run-id minutes work-area)
+				       (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
+				       ;; (tests:set-partial-meta-info test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)

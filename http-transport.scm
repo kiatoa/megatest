@@ -224,7 +224,7 @@
 ;;
 (define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 30))
   (let* ((fullurl    (if (list? serverdat)
-			 (cadddr serverdat) ;; this is the uri for /api
+			 (list-ref serverdat 4) ;; (cadddr serverdat) ;; this is the uri for /api
 			 (begin
 			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
@@ -275,11 +275,12 @@
 ;; connect
 ;;
 (define (http-transport:client-connect iface port)
-  (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+  (let* ((api-url     (conc "http://" iface ":" port "/api"))
+	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 ;; (uri-dat     (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 (uri-api-dat (make-request method: 'POST uri: api-url)) ;; (uri-reference (conc "http://" iface ":" port "/api"))))
 	 ;; (uri-api-dat (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (server-dat  (list iface port uri-dat uri-api-dat)))
+	 (server-dat  (list iface port uri-dat uri-api-dat api-url)))
 ;;	 (login-res   (server:ping-server run-id server-dat))) ;; login-no-auto-client-setup server-dat run-id)))
     server-dat))
 ;;     (if (and (list? login-res)
@@ -334,14 +335,11 @@
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)
 	    (rem-time   #f))
+
 	(if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
 	(set! sync-time  (- (current-milliseconds) start-time))
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
 	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
-	(if (and (<= rem-time 4)
-		 (> rem-time 0))
-	    (thread-sleep! rem-time)
-	    (thread-sleep! 4))) ;; fallback for if the math is changed ...
 
       ;;
       ;; set_running after our first pass through
@@ -349,6 +347,11 @@
       (if (eq? server-state 'available)
 	  (tasks:server-set-state! tdb server-id "running"))
 
+      (if (and (<= rem-time 4)
+	       (> rem-time 0))
+	  (thread-sleep! rem-time)
+	  (thread-sleep! 4))) ;; fallback for if the math is changed ...
+      
       (if (< count 1) ;; 3x3 = 9 secs aprox
 	  (loop (+ count 1) 'running))
       
@@ -378,6 +381,13 @@
 		  (current-seconds)))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+	    ;;
+	    ;; Consider implementing some smarts here to re-insert the record or kill self is
+	    ;; the db indicates so
+	    ;;
+	    ;; (if (tasks:server-am-i-the-server? tdb run-id)
+	    ;;     (tasks:server-set-state! tdb server-id "running"))
+	    ;;
 	    (loop 0 server-state))
 	  (begin
 	    (debug:print-info 0 "Starting to shutdown the server.")
