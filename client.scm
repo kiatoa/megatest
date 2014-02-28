@@ -62,12 +62,13 @@
 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	(exit 1))
       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
+	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 	(if host-info
 	    (let* ((iface     (car  host-info))
 		   (port      (cadr host-info))
 		   (start-res (http-transport:client-connect iface port))
 		   ;; (ping-res  (server:ping-server run-id iface port))
-		   (ping-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
 	      (if ping-res   ;; sucessful login?
 		  (begin
 		    (hash-table-set! *runremote* run-id start-res)
@@ -90,6 +91,7 @@
 			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
 	    ;; YUK: rename server-dat here
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
+	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-dat
 		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 			 (port      (tasks:hostinfo-get-port      server-dat))

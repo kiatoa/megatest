@@ -113,17 +113,16 @@
 (define (server:check-if-running run-id)
   (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
 	     (trycount 0))
-    (thread-sleep! 2)
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (client:start run-id server)))
+	(let ((res (server:ping-server run-id (vector-ref server 1)(vector-ref server 0))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
-	      res
+	      #t
 	      (begin
 		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id 
 				" server:check-if-running")

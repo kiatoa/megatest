@@ -158,8 +158,8 @@
    (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   (start-server ;; bind-address: ipaddrstr
-		 port: portnum)
+   ;; (start-server bind-address: ipaddrstr port: portnum)
+   (start-server port: portnum)
    (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
 
