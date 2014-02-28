@@ -70,7 +70,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
-	 (link-tree-path  (config-lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path
@@ -129,11 +129,11 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
-    (http-transport:try-start-server ipaddrstr start-port server-id)))
+    (http-transport:try-start-server run-id ipaddrstr start-port server-id)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
-(define (http-transport:try-start-server ipaddrstr portnum server-id)
+(define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (handle-exceptions
    exn
    (begin
@@ -145,7 +145,7 @@
 
 	   ;; get_next_port goes here
 
-	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
+	   (http-transport:try-start-server run-id ipaddrstr (+ portnum 1) server-id))
 	 (begin
 	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
 	   (print "ERROR: Tried and tried but could not start the server"))))
@@ -158,7 +158,8 @@
    (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   (start-server bind-address: ipaddrstr port: portnum)
+   (start-server ;; bind-address: ipaddrstr
+		 port: portnum)
    (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
 
@@ -270,7 +271,9 @@
 ;;
 (define (http-transport:client-connect iface port)
   (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+	 ;; (uri-dat     (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
 	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 ;; (uri-api-dat (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/api"))))
 	 (server-dat  (list iface port uri-dat uri-api-dat)))
 ;;	 (login-res   (server:ping-server run-id server-dat))) ;; login-no-auto-client-setup server-dat run-id)))
     server-dat))
@@ -312,7 +315,7 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdb         (tasks:open-db))
-	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
+	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))

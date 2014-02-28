@@ -66,7 +66,8 @@
 	    (let* ((iface     (car  host-info))
 		   (port      (cadr host-info))
 		   (start-res (http-transport:client-connect iface port))
-		   (ping-res  (server:ping-server run-id iface port)))
+		   ;; (ping-res  (server:ping-server run-id iface port))
+		   (ping-res  (rmt:login-no-auto-client-setup server-dat run-id)))
 	      (if ping-res   ;; sucessful login?
 		  (begin
 		    (hash-table-set! *runremote* run-id start-res)
@@ -93,7 +94,8 @@
 		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 			 (port      (tasks:hostinfo-get-port      server-dat))
 			 (start-res (http-transport:client-connect iface port))
-			 (ping-res  (server:ping-server run-id iface port)))
+			 ;; (ping-res  (server:ping-server run-id iface port))
+			 (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
 		    (if start-res
 			(begin
 			  (hash-table-set! *runremote* run-id start-res)
