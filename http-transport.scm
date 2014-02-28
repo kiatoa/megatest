@@ -231,7 +231,12 @@
 	 (res        #f))
     (handle-exceptions
      exn
-     #f
+     (if (> numretries 0)
+	 (begin
+	   (mutex-unlock! *http-mutex*)
+	   (thread-sleep! 10)
+	   (http-transport:client-api-send-receive run-id serverdat cmd params (- numretries 1)))
+	 #f)
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
