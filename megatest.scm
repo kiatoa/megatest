@@ -127,6 +127,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -transport http|zmq     : use http or zmq for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -list-servers           : list the servers 
   -stop-server id         : stop server specified by id (see output of -list-servers), use
@@ -196,6 +197,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-start-dir"
 			"-server"
 			"-stop-server"
+			"-transport"
+			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -351,7 +354,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
-	   (toppath   (setup-for-run)))
+	   (toppath   (setup-for-run))
+	   (transport (server:get-transport)))
+      (set! *did-something* #t)
       (if (not run-id)
 	  (begin
 	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
@@ -362,16 +367,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "ERROR: argument to -ping is host:port, got " (args:get-arg "-ping"))
 		(print "ERROR: bad host:port")
 		(exit 1))
-	      (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
-		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
-		(if (and (list? login-res)
-			 (car login-res))
-		    (begin
-		      (print "LOGIN_OK")
-		      (exit 0))
-		    (begin
-		      (print "LOGIN_FAILED")
-		      (exit 1))))))))
+	      (case transport
+		((http)(http:ping run-id host-port))
+		((rpc) (rpc:ping  run-id host-port))
+		(else  (debug:print 0 "ERROR: No transport set")(exit)))))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -800,6 +799,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -848,6 +848,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -927,6 +928,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(exit 5))
       (let* ((cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	     ;; (runremote (assoc/default 'runremote cmdinfo))
+	     (transport (assoc/default 'transport cmdinfo))
 	     (testpath  (assoc/default 'testpath  cmdinfo))
 	     (test-name (assoc/default 'test-name cmdinfo))
 	     (runscript (assoc/default 'runscript cmdinfo))
@@ -974,6 +976,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (read (open-input-string (base64:base64-decode (getenv "MT_CMDINFO")))))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -1254,6 +1257,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 help))
+
+;; (if *runremote* (rpc:close-all-connections!))
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))

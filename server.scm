@@ -22,7 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
 (declare (uses http-transport))
-;; (declare (uses zmq-transport))
+(declare (uses rcp-transport))
 (declare (uses daemon))
 
 (include "common_records.scm")
@@ -48,18 +48,48 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  (http-transport:launch run-id))
+  (let ((transport (server:get-transport)))
+    (case transport
+      ((http) (http-transport:launch run-id))
+      ((rpc)  (rpc-transport:launch run-id))
+      (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
+	      (rpc-transport:launch run-id)))))
 
-;;======================================================================
-;; Q U E U E   M A N A G E M E N T
-;;======================================================================
-
-;; We don't want to flush the queue if it was just flushed
-(define *server:last-write-flush* (current-milliseconds))
+(define (server:run hostn)
+  (debug:print 2 "Attempting to start the server ...")
+  (if (not *toppath*)
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
+	    (exit))))
+  (let* (;; (iface           (if (string=? "-" hostn)
+	 ;;        	      #f ;; (get-host-name) 
+	 ;;        	      hostn))
+	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
+	 (hostname        (get-host-name))
+	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
+					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+					   #f)))
+			    (if ipstr ipstr hostn))) ;; hostname)))
+	 (start-port    (if (args:get-arg "-port")
+			    (string->number (args:get-arg "-port"))
+			    (+ 5000 (random 1001))))
+	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
+    (set! *cache-on* #t)
+    (root-path     (if link-tree-path 
+		       link-tree-path
+		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
+
+;; Get the transport
+(define (server:get-transport)
+  (string->symbol
+   (or (args:get-arg "-transport")
+       (configf:lookup *configdat* "server" "transport")
+       "rpc")))
 
 ;; Generate a unique signature for this server
 (define (server:mk-signature)
@@ -74,6 +104,19 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
+  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
+  ;; (send-message pubsock target send-more: #t)
+  ;; (send-message pubsock 
+  (case *transport-type*
+    ((fs) result)
+    ((http)(db:obj->string (vector success/fail query-sig result)))
+    ((zmq)
+     (let ((pub-socket (vector-ref *runremote* 1)))
+       (send-message pub-socket return-addr send-more: #t)
+       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
+    (else 
+     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     result)))
   (db:obj->string (vector success/fail query-sig result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
@@ -92,6 +135,12 @@
 	  (system (conc "nbfake " cmdln)))
 	(system cmdln))
     (pop-directory)))
+
+(define (server:get-client-signature)
+  (if *my-client-signature* *my-client-signature*
+      (let ((sig (server:mk-signature)))
+	(set! *my-client-signature* sig)
+	*my-client-signature*)))
 
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
