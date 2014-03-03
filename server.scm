@@ -22,7 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
 (declare (uses http-transport))
-(declare (uses rcp-transport))
+(declare (uses rpc-transport))
 (declare (uses daemon))
 
 (include "common_records.scm")
