@@ -55,37 +55,13 @@
       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
 	      (rpc-transport:launch run-id)))))
 
-(define (server:run hostn)
-  (debug:print 2 "Attempting to start the server ...")
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
-	    (exit))))
-  (let* (;; (iface           (if (string=? "-" hostn)
-	 ;;        	      #f ;; (get-host-name) 
-	 ;;        	      hostn))
-	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
-	 (hostname        (get-host-name))
-	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
-					   (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
-					   #f)))
-			    (if ipstr ipstr hostn))) ;; hostname)))
-	 (start-port    (if (args:get-arg "-port")
-			    (string->number (args:get-arg "-port"))
-			    (+ 5000 (random 1001))))
-	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
-    (set! *cache-on* #t)
-    (root-path     (if link-tree-path 
-		       link-tree-path
-		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
-
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
 
 ;; Get the transport
 (define (server:get-transport)
+  (if *
   (string->symbol
    (or (args:get-arg "-transport")
        (configf:lookup *configdat* "server" "transport")
@@ -107,7 +83,7 @@
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
-  (case *transport-type*
+  (case (server:get-transport)
     ((fs) result)
     ((http)(db:obj->string (vector success/fail query-sig result)))
     ((zmq)

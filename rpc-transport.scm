@@ -14,7 +14,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(declare (unit server))
+(declare (unit rpc-transport))
 
 (declare (uses common))
 (declare (uses db))
@@ -192,7 +192,7 @@
     ;; (thread-join!  th2)
     ;; return th2 for the calling process to do a join with 
     th1
-    )))) ;; rpc:server)))
+    )) ;; rpc:server)))
 
 (define (rpc-transport:keep-running db host:port)
   ;; if none running or if > 20 seconds since 

@@ -27,8 +27,6 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-;; (declare (uses sdb))
-;; (declare (uses filedb))
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
