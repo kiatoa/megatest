@@ -31,7 +31,7 @@
     (if change-env
 	(for-each ;; NB// This can be simplified with new content of keyvals having all that is needed.
 	 (lambda (keyval)
-	   (setenv (car keyval)(cadr keyval)))
+	   (safe-setenv (car keyval)(cadr keyval)))
 	 keyvals))
 	
     (for-each 
@@ -45,7 +45,7 @@
 		(if (and (string? envvar)
 			 (string? val)
 			 change-env)
-		    (setenv envvar val))
+		    (safe-setenv envvar val))
 		(hash-table-set! finaldat envvar val)))
 	      (map car section-dat)))))
      sections)

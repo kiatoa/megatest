@@ -10,7 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -46,6 +46,9 @@
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
+;; Disabled help items
+;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
+;;                            from prior runs with same keys
 
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
@@ -64,10 +67,10 @@ Launching and managing runs
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
-                            from prior runs with same keys
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
+  -set-run-status status  : sets status for run to status, requires -target and :runname
+  -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
@@ -115,6 +118,7 @@ Queries
   -show-cmdinfo           : dump the command info for a test (run in test environment)
 
 Misc 
+  -start-dir path         : switch to this directory before running megatest
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -update-meta            : update the tests metadata for all tests
@@ -130,6 +134,7 @@ Misc
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
+  -ping run-id|host:port  : ping server, exit with 0 if found
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -188,6 +193,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			":tol"
 			":units"
 			;; misc
+			"-start-dir"
 			"-server"
 			"-stop-server"
 			"-port"
@@ -196,6 +202,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-env2file"
 			"-setvars"
 			"-set-state-status"
+			"-set-run-status"
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
@@ -203,6 +210,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-load"        ;; load and exectute a scheme file
 			"-dumpmode"
 			"-run-id"
+			"-ping"
 			) 
 		 (list  "-h"
 			"-version"
@@ -231,6 +239,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-show-runconfig"
 			"-show-config"
 			"-show-cmdinfo"
+			"-get-run-status"
+
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
@@ -258,6 +268,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (print help)
       (exit)))
+
+(if (args:get-arg "-start-dir")
+    (if (file-exists? (args:get-arg "-start-dir"))
+	(change-directory (args:get-arg "-start-dir"))
+	(begin
+	  (debug:print 0 "ERROR: non-existant start dir " (args:get-arg "-start-dir") " specified, exiting.")
+	  (exit 1))))
 
 (if (args:get-arg "-version")
     (begin
@@ -327,6 +344,34 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (common:get-disks) )
 	"\n"))
       (set! *didsomething* #t)))
+
+(if (args:get-arg "-ping")
+    (let* ((run-id    (string->number (args:get-arg "-run-id")))
+	   (host-port (let ((slst (string-split   (args:get-arg "-ping") ":")))
+			(if (eq? (length slst) 2)
+			    (list (car slst)(string->number (cadr slst)))
+			    #f)))
+	   (toppath   (setup-for-run)))
+      (if (not run-id)
+	  (begin
+	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (print "ERROR: No run-id")
+	    (exit 1))
+	  (if (not host-port)
+	      (begin
+		(debug:print 0 "ERROR: argument to -ping is host:port, got " (args:get-arg "-ping"))
+		(print "ERROR: bad host:port")
+		(exit 1))
+	      (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		(if (and (list? login-res)
+			 (car login-res))
+		    (begin
+		      (print "LOGIN_OK")
+		      (exit 0))
+		    (begin
+		      (print "LOGIN_FAILED")
+		      (exit 1))))))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -455,20 +500,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 
 (if (args:get-arg "-show-runconfig")
-    (let ((data (full-runconfigs-read)))
-      ;; keep this one local
-      (cond
-       ((not (args:get-arg "-dumpmode"))
-	(pp (hash-table->alist data)))
-       ((string=? (args:get-arg "-dumpmode") "json")
+    (let ((tl (setup-for-run)))
+      (push-directory *toppath*)
+      (let ((data (full-runconfigs-read)))
+	;; keep this one local
+	(cond
+	 ((not (args:get-arg "-dumpmode"))
+	  (pp (hash-table->alist data)))
+	 ((string=? (args:get-arg "-dumpmode") "json")
 	(json-write data))
-       (else
-	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
-      (set! *didsomething* #t)))
+	 (else
+	  (debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
+	(set! *didsomething* #t))
+      (pop-directory)))
 
 (if (args:get-arg "-show-config")
     (let ((tl   (setup-for-run))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
+      (push-directory *toppath*)
       ;; keep this one local
       (cond 
        ((not (args:get-arg "-dumpmode"))
@@ -477,7 +526,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(json-write data))
        (else
 	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
-      (set! *didsomething* #t)))
+      (set! *didsomething* #t)
+      (pop-directory)))
 
 (if (args:get-arg "-show-cmdinfo")
     (if (getenv "MT_CMDINFO")
@@ -536,6 +586,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "set state and status"
      (lambda (target runname keys keyvals)
        (operate-on 'set-state-status))))
+
+(if (or (args:get-arg "-set-run-status")
+	(args:get-arg "-get-run-status"))
+    (general-run-call
+     "-set-run-status"
+     "set run status"
+     (lambda (target runname keys keyvals)
+       (let* ((runsdat  (cdb:remote-run db:get-runs-by-patt #f keys runname (or (args:get-arg "-target")
+									       (args:get-arg "-reqtarg")) #f #f))
+	      (header   (vector-ref runsdat 0))
+	      (rows     (vector-ref runsdat 1)))
+	 (if (null? rows)
+	     (begin
+	       (debug:print-info 0 "No matching run found.")
+	       (exit 1))
+	     (let* ((row      (car (vector-ref runsdat 1)))
+		    (run-id   (db:get-value-by-header row header "id")))
+	       (if (args:get-arg "-set-run-status")
+		   (cdb:remote-run db:set-run-status #f run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
+		   (print (open-run-close db:get-run-status #f run-id))
+		   )))))))
 
 ;;======================================================================
 ;; Query runs
@@ -740,7 +811,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (target    (args:get-arg "-target"))
 	       (toppath   (assoc/default 'toppath   cmdinfo)))
 	  (change-directory toppath)
-	  ;; (set! *runremote* runremote)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -788,7 +858,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (status    (args:get-arg ":status"))
 	       (target    (args:get-arg "-target")))
 	  (change-directory testpath)
-	  ;; (set! *runremote* runremote)
 	  (if (not target)
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
@@ -868,7 +937,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	;; (set! *runremote* runremote)
 	(if (not (setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
@@ -917,7 +985,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  ;; (set! *runremote* runremote)
 	  (if (not (setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
@@ -934,14 +1001,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (tdb:load-test-data run-id test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
-		;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid logfname))))
 		(rmt:test-set-log! run-id test-id logfname)))
 	  (if (args:get-arg "-set-toplog")
 	      ;; DO NOT run remote
 	      (tests:test-set-toplog! run-id test-name (args:get-arg "-set-toplog")))
 	  (if (args:get-arg "-summarize-items")
 	      ;; DO NOT run remote
-	      (tests:summarize-items db run-id test-id test-name #t)) ;; do force here
+	      (tests:summarize-items run-id test-id test-name #t)) ;; do force here
 	  (if (args:get-arg "-runstep")
 	      (if (null? remargs)
 		  (begin
@@ -980,7 +1046,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (set! exitstat (system cmd))
 			  (set! *globalexitstatus* exitstat) ;; no necessary
 			  (change-directory testpath)
-			  ;; (cdb:test-set-log! *runremote* test-id (sdb:qry 'getid htmllogfile))))
 			  (rmt:test-set-log! run-id test-id htmllogfile)))
 		    (let ((msg (args:get-arg "-m")))
 		      (rmt:teststep-set-status! run-id test-id stepname "end" exitstat msg logfile))
@@ -1167,7 +1232,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((toppath  (setup-for-run))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	   (mtdb     (if toppath (db:open-megatest-db)))
-	   (run-ids  (if toppath (db:get-run-ids mtdb))))
+	   (run-ids  (if toppath (db:get-all-run-ids mtdb))))
       ;; sync runs, test_meta etc.
       (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
       (for-each 
@@ -1187,19 +1252,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if *runremote* (close-all-connections!))
 
-;; this is the socket if we are a client
-;; (if (and *runremote*
-;; 	 (socket? *runremote*))
-;;     (close-socket *runremote*))
-
-;; (if sdb:qry (sdb:qry 'finalize #f))
-;; (if *fdb*   (filedb:finalize-db! *fdb*))
-
 (if (not *didsomething*)
     (debug:print 0 help))
 
-;; (if *runremote* (rpc:close-all-connections!))
-    
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin

@@ -17,6 +17,26 @@
 
 (define (api:execute-requests dbstruct cmd params)
   (case (string->symbol cmd)
+    ;; SERVERS
+    ((start-server)                (apply server:kind-run params))
+    ;; ((kill-server)
+    ;;  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
+    ;;  (let ((hostname (car  *runremote*))
+    ;;        (port     (cadr *runremote*))
+    ;;        (pid      (if (null? params) #f (car params)))
+    ;;        (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
+    ;;    (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
+    ;;    (debug:print-info 1 "current pid=" (current-process-id))
+    ;;    (open-run-close tasks:server-deregister tasks:open-db 
+    ;;     	       hostname
+    ;;     	       port: port)
+    ;;    (set! *server-run* #f)
+    ;;    (thread-sleep! 3)
+    ;;    (if pid 
+    ;;        (process-signal pid signal/kill)
+    ;;        (thread-start! th1))
+    ;;    '(#t "exit process started")))
+
     ;; KEYS
     ((get-key-val-pairs)            (apply db:get-key-val-pairs dbstruct params))
     ((get-keys)                     (db:get-keys dbstruct))
@@ -53,6 +73,8 @@
     ((delete-run)                   (apply db:delete-run dbstruct params))
     ((get-runs)                     (apply db:get-runs dbstruct params))
     ((get-all-run-ids)              (db:get-all-run-ids dbstruct))
+    ((get-prev-run-ids)             (apply db:get-prev-run-ids dbstruct params))
+    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct params))
     ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
     ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
     ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
@@ -74,23 +96,6 @@
 						  (lambda (db)
 						    (db:general-call db stmtname realparams)))))
     ((sync-inmem->db)               (db:sync-touched dbstruct run-id force-sync: #t))
-    ;; ((kill-server)
-    ;;  (db:sync-tables (db:tbls *inmemdb*) *inmemdb* *db*)  ;; (db:sync-to *inmemdb* *db*)
-    ;;  (let ((hostname (car  *runremote*))
-    ;;        (port     (cadr *runremote*))
-    ;;        (pid      (if (null? params) #f (car params)))
-    ;;        (th1      (make-thread (lambda ()(thread-sleep! 3)(debug:print 0 "Server exiting!")(exit 0)) "Server exit thread")))
-    ;;    (debug:print 0 "WARNING: Server on " hostname ":" port " going down by user request!")
-    ;;    (debug:print-info 1 "current pid=" (current-process-id))
-    ;;    (open-run-close tasks:server-deregister tasks:open-db 
-    ;;     	       hostname
-    ;;     	       port: port)
-    ;;    (set! *server-run* #f)
-    ;;    (thread-sleep! 3)
-    ;;    (if pid 
-    ;;        (process-signal pid signal/kill)
-    ;;        (thread-start! th1))
-    ;;    '(#t "exit process started")))
     ((sdb-qry)                      (apply sdb:qry params))
 
     ;; TESTMETA

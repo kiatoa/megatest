@@ -86,7 +86,7 @@
     (for-each (lambda (section)
 		(for-each (lambda (varval)
 			    (set! envdat (append envdat (list varval)))
-			    (setenv (car varval)(cadr varval)))
+			    (safe-setenv (car varval)(cadr varval)))
 			  (configf:get-section runconfig section)))
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
@@ -112,10 +112,7 @@
      vals
      (lambda (key val)
        (debug:print 2 "setenv " key " " val)
-       (if (and (string? key)
-		(string? val))
-	   (setenv key val)
-	   (debug:print 0 "ERROR: Malformed environment variable definition: var=" var ", val=" val))))
+       (safe-setenv key val)))
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default *configdat* "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
@@ -1156,7 +1153,7 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
+	       (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else      
 	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))

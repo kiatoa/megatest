@@ -55,58 +55,82 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 10))
+(define (client:setup run-id #!key (remaining-tries 10) (failed-connects 0))
   (if (<= remaining-tries 0)
       (begin
 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	(exit 1))
-      (let ((server-dat (and run-id (hash-table-ref/default *runremote* run-id #f))))
+      (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
+	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 	(thread-sleep! 1) ;; try to avoid race conditons
-	(if server-dat
-	    (let ((new-dat (http-transport:client-connect run-id ;; NB// confusion over server-dat and connection result!
-							    (car  server-dat)
-							    (cadr server-dat))))
-	      (if new-dat ;; sucessful login?
-		  new-dat
-		  (begin    ;; login failed
-		    (debug:print 0 "INFO: login failed in client:setup with existing server-dat: " server-dat ", new-dat: " new-dat ", cleaning out records and then trying again")
-		    (hash-table-delete! *runremote* run-id)
-		    (open-run-close tasks:server-force-clean-run-record
-				    tasks:open-db
-				    run-id 
-				    (car  server-dat)
-				    (cadr server-dat))
-		    (thread-sleep! 5)
-		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
-	    (let* ((server-info (open-run-close tasks:get-server tasks:open-db run-id)))
-	      (if server-info
-		  (let ((new-dat (http-transport:client-connect run-id
-								  (tasks:hostinfo-get-interface server-info)
-								  (tasks:hostinfo-get-port      server-info))))
+	(if host-info
+	    (let* ((iface     (car  host-info))
+		   (port      (cadr host-info))
+		   (start-res (http-transport:client-connect iface port))
+		   ;; (ping-res  (server:ping-server run-id iface port))
+		   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+	      (if ping-res   ;; sucessful login?
+		    start-res)  ;; return the server info
+		  (if (member remaining-tries '(3 4 6))
+		      (begin    ;; login failed
+			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
+			(hash-table-delete! *runremote* run-id)
+			(open-run-close tasks:server-force-clean-run-record
+			 		tasks:open-db
+			 		run-id 
+			 		(car  host-info)
+			 		(cadr host-info)
+					" client:setup (host-info=#t)")
+			(thread-sleep! 5)
+			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
+		      (begin
+			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
+			(thread-sleep! 5)
+			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
+	    ;; YUK: rename server-dat here
 		    (if new-dat
 			new-dat
-			(begin    ;; login failed
-			  (debug:print 0 "INFO: login failed in client:setup with no existing server-dat: " server-dat ", new-dat: " new-dat ", and server-info: " server-info ", cleaning out records and then trying again")
-			  (hash-table-delete! *runremote* run-id)
-			  (open-run-close tasks:server-force-clean-run-record
-					  tasks:open-db
-					  run-id 
-					  (tasks:hostinfo-get-interface server-dat)
-					  (tasks:hostinfo-get-port      server-dat))
-			  ;; (thread-sleep! 2)
-			  (server:try-running run-id)
-			  (thread-sleep! 5) ;; give server a little time to start up
-			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+			 (port      (tasks:hostinfo-get-port      server-dat))
+			 (start-res (http-transport:client-connect iface port))
+			 ;; (ping-res  (server:ping-server run-id iface port))
+			 (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+			(if (member remaining-tries '(2 5))
+			    (begin    ;; login failed
+			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			  ;;(debug:print 0 "INFO: login failed in client:setup with no existing server-dat: " server-dat ", new-dat: " new-dat ", and server-info: " server-info ", cleaning out records and then trying again")
+			      (hash-table-delete! *runremote* run-id)
+			      (open-run-close tasks:server-force-clean-run-record
+					      tasks:open-db
+					      run-id 
+					      (tasks:hostinfo-get-interface server-dat)
+					      (tasks:hostinfo-get-port      server-dat)
+					      " client:setup (server-dat = #t)")
+			      (server:try-running run-id)
+			      (thread-sleep! 10) ;; give server a little time to start up
+			      (client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
+			    (begin
+			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			      (thread-sleep! 5)
+			      (client:setup run-id remaining-tries: (- remaining-tries 1))))))
 		  (begin    ;; no server registered
-		    ;; (thread-sleep! 2)
-		    (server:try-running run-id)
-		    (thread-sleep! 5) ;; give server a little time to start up
-		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+		    (if (eq? remaining-tries 2)
+			(begin
+			  ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+			  (client:setup run-id remaining-tries: 10))
+			(begin
+			  (debug:print 25 "INFO: client:setup start-res (not defined here), run-id=" run-id ", server-dat=" server-dat)
+			  (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 3)
+			      (begin
+				;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+				(server:try-running run-id)))
+			  (thread-sleep! 10) ;; give server a little time to start up
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)
-  (http-transport:client-connect run-id 
-				 (tasks:hostinfo-get-interface server-info)
+  (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
 				 (tasks:hostinfo-get-port server-info)))
 
 ;; client:signal-handler

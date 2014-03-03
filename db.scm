@@ -13,25 +13,17 @@
 ;; Database access
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp) ;;  rpc)
-;; (import (prefix rpc rpc:))
-
+(require-extension (srfi 18) extras tcp)
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
-
-;; Note, try to remove this dependency 
-;; (use zmq)
 
 (declare (unit db))
 (declare (uses common))
 (declare (uses keys))
 (declare (uses ods))
-(declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
-;; (declare (uses sdb))
-;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -79,10 +71,18 @@
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((db (db:get-db dbstruct run-id)))
+  (let* ((db    (db:get-db dbstruct run-id))
+	 )
+    ;; (proc2 (lambda ()
     (let ((res (apply proc db params)))
       (db:done-with dbstruct run-id r/w)
       res)))
+;;     (handle-exceptions
+;;      exn
+;;      (begin
+;;        (thread-sleep! 10)
+;;        (proc2))
+;;      (proc2))))
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -462,8 +462,9 @@
 
 ;; (define open-run-close 
 (define open-run-close ;; (if (debug:debug-mode 2)
-			   open-run-close-no-exception-handling)
-			 ;;  open-run-close-exception-handling))
+		;;	   open-run-close-no-exception-handling
+			   open-run-close-exception-handling)
+;;)
 
 (define (db:initialize-main-db db)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
@@ -644,7 +645,7 @@
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
 			   7200)) ;; two hours
-	 (run-ids      (db:get-run-ids db))) ;; iterate over runs to divy up the calls
+	 (run-ids      (db:get-all-run-ids db))) ;; iterate over runs to divy up the calls
     (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
     (for-each
      (lambda (run-id)
@@ -980,7 +981,7 @@
 	 (keys       (db:get-keys dbstruct))
 	 (header     keys) ;; (map key:get-fieldname keys))
 	 (keystr     (keys->keystr keys))
-	 (qrystr     (conc "SELECT " keystr " FROM runs;"))
+	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE state != 'deleted';"))
 	 (seen       (make-hash-table)))
     (sqlite3:for-each-row
      (lambda (a . x)
@@ -1013,7 +1014,7 @@
        (set! run-ids (cons run-id run-ids)))
      (db:get-db dbstruct #f)
      "SELECT id FROM runs WHERE state != 'deleted';")
-    run-ids))
+    (reverse run-ids)))
 
 ;; get some basic run stats
 ;;
@@ -1028,7 +1029,7 @@
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
      (db:get-db dbstruct #f)
-     "SELECT id,runname FROM runs;")
+     "SELECT id,runname FROM runs WHERE state != 'deleted';")
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
@@ -1140,22 +1141,20 @@
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
-(define (db:get-all-run-ids dbstruct)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (run-id)
-       (set! res (cons run-id res)))
-     (db:get-db dbstruct #f)
-     "SELECT id FROM runs;")
-    (reverse res)))
+(define (db:set-run-status db run-id status #!key (msg #f))
+  (if msg
+      (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
+      (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id)))
 
-(define (db:get-run-ids db)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (id)
-       (set! res (cons id res)))
+(define (db:get-run-status db run-id)
+  (let ((res "n/a"))
+    (sqlite3:for-each-row 
+     (lambda (status)
+       (set! res status))
      db 
-     "SELECT id FROM runs;")))
+     "SELECT status FROM runs WHERE id=?;" 
+     run-id)
+    res))
 
 ;;======================================================================
 ;; K E Y S
@@ -1179,32 +1178,42 @@
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals dbstruct run-id)
-  (let ((mykeyvals (hash-table-ref/default *keyvals* run-id #f)))
-    (if mykeyvals 
-	mykeyvals
-	(let* ((keys (db:get-keys dbstruct))
-	       (res  '()))
-	  (for-each 
-	   (lambda (key)
-	     (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
-	       (sqlite3:for-each-row 
-		(lambda (key-val)
-		  (set! res (cons key-val res)))
-		(db:get-db dbstruct #f) qry run-id)))
-	   keys)
-	  (let ((final-res (reverse res)))
-	    (hash-table-set! *keyvals* run-id final-res)
-	    final-res)))))
+  (let* ((keys (db:get-keys dbstruct))
+	 (res  '()))
+    (for-each 
+     (lambda (key)
+       (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
+	 (sqlite3:for-each-row 
+	  (lambda (key-val)
+	    (set! res (cons key-val res)))
+	  (db:get-db dbstruct #f) qry run-id)))
+     keys)
+    (let ((final-res (reverse res)))
+      (hash-table-set! *keyvals* run-id final-res)
+      final-res)))
 
 ;; The target is keyval1/keyval2..., cached in *target* as it is used often
 (define (db:get-target dbstruct run-id)
-  (let ((mytarg (hash-table-ref/default *target* run-id #f)))
-    (if mytarg
-	mytarg
-	(let* ((keyvals (db:get-key-vals dbstruct run-id))
-	       (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
-	  (hash-table-set! *target* run-id thekey)
-	  thekey))))
+  (let* ((keyvals (db:get-key-vals dbstruct run-id))
+	 (thekey  (string-intersperse (map (lambda (x)(if x x "-na-")) keyvals) "/")))
+    thekey))
+
+;; Get run-ids for runs with same target but different runnames and NOT run-id
+;;
+(define (db:get-prev-run-ids dbstruct run-id)
+  (let* ((keyvals (rmt:get-key-val-pairs run-id))
+	 (kvalues (map cadr keyvals))
+	 (keys    (rmt:get-keys))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND ")))
+    (let ((prev-run-ids '()))
+      (db:with-db dbstruct #f #f ;; #f means work with the zeroth db - i.e. the runs db
+       (lambda (db)
+	 (apply sqlite3:for-each-row
+		(lambda (id)
+		  (set! prev-run-ids (cons id prev-run-ids)))
+		db
+		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;") (append kvalues (list run-id)))))
+      prev-run-ids)))
 
 ;;======================================================================
 ;;  T E S T S
@@ -1489,7 +1498,7 @@
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
 		       res)))
      (db:get-db dbstruct run-id)
-     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE run_id=?;")
+     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
      run-id)
     res))
 
@@ -1685,7 +1694,7 @@
 ;; Misc. test related queries
 ;;======================================================================
 
-(define (db:test-get-paths-matching-keynames-target-new dbstruct keynames target res testpatt statepatt statuspatt runname)
+(define (db:get-run-ids-matching-target dbstruct keynames target res runname testpatt statepatt statuspatt)
   (let* ((row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
@@ -1693,22 +1702,24 @@
 		       keynames 
 		       (string-split target "/"))
 		  " AND "))
-	 (testqry (tests:match->sqlqry testpatt))
-	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';")))
-	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
-    (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" tstsqry)
+	 ;; (testqry (tests:match->sqlqry testpatt))
+	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
+    ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
      runsqry)
     (sqlite3:finalize! runsqry)
-    (for-each (lambda (rid)
-		(sqlite3:for-each-row 
-		 (lambda (p)
-		   (set! res (cons p res)))
-		 (db:get-db dbstruct rid)
-		 tstsqry))
-	      row-ids)
+    row-ids))
+
+(define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
+  (let* ((testqry (tests:match->sqlqry testpatt))
+	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
+    (sqlite3:for-each-row 
+     (lambda (p)
+       (set! res (cons p res)))
+     (db:get-db dbstruct run-id)
+     tstsqry)
     res))
 
 ;;======================================================================
@@ -1879,45 +1890,6 @@
  		 (if q (car q) #f))))
     (apply sqlite3:execute db query params)
     #t))
-
-;; get the previous record for when this test was run where all keys match but runname
-;; returns #f if no such test found, returns a single test record if found
-;; 
-;; Run this server-side
-;;
-(define (db:get-previous-test-run-record dbstruct run-id test-name item-path)
-  (let* ((db      (db:get-db dbstruct #f)) ;; 
-	 (keys    (db:get-keys db))
-	 (selstr  (string-intersperse  keys ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
-	 (keyvals #f))
-    ;; first look up the key values from the run selected by run-id
-    (sqlite3:for-each-row 
-     (lambda (a . b)
-       (set! keyvals (cons a b)))
-     db
-     (conc "SELECT " selstr " FROM runs WHERE id=? ORDER BY event_time DESC;") run-id)
-    (if (not keyvals)
-	#f
-	(let ((prev-run-ids '()))
-	  (apply sqlite3:for-each-row
-		 (lambda (id)
-		   (set! prev-run-ids (cons id prev-run-ids)))
-		 db
-		 (conc "SELECT id FROM runs WHERE " qrystr " AND id != ?;") (append keyvals (list run-id)))
-	  ;; for each run starting with the most recent look to see if there is a matching test
-	  ;; if found then return that matching test record
-	  (debug:print 4 "selstr: " selstr ", qrystr: " qrystr ", keyvals: " keyvals ", previous run ids found: " prev-run-ids)
-	  (if (null? prev-run-ids) #f
-	      (let loop ((hed (car prev-run-ids))
-			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run db hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
-		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name ", item-path " item-path ": " results)
-		  (if (and (null? results)
-			   (not (null? tal)))
-		      (loop (car tal)(cdr tal))
-		      (if (null? results) #f
-			  (car results))))))))))
 
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests

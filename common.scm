@@ -25,6 +25,13 @@
 ;; (include "margs.scm")
 
 (define getenv get-environment-variable)
+(define (safe-setenv key val)
+  (if (and (string? val)(string? key))
+      (handle-exceptions
+       exn
+       (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)
+       (setenv key val))
+      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -62,6 +69,7 @@
 (define *db-write-access*   #t)
 (define *inmemdb*           #f)
 (define *run-id*            #f)
+(define *server-kind-run*   (make-hash-table))
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -101,6 +109,13 @@
 (define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
 ;; Generic path database (normalization of sorts)
 (define *fdb* #f)
+
+;;======================================================================
+;; U S E F U L   S T U F F
+;;======================================================================
+
+(define (common:get-megatest-exe)
+  (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S

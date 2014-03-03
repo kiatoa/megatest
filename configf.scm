@@ -219,13 +219,7 @@
 									       (config:eval-string-in-environment val)
 									       val)))
 							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
-							     (if envar
-								 (if (and (string? realval)(string? key))
-								     (handle-exceptions
-								      exn
-								      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" realval)
-								      (setenv key realval))
-								     (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" realval)))
+							     (if envar (safe-setenv key realval))
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval))
 							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))

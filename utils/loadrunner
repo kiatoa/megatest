@@ -25,5 +25,5 @@ if [[  $lperc -lt $max_load ]];then
   nbfake "$@"
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
-  echo "nbload $@" | at now + 2 minutes 2> /dev/null
+  echo "loadrunner $@" | at now + 2 minutes 2> /dev/null
 fi

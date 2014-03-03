@@ -70,7 +70,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
-	 (link-tree-path  (config-lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path
@@ -129,11 +129,11 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
-    (http-transport:try-start-server ipaddrstr start-port server-id)))
+    (http-transport:try-start-server run-id ipaddrstr start-port server-id)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
-(define (http-transport:try-start-server ipaddrstr portnum server-id)
+(define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (handle-exceptions
    exn
    (begin
@@ -145,8 +145,10 @@
 
 	   ;; get_next_port goes here
 
-	   (http-transport:try-start-server ipaddrstr (+ portnum 1) server-id))
-	 (print "ERROR: Tried and tried but could not start the server")))
+	   (http-transport:try-start-server run-id ipaddrstr (+ portnum 1) server-id))
+	 (begin
+	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+	   (print "ERROR: Tried and tried but could not start the server"))))
    ;; any error in following steps will result in a retry
    (set! *server-info* (list ipaddrstr portnum))
    (open-run-close tasks:server-set-interface-port 
@@ -156,8 +158,9 @@
    (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   (start-server bind-address: ipaddrstr port: portnum)
-   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
+   ;; (start-server bind-address: ipaddrstr port: portnum)
+   (start-server port: portnum)
+   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
 
 ;;======================================================================
@@ -221,14 +224,19 @@
 ;;
 (define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 30))
   (let* ((fullurl    (if (list? serverdat)
-			 (cadddr serverdat) ;; this is the uri for /api
+			 (list-ref serverdat 4) ;; (cadddr serverdat) ;; this is the uri for /api
 			 (begin
 			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
 	 (res        #f))
     (handle-exceptions
      exn
-     #f
+     (if (> numretries 0)
+	 (begin
+	   (mutex-unlock! *http-mutex*)
+	   (thread-sleep! 10)
+	   (http-transport:client-api-send-receive run-id serverdat cmd params (- numretries 1)))
+	 #f)
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
@@ -266,21 +274,25 @@
 ;;
 ;; connect
 ;;
-(define (http-transport:client-connect run-id iface port)
-  (let* ((uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (uri-api-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (server-dat  (list iface port uri-dat uri-api-dat))
-	 (login-res   (rmt:login-no-auto-client-setup server-dat run-id)))
-    ;; (hash-table-set! *runremote* run-id serverdat) ;; may or may not be good ...
-    (if (and (list? login-res)
-	     (car login-res))
-	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
+(define (http-transport:client-connect iface port)
+  (let* ((api-url     (conc "http://" iface ":" port "/api"))
+	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+	 ;; (uri-dat     (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+	 (uri-api-dat (make-request method: 'POST uri: api-url)) ;; (uri-reference (conc "http://" iface ":" port "/api"))))
+	 ;; (uri-api-dat (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/api"))))
+	 (server-dat  (list iface port uri-dat uri-api-dat api-url)))
+;;	 (login-res   (server:ping-server run-id server-dat))) ;; login-no-auto-client-setup server-dat run-id)))
+    server-dat))
+;;     (if (and (list? login-res)
 	  (hash-table-set! *runremote* run-id server-dat)
 	  server-dat)
-	(begin
-	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
-	  #f))))
+;; 	  (hash-table-set! *runremote* run-id server-dat)
+;; 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
+;; 	  (hash-table-set! *runremote* run-id server-dat)
+;; 	  server-dat)
+;; 	(begin
+;; 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
+;; 	  #f))))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -309,35 +321,39 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdb         (tasks:open-db))
-	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
+	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
 			       ;; (* 3 24 60 60) ;; default to three days
-			       (* 60 60)         ;; default to one hour
+			       ;; (* 60 1)         ;; default to one minute
+			       (* 60 60 25)      ;; default to 25 hours
 			       ))))
-    ;;
-    ;; set_running
-    ;;
-    (tasks:server-set-state! tdb server-id "running")
-    (let loop ((count 0))
+    (let loop ((count         0)
+	       (server-state 'available))
       ;; Use this opportunity to sync the inmemdb to db
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)
 	    (rem-time   #f))
+
 	(if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
 	(set! sync-time  (- (current-milliseconds) start-time))
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
 	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
-	(if (and (<= rem-time 4)
-		 (> rem-time 0))
-	    (thread-sleep! rem-time)
-	    (thread-sleep! 4))) ;; fallback for if the math is changed ...
 
-      ;; (thread-sleep! 4) ;; no need to do this very often
+      ;;
+      ;; set_running after our first pass through
+      ;;
+      (if (eq? server-state 'available)
+	  (tasks:server-set-state! tdb server-id "running"))
 
+      (if (and (<= rem-time 4)
+	       (> rem-time 0))
+	  (thread-sleep! rem-time)
+	  (thread-sleep! 4))) ;; fallback for if the math is changed ...
+      
       (if (< count 1) ;; 3x3 = 9 secs aprox
-	  (loop (+ count 1)))
+	  (loop (+ count 1) 'running))
       
       ;; Check that iface and port have not changed (can happen if server port collides)
       (mutex-lock! *heartbeat-mutex*)
@@ -365,7 +381,14 @@
 		  (current-seconds)))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-	    (loop 0))
+	    ;;
+	    ;; Consider implementing some smarts here to re-insert the record or kill self is
+	    ;; the db indicates so
+	    ;;
+	    ;; (if (tasks:server-am-i-the-server? tdb run-id)
+	    ;;     (tasks:server-set-state! tdb server-id "running"))
+	    ;;
+	    (loop 0 server-state))
 	  (begin
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
@@ -392,7 +415,7 @@
 				     *number-non-write-queries*))
 			      " ms")
 	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    (tasks:server-delete-record! tdb server-id)
+	    (tasks:server-delete-record tdb server-id " http-transport:keep-running")
 	    (exit))))))
 
 ;; all routes though here end in exit ...
@@ -407,12 +430,19 @@
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
-  (let ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id)))
+  (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
+	     (remtries  4))
     (if (not server-id)
-	(begin
-	  ;; since we didn't get the server lock we are going to clean up and bail out
-	  (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	  (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db))
+	(if (> remtries 0)
+	    (begin
+	      (thread-sleep! 2)
+	      (loop (open-run-close tasks:server-lock-slot tasks:open-db run-id)
+		    (- remtries 1)))
+	    (begin
+	      ;; since we didn't get the server lock we are going to clean up and bail out
+	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
+	      ))
 	(let* ((th2 (make-thread (lambda ()
 				   (http-transport:run 
 				    (if (args:get-arg "-server")
