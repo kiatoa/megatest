@@ -195,7 +195,7 @@
 	    (loop (+ 1 count)))
 	  (begin
 	    (debug:print-info 0 "Starting to shutdown the server side")
-	    (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " rpc-transport:try-start-server stop")
+	    (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
 	    (thread-sleep! 10)
 	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
 	    (debug:print-info 0 "Server shutdown complete. Exiting")

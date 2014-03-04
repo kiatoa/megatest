@@ -34,6 +34,14 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
+(define (rmt:call-transport run-id connection-info cmd jparams)
+  (case (server:get-transport)
+    ((rpc)  ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))
+    ((http) (http-transport:client-api-send-receive run-id connection-info cmd jparams))
+    ((fs)   ( fs-transport:client-api-send-receive run-id connection-info cmd jparams))
+    ((zmq)  (zmq-transport:client-api-send-receive run-id connection-info cmd jparams))
+    (else   ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))))
+
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
@@ -54,7 +62,7 @@
 					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
 					      (exit 1)))))))))
 	 (jparams         (db:obj->string params))
-	 (res     (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	 (res             (rmt:call-transport connection-info cmd jparams)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
 	(let ((new-connection-info (client:setup run-id)))
