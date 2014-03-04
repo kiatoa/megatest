@@ -107,15 +107,15 @@
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
                    VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?,-1,?,        ?,        ?);"
-   (current-process-id)       ;; pid
-   (get-host-name)            ;; hostname
-   -1                         ;; port
-   -1                         ;; pubport
-   (random 1000)              ;; priority (used a tiebreaker on get-available)
-   "available"                ;; state
-   (common:version-signature) ;; mt_version
-   -1                         ;; interface
-   "http"                     ;; transport
+   (current-process-id)          ;; pid
+   (get-host-name)               ;; hostname
+   -1                            ;; port
+   -1                            ;; pubport
+   (random 1000)                 ;; priority (used a tiebreaker on get-available)
+   "available"                   ;; state
+   (common:version-signature)    ;; mt_version
+   -1                            ;; interface
+   (conc (server:get-transport)) ;; transport
    run-id
    ))
 

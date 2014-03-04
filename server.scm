@@ -61,12 +61,15 @@
 
 ;; Get the transport
 (define (server:get-transport)
-  (if *
-  (string->symbol
-   (or (args:get-arg "-transport")
-       (configf:lookup *configdat* "server" "transport")
-       "rpc")))
-
+  (if *transport-type*
+      *transport-type*
+      (let ((ttype (string->symbol
+		    (or (args:get-arg "-transport")
+			(configf:lookup *configdat* "server" "transport")
+			"rpc"))))
+	(set! *transport-type* ttype)
+	ttype)))
+	    
 ;; Generate a unique signature for this server
 (define (server:mk-signature)
   (message-digest-string (md5-primitive) 
@@ -74,7 +77,6 @@
 			   (lambda ()
 			     (write (list (current-directory)
 					  (argv)))))))
-
 
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned
@@ -84,16 +86,16 @@
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (case (server:get-transport)
-    ((fs) result)
-    ((http)(db:obj->string (vector success/fail query-sig result)))
+    ((rpc)  (db:obj->string (vector success/fail query-sig result)))
+    ((http) (db:obj->string (vector success/fail query-sig result)))
     ((zmq)
      (let ((pub-socket (vector-ref *runremote* 1)))
        (send-message pub-socket return-addr send-more: #t)
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
+    ((fs)   result)
     (else 
      (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
      result)))
-  (db:obj->string (vector success/fail query-sig result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
 ;; if the run-id is zero and the target-host is set 

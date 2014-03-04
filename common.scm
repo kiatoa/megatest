@@ -52,7 +52,7 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)
+(define *transport-type*    #f)
 (define *megatest-db*       #f)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>

@@ -93,27 +93,6 @@
 				   (mutex-lock! *heartbeat-mutex*)
 				   (set! *last-db-access* (current-seconds))
 				   (mutex-unlock! *heartbeat-mutex*))
-				  ;; This is the /ctrl path where data is handed to the server and
-				  ;; responses 
-				  ((equal? (uri-path (request-uri (current-request)))
-					   '(/ "ctrl"))
-				   (let* ((packet (db:string->obj dat))
-					  (qtype  (cdb:packet-get-qtype packet)))
-				     (debug:print-info 12 "server=> received packet=" packet)
-				     (if (not (member qtype '(sync ping)))
-					 (begin
-					   (mutex-lock! *heartbeat-mutex*)
-					   (set! *last-db-access* (current-seconds))
-					   (mutex-unlock! *heartbeat-mutex*)))
-				     ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
-				     ;; (set! res (open-run-close db:process-queue-item open-db packet))
-				     (set! res (db:process-queue-item db packet))
-				     ;; (mutex-unlock! *db:process-queue-mutex*)
-				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
-				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
-								res
-								"</body>")
-						    headers: '((content-type text/plain)))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
 				   (send-response body: (http-transport:main-page)))
@@ -331,6 +310,8 @@
 			       ))))
     (let loop ((count         0)
 	       (server-state 'available))
+
+
       ;; Use this opportunity to sync the inmemdb to db
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)

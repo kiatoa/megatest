@@ -68,19 +68,19 @@
 				    run-id
 				    server-id)) "Server run"))
 	       (th3 (make-thread (lambda ()
-				   (rpc-transport:keep-running server-id))
+				   (rpc-transport:keep-running run-id server-id))
 				 "Keep running")))
 	  ;; Database connection
 	  (set! *inmemdb*  (db:setup run-id))
 	  (thread-start! th2)
 	  (thread-start! th3)
 	  (set! *didsomething* #t)
-	  (thread-join! th2)
+	  (thread-join! th3)
 	  (exit)))))
 
-(define (rpc-transport:run db hostn run-id)
-  (debug:print 2 "Attempting to start the server ...")
-  (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
+(define (rpc-transport:run hostn run-id server-id)
+  (debug:print 2 "Attempting to start the rpc server ...")
+  (let* ((db              #f)
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
@@ -93,18 +93,21 @@
 	 (th1            (make-thread
 			  (cute (rpc:make-server rpc:listener) "rpc:server")
 			  'rpc:server))
-	 ;; (th2            (make-thread (lambda ()(db:updater))))
 	 (hostname       (if (string=? "-" hostn)
 			     (get-host-name) 
 			     hostn))
 	 (ipaddrstr      (if (string=? "-" hostn)
-			     (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+			     (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 			     #f))
-	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" (rpc:default-server-port))))
+	 (portnum        (rpc:default-server-port))
+	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
+	 (tdb            (tasks:open-db)))
     (set! db *inmemdb*)
+    (open-run-close tasks:server-set-interface-port 
+		    tasks:open-db 
+		    server-id 
+		    ipaddrstr portnum)
     (debug:print 0 "Server started on " host:port)
-    (db:set-var db "SERVER" host:port)
-    (set! *cache-on* #t)
     
     ;; can use this to run most anything at the remote
     (rpc:publish-procedure! 
@@ -163,56 +166,39 @@
     ;;	     (debug:print-info 12 "Remote call of cdb:flush-queue")
     ;;	     (cdb:flush-queue)))
     ;;
+
     ;;======================================================================
     ;;	  ;; end of publish-procedure section
     ;;======================================================================
     ;;
-    (set! *rpc:listener* rpc:listener)
     (on-exit (lambda ()
-	       (open-run-close
-		(lambda (db . params)
-		  (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' and val=?;" host:port))
-		#f ;; for db
-		#f) ;; for a param
-	       (let loop ((n 0))
-		 (let ((queue-len 0))
-		   (thread-sleep! (random 5))
-		   (mutex-lock! *incoming-mutex*)
-		   (set! queue-len (length *incoming-data*))
-		   (mutex-unlock! *incoming-mutex*)
-		   (if (> queue-len 0)
-		       (begin
-			 (debug:print-info 0 "Queue not flushed, waiting ...")
-			 (loop (+ n 1)))))
-		 )))
-    (db:updater)
+	       (open-run-close tasks:server-set-state! tasks:open-db server-id "stopped")))
+
     (thread-start! th1)
-    ;; (debug:print 0 "Server started on port " (rpc:default-server-port) "...")
-    ;; (thread-start! th2)
-    ;; (thread-join!  th2)
-    ;; return th2 for the calling process to do a join with 
+
+    (set! *rpc:listener* rpc:listener)
+    (tasks:server-set-state! tdb server-id "running")
+    ; (sqlite3:finalize! tdb)
     th1
     )) ;; rpc:server)))
 
-(define (rpc-transport:keep-running db host:port)
+(define (rpc-transport:keep-running run-id server-id)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
-    (let loop ((count 0))
-    (thread-sleep! 20) ;; no need to do this very often
-    (let ((numrunning (db:get-count-tests-running db)))
+  (let loop ((count 0))
+    (thread-sleep! 5) ;; no need to do this very often
+    (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
       (if (or (> numrunning 0)
 	      (> (+ *last-db-access* 60)(current-seconds)))
-            (begin
+	  (begin
 	    (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
 	    (loop (+ 1 count)))
-            (begin
+	  (begin
 	    (debug:print-info 0 "Starting to shutdown the server side")
-              ;; need to delete only *my* server entry (future use)
-	    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER' AND val like ?;"  host:port)
+	    (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " rpc-transport:try-start-server stop")
 	    (thread-sleep! 10)
-              (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-              (debug:print-info 0 "Server shutdown complete. Exiting")
-	    ;; (exit)))
+	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+	    (debug:print-info 0 "Server shutdown complete. Exiting")
 	    )))))
 
 (define (rpc-transport:find-free-port-and-open port)
