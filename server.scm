@@ -168,3 +168,14 @@
 	     ((LOGIN_OK) #t)
 	     (else       #f))
 	   (loop (read-line) inl))))))
+
+(define (server:login toppath)
+  (lambda (toppath)
+    (set! *last-db-access* (current-seconds))
+    (if (equal? *toppath* toppath)
+	(begin
+	  ;; (debug:print-info 2 "login successful")
+	  #t)
+	(begin
+	  ;; (debug:print-info 2 "login failed")
+	  #f))))

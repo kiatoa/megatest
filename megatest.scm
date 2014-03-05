@@ -10,9 +10,10 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(import (prefix rpc rpc:))
 
 ;; (use zmq)
 
@@ -353,8 +354,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
-	   (toppath   (setup-for-run))
-	   (transport (server:get-transport)))
+	   (toppath   (setup-for-run)))
       (set! *did-something* #t)
       (if (not run-id)
 	  (begin
@@ -366,9 +366,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "ERROR: argument to -ping is host:port, got " (args:get-arg "-ping"))
 		(print "ERROR: bad host:port")
 		(exit 1))
-	      (case transport
+	      (case (server:get-transport)
 		((http)(http:ping run-id host-port))
-		((rpc) (rpc:ping  run-id (car host-port)(cadr host-port)))
+		((rpc)  ((rpc:procedure 'server:login (car host-port)(cadr host-port)) *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
 		(else  (debug:print 0 "ERROR: No transport set")(exit)))))))
 
 ;;======================================================================
@@ -398,7 +398,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     '("-list-servers"
 		       "-stop-server"
 		       "-show-cmdinfo"
-		       "-list-runs")))
+		       "-list-runs"
+		       "-ping")))
 	(if (setup-for-run)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))

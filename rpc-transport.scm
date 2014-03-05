@@ -60,13 +60,12 @@
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")
 	      ))
-	(let* ((th2 (make-thread (lambda ()
-				   (rpc-transport:run 
-				    (if (args:get-arg "-server")
-					(args:get-arg "-server")
-					"-")
-				    run-id
-				    server-id)) "Server run"))
+	(let* ((th2 (rpc-transport:run 
+		     (if (args:get-arg "-server")
+			 (args:get-arg "-server")
+			 "-")
+		     run-id
+		     server-id))
 	       (th3 (make-thread (lambda ()
 				   (rpc-transport:keep-running run-id server-id))
 				 "Keep running")))
@@ -89,19 +88,19 @@
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	 (rpc:listener   (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
-	 (th1            (make-thread
-			  (cute (rpc:make-server rpc:listener) "rpc:server")
-			  'rpc:server))
-	 (hostname       (if (string=? "-" hostn)
-			     (get-host-name) 
-			     hostn))
-	 (ipaddrstr      (if (string=? "-" hostn)
-			     (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
-			     #f))
-	 (portnum        (rpc:default-server-port))
-	 (host:port      (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
-	 (tdb            (tasks:open-db)))
+	 (rpc:listener    (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
+	 (th1             (make-thread
+			   (cute (rpc:make-server rpc:listener) "rpc:server")
+			   'rpc:server))
+	 (hostname        (if (string=? "-" hostn)
+			      (get-host-name) 
+			      hostn))
+	 (ipaddrstr       (if (string=? "-" hostn)
+			      (server:get-best-guess-address hostname) ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
+			      #f))
+	 (portnum         (rpc:default-server-port))
+	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
+	 (tdb             (tasks:open-db)))
     (set! db *inmemdb*)
     (open-run-close tasks:server-set-interface-port 
 		    tasks:open-db 
@@ -109,63 +108,8 @@
 		    ipaddrstr portnum)
     (debug:print 0 "Server started on " host:port)
     
-    ;; can use this to run most anything at the remote
-    (rpc:publish-procedure! 
-     'remote:run 
-     (lambda (procstr . params)
-       (rpc-transport:autoremote procstr params)))
-    
-    ;;    (rpc:publish-procedure!
-    ;;     'server:login
-    ;;     (lambda (toppath)
-    ;;       (set! *last-db-access* (current-seconds))
-    ;;       (if (equal? *toppath* toppath)
-    ;;	   (begin
-    ;;	     (debug:print-info 2 "login successful")
-    ;;	     #t)
-    ;;	   #f)))
-    ;;
-    ;;	  ;;======================================================================
-    ;;	  ;; db specials here
-    ;;	  ;;======================================================================
-    ;;	  ;; remote call to open-run-close
-    ;;	  (rpc:publish-procedure!
-    ;;	   'rdb:open-run-close 
-    ;;	   (lambda (procname . remargs)
-    ;;	     (debug:print-info 12 "Remote call of rdb:open-run-close " procname " " remargs)
-    ;;					   (set! *last-db-access* (current-seconds))
-    ;;	     (apply open-run-close (eval procname) remargs)))
-    ;;
-    ;;	  (rpc:publish-procedure!
-    ;;	   'cdb:test-set-status-state
-    ;;	   (lambda (test-id status state msg)
-    ;;	     (debug:print-info 12 "Remote call of cdb:test-set-status-state test-id=" test-id ", status=" status ", state=" state ", msg=" msg)
-    ;;	     (cdb:test-set-status-state test-id status state msg)))
-    ;;
-    ;;	  (rpc:publish-procedure!
-    ;;	   'cdb:test-rollup-test_data-pass-fail
-    ;;	   (lambda (test-id)
-    ;;	     (debug:print-info 12 "Remote call of cdb:test-rollup-test_data-pass-fail " test-id)
-    ;;	     (cdb:test-rollup-test_data-pass-fail test-id)))
-    ;;
-    ;;	  (rpc:publish-procedure!
-    ;;	   'cdb:pass-fail-counts
-    ;;	   (lambda (test-id fail-count pass-count)
-    ;;	     (debug:print-info 12 "Remote call of cdb:pass-fail-counts " test-id " passes: " pass-count " fails: " fail-count)
-    ;;	     (cdb:pass-fail-counts test-id fail-count pass-count)))
-    ;;
-    ;;	  (rpc:publish-procedure!
-    ;;	   'cdb:tests-register-test
-    ;;	   (lambda (db run-id test-name item-path)
-    ;;	     (debug:print-info 12 "Remote call of cdb:tests-register-test " run-id " testname: " test-name " item-path: " item-path)
-    ;;	     (cdb:tests-register-test db run-id test-name item-path)))
-    ;;
-    ;;	  (rpc:publish-procedure!
-    ;;	   'cdb:flush-queue
-    ;;			   (lambda ()
-    ;;	     (debug:print-info 12 "Remote call of cdb:flush-queue")
-    ;;	     (cdb:flush-queue)))
-    ;;
+    (trace rpc:publish-procedure!)
+    (rpc:publish-procedure! 'server:login server:login)
 
     ;;======================================================================
     ;;	  ;; end of publish-procedure section
@@ -174,13 +118,10 @@
     (on-exit (lambda ()
 	       (open-run-close tasks:server-set-state! tasks:open-db server-id "stopped")))
 
-    (thread-start! th1)
-
     (set! *rpc:listener* rpc:listener)
     (tasks:server-set-state! tdb server-id "running")
-    ; (sqlite3:finalize! tdb)
     th1
-    )) ;; rpc:server)))
+    ))
 
 (define (rpc-transport:keep-running run-id server-id)
   ;; if none running or if > 20 seconds since 
@@ -211,8 +152,21 @@
    (tcp-read-timeout 240000)
    (tcp-listen (rpc:default-server-port) 10000)))
 
-(define (rpc:ping run-id host port)
-  ((rpc:procedure 'server:login host port) *toppath*))
+(define (rpc-transport:ping run-id host port)
+  (handle-exceptions
+   exn
+   (begin
+     (print "SERVER_NOT_FOUND")
+     (exit 1))
+   (let ((login-res ((rpc:procedure 'server:login host port) *toppath*)))
+     (if (and (list? login-res)
+	      (car login-res))
+	 (begin
+	   (print "LOGIN_OK")
+	   (exit 0))
+	 (begin
+	   (print "LOGIN_FAILED")
+	   (exit 1))))))
 
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*
@@ -223,7 +177,7 @@
 	(if host-info
 	    (let ((iface    (car host-info))
 		  (port     (cadr host-info))
-		  (ping-res (rpc:ping run-id host port)))
+		  (ping-res ((rpc:procedure 'server:login host port) *toppath*)))
 	      (if ping-res
 		  (let ((server-dat (list iface port #f #f #f)))
 		    (hash-table-set! *runremote* run-id server-dat)
@@ -238,7 +192,7 @@
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
  			 (port      (tasks:hostinfo-get-port      server-db-info))
 			 (server-dat (list iface port #f #f #f))
- 			 (ping-res  (rpc:ping run-id iface port)))
+ 			 (ping-res  ((rpc:procedure 'server:login host port) *toppath*)))
  		    (if start-res
  			(begin
  			  (hash-table-set! *runremote* run-id server-dat)
