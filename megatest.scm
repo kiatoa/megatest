@@ -368,7 +368,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(exit 1))
 	      (case transport
 		((http)(http:ping run-id host-port))
-		((rpc) (rpc:ping  run-id host-port))
+		((rpc) (rpc:ping  run-id (car host-port)(cadr host-port)))
 		(else  (debug:print 0 "ERROR: No transport set")(exit)))))))
 
 ;;======================================================================

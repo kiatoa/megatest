@@ -211,39 +211,69 @@
    (tcp-read-timeout 240000)
    (tcp-listen (rpc:default-server-port) 10000)))
 
-(define (rpc:ping run-id host-port)
-  #f)
+(define (rpc:ping run-id host port)
+  ((rpc:procedure 'server:login host port) *toppath*))
 
-(define (rpc-transport:client-setup)
+(define (rpc-transport:client-setup run-id #!key (remtries 10))
   (if *runremote*
       (begin
 	(debug:print 0 "ERROR: Attempt to connect to server but already connected")
 	#f)
-      (let* ((hostinfo (open-run-close db:get-var #f "SERVER"))
-	     (hostdat  (if hostinfo (string-split hostinfo ":") #f))
-	     (host     (if hostinfo (car hostdat) #f))
-	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
-	(if (and port
-		 (string->number port))
-	    (let ((portn (string->number port)))
-	      (debug:print-info 2 "Setting up to connect to host " host ":" port)
-  (handle-exceptions
-   exn
-       (begin
-		 (debug:print 0 "ERROR: Failed to open a connection to the server at host: " host " port: " port)
-		 (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-		 ;; (open-run-close 
-		 ;;  (lambda (db . param) 
-		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
-		 ;;  #f)
-		 (set! *runremote* #f))
-	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-			((rpc:procedure 'server:login host portn) *toppath*))
-		   (begin
-		     (debug:print-info 2 "Logged in and connected to " host ":" port)
-		     (set! *runremote* (vector host portn)))
-		   (begin
-		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
-		     (set! *runremote* #f)))))
-	    (debug:print-info 2 "no server available")))))
+      (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
+	(if host-info
+	    (let ((iface    (car host-info))
+		  (port     (cadr host-info))
+		  (ping-res (rpc:ping run-id host port)))
+	      (if ping-res
+		  (let ((server-dat (list iface port #f #f #f)))
+		    (hash-table-set! *runremote* run-id server-dat)
+		    server-dat)
+		  (begin
+		    (server:try-running run-id)
+		    (thread-sleep! 2)
+		    (rpc-transport:client-setup run-id (- remtries 1)))))
+ 	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
+ 	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+	      (if server-db-info
+ 		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
+ 			 (port      (tasks:hostinfo-get-port      server-db-info))
+			 (server-dat (list iface port #f #f #f))
+ 			 (ping-res  (rpc:ping run-id iface port)))
+ 		    (if start-res
+ 			(begin
+ 			  (hash-table-set! *runremote* run-id server-dat)
+			  server-dat)
+			(begin
+			  (server:try-running run-id)
+			  (thread-sleep! 2)
+			  (rpc-transport:client-setup run-id (- remtries 1)))))
+		  (begin
+		    (server:try-running run-id)
+		    (thread-sleep! 2)
+		    (rpc-transport:client-setup run-id (- remtries 1)))))))))
+;; 
+;; 	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
+;; 	(if (and port
+;; 		 (string->number port))
+;; 	    (let ((portn (string->number port)))
+;; 	      (debug:print-info 2 "Setting up to connect to host " host ":" port)
+;; 	      (handle-exceptions
+;; 	       exn
+;; 	       (begin
+;; 		 (debug:print 0 "ERROR: Failed to open a connection to the server at host: " host " port: " port)
+;; 		 (debug:print 0 "   EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+;; 		 ;; (open-run-close 
+;; 		 ;;  (lambda (db . param) 
+;; 		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
+;; 		 ;;  #f)
+;; 		 (set! *runremote* #f))
+;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
+;; 			((rpc:procedure 'server:login host portn) *toppath*))
+;; 		   (begin
+;; 		     (debug:print-info 2 "Logged in and connected to " host ":" port)
+;; 		     (set! *runremote* (vector host portn)))
+;; 		   (begin
+;; 		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
+;; 		     (set! *runremote* #f)))))
+;; 	    (debug:print-info 2 "no server available")))))
 
