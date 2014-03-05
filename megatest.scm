@@ -366,10 +366,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(debug:print 0 "ERROR: argument to -ping is host:port, got " (args:get-arg "-ping"))
 		(print "ERROR: bad host:port")
 		(exit 1))
-	      (case (server:get-transport)
-		((http)(http:ping run-id host-port))
-		((rpc)  ((rpc:procedure 'server:login (car host-port)(cadr host-port)) *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
-		(else  (debug:print 0 "ERROR: No transport set")(exit)))))))
+	      (begin
+		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
+		(case (server:get-transport)
+		  ((http)(http:ping run-id host-port))
+		  ((rpc)  ((rpc:procedure 'server:login (car host-port)(cadr host-port)) *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
+		  (else  (debug:print 0 "ERROR: No transport set")(exit))))))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)

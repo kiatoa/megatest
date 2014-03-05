@@ -58,27 +58,18 @@
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")
-	      ))
-	(let* ((th2 (rpc-transport:run 
-		     (if (args:get-arg "-server")
-			 (args:get-arg "-server")
-			 "-")
-		     run-id
-		     server-id))
-	       (th3 (make-thread (lambda ()
-				   (rpc-transport:keep-running run-id server-id))
-				 "Keep running")))
-	  ;; Database connection
-	  (set! *inmemdb*  (db:setup run-id))
-	  (thread-start! th2)
-	  (thread-start! th3)
-	  (set! *didsomething* #t)
-	  (thread-join! th3)
+	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")))
+	(begin
+	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
 	  (exit)))))
 
 (define (rpc-transport:run hostn run-id server-id)
   (debug:print 2 "Attempting to start the rpc server ...")
+   ;; (trace rpc:publish-procedure!)
+
+  (rpc:publish-procedure! 'server:login server:login)
+  (rpc:publish-procedure! 'testing (lambda () "Just testing"))
+
   (let* ((db              #f)
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
@@ -90,8 +81,11 @@
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
 	 (rpc:listener    (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
 	 (th1             (make-thread
-			   (cute (rpc:make-server rpc:listener) "rpc:server")
-			   'rpc:server))
+			   (lambda ()
+			     ((rpc:make-server rpc:listener) #t))
+			   "rpc:server"))
+			   ;; (cute (rpc:make-server rpc:listener) "rpc:server")
+			   ;; 'rpc:server))
 	 (hostname        (if (string=? "-" hostn)
 			      (get-host-name) 
 			      hostn))
@@ -101,6 +95,7 @@
 	 (portnum         (rpc:default-server-port))
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
 	 (tdb             (tasks:open-db)))
+    (thread-start! th1)
     (set! db *inmemdb*)
     (open-run-close tasks:server-set-interface-port 
 		    tasks:open-db 
@@ -108,8 +103,9 @@
 		    ipaddrstr portnum)
     (debug:print 0 "Server started on " host:port)
     
-    (trace rpc:publish-procedure!)
-    (rpc:publish-procedure! 'server:login server:login)
+    ;; (trace rpc:publish-procedure!)
+    ;; (rpc:publish-procedure! 'server:login server:login)
+    ;; (rpc:publish-procedure! 'testing (lambda () "Just testing"))
 
     ;;======================================================================
     ;;	  ;; end of publish-procedure section
@@ -120,27 +116,24 @@
 
     (set! *rpc:listener* rpc:listener)
     (tasks:server-set-state! tdb server-id "running")
-    th1
-    ))
-
-(define (rpc-transport:keep-running run-id server-id)
-  ;; if none running or if > 20 seconds since 
-  ;; server last used then start shutdown
-  (let loop ((count 0))
-    (thread-sleep! 5) ;; no need to do this very often
-    (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
-      (if (or (> numrunning 0)
-	      (> (+ *last-db-access* 60)(current-seconds)))
-	  (begin
-	    (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
-	    (loop (+ 1 count)))
-	  (begin
-	    (debug:print-info 0 "Starting to shutdown the server side")
-	    (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
-	    (thread-sleep! 10)
-	    (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-	    (debug:print-info 0 "Server shutdown complete. Exiting")
-	    )))))
+    (set! *inmemdb*  (db:setup run-id))
+    ;; if none running or if > 20 seconds since 
+    ;; server last used then start shutdown
+    (let loop ((count 0))
+      (thread-sleep! 5) ;; no need to do this very often
+      (let ((numrunning -1)) ;; (db:get-count-tests-running db)))
+	(if (or (> numrunning 0)
+		(> (+ *last-db-access* 60)(current-seconds)))
+	    (begin
+	      (debug:print-info 0 "Server continuing, tests running: " numrunning ", seconds since last db access: " (- (current-seconds) *last-db-access*))
+	      (loop (+ 1 count)))
+	    (begin
+	      (debug:print-info 0 "Starting to shutdown the server side")
+	      (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
+	      (thread-sleep! 10)
+	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+	      (debug:print-info 0 "Server shutdown complete. Exiting")
+	      ))))))
 
 (define (rpc-transport:find-free-port-and-open port)
   (handle-exceptions
