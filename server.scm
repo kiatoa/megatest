@@ -88,7 +88,8 @@
 		      " -server " (or target-host "-") " -run-id " run-id " >> " logfile " 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (if (and target-host (not (equal? target-host curr-host)))
+    ;; host.domain.tld match host?
+    (if (and target-host (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host)))
 	(begin
 	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)
