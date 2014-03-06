@@ -81,14 +81,18 @@
 ;; try running on that host
 ;;
 (define  (server:run run-id)
-  (let* ((target-host (configf:lookup *configdat* "server" "homehost" ))
+  (let* ((curr-host   (get-host-name))
+	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (logfile     (conc *toppath* "/db/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server - -run-id " run-id " >> " *toppath* "/db/" run-id ".log 2>&1 &")))
+		      " -server " (or target-host "-") " -run-id " run-id " >> " logfile " 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (if target-host
+    (if (and target-host (not (equal? target-host curr-host)))
 	(begin
-	  (set-environment-variable "TARGETHOST" target-host)
+	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
+	  (setenv "TARGETHOST" target-host)
+	  (setenv "TARGETHOST_LOGF" logfile)
 	  (system (conc "nbfake " cmdln)))
 	(system cmdln))
     (pop-directory)))
