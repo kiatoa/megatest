@@ -14,6 +14,7 @@
 echo You may need to do the following first:
 echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
+echo sudo apt-get install libssl-dev
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo KTYPE can be 26, 26g4, or 32
 echo KTYPE=$KTYPE
@@ -94,7 +95,8 @@ fi
 
 # Some eggs are quoted since they are reserved to Bash
 # for f in matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5; do
-$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars spiffy-directory-listing ssax sxml-serializer sxml-modifications logpro
+# $CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars md5 message-digest http-client spiffy-directory-listing
+$CHICKEN_INSTALL $PROX -keep-installed matchable readline apropos base64 regex-literals format "regex-case" "test" coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb http-client spiffy-request-vars s md5 message-digest piffy-directory-listing ssax sxml-serializer sxml-modifications logpro
 #   if ! [[ -e $PREFIX/lib/chicken/6/$f.so ]];then
 #     $CHICKEN_INSTALL $PROX $f
 #     # $CHICKEN_INSTALL -deploy -prefix $DEPLOYTARG $PROX $f
