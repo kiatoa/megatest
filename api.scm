@@ -53,7 +53,7 @@
     ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
     ((get-previous-test-run-record)    (apply db:get-previous-test-run-record dbstruct params))
     ((get-matching-previous-test-run-records)(apply db:get-matching-previous-test-run-records dbstruct params))
-    ((db:test-get-logfile-info)        (apply db:test-get-logfile-info dbstruct params))
+    ((test-get-logfile-info)           (apply db:test-get-logfile-info dbstruct params))
     ((test-get-records-for-index-file  (apply db:test-get-records-for-index-file dbstruct params)))
     ((get-testinfo-state-status)       (apply db:get-testinfo-state-status dbstruct params))
     ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new dbstruct params))
