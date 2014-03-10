@@ -64,7 +64,7 @@
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 3)))
+	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
 	(db:string->obj res) ;; (rmt:json-str->dat res)
 	;; this one does NOT keep trying

@@ -222,7 +222,7 @@
 
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
-(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 30))
+(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
   (let* ((fullurl    (if (list? serverdat)
 			 (list-ref serverdat 4) ;; (cadddr serverdat) ;; this is the uri for /api
 			 (begin
@@ -234,16 +234,20 @@
      (if (> numretries 0)
 	 (begin
 	   (mutex-unlock! *http-mutex*)
-	   (thread-sleep! 10)
-	   (http-transport:client-api-send-receive run-id serverdat cmd params (- numretries 1)))
-	 #f)
+	   (thread-sleep! 2)
+	   (close-all-connections!)
+	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
+	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
+	 (begin
+	   (mutex-unlock! *http-mutex*)
+	   #f))
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
-       (max-retry-attempts 5)
+       (max-retry-attempts 1)
        ;; consider all requests indempotent
        (retry-request? (lambda (request)
-			 #t))
+			 #f))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.
