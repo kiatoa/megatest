@@ -95,25 +95,25 @@
 				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
-				  ((equal? (uri-path (request-uri (current-request)))
-					   '(/ "ctrl"))
-				   (let* ((packet (db:string->obj dat))
-					  (qtype  (cdb:packet-get-qtype packet)))
-				     (debug:print-info 12 "server=> received packet=" packet)
-				     (if (not (member qtype '(sync ping)))
-					 (begin
-					   (mutex-lock! *heartbeat-mutex*)
-					   (set! *last-db-access* (current-seconds))
-					   (mutex-unlock! *heartbeat-mutex*)))
-				     ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
-				     ;; (set! res (open-run-close db:process-queue-item open-db packet))
-				     (set! res (db:process-queue-item db packet))
-				     ;; (mutex-unlock! *db:process-queue-mutex*)
-				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
-				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
-								res
-								"</body>")
-						    headers: '((content-type text/plain)))))
+				  ;; ((equal? (uri-path (request-uri (current-request)))
+				  ;;          '(/ "ctrl"))
+				  ;;  (let* ((packet (db:string->obj dat))
+				  ;;         (qtype  (cdb:packet-get-qtype packet)))
+				  ;;    (debug:print-info 12 "server=> received packet=" packet)
+				  ;;    (if (not (member qtype '(sync ping)))
+				  ;;        (begin
+				  ;;          (mutex-lock! *heartbeat-mutex*)
+				  ;;          (set! *last-db-access* (current-seconds))
+				  ;;          (mutex-unlock! *heartbeat-mutex*)))
+				  ;;    ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
+				  ;;    ;; (set! res (open-run-close db:process-queue-item open-db packet))
+				  ;;    (set! res (db:process-queue-item db packet))
+				  ;;    ;; (mutex-unlock! *db:process-queue-mutex*)
+				  ;;    (debug:print-info 11 "Return value from db:process-queue-item is " res)
+				  ;;    (send-response body: (conc "<head>ctrl data</head>\n<body>"
+				  ;;       			res
+				  ;;       			"</body>")
+				  ;;       	    headers: '((content-type text/plain)))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
 				   (send-response body: (http-transport:main-page)))
@@ -234,7 +234,7 @@
      (if (> numretries 0)
 	 (begin
 	   (mutex-unlock! *http-mutex*)
-	   (thread-sleep! 2)
+	   (thread-sleep! 1)
 	   (close-all-connections!)
 	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
 	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
@@ -275,28 +275,38 @@
 	 (debug:print-info 11 "got res=" res)
 	 res)))))
 
+;; careful closing of connections stored in *runremote*
+;;
+(define (http-transport:close-connections run-id)
+  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+    (if (and (list? server-dat)
+	     (>= (length server-dat) 5))
+	(let ((ctrl-dat (list-ref server-dat 2))
+	      (api-dat  (list-ref server-dat 3)))
+	  (close-connection! ctrl-dat)
+	  (close-connection! api-dat)
+	  #t)
+	#f)))
+
+
+(define (make-http-transport:server-dat)(make-vector 5))
+(define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
+(define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
+(define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
+(define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
+(define (http-transport:server-dat-get-api-request   vec)    (vector-ref  vec 4))
+
 ;;
 ;; connect
 ;;
 (define (http-transport:client-connect iface port)
-  (let* ((api-url     (conc "http://" iface ":" port "/api"))
-	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 ;; (uri-dat     (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (uri-api-dat (make-request method: 'POST uri: api-url)) ;; (uri-reference (conc "http://" iface ":" port "/api"))))
-	 ;; (uri-api-dat (make-request method: 'GET uri: (uri-reference (conc "http://" iface ":" port "/api"))))
-	 (server-dat  (list iface port uri-dat uri-api-dat api-url)))
-;;	 (login-res   (server:ping-server run-id server-dat))) ;; login-no-auto-client-setup server-dat run-id)))
+  (let* ((api-url      (conc "http://" iface ":" port "/api"))
+	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
+	 (uri-api-dat  (make-request method: 'POST uri: api-uri))
+	 ;; (uri-ctrl-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
+	 (uri-ctrl-dat #f) ;; not used anymore
+	 (server-dat   (vector iface port uri-ctrl-dat uri-api-dat api-url)))
     server-dat))
-;;     (if (and (list? login-res)
-;; 	     (car login-res))
-;; 	(begin
-;; 	  (hash-table-set! *runremote* run-id server-dat)
-;; 	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-;; 	  (hash-table-set! *runremote* run-id server-dat)
-;; 	  server-dat)
-;; 	(begin
-;; 	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
-;; 	  #f))))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
