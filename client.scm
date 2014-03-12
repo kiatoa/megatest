@@ -64,8 +64,8 @@
       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
 	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 	(if host-info
-	    (let* ((iface     (car  host-info))
-		   (port      (cadr host-info))
+	    (let* ((iface     (http-transport:server-dat-get-iface host-info))
+		   (port      (http-transport:server-dat-get-port  host-info))
 		   (start-res (http-transport:client-connect iface port))
 		   ;; (ping-res  (server:ping-server run-id iface port))
 		   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
@@ -82,8 +82,8 @@
 			(open-run-close tasks:server-force-clean-run-record
 			 		tasks:open-db
 			 		run-id 
-			 		(car  host-info)
-			 		(cadr host-info)
+			 		iface
+			 		port
 					" client:setup (host-info=#t)")
 			(if (< remaining-tries 8)
 			    (thread-sleep! 5))

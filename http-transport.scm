@@ -223,8 +223,8 @@
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
 (define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
-  (let* ((fullurl    (if (list? serverdat)
-			 (list-ref serverdat 4) ;; (cadddr serverdat) ;; this is the uri for /api
+  (let* ((fullurl    (if (vector? serverdat)
+			 (http-transport:server-dat-get-api-req serverdat)
 			 (begin
 			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
@@ -279,11 +279,8 @@
 ;;
 (define (http-transport:close-connections run-id)
   (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
-    (if (and (list? server-dat)
-	     (>= (length server-dat) 5))
-	(let ((ctrl-dat (list-ref server-dat 2))
-	      (api-dat  (list-ref server-dat 3)))
-	  (close-connection! ctrl-dat)
+    (if (vector? server-dat)
+	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)
 	  #t)
 	#f)))
@@ -294,7 +291,7 @@
 (define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
 (define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
-(define (http-transport:server-dat-get-api-request   vec)    (vector-ref  vec 4))
+(define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 
 ;;
 ;; connect
@@ -302,10 +299,8 @@
 (define (http-transport:client-connect iface port)
   (let* ((api-url      (conc "http://" iface ":" port "/api"))
 	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
-	 (uri-api-dat  (make-request method: 'POST uri: api-uri))
-	 ;; (uri-ctrl-dat (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (uri-ctrl-dat #f) ;; not used anymore
-	 (server-dat   (vector iface port uri-ctrl-dat uri-api-dat api-url)))
+	 (api-req      (make-request method: 'POST uri: api-uri))
+	 (server-dat   (vector iface port api-uri api-url api-req)))
     server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
