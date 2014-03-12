@@ -64,26 +64,29 @@
       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
 	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 	(if host-info
-	    (let* ((iface     (car  host-info))
-		   (port      (cadr host-info))
+	    (let* ((iface     (http-transport:server-dat-get-iface host-info))
+		   (port      (http-transport:server-dat-get-port  host-info))
 		   (start-res (http-transport:client-connect iface port))
 		   ;; (ping-res  (server:ping-server run-id iface port))
 		   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
 	      (if ping-res   ;; sucessful login?
 		  (begin
+		    (http-transport:close-connections run-id)
 		    (hash-table-set! *runremote* run-id start-res)
 		    start-res)  ;; return the server info
-		  (if (member remaining-tries '(3 4 6))
+		  (if (member remaining-tries '(9 6 4 2))
 		      (begin    ;; login failed
 			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
+			(http-transport:close-connections run-id)
 			(hash-table-delete! *runremote* run-id)
 			(open-run-close tasks:server-force-clean-run-record
 			 		tasks:open-db
 			 		run-id 
-			 		(car  host-info)
-			 		(cadr host-info)
+			 		iface
+			 		port
 					" client:setup (host-info=#t)")
-			(thread-sleep! 5)
+			(if (< remaining-tries 8)
+			    (thread-sleep! 5))
 			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 		      (begin
 			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
