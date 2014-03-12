@@ -86,7 +86,8 @@
 			 		port
 					" client:setup (host-info=#t)")
 			(if (< remaining-tries 8)
-			    (thread-sleep! 5))
+			    (thread-sleep! 5)
+			    (thread-sleep! 1))
 			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
 		      (begin
 			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
@@ -108,6 +109,7 @@
 			(if (member remaining-tries '(2 5))
 			    (begin    ;; login failed
 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			      (http-transport:close-connections run-id)
 			      (hash-table-delete! *runremote* run-id)
 			      (open-run-close tasks:server-force-clean-run-record
 					      tasks:open-db
