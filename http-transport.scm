@@ -293,6 +293,15 @@
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 
+(define (http-transport:server-dat-make-url vec)
+  (if (and (http-transport:server-dat-get-iface vec)
+	   (http-transport:server-dat-get-port  vec))
+      (conc "http://" 
+	    (http-transport:server-dat-get-iface vec)
+	    ":"
+	    (http-transport:server-dat-get-port  vec))
+      #f))
+
 ;;
 ;; connect
 ;;

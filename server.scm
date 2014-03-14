@@ -124,11 +124,14 @@
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (server:ping-server run-id (vector-ref server 1)(vector-ref server 0))))
+	(let ((res (server:ping-server run-id 
+				       (tasks:hostinfo-get-interface server)
+				       (tasks:hostinfo-get-port      server))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      #t
 	      (begin
+		(debug:print-info 0 "server at " server " not responding, removing record")
 		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id 
 				" server:check-if-running")
 		res)))

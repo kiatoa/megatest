@@ -56,7 +56,7 @@
 	 (jparams         (db:obj->string params))
 	 (res     (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
-	(db:string->obj res) ;; (rmt:json-str->dat res)
+	(db:string->obj res)
 	(let ((new-connection-info (client:setup run-id)))
 	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 	  (rmt:send-receive cmd run-id params)))))
@@ -66,8 +66,7 @@
 	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
 	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
     (if res
-	(db:string->obj res) ;; (rmt:json-str->dat res)
-	;; this one does NOT keep trying
+	(db:string->obj res)
 	res)))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
