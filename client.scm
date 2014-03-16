@@ -74,25 +74,15 @@
 		    ;; (http-transport:close-connections run-id)
 		    (hash-table-set! *runremote* run-id start-res)
 		    start-res)  ;; return the server info
-		  (if (member remaining-tries '(9 6 4 2))
-		      (begin    ;; login failed
-			(debug:print-info 0 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
-			(http-transport:close-connections run-id)
-			(hash-table-delete! *runremote* run-id)
-			(open-run-close tasks:server-force-clean-run-record
-			 		tasks:open-db
-			 		run-id 
-			 		iface
-			 		port
-					" client:setup (host-info=#t)")
-			(if (< remaining-tries 8)
-			    (thread-sleep! 5)
-			    (thread-sleep! 1))
-			(client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
-		      (begin
-			(debug:print 25 "INFO: client:setup failed to connect, start-res=" start-res ", run-id=" run-id ", host-info=" host-info)
+		  ;; have host info but no ping. shutdown the current connection and try again
+		  (begin    ;; login failed
+		    (debug:print-info 0 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
+		    (http-transport:close-connections run-id)
+		    (hash-table-delete! *runremote* run-id)
+		    (if (< remaining-tries 8)
 			(thread-sleep! 5)
-			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
+			(thread-sleep! 1))
+		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 	    ;; YUK: rename server-dat here
 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
 	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
@@ -105,42 +95,32 @@
 			     ping-res)
 			(begin
 			  (hash-table-set! *runremote* run-id start-res)
-			  (debug:print-info 0 "connected to " (http-transport:server-dat-make-url start-res)))
+			  (debug:print-info 0 "connected to " (http-transport:server-dat-make-url start-res))
 			  start-res)
-			(if (member remaining-tries '(2 5))
-			    (begin    ;; login failed
-			      (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
-			      (http-transport:close-connections run-id)
-			      (hash-table-delete! *runremote* run-id)
-			      (open-run-close tasks:server-force-clean-run-record
-					      tasks:open-db
-					      run-id 
-					      (tasks:hostinfo-get-interface server-dat)
-					      (tasks:hostinfo-get-port      server-dat)
-					      " client:setup (server-dat = #t)")
-			      (thread-sleep! 2)
-			      (server:try-running run-id)
-			      (thread-sleep! 10) ;; give server a little time to start up
-			      (client:setup run-id remaining-tries: 10)) ;; (- remaining-tries 1)))
-			    (begin
-			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
-			      (thread-sleep! 5)
-			      (client:setup run-id remaining-tries: (- remaining-tries 1)))))
-		  (begin    ;; no server registered
-		    (if (member remaining-tries '(2))
-			(begin
-			  (debug:print-info 0 "no server registered, remaining-tries=" remaining-tries ", try running client:setup again")
-			  ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
-			  (client:setup run-id remaining-tries: remaining-tries))
-			(let ((num-available (open-run-close tasks:num-in-available-state tasks:open-db run-id)))
-			  (thread-sleep! 2) 
-			  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
-			  (if (< num-available 2)
-			      (begin
-				;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
-				(server:try-running run-id)))
+			(begin    ;; login failed but have a server record, clean out the record and try again
+			  (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			  (http-transport:close-connections run-id)
+			  (hash-table-delete! *runremote* run-id)
+			  (open-run-close tasks:server-force-clean-run-record
+					  tasks:open-db
+					  run-id 
+					  (tasks:hostinfo-get-interface server-dat)
+					  (tasks:hostinfo-get-port      server-dat)
+					  " client:setup (server-dat = #t)")
+			  (thread-sleep! 2)
+			  (server:try-running run-id)
 			  (thread-sleep! 10) ;; give server a little time to start up
-			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))
+			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		  (begin    ;; no server registered
+		    (let ((num-available (open-run-close tasks:num-in-available-state tasks:open-db run-id)))
+		      (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
+		      (thread-sleep! 2) 
+		      (if (< num-available 2)
+			  (begin
+			    ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+			    (server:try-running run-id)))
+		      (thread-sleep! 10) ;; give server a little time to start up
+		      (client:setup run-id remaining-tries: (- remaining-tries 1))))))))))
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)
