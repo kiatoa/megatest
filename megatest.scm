@@ -347,34 +347,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-ping")
     (let* ((run-id        (string->number (args:get-arg "-run-id")))
-	   (host-port     (let ((slst (string-split   (args:get-arg "-ping") ":")))
-			    (if (eq? (length slst) 2)
-				(list (car slst)(string->number (cadr slst)))
-				#f)))
-	   (toppath       (setup-for-run))
-	   (server-db-dat (if (not host-port)(open-run-close tasks:get-server tasks:open-db run-id) #f)))
-      (if (not run-id)
-	  (begin
-	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
-	    (print "ERROR: No run-id")
-	    (exit 1))
-	  (if (and (not host-port)
-		   (not server-db-dat))
-	      (begin
-		(print "ERROR: bad host:port")
-		(exit 1))
-	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
-		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
-		     (server-dat (http-transport:client-connect iface port))
-		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
-		(if (and (list? login-res)
-			 (car login-res))
-		    (begin
-		      (print "LOGIN_OK")
-		      (exit 0))
-		    (begin
-		      (print "LOGIN_FAILED")
-		      (exit 1))))))))
+	   (host:port     (args:get-arg "-ping")))
+      (server:ping run-id host:port)))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)

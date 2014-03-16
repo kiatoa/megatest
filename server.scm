@@ -82,6 +82,7 @@
 ;;
 (define  (server:run run-id)
   (let* ((curr-host   (get-host-name))
+	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (target-host (configf:lookup *configdat* "server" "homehost" ))
 	 (logfile     (conc *toppath* "/db/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
@@ -89,7 +90,11 @@
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     ;; host.domain.tld match host?
-    (if (and target-host (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host)))
+    (if (and target-host 
+	     ;; look at target host, is it host.domain.tld or ip address and does it 
+	     ;; match current ip or hostname
+	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
+	     (not (equal? curr-ip target-host)))
 	(begin
 	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)
@@ -137,6 +142,40 @@
 		res)))
 	#f)))
 
+;; called in megatest.scm, host-port is string hostname:port
+;;
+(define (server:ping run-id host:port)
+  (let* ((host-port (let ((slst (string-split   host:port ":")))
+		      (if (eq? (length slst) 2)
+			  (list (car slst)(string->number (cadr slst)))
+			  #f)))
+	 (toppath       (setup-for-run))
+	 (server-db-dat (if (not host-port)(open-run-close tasks:get-server tasks:open-db run-id) #f)))
+    (if (not run-id)
+	  (begin
+	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (print "ERROR: No run-id")
+	    (exit 1))
+	  (if (and (not host-port)
+		   (not server-db-dat))
+	      (begin
+		(print "ERROR: bad host:port")
+		(exit 1))
+	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
+		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
+		     (server-dat (http-transport:client-connect iface port))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		(if (and (list? login-res)
+			 (car login-res))
+		    (begin
+		      (print "LOGIN_OK")
+		      (exit 0))
+		    (begin
+		      (print "LOGIN_FAILED")
+		      (exit 1))))))))
+
+;; run ping in separate process, safest way in some cases
+;;
 (define (server:ping-server run-id iface port)
   (with-input-from-pipe 
    (conc (common:get-megatest-exe) " -run-id " run-id " -ping " (conc iface ":" port))
