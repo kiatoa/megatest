@@ -244,10 +244,11 @@
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
-       (max-retry-attempts 1)
+       (max-retry-attempts 5)
        ;; consider all requests indempotent
        (retry-request? (lambda (request)
-			 #f))
+			 (thread-sleep! 1)
+			 #t))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.

@@ -77,7 +77,7 @@
 		  (if (member remaining-tries '(9 6 4 2))
 		      (begin    ;; login failed
 			(debug:print-info 0 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
-			(http-transport:close-connections run-id)
+			;; (http-transport:close-connections run-id)
 			(hash-table-delete! *runremote* run-id)
 			(open-run-close tasks:server-force-clean-run-record
 			 		tasks:open-db
