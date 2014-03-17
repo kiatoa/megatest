@@ -57,7 +57,8 @@
 	 (begin
 	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
-	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
+	   (set! db (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
+	   (set! dbexists #f)) ;; must force re-creation of tables, more tom-foolery
 	 (set! db (sqlite3:open-database dbpath)))
 	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
