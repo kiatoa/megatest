@@ -418,14 +418,35 @@
 			    pathenvvar: "MT_RUN_AREA_HOME"))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-	(if *toppath*
-	    (let ((dbdir (conc *toppath* "/db")))
-	      (handle-exceptions
-	       exn
-	       (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
-	       (if (not (directory-exists? dbdir))(create-directory dbdir)))
-	      (setenv "MT_RUN_AREA_HOME" *toppath*))
-	    (debug:print 0 "ERROR: failed to find the top path to your Megatest area."))))
+	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
+	  (if linktree
+	      (if (not (file-exists? linktree))
+		  (begin
+		    (handle-exceptions
+		     exn
+		     (begin
+		       (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
+		       (exit 1))
+		     (create-directory linktree #t))))
+	      (begin
+		(debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
+		(exit 1)))
+	  (if linktree
+	      (let ((dbdir (conc linktree "/.db")))
+		(handle-exceptions
+		 exn
+		 (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+		 (if (not (directory-exists? dbdir))(create-directory dbdir)))
+		(setenv "MT_LINKTREE" linktree))
+	      (begin
+		(debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
+		(exit 1)))
+	  (if (and *toppath*
+		   (directory-exists? *toppath*))
+	      (setenv "MT_RUN_AREA_HOME" *toppath*)
+	      (begin
+		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
+		(exit 1))))))
   *toppath*)
 
 (define (get-best-disk confdat)

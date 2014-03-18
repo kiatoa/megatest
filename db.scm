@@ -108,6 +108,21 @@
 ;;   (let ((fdb (db:get-filedb dbstruct)))
 ;;     (filedb:get-path db id)))
 
+;; NB// #f => zeroth db with name=main.db
+;;
+(define (db:dbfile-path run-id)
+  (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
+	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
+	 (fname           (if (eq? run-id 0) "main.db" (conc run-id ".db")))
+	 (dbdir           (conc link-tree-path "/.db/")))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (exit 1))
+     (if (not (directory? dbdir))(create-directory dbdir #t)))
+    (conc dbdir fname)))
+	       
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -117,8 +132,7 @@
 		     (dbr:dbstruct-get-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if rdb
 	rdb
-	(let* ((toppath      (dbr:dbstruct-get-path  dbstruct))
-	       (dbpath       (conc toppath "/db/" run-id ".db"))
+	(let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
@@ -149,17 +163,18 @@
 		(db:sync-tables db:sync-tests-only db refdb)
 		inmem))))))
 
-;; This routine creates the db. It is only called if the db is not already opened
+;; This routine creates the db. It is only called if the db is not already ls opened
 ;;
 (define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
-	(let* ((toppath      (dbr:dbstruct-get-path dbstruct))
-	       (dbpath       (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
-			       (if (not (directory-exists? dbdir))
-				   (create-direcory dbdir))
-			       (conc *toppath* "/db/main.db")))
+	(let* (;; (toppath      (dbr:dbstruct-get-path dbstruct))
+	       ;; (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
+	       (dbpath       (db:dbfile-path 0)) ;; (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
+			                         ;;       (if (not (directory-exists? dbdir))
+				                 ;;           (create-direcory dbdir))
+			                         ;;           (conc *toppath* "/db/main.db")))
 	       (dbexists     (file-exists? dbpath))
 	       (db           (sqlite3:open-database dbpath))
 	       (write-access (file-write-access? dbpath))
@@ -178,7 +193,8 @@
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 (define (db:setup run-id #!key (local #f))
-  (let ((dbstruct (make-dbr:dbstruct path: *toppath* local: local)))
+  (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     (db:get-db dbstruct #f) ;; force one call to main
     dbstruct))
 
@@ -256,9 +272,8 @@
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
-	 (handler   (make-busy-timeout 3600)))
+	 (handler (make-busy-timeout 3600)))
     (db:initialize-run-id-db db)
-    ;; (sdb:initialize db) ;; for future use
     (sqlite3:set-busy-handler! db handler)
     db))
 
@@ -478,8 +493,7 @@
 			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
 				    "pass_count"))
 		      (begin
-			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table")
-			(system (conc "rm -f " dbpath))
+			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
 			(exit 1)))))
 	      keys)
     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")

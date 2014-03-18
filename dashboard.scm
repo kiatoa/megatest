@@ -88,18 +88,18 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *dbstruct-local*  (make-dbr:dbstruct path: *toppath* local: #t))
+(define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
+					     local: #t))
+(define *db-file-path* (db:dbfile-path 0))
 
 ;; HACK ALERT: this is a hack, please fix.
-(define *read-only* (not (file-read-access? (conc *toppath* "db/main.db"))))
-;; (client:setup *dbstruct-local*)
+(define *read-only* (not (file-read-access? *db-file-path*)))
 
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
 (define *keys*   (db:get-keys *dbstruct-local*))
-;; (define *keys*   (cdb:remote-run db:get-keys #f))
-;; (define *keys*   (db:get-keys   *dbstruct-local*))
 
 (define *dbkeys*  (append *keys* (list "runname")))
 
@@ -132,8 +132,6 @@ Misc
 (define *exit-started* #f)
 (define *status-ignore-hash* (make-hash-table))
 (define *state-ignore-hash*  (make-hash-table))
-
-(define *db-file-path* (conc *toppath* "/db/main.db"))
 
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
@@ -1412,14 +1410,14 @@ Misc
 
 ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
-(define *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db")))
+(define *last-db-update-time* (file-modification-time *db-file-path*)) ;; (conc *toppath* "/db/main.db")))
 (define *last-recalc-ended-time* 0)
 
 (define (dashboard:been-changed)
-  (> (file-modification-time (conc *toppath* "/db/main.db")) *last-db-update-time*))
+  (> (file-modification-time *db-file-path* *last-db-update-time*)))
 
 (define (dashboard:set-db-update-time)
-  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db"))))
+  (set! *last-db-update-time* (file-modification-time *db-file-path*)))
 
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
   (or please-update-buttons
@@ -1427,7 +1425,7 @@ Misc
 	   (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
-(define *monitor-db-path* (conc *toppath* "/db/monitor.db"))
+(define *monitor-db-path* (conc *dbdir* "/monitor.db"))
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
@@ -1437,7 +1435,7 @@ Misc
 (define (dashboard:get-youngest-run-db-mod-time)
   (apply max (map (lambda (filen)
 		    (file-modification-time filen))
-		  (glob (conc *toppath* "/db/*.db")))))
+		  (glob (conc *dbdir* "/*.db")))))
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))

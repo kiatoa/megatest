@@ -84,11 +84,12 @@
   (let* ((curr-host   (get-host-name))
 	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (target-host (configf:lookup *configdat* "server" "homehost" ))
-	 (logfile     (conc *toppath* "/db/" run-id ".log"))
+	 (logfile     (conc *toppath* "/logs/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") " -run-id " run-id " >> " logfile " 2>&1 &")))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
+    (if (not (directory-exists? "logs"))(create-directory "logs"))
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 

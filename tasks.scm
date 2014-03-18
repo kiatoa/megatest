@@ -23,7 +23,8 @@
 ;;======================================================================
 
 (define (tasks:open-db)
-  (let* ((dbpath       (conc *toppath* "/db/monitor.db"))
+  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
+	 (dbpath       (conc linktree "/.db/monitor.db"))
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
 	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
@@ -413,7 +414,7 @@
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
       (debug:print-info 1 "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc *toppath* "/db/monitor.db"))
+	     (monitordbf     (conc (configf:lookup *configdat* "setup" "linktree") "/.db/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
 	(task:register-monitor mdb)
 	(let loop ((count      0)

@@ -471,8 +471,8 @@
 ;;
 ;;======================================================================
 (define (examine-test run-id test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (conc *toppath* "/db/" run-id ".db"))
-	 (dbstruct      (make-dbr:dbstruct path: *toppath* local: #t))
+  (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
+	 (dbstruct      (make-dbr:dbstruct path: (configf:lookup *configdat* "setup" "linktree") local: #t))
 	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
