@@ -146,7 +146,11 @@
 		(if (not dbexists)
 		    (begin
 		      (db:initialize-run-id-db db)
-		      ;; (sdb:initialize db) 
+		      (sqlite3:execute 
+		       db
+		       "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+		       (* run-id 30000) ;; allow for up to 30k tests per run
+		       run-id)
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
