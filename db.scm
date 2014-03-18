@@ -258,7 +258,7 @@
 	    (not (number? stime))
 	    (> mtime stime)
 	    force-sync)
-	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb slavedb olddb)))
+	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
 	  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	  num-synced)
 	0)))
