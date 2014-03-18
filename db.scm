@@ -137,6 +137,7 @@
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
 	       (db           (sqlite3:open-database dbpath))
+	       (olddb        (db:open-megatest-db))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
 	  (if (and dbexists (not write-access))
@@ -156,6 +157,7 @@
 		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
 	  (dbr:dbstruct-set-rundb! dbstruct db)
 	  (dbr:dbstruct-set-inuse! dbstruct #t)
+	  (dbr:dbstruct-set-olddb! dbstruct olddb)
 	  (if local
 	      (begin
 		(dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
@@ -181,6 +183,7 @@
 			                         ;;           (conc *toppath* "/db/main.db")))
 	       (dbexists     (file-exists? dbpath))
 	       (db           (sqlite3:open-database dbpath))
+	       (olddb        (db:open-megatest-db))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
 	  (if (and dbexists (not write-access))
@@ -192,6 +195,7 @@
 	  (if (not dbexists)
 	      (db:initialize-main-db db))
 	  (dbr:dbstruct-set-main! dbstruct db)
+	  (dbr:dbstruct-set-olddb! dbstruct olddb)
 	  db))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
@@ -222,23 +226,24 @@
 	  (db:initialize-run-id-db db)))
     db))
 
-;; sync all touched runs to disk
-;;
-(define (db:sync-touched dbstruct #!key (force-sync #f))
-  (let ((tot-synced 0))
-    (for-each
-     (lambda (runvec)
-       (let ((mtime (vector-ref runvec (dbr:dbstruct-field-name->num 'mtime)))
-	     (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
-	     (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
-	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem)))
-	     (refdb (vector-ref runvec (dbr:dbstruct-field-name->num 'refdb))))
-	 (if (or (> mtime stime) force-sync)
-	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
-	       (set! tot-synced (+ tot-synced num-synced))
-	       (vector-set! runvec (dbr:dbstruct-field-name->num 'stime) (current-milliseconds))))))
-     (hash-table-values (vector-ref dbstruct 1)))
-    tot-synced))
+;; ;; sync all touched runs to disk
+;; ;;
+;; (define (db:sync-touched dbstruct #!key (force-sync #f))
+;;   (let ((tot-synced 0))
+;;     (for-each
+;;      (lambda (runvec)
+;;        (let ((mtime (vector-ref runvec (dbr:dbstruct-field-name->num 'mtime)))
+;; 	     (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
+;; 	     (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
+;; 	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem)))
+;; 	     (refdb (vector-ref runvec (dbr:dbstruct-field-name->num 'refdb)))
+;; 	     (slave (vector-ref runvec (dbr:dbstruct-field-name->num 'slavedb))))
+;; 	 (if (or (> mtime stime) force-sync)
+;; 	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
+;; 	       (set! tot-synced (+ tot-synced num-synced))
+;; 	       (vector-set! runvec (dbr:dbstruct-field-name->num 'stime) (current-milliseconds))))))
+;;      (hash-table-values (vector-ref dbstruct 1)))
+;;     tot-synced))
 
 ;; sync run to disk if touched
 ;;
@@ -247,12 +252,13 @@
 	(stime (dbr:dbstruct-get-stime dbstruct))
 	(rundb (dbr:dbstruct-get-rundb dbstruct))
 	(inmem (dbr:dbstruct-get-inmem dbstruct))
-	(refdb (dbr:dbstruct-get-refdb dbstruct)))
+	(refdb (dbr:dbstruct-get-refdb dbstruct))
+	(olddb (dbr:dbstruct-get-olddb dbstruct)))
     (if (or (not (number? mtime))
 	    (not (number? stime))
 	    (> mtime stime)
 	    force-sync)
-	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
+	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb slavedb olddb)))
 	  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	  num-synced)
 	0)))
