@@ -203,7 +203,8 @@
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
-    (db:get-db dbstruct #f) ;; force one call to main
+    ;; isn't this a hold-over from the multi-db in one process? Commenting it out for now ....
+    ;; (db:get-db dbstruct #f) ;; force one call to main
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
@@ -225,25 +226,6 @@
 	  (db:initialize-main-db db)
 	  (db:initialize-run-id-db db)))
     db))
-
-;; ;; sync all touched runs to disk
-;; ;;
-;; (define (db:sync-touched dbstruct #!key (force-sync #f))
-;;   (let ((tot-synced 0))
-;;     (for-each
-;;      (lambda (runvec)
-;;        (let ((mtime (vector-ref runvec (dbr:dbstruct-field-name->num 'mtime)))
-;; 	     (stime (vector-ref runvec (dbr:dbstruct-field-name->num 'stime)))
-;; 	     (rundb (vector-ref runvec (dbr:dbstruct-field-name->num 'rundb)))
-;; 	     (inmem (vector-ref runvec (dbr:dbstruct-field-name->num 'inmem)))
-;; 	     (refdb (vector-ref runvec (dbr:dbstruct-field-name->num 'refdb)))
-;; 	     (slave (vector-ref runvec (dbr:dbstruct-field-name->num 'slavedb))))
-;; 	 (if (or (> mtime stime) force-sync)
-;; 	     (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb)))
-;; 	       (set! tot-synced (+ tot-synced num-synced))
-;; 	       (vector-set! runvec (dbr:dbstruct-field-name->num 'stime) (current-milliseconds))))))
-;;      (hash-table-values (vector-ref dbstruct 1)))
-;;     tot-synced))
 
 ;; sync run to disk if touched
 ;;
@@ -1046,6 +1028,7 @@
 ;;   (   ...  
 (define (db:get-run-stats dbstruct)
   (let ((totals       (make-hash-table))
+	(curr         (make-hash-table))
 	(res          '())
 	(runs-info    '()))
     ;; First get all the runname/run-ids
@@ -1057,22 +1040,27 @@
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
+       ;; get the net state/status counts for this run
        (let ((run-id   (car  run-info))
 	     (run-name (cadr run-info)))
 	 (sqlite3:for-each-row
-	  (lambda (state count)
-	    (if (string? state)
-		(let* ((stateparts (string-split state "|"))
-		       (newstate   (conc (car stateparts) "\n" (cadr stateparts))))
-		  (hash-table-set! totals newstate (+ (hash-table-ref/default totals newstate 0) count))
-		  (set! res (cons (list run-name newstate count) res)))))
+	  (lambda (state status count)
+	    (let ((netstate (if (equal? state "COMPLETED") status state)))
+	      (if (string? netstate)
+		  (begin
+		    (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
+		    (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
 	  (db:get-db dbstruct run-id)
-	  "SELECT state||'|'||status AS s,count(id) FROM tests AS t ORDER BY s DESC;" )
-    ;; (set! res (reverse res))
+	  "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
+	 ;; add the per run counts to res
+	 (for-each (lambda (state)
+		     (set! res (cons (list run-name state (hash-table-ref curr state)) res)))
+		   (sort (hash-table-keys curr) string>=))
+	 (set! curr (make-hash-table))))
+     runs-info)
     (for-each (lambda (state)
 		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
-		   (sort (hash-table-keys totals) string>=))))
-     runs-info)
+	      (sort (hash-table-keys totals) string>=))
     res))
 
 ;; db:get-runs-by-patt
