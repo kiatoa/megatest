@@ -1050,7 +1050,7 @@
 	    ;;
 	    ;; NB// for the above line. I want the test to be registered long before this routine gets called!
 	    ;;
-	    (if (not test-id)(set! test-id (rmt:get-test-id-cached run-id test-name item-path)))
+	    (if (not test-id)(set! test-id (rmt:get-test-id run-id test-name item-path)))
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)

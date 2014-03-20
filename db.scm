@@ -46,9 +46,11 @@
       dbstruct
       (begin
 	(mutex-lock! *rundb-mutex*)
-	(let ((db (if run-id
+	(let ((db (if (or (not run-id)
+			  (eq? run-id 0))
+		      (db:open-main dbstruct)
 		      (db:open-rundb dbstruct run-id)
-		      (db:open-main dbstruct))))
+		      )))
 	  ;; db prunning would go here
 	  (mutex-unlock! *rundb-mutex*)
 	  db))))
@@ -155,17 +157,18 @@
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
 		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
-	  (dbr:dbstruct-set-rundb! dbstruct db)
-	  (dbr:dbstruct-set-inuse! dbstruct #t)
-	  (dbr:dbstruct-set-olddb! dbstruct olddb)
+	  (dbr:dbstruct-set-rundb!  dbstruct db)
+	  (dbr:dbstruct-set-inuse!  dbstruct #t)
+	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
+	  ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
 	  (if local
 	      (begin
 		(dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
 		db)
 	      (begin
-		(dbr:dbstruct-set-inmem! dbstruct inmem)
+		(dbr:dbstruct-set-inmem!  dbstruct inmem)
 		(db:sync-tables db:sync-tests-only db inmem)
-		(dbr:dbstruct-set-refdb! dbstruct refdb)
+		(dbr:dbstruct-set-refdb!  dbstruct refdb)
 		(db:sync-tables db:sync-tests-only db refdb)
 		inmem))))))
 
@@ -194,8 +197,9 @@
 		(sqlite3:execute db "PRAGMA synchronous = 0;")))
 	  (if (not dbexists)
 	      (db:initialize-main-db db))
-	  (dbr:dbstruct-set-main! dbstruct db)
-	  (dbr:dbstruct-set-olddb! dbstruct olddb)
+	  ;; (dbr:dbstruct-set-run-id! dbstruct 0) ;; main.db is the zeroth "run"
+	  (dbr:dbstruct-set-main!   dbstruct db)
+	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
 	  db))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
@@ -203,6 +207,7 @@
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
+    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
     ;; isn't this a hold-over from the multi-db in one process? Commenting it out for now ....
     ;; (db:get-db dbstruct #f) ;; force one call to main
     dbstruct))
@@ -229,21 +234,40 @@
 
 ;; sync run to disk if touched
 ;;
-(define (db:sync-touched dbstruct #!key (force-sync #f))
-  (let ((mtime (dbr:dbstruct-get-mtime dbstruct))
-	(stime (dbr:dbstruct-get-stime dbstruct))
-	(rundb (dbr:dbstruct-get-rundb dbstruct))
-	(inmem (dbr:dbstruct-get-inmem dbstruct))
-	(refdb (dbr:dbstruct-get-refdb dbstruct))
-	(olddb (dbr:dbstruct-get-olddb dbstruct)))
-    (if (or (not (number? mtime))
-	    (not (number? stime))
-	    (> mtime stime)
-	    force-sync)
-	(let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-	  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-	  num-synced)
-	0)))
+(define (db:sync-touched dbstruct run-id #!key (force-sync #f))
+  (let ((mtime  (dbr:dbstruct-get-mtime dbstruct))
+	(stime  (dbr:dbstruct-get-stime dbstruct))
+	(rundb  (dbr:dbstruct-get-rundb dbstruct))
+	(inmem  (dbr:dbstruct-get-inmem dbstruct))
+	(maindb (dbr:dbstruct-get-main  dbstruct))
+	(refdb  (dbr:dbstruct-get-refdb dbstruct))
+	(olddb  (dbr:dbstruct-get-olddb dbstruct))
+	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
+	)
+    (debug:print-info 0 "Syncing for run-id " run-id)
+    (if (eq? run-id 0)
+	;; runid equal to 0 is main.db
+	(if maindb
+	    (if (or (not (number? mtime))
+		    (not (number? stime))
+		    (> mtime stime)
+		    force-sync)
+		(let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+		  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		  num-synced)
+		0)
+	    (begin
+	      (debug:print 0 "WARNING: call to sync main.db to megatest.db but main not initialized")
+	      0))
+	;; any other runid is a run
+	(if (or (not (number? mtime))
+		(not (number? stime))
+		(> mtime stime)
+		force-sync)
+	    (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+	      num-synced)
+	    0))))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)

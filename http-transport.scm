@@ -354,7 +354,7 @@
 	    (sync-time  #f)
 	    (rem-time   #f))
 
-	(if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
+	(if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
 	(set! sync-time  (- (current-milliseconds) start-time))
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
 	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
@@ -411,7 +411,7 @@
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
 	    (set! *time-to-exit* #t)
-	    (if *inmemdb* (db:sync-touched *inmemdb* force-sync: #t))
+	    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
 	    ;;
 	    ;; start_shutdown
 	    ;;
