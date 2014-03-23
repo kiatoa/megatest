@@ -89,7 +89,7 @@ $(PREFIX)/bin/nbfind : utils/nbfind
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-$(PREFIX)/bin/nbload : utils/nbload
+$(PREFIX)/bin/loadrunner : utils/loadrunner
 	$(INSTALL) $< $@
 	chmod a+x $@
 
@@ -113,7 +113,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : $(PREFIX)/bin/.$(ARCHSTR) dboard $(FILES)
 	chmod a+x $(PREFIX)/bin/dashboard
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-          $(PREFIX)/bin/nbfind $(PREFIX)/bin/nbload $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm
+          $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
