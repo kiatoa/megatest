@@ -43,7 +43,10 @@ CHICKEN_VERSION=4.8.0
 SQLITE3_VERSION=3071401
 
 # Eggs to install (straightforward ones)
-EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars
+EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
+     dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
+     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications
 
 #
 # Derived variables
@@ -83,7 +86,7 @@ IUPFILES=cd-5.5.1_Linux$(KTYPE)_$(ARCHSIZE)lib.tar.gz im-3.8_Linux$(KTYPE)_$(ARC
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs iup
+all : chkn eggs libiup sqlite3 logprobin mutils
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -91,10 +94,15 @@ eggs : $(EGGSOFILES)
 
 sqlite3 :  $(CHICKEN_EGG_DIR)/sqlite3.so
 
-iup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+libiup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+
+logprobin : $(PREFIX)/bin/logpro
+
+$(PREFIX)/bin/logpro : $(CHICKEN_EGG_DIR)/regex-literals.so
+	$(CHICKEN_INSTALL) logpro
 
 # Silly rule to make installing eggs more makeish, I don't understand why I need the basename
-$(CHICKEN_EGG_DIR)/%.so : %.flag
+$(CHICKEN_EGG_DIR)/%.so : eggflags/%.flag
 	$(CHICKEN_INSTALL) $(PROX) $(shell basename $*)
 
 $(EGGFLAGS) : # $(CHICKEN_INSTALL)
@@ -133,6 +141,7 @@ $(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)
 $(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
 
+mutils : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so # $(CHICKEN_EGG_DIR)/dbi.so 
 
 # Get and install my various utilities that haven't been eggified yet.
 opensrc/margs/margs.scm opensrc/dbi/dbi.scm opensrc/qtree/qtree.scm : $(CHICKEN_INSTALL) $(CHICKEN_EGG_DIR)/sqlite3.so
@@ -148,9 +157,6 @@ $(CHICKEN_EGG_DIR)/margs.so : opensrc/margs/margs.scm
 
 $(CHICKEN_EGG_DIR)/qtree.so : opensrc/qtree/qtree.scm
 	cd opensrc/qtree;chicken-install
-
-# $(CHICKEN_EGG_DIR)/dbi.so # Don't include as requires postgres
-mattseggs : $(CHICKEN_EGG_DIR)/margs.so $(CHICKEN_EGG_DIR)/qtree.so
 
 # 
 # IUP
