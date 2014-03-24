@@ -11,8 +11,5 @@ else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
-# echo 'ARCHSTR=$(uname -m)_$(uname -r)'
+echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\""
 
-fullcmd="exec $prefix/bin/.${MACHTYPE}/$cmd"
-
-echo "$fullcmd \"\$@\""

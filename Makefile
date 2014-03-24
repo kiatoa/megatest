@@ -23,7 +23,10 @@ MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 CSIPATH=$(shell which csi)
 CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 # ARCHSTR=$(shell uname -m)_$(shell uname -r)
-ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
+# BASH_MACHTYPE=$(shell bash -c "echo \$$MACHTYPE")
+# ARCHSTR=$(BASH_MACHTYPE)_$(shell lsb_release -sr)
+ARCHSTR=$(shell lsb_release -sr)
+# ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
 all : mtest dboard newdboard txtdb
 
