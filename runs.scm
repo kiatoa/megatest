@@ -407,8 +407,9 @@
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
 
-     ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
-	      '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
+     ((and (not (member 'toplevel testmode))
+	   (member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
+		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
       (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
