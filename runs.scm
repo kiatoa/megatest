@@ -389,7 +389,7 @@
 		      "\n non-completed:   " (runs:pretty-string non-completed) 
 		      "\n fails:           " (runs:pretty-string fails)
 		      "\n testmode:        " testmode
-		      "\n (eq? testmode 'toplevel): " (eq? testmode 'toplevel)
+		      "\n (member 'toplevel testmode): " (member 'toplevel testmode)
 		      "\n (null? non-completed):    " (null? non-completed)
 		      "\n reruns:          " reruns
 		      "\n items:           " items
@@ -422,9 +422,9 @@
 
      ;; 
      ((or (null? prereqs-not-met)
-	  (and (eq? testmode 'toplevel)
+	  (and (member 'toplevel testmode)
 	       (null? non-completed)))
-      (debug:print-info 4 "runs:expand-items: (or (null? prereqs-not-met) (and (eq? testmode 'toplevel)(null? non-completed)))")
+      (debug:print-info 4 "runs:expand-items: (or (null? prereqs-not-met) (and (member 'toplevel testmode)(null? non-completed)))")
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
@@ -542,7 +542,7 @@
 		  (runs:queue-next-reg tal reg reglen regfull)
 		  reruns))))
 
-     ((and (not (null? fails))(eq? testmode 'normal))
+     ((and (not (null? fails))(member 'normal testmode))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
@@ -555,7 +555,7 @@
 		  (cons hed reruns)))
 	  #f)) ;; #f flags do not loop
 
-     ((and (not (null? fails))(eq? testmode 'toplevel))
+     ((and (not (null? fails))(member 'toplevel testmode))
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
@@ -794,7 +794,7 @@
 	     (tconfig     (tests:testqueue-get-testconfig test-record))
 	     (jobgroup    (config-lookup tconfig "test_meta" "jobgroup"))
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
-			    (if m (string->symbol m) 'normal)))
+			    (if m (map string->symbol (string-split m)) '(normal))))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
 	     (priority    (tests:testqueue-get-priority   test-record))
 	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f

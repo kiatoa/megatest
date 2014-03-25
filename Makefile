@@ -24,9 +24,12 @@ MTESTHASH=$(shell fossil info|grep checkout:| awk '{print $$2}')
 CSIPATH=$(shell which csi)
 CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 # ARCHSTR=$(shell uname -m)_$(shell uname -r)
-ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
+# BASH_MACHTYPE=$(shell bash -c "echo \$$MACHTYPE")
+# ARCHSTR=$(BASH_MACHTYPE)_$(shell lsb_release -sr)
+ARCHSTR=$(shell lsb_release -sr)
+# ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
-all : mtest dboard newdboard txtdb
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard newdboard txtdb
 
 refdb : txtdb/txtdb.scm
 	csc -I txtdb txtdb/txtdb.scm -o refdb
@@ -37,11 +40,11 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES) dashboard.scm
 	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
-newdboard : newdashboard.scm $(OFILES) $(GOFILES)
-	csc $(OFILES) $(GOFILES) newdashboard.scm -o newdboard
-
-$(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
-	csc utils/revtagfsl.scm -o $(PREFIX)/bin/revtagfsl
+# newdboard : newdashboard.scm $(OFILES) $(GOFILES)
+# 	csc $(OFILES) $(GOFILES) newdashboard.scm -o newdboard
+# 
+# $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
+#	csc utils/revtagfsl.scm -o $(PREFIX)/bin/revtagfsl
 
 # Special dependencies for the includes
 tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o megatest.o : db_records.scm
@@ -64,15 +67,15 @@ $(OFILES) $(GOFILES) : common_records.scm
 %.o : %.scm
 	csc $(CSCOPTS) -c $<
 
-$(PREFIX)/bin/.$(ARCHSTR)/mtest : $(PREFIX)/bin/.$(ARCHSTR) mtest
+$(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
 	@echo Installing to PREFIX=$(PREFIX)
 	$(INSTALL) mtest $(PREFIX)/bin/.$(ARCHSTR)/mtest
-	utils/mk_wrapper $(PREFIX) mtest > $(PREFIX)/bin/megatest
+	utils/mk_wrapper $(PREFIX) mtest $(PREFIX)/bin/megatest
 	chmod a+x $(PREFIX)/bin/megatest
 
 # $(PREFIX)/bin/newdboard : newdboard
 # 	$(INSTALL) newdboard $(PREFIX)/bin/newdboard
-# 	utils/mk_wrapper $(PREFIX) newdboard > $(PREFIX)/bin/newdashboard
+# 	utils/mk_wrapper $(PREFIX) newdboard $(PREFIX)/bin/newdashboard
 #	chmod a+x $(PREFIX)/bin/newdashboard
 
 $(HELPERS) : utils/mt_* 
@@ -109,10 +112,10 @@ deploytarg/nbfind : utils/nbfind
 
 
 # install dashboard as dboard so wrapper script can be called dashboard
-$(PREFIX)/bin/.$(ARCHSTR)/dboard : $(PREFIX)/bin/.$(ARCHSTR) dboard $(FILES)
-	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
-	utils/mk_wrapper $(PREFIX) dboard > $(PREFIX)/bin/dashboard
+$(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
+	utils/mk_wrapper $(PREFIX) dboard $(PREFIX)/bin/dashboard
 	chmod a+x $(PREFIX)/bin/dashboard
+	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
           $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm

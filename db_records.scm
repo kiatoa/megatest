@@ -28,7 +28,7 @@
 (define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10))
 (define-inline (dbr:dbstruct-get-locdbs  vec)    (vector-ref  vec 11))
 (define-inline (dbr:dbstruct-get-olddb   vec)    (vector-ref  vec 12))
-(define-inline (dbr:dbstruct-get-run-id  vec)    (vector-ref  vec 13))
+;; (define-inline (dbr:dbstruct-get-run-id  vec)    (vector-ref  vec 13))
 
 (define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
 (define-inline (dbr:dbstruct-set-strdb!  vec val)(vector-set! vec 1 val))
@@ -43,7 +43,7 @@
 (define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
 (define-inline (dbr:dbstruct-set-locdbs! vec val)(vector-set! vec 11 val))
 (define-inline (dbr:dbstruct-set-olddb!  vec val)(vector-set! vec 12 val))
-(define-inline (dbr:dbstruct-set-run-id! vec val)(vector-set! vec 13 val))
+; (define-inline (dbr:dbstruct-set-run-id! vec val)(vector-set! vec 13 val))
 
 ;; constructor for dbstruct
 ;;

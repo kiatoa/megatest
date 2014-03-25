@@ -2,17 +2,16 @@
 
 prefix=$1
 cmd=$2
+target=$3
 
-echo "#!/bin/bash"
 if [ "$LD_LIBRARY_PATH" != "" ];then
   echo "INFO: Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >&2
-  echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+  echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > $prefix/bin/.$(lsb_release -sr)/cfg.sh
 else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
-# echo 'ARCHSTR=$(uname -m)_$(uname -r)'
+echo "#!/bin/bash" > $target
+echo "source $prefix/bin/.\$(lsb_release -sr)/cfg.sh" >> $target
+echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 
-fullcmd="exec $prefix/bin/.${MACHTYPE}/$cmd"
-
-echo "$fullcmd \"\$@\""

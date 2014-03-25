@@ -84,7 +84,7 @@
 		  limit))
 	  full-list))))
 
-(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
   (let* ((key    (list run-id waitons ref-item-path mode))
 	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
 	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))

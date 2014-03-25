@@ -676,8 +676,8 @@
 				 (exe (pathname-strip-directory lm)))
 			    (conc (if dir (conc dir "/") "")
 				  (case (string->symbol exe)
-				    ((dboard)    "megatest")
-				    ((mtest)     "megatest")
+				    ((dboard)    "../megatest")
+				    ((mtest)     "../megatest")
 				    ((dashboard) "megatest")
 				    (else exe)))))
 	 (test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
