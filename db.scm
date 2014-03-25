@@ -2374,7 +2374,7 @@
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+(define (db:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -2404,15 +2404,15 @@
 		   ;; case 1, non-item (parent test) is 
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-completed
-			 (or is-ok (member mode '(toplevel itemmatch itemwait))))
+			 (or is-ok (not (null? (lset-intersection eq? mode '(toplevel itemmatch itemwait))))))
 		    (set! parent-waiton-met #t))
 		   ;; Special case for toplevel and KILLED
 		   ((and (equal? item-path "") ;; this is the parent test
 			 is-killed
-			 (eq? mode 'toplevel))
+			 (member 'toplevel mode))
 		    (set! parent-waiton-met #t))
 		   ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		   ((and (member mode '(itemmatch itemwait))
+		   ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait))))
 			 ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
 			 same-itempath)
 		    (if (and is-completed is-ok)
@@ -2423,10 +2423,10 @@
 		   ;; normal checking of parent items, any parent or parent item not ok blocks running
 		   ((and is-completed
 			 (or is-ok 
-			     (eq? mode 'toplevel))              ;; toplevel does not block on FAIL
-			 (and is-ok (eq? mode 'itemmatch))) ;; itemmatch blocks on not ok
+			     (member 'toplevel mode))              ;; toplevel does not block on FAIL
+			 (and is-ok (member 'itemmatch mode))) ;; itemmatch blocks on not ok
 		    (set! item-waiton-met #t)))))
-	      tests)
+		tests)
 	     ;; both requirements, parent and item-waiton must be met to NOT add item to
 	     ;; prereq's not met list
 	     (if (not (or parent-waiton-met item-waiton-met))
