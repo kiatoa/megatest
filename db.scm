@@ -75,7 +75,7 @@
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
-					   136000)))) ;; 136000))) ;; 136000 = 2.2 minutes
+					   30)))) ;; 136000))) ;; 136000 = 2.2 minutes
     (if (and dbexists
 	     (not write-access))
 	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
@@ -112,12 +112,12 @@
      (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
      (print-call-chain)
      (thread-sleep! (random 120))
-     (debug:print-info 0 "trying db call one more time....")
+     (debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (current-host-name) " to clean up")
      (apply open-run-close-no-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
 ;; (define open-run-close open-run-close-exception-handling)
-(define open-run-close open-run-close-no-exception-handling)
+(define open-run-close open-run-close-exception-handling)
 
 (define *global-delta* 0)
 (define *last-global-delta-printed* 0)
@@ -273,7 +273,8 @@
 	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
-	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	      ;; Why use FULL here? This data is not that critical
+	      ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
 	      (debug:print-info 11 "Initialized test database " dbpath)
 	      (db:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
