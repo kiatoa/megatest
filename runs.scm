@@ -463,10 +463,13 @@
 
 	;; We can get here when a prereq has not been run due to *it* having a prereq that failed.
 	;; We need to use this to dequeue this item as CANNOTRUN
-	(for-each (lambda (prereq)
-		    (if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
-			(set! give-up #t)))
-		  prereqstrs)
+	;; 
+	(if (member testmode '(toplevel))
+	    (for-each (lambda (prereq)
+			(if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
+			    (set! give-up #t)))
+		      prereqstrs))
+
 	(if (and give-up
 		 (not (and (null? tal)(null? reg))))
 	    (let ((trimmed-tal (mt:discard-blocked-tests run-id hed tal test-records))
@@ -474,7 +477,7 @@
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
-		(mt:test-set-state-status-by-id test-id "DEQUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+		(mt:test-set-state-status-by-id test-id "DEQUEUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
