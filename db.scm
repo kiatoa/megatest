@@ -75,7 +75,7 @@
 	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					   (string->number (args:get-arg "-override-timeout"))
-					   30)))) ;; 136000))) ;; 136000 = 2.2 minutes
+					   6000)))) ;; NB// this is in milliseconds. 136000))) ;; 136000 = 2.2 minutes
     (if (and dbexists
 	     (not write-access))
 	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
@@ -107,13 +107,20 @@
 (define (open-run-close-exception-handling proc idb . params)
   (handle-exceptions
    exn
-   (begin
-     (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-     (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-     (print-call-chain)
-     (thread-sleep! (random 120))
-     (debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (current-host-name) " to clean up")
-     (apply open-run-close-no-exception-handling proc idb params))
+   (let ((sleep-time (random 30))
+	 (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     (case err-status
+       ((busy)
+	(thread-sleep! sleep-time))
+       (else
+	(debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	(print "exn=" (condition->list exn))
+	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	(print-call-chain)
+	(thread-sleep! sleep-time)
+	(debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
+     (apply open-run-close-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
 ;; (define open-run-close open-run-close-exception-handling)
@@ -1732,9 +1739,13 @@
 	  (not (member proc *db:all-write-procs*)))
       (handle-exceptions
        exn
-       (begin 
-	 (debug:print 0 "Problem with call to cdb:remote-run, database may be locked and read-only, waiting and trying again ...")
-	 (thread-sleep! 10)
+       (let ((sleep-time (random 20))
+	     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	 (case err-status
+	   ((busy)(thread-sleep! 4))
+	   (else
+	    (debug:print 0 "WARNING: possible problem with call to cdb:remote-run, database may be read-only and locked, waiting and trying again ...")
+	    (thread-sleep! sleep-time)))
 	 (apply cdb:remote-run proc db params))
        (apply cdb:client-call *runremote* 'immediate #f *default-numtries* open-run-close proc #f params))
       (begin
@@ -1948,7 +1959,31 @@
 			   (debug:print-info 7 "Queuing item " item " for wrapped write")
 			   (db:queue-write-and-wait db qry-sig query params))
 			  (else 
-			   (apply sqlite3:execute db query params)
+			   (let* ((remtries 10)
+				  (proc     #f))
+			     (set! proc (lambda (remtries)
+					  (if (> remtries 0)
+					      (handle-exceptions
+					       exn
+					       (let ((sleep-time (random 30))
+						     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+						 (case err-status
+						   ((busy)
+						    (thread-sleep! sleep-time)
+						    (proc 10)) ;; we never give up on busy
+						   (else
+						    (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+						    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+						    (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status)  exn))
+						    (print-call-chain)
+						    (debug:print 0 "Sleeping for " sleep-time)
+						    (thread-sleep! sleep-time)
+						    (debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")
+						    (proc (- remtries 1)))))
+					       (apply sqlite3:execute db query params))
+					      (debug:print 0 "ERROR: too many attempts to access db were made and no sucess. query: "
+							   query ", params: " params))))
+			     (proc remtries))
 			   #t))))
 	  (debug:print-info 7 "Received " response " from wrapped write")
 	  (server:reply return-address qry-sig response response))
