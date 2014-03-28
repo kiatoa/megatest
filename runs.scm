@@ -209,11 +209,11 @@
 	 (run-id             (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
-	 (required-tests    '())
 	 (test-records       (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
-	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+	 (test-names         (tests:filter-test-names all-test-names test-patts))
+	 (required-tests     test-names))
 
     ;; Update the synchronous setting in the db based on the default or what is set by the user
     ;; This is done once here on a call to run tests rather than on every call to open-db

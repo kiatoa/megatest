@@ -13,8 +13,8 @@
 (require-extension regex)
 (require-extension srfi-18)
 (import srfi-18)
-(require-extension zmq)
-(import zmq)
+;; (require-extension zmq)
+;; (import zmq)
 
 (define test-work-dir (current-directory))
 
@@ -57,10 +57,10 @@
    (test (conc patterns " " testname "/" itempath "=>" expected)
 	 expected 
 	 (tests:match patterns testname itempath)))
- (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/")
- (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a")
- (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b")
- (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f))
+ (list "abc" "abc/%" "ab%/c%" "~abc/c%" "abc/~c%" "a,b/c,%/d" "%/,%/a" "%/,%/a" "%/,%/a" "%" "%" "%/" "%/" "%abc%")
+ (list "abc" "abc"   "abcd"   "abc"     "abc"     "a"         "abc"     "def"    "ghi"   "a" "a"  "a"  "a" "abc")
+ (list   ""  ""      "cde"    "cde"     "cde"     ""            ""      "a"       "b"    ""  "b"  ""   "b" "abc")
+ (list   #t    #t       #t    #f           #f      #t           #t       #t       #f     #t  #t   #t    #f #t))
 
 ;; db:patt->like
 (test #f "testname LIKE 't%'" (db:patt->like "testname" "t%" comparator: " AND "))
