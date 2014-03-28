@@ -706,25 +706,55 @@
   (if (and uname hostname)
       (cdb:tests-update-uname-host *runremote* test-id uname hostname)))
   
-(define (tests:set-full-meta-info db test-id run-id minutes work-area)
+(define (tests:set-full-meta-info db test-id run-id minutes work-area remtries)
   ;; DOES cdb:remote-run under the hood!
-  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
-	 (cpuload  (get-cpu-load))
-	 (diskfree (get-df (current-directory)))
-	 (uname    (get-uname "-srvpio"))
-	 (hostname (get-host-name)))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
-	  
-(define (tests:set-partial-meta-info db test-id run-id minutes work-area)
+  (let ((remtries 10))
+    (handle-exceptions
+     exn
+     (if (> remtries 0)
+	 (begin
+	   (set! remtries (- remtries 1))
+	   (thread-sleep! 10)
+	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	   (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (print "exn=" (condition->list exn))
+	   (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	   (print-call-chain)))
+     (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
+	    (cpuload  (get-cpu-load))
+	    (diskfree (get-df (current-directory)))
+	    (uname    (get-uname "-srvpio"))
+	    (hostname (get-host-name)))
+       (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+       (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))))
+    
+(define (tests:set-partial-meta-info db test-id run-id minutes work-area remtries)
   ;; DOES cdb:remote-run under the hood!
   (let* ((cpuload  (get-cpu-load))
-	 (diskfree (get-df (current-directory))))
-    (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+	 (diskfree (get-df (current-directory)))
+	 (remtries 10))
+    (handle-exceptions
+     exn
+     (if (> remtries 0)
+	 (begin
+	   (set! remtries (- remtries 1))
+	   (thread-sleep! 10)
+	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	   (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (print "exn=" (condition->list exn))
+	   (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	   (print-call-chain)))
+     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
     ;; Update central with uname and hostname = #f
     ;; Is this one of the performance problems? This info should come from testdat-meta anyway
     ;; (tests:update-central-meta-info test-id cpuload diskfree minutes #f #f)
-  ))
+  )))
 	 
 (define (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   (let ((tdb         (db:open-test-db-by-test-id db test-id work-area: work-area)))
