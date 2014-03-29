@@ -219,7 +219,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed")
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\"")
 	      #f)
 	    #f))))
 
