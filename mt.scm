@@ -111,7 +111,8 @@
 	(let loop ((testn (car tests))
 		   (remt  (cdr tests))
 		   (res   '()))
-	  (let ((waitons (vector-ref (hash-table-ref/default test-records testn (vector #f #f '())) 2)))
+	  (let* ((test-dat (hash-table-ref/default test-records testn (vector #f #f '())))
+		 (waitons  (vector-ref test-dat 2)))
 	    ;; (print "mt:discard-blocked-tests run-id: " run-id " failed-test: " failed-test " testn: " testn " with waitons: " waitons)
 	    (if (null? remt)
 		(let ((new-res (reverse res)))
@@ -120,7 +121,9 @@
 		(loop (car remt)
 		      (cdr remt)
 		      (if (member failed-test waitons)
-			  res
+			  (begin
+			    (debug:print 0 "Discarding test " testn "(" test-dat ") due to " failed-test)
+			    res)
 			  (cons testn res)))))))))
 
 ;;======================================================================

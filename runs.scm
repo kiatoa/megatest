@@ -463,6 +463,10 @@
 	    (let ((trimmed-tal (mt:discard-blocked-tests run-id hed tal test-records))
 		  (trimmed-reg (mt:discard-blocked-tests run-id hed reg test-records)))
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
+
+	      (let ((test-id (rmt:get-test-id run-id hed "")))
+		(mt:test-set-state-status-by-id test-id "DEQUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
 		  #f

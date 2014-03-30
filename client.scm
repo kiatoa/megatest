@@ -55,7 +55,7 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 10) (failed-connects 0))
+(define (client:setup run-id #!key (remaining-tries 100) (failed-connects 0))
   (debug:print-info 0 "client:setup remaining-tries=" remaining-tries)
   (if (<= remaining-tries 0)
       (begin
