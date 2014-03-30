@@ -45,8 +45,7 @@
 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
 		                 (exit 1)))))
 	  (runrec      (runs:runrec-make-record))
-	  (target      (or (args:get-arg "-reqtarg")
-		           (args:get-arg "-target")))
+	  (target      (common:args-get-target))
 	  (runname     (or (args:get-arg ":runname")
 		           (args:get-arg "-runname")))
 	  (testpatt    (or (args:get-arg "-testpatt")
@@ -92,8 +91,7 @@
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target      (or (args:get-arg "-reqtarg")
-			  (args:get-arg "-target")
+  (let* ((target      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
@@ -205,11 +203,11 @@
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
-	 (required-tests    '())
 	 (test-records       (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
-	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+	 (test-names         (tests:filter-test-names all-test-names test-patts))
+	 (required-tests     test-names))
 
     (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
@@ -399,8 +397,9 @@
      ;; all prereqs met, fire off the test
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
 
-     ((member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
-	      '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
+     ((and (not (member 'toplevel testmode))
+	   (member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
+		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
       (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
@@ -454,10 +453,13 @@
 
 	;; We can get here when a prereq has not been run due to *it* having a prereq that failed.
 	;; We need to use this to dequeue this item as CANNOTRUN
-	(for-each (lambda (prereq)
-		    (if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
-			(set! give-up #t)))
-		  prereqstrs)
+	;; 
+	(if (member testmode '(toplevel))
+	    (for-each (lambda (prereq)
+			(if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
+			    (set! give-up #t)))
+		      prereqstrs))
+
 	(if (and give-up
 		 (not (and (null? tal)(null? reg))))
 	    (let ((trimmed-tal (mt:discard-blocked-tests run-id hed tal test-records))
@@ -465,7 +467,7 @@
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (rmt:get-test-id run-id hed "")))
-		(mt:test-set-state-status-by-id test-id "DEQUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+		(mt:test-set-state-status-by-id test-id "DEQUEUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
@@ -1388,10 +1390,7 @@
 ;; this wrapper is used to reduce the replication of code
 (define (general-run-call switchname action-desc proc)
   (let ((runname (args:get-arg ":runname"))
-	(target  (if (args:get-arg "-target")
-		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg"))))
-	;; (th1     #f))
+	(target  (common:args-get-target)))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -1401,9 +1400,7 @@
       (exit 3))
      (else
       (let ((db   #f)
-	    (keys #f)
-	    (target (or (args:get-arg "-reqtarg")
-			(args:get-arg "-target"))))
+	    (keys #f))
 	(if (not (setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")

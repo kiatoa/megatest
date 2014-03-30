@@ -146,7 +146,7 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-full-meta-info test-id run-id 0 work-area)
+	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
 
 	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
@@ -304,7 +304,7 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
-				   (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
+				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
@@ -316,7 +316,10 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
-				       (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
+				       (print "ERROR: EDIT ME")
+				       (exit 1)
+				       ;;(tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
+				       ;;(tests:set-partial-meta-info #f test-id run-id minutes work-area 10)
 				       ;; (tests:set-partial-meta-info test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
@@ -326,26 +329,31 @@
 					     ;;       between tries?
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
-						   (process-signal pid signal/kill)
-						   ;; (begin
-						   ;;   (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
-						   ;;   (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
-						   ;;     (for-each 
-						   ;;      (lambda (p)
-						   ;;        (let* ((parts  (string-split p))
-						   ;;      	 (p-id   (if (> (length parts) 0)
-						   ;;      		     (string->number (car parts))
-						   ;;      		     #f)))
-						   ;;          (if p-id
-						   ;;      	(begin
-						   ;;      	  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
-						   ;;      	  (system (conc "kill -9 " p-id))))))
-						   ;;      (car processes))
-						   ;;     (system (conc "kill -9 -" pid))))
+						   (handle-exceptions
+						    exn
+						    (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+						    ;;(process-signal pid signal/kill))
+						    (begin
+						      (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						      (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
+							(for-each 
+							 (lambda (p)
+							   (let* ((parts  (string-split p))
+								  (p-id   (if (> (length parts) 0)
+									      (string->number (car parts))
+									      #f)))
+							     (if p-id
+								 (begin
+								   (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
+								   ;; (process-signal pid signal/kill))))) ;; 
+								   (system (conc "kill -9 " p-id))))))
+							 (car processes)))
+						      (system (conc "kill -9 -" pid))
+						      (tests:test-set-status! test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
-								     (args:get-arg "-m") #f)
+						     ;;(tests:test-set-status! run-id test-id "KILLED"  "FAIL"
+						     (tests:test-set-status! trun-id est-id "KILLED"  "FAIL" (args:get-arg "-m") #f)
 						     (exit 1) ;; IS THIS NECESSARY OR WISE???
 						     )))
 					     (set! kill-tries (+ 1 kill-tries))

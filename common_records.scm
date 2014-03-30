@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use trace)
+;; (use trace)
 
 (define (debug:calc-verbosity vstr)
   (cond

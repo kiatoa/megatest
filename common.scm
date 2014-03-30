@@ -238,6 +238,31 @@
    "disks" '("none" "")))
 
 ;;======================================================================
+;; T A R G E T S
+;;======================================================================
+
+(define (common:args-get-target #!key (split #f))
+  (let* ((target  (if (args:get-arg "-reqtarg")
+		      (args:get-arg "-reqtarg")
+		      (if (args:get-arg "-target")
+			  (args:get-arg "-target")
+			  #f)))
+	 (tlist   (if target (string-split target "/" #t) '()))
+	 (valid   (if target
+		      (and (not (null? tlist))
+			   (null? (filter string-null? tlist)))
+		      #f)))
+    (if valid
+	(if split
+	    tlist
+	    target)
+	(if target
+	    (begin
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\"")
+	      #f)
+	    #f))))
+
+;;======================================================================
 ;; M I S C   L I S T S
 ;;======================================================================
 
@@ -362,24 +387,28 @@
 	"unknown"
 	(caar uname-res))))
 	      
-(define (save-environment-as-files fname #!key (ignorevars (list "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
+(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
           (for-each (lambda (key)
-		      (if (not (member key ignorevars))
-			  (let* ((val (cdr key))
-				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-			    (print "setenv " (car key) " " sval))))
+		      (let* ((val (cdr key))
+			     (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
+			(print (if (member key ignorevars)
+				   "# setenv "
+				   "setenv ")
+			       (car key) " " sval)))
 		      envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
           (for-each (lambda (key)
-		      (if (not (member key ignorevars))
-			  (let* ((val (cdr key))
-				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-			    (print "export " (car key) "=" sval))))
+		      (let* ((val (cdr key))
+			     (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
+			(print (if (member key ignorevars)
+				   "# export "
+				   "export ")
+			       (car key) "=" sval)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values
