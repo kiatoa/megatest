@@ -168,6 +168,8 @@ Misc
 (define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
 (define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
 
+(if (get-environment-variable "MT_RUN_AREA_HOME")(change-directory (get-environment-variable "MT_RUN_AREA_HOME")))
+
 (define (message-window msg)
   (iup:show
    (iup:dialog
