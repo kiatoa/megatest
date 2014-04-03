@@ -47,7 +47,7 @@ ifeq ($(PROXY),)
 PROX=
 else
 http_proxy=http://$(PROXY)
-PROX="-proxy $(PROXY)"
+PROX=-proxy $(PROXY)
 endif
 
 BUILDHOME=$(PWD)
@@ -105,7 +105,8 @@ setup-chicken4x.sh : $(EGGFLAGS)
 	mkdir -p $(PREFIX)
 
 chicken-core/chicken.scm :
-	git clone git://code.call-cc.org/chicken-core
+	git clone http://code.call-cc.org/git/chicken-core.git
+# git clone git://code.call-cc.org/chicken-core
 
 $(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
