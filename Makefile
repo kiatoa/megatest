@@ -10,6 +10,12 @@ SRCFILES = common.scm items.scm launch.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
 	   tree.scm ezsteps.scm lock-queue.scm sdb.scm
 
+# Eggs to install (straightforward ones)
+EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
+     dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
+     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications iup canvas-draw sqlite3
+
 GUISRCF  = dashboard-tests.scm dashboard-guimonitor.scm 
 
 OFILES   = $(SRCFILES:%.scm=%.o)
@@ -134,11 +140,13 @@ $(DEPLOYHELPERS) : utils/mt_*
 	chmod a+X $@
 
 deploytarg/apropos.so : Makefile
-	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
-	chicken-install -prefix deploytarg -deploy $$i;done
+	chicken-install -p deploytarg -deploy $(EGGS)
 
-deploytarg/libsqlite3.so : 
-	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
+#	for i in apropos base64 canvas-draw csv-xml directory-utils dot-locking extras fmt format hostinfo http-client intarweb json md5 message-digest posix posix-extras readline regex regex-case s11n spiffy spiffy-request-vars sqlite3 srfi-1 srfi-18 srfi-69 tcp test uri-common check-errors synch matchable sql-null tcp-server rpc blob-utils string-utils variable-item defstruct uri-generic sendfile opensll openssl lookup-table list-utils stack; do \
+#	chicken-install -prefix deploytarg -deploy $$i;done
+
+# deploytarg/libsqlite3.so : 
+# 	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
 
 deploy : deploytarg/megatest deploytarg/dashboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/libiupcd.so deploytarg/apropos.so
 
@@ -149,11 +157,11 @@ deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
 	cp $(CKPATH)/include/*.h deploytarg
 
 # puts deployed megatest in directory "megatest"
-deploytarg/megatest : $(OFILES) megatest.o
-	csc -deploy $(CSCOPTS) $(OFILES) megatest.scm
-	rsync -av megatest/ deploytarg/
+deploytarg/mtest : $(OFILES) megatest.o 
+	csc -deploy $(CSCOPTS) $(OFILES) megatest.scm -o deploytarg
+	mv deploytarg/deploytarg deploytarg/mtest
 
-deploytarg/dashboard :  $(OFILES) $(GOFILES)
-	csc -deploy $(OFILES) $(GOFILES) dashboard.scm
-	rsync -av dashboard/ deploytarg/
+deploytarg/dboard :  $(OFILES) $(GOFILES)
+	csc -deploy $(OFILES) $(GOFILES) dashboard.scm -o deploytarg
+	mv deploytarg/deploytarg deploytarg/dboard
 

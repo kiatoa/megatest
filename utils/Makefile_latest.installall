@@ -1,0 +1,150 @@
+
+# Copyright 2013,2014 Matthew Welland.
+# 
+#  This program is made available under the GNU GPL version 2.0 or
+#  greater. See the accompanying file COPYING for details.
+# 
+#  This program is distributed WITHOUT ANY WARRANTY; without even the
+#  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE.
+
+# make PREFIX=/mfs/pkgs/chicken/chicken-core all
+
+help :
+	@echo You may need to do the following first:
+	@echo sudo apt-get install libreadline-dev
+	@echo sudo apt-get install libwebkitgtk-dev 
+	@echo sudo apt-get install libmotif3
+	@echo You are using PREFIX=$(PREFIX)
+	@echo You are using proxy="$(proxy)"
+	@echo If needed set proxy to host.dom:port
+	@echo 
+	@echo To make all do: make all
+
+# Put the installation here
+ifeq ($(PREFIX),)
+PREFIX=$(PWD)/target
+endif
+
+# Set this on the command line of your make call if needed: make PROXY=host.com:1234
+PROXY=
+
+# Select version of chicken, sqlite3 etc
+CHICKEN_VERSION=4.8.0
+SQLITE3_VERSION=3071401
+
+# Eggs to install (straightforward ones)
+EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
+     dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
+     json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications sqlite3
+
+#
+# Derived variables
+#
+
+ifeq ($(PROXY),)
+PROX=
+else
+http_proxy=http://$(PROXY)
+PROX="-proxy $(PROXY)"
+endif
+
+BUILDHOME=$(PWD)
+PATH:=$(PREFIX)/bin:$(PATH)
+LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
+LD_LIBRARY_PATH=$(LIBPATH)
+CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
+
+VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
+
+vpath %.so $(CHICKEN_EGG_DIR)
+vpath %.flag eggflags
+
+EGGSOFILES=$(addprefix $(CHICKEN_EGG_DIR)/,$(addsuffix .so,$(EGGS)))
+EGGFLAGS=$(addprefix eggflags/,$(addsuffix .flag,$(EGGS)))
+
+# Stuff needed for IUP
+ISARCHX86_64=$(shell uname -a | grep x86_64)
+ifeq ($(ISARCHX86_64),)
+ARCHSIZE=
+else
+ARCHSIZE=64_
+endif
+
+CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
+# CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
+
+all : chkn eggs libiup logprobin
+
+chkn : $(CHICKEN_INSTALL)
+
+eggs : $(EGGSOFILES)
+
+libiup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+
+logprobin : $(PREFIX)/bin/logpro
+
+$(PREFIX)/bin/logpro : $(CHICKEN_EGG_DIR)/regex-literals.so
+	$(CHICKEN_INSTALL) logpro
+
+# Silly rule to make installing eggs more makeish, I don't understand why I need the basename
+$(CHICKEN_EGG_DIR)/%.so : eggflags/%.flag
+	$(CHICKEN_INSTALL) $(PROX) -keep-installed $(shell basename $*)
+
+$(EGGFLAGS) : # $(CHICKEN_INSTALL)
+	mkdir -p eggflags
+	touch $(EGGFLAGS)
+
+# some setup stuff
+#
+setup-chicken4x.sh : $(EGGFLAGS)
+	(echo "export PATH=$(PATH)" > setup-chicken4x.sh)
+	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
+	mkdir -p $(PREFIX)
+
+chicken-core/chicken.scm :
+	git clone git://code.call-cc.org/chicken-core
+
+$(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
+	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
+	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX) install
+
+# 
+# IUP
+#
+
+ffcall.fossil :
+	fossil clone http://www.kiatoa.com/fossils/ffcall ffcall.fossil
+
+ffcall/README : ffcall.fossil
+	mkdir -p ffcall
+	cd ffcall && if [ -e README ];then fossil update; else fossil open ../ffcall.fossil; fi
+
+# NOTE: This worked fine *without* the enable-shared
+#
+$(PREFIX)/lib/libavcall.a : ffcall/README
+	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make && make install
+
+iuplib.fossil :
+	fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
+
+iup/installall.sh : iuplib.fossil
+	mkdir -p iup
+	cd iup && if [ -e installall.sh ];then fossil update; else fossil open ../iuplib.fossil; fi
+
+iup/iup/alldone : iup/installall.sh
+	cd iup && ./makeall.sh
+
+$(PREFIX)/lib/libiup.so : iup/iup/alldone
+	touch -c $(PREFIX)/lib/libiup.so
+
+$(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+
+$(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
+	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+
+clean :
+	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)
