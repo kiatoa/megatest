@@ -148,20 +148,20 @@ deploytarg/apropos.so : Makefile
 # deploytarg/libsqlite3.so : 
 # 	CSC_OPTIONS="-Ideploytarg -Ldeploytarg" $CHICKEN_INSTALL -prefix deploytarg -deploy sqlite3
 
-deploy : deploytarg/megatest deploytarg/dashboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/libiupcd.so deploytarg/apropos.so
+deploy : deploytarg/mtest deploytarg/dboard $(DEPLOYHELPERS) deploytarg/nbfake deploytarg/nbfind deploytarg/apropos.so
 
-deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
-	for i in iup im cd av call sqlite; do \
-	  cp $(CKPATH)/lib/lib$$i* deploytarg/ ; \
-	done
-	cp $(CKPATH)/include/*.h deploytarg
+# deploytarg/libiupcd.so : $(CKPATH)/lib/libiupcd.so
+# 	for i in iup im cd av call sqlite; do \
+# 	  cp $(CKPATH)/lib/lib$$i* deploytarg/ ; \
+# 	done
+# 	cp $(CKPATH)/include/*.h deploytarg
 
 # puts deployed megatest in directory "megatest"
-deploytarg/mtest : $(OFILES) megatest.o 
+deploytarg/mtest : $(OFILES) megatest.o deploytarg/apropos.so
 	csc -deploy $(CSCOPTS) $(OFILES) megatest.scm -o deploytarg
 	mv deploytarg/deploytarg deploytarg/mtest
 
-deploytarg/dboard :  $(OFILES) $(GOFILES)
+deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 	csc -deploy $(OFILES) $(GOFILES) dashboard.scm -o deploytarg
 	mv deploytarg/deploytarg deploytarg/dboard
 
