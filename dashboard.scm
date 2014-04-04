@@ -345,9 +345,12 @@ Misc
 		(let ((tname (vector-ref tdat 0))  ;; (db:test-get-testname tdat))
 		      (ipath (vector-ref tdat 1))) ;; (db:test-get-item-path tdat)))
 		  (if (not (equal? ipath ""))
-		      (if (not (member tname tnames))
+		      (if (and (list? tnames)
+			       (string? tname)
+			       (not (member tname tnames)))
 			  (set! tnames (append tnames (list tname)))))))
-	      test-dats)))
+	      test-dats)
+    tnames))
 
 ;; Bubble up the top tests to above the items, collect the items underneath
 ;; all while preserving the sort order from the SQL query as best as possible.

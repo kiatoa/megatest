@@ -1210,27 +1210,6 @@
 		(sqlite3:execute db qry run-id newstate newstatus testname testname)))
 	    testnames))
 
-
-(define (cdb:set-tests-state-status-faster serverdat run-id testnames currstate currstatus newstate newstatus)
-  ;; Convert #f to wildcard %
-  (if (null? testnames)
-      #t
-      (let ((currstate  (if currstate currstate "%"))
-	    (currstatus (if currstatus currstatus "%")))
-	(let loop ((hed (car testnames))
-		   (tal (cdr testnames))
-		   (thr '()))
-	  (let ((th1 (if newstate  (create-thread (cbd:client-call serverdat 'update-test-state  #t *default-numtries* newstate  currstate  run-id testname testname)) #f))
-		(th2 (if newstatus (create-thread (cbd:client-call serverdat 'update-test-status #t *default-numtries* newstatus currstatus run-id testname testname)) #f)))
-	    (thread-start! th1)
-	    (thread-start! th2)
-	    (if (null? tal)
-		(loop (car tal)(cdr tal)(cons th1 (cons th2 thr)))
-		(for-each
-		 (lambda (th)
-		   (if th (thread-join! th)))
-		 thr)))))))
-
 (define (cdb:delete-tests-in-state serverdat run-id state)
   (common:clear-caches)
   (cdb:client-call serverdat 'delete-tests-in-state #t *default-numtries* run-id state))
