@@ -95,12 +95,16 @@
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target      (or (common:args-get-target)
-			  (get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
-	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
-	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
+  (let* ((target    (or (common:args-get-target)
+			(get-environment-variable "MT_TARGET")))
+	 (keys      (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
+	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
+	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
+	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
     ;; get the info from the db and put it in the cache
+    (if link-tree
+	(setenv "MT_LINKTREE" link-tree)
+	(debug:print 0 "ERROR: linktree not set, should be set in megatest.config in [setup] section."))
     (if (not vals)
 	(let ((ht (make-hash-table)))
 	  (hash-table-set! *env-vars-by-run-id* run-id ht)
