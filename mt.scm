@@ -82,10 +82,10 @@
 		  limit))
 	  full-list))))
 
-(define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
-  (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode))
+(define (mt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+  (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap))
 
-(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f) )
   (let* ((key    (list run-id waitons ref-item-path mode))
 	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
 	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
@@ -96,7 +96,7 @@
 	(let ((result (vector-ref res 1)))
 	  (debug:print 4 "Using lazy value res: " result)
 	  result)
-	(let ((newres (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode)))
+	(let ((newres (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
 	  newres))))
 

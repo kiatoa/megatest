@@ -21,6 +21,9 @@ bigrun :
 bigrun2 :
 	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname $(RUNNAME)
 
+bigrun3 :
+	$(MEGATEST) -runtests bigrun3 -target a/bigrun3 :runname $(RUNNAME)
+
 dashboard : 
 	$(DASHBOARD) -rows 20 &
 

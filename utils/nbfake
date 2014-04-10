@@ -1,12 +1,17 @@
 #!/bin/bash
 
-# ssh localhost "nohup $* > nbfake.log 2> nbfake.err < /dev/null"
-
 # Can't always trust $PWD
 CURRWD=`pwd`
+if [[ $TARGETHOST_LOGF == "" ]]; then
+    TARGETHOST_LOGF=NBFAKE-`date +%GWW%V.%u_%T`
+fi
+echo "#======================================================================"
+echo "# NBFAKE Running command:"
+echo "#     \"$*\""
+echo "#======================================================================"
 
 if [[ $TARGETHOST == ""  ]]; then
-  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &"
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &"
 else
-  ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+  ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &\""
 fi
