@@ -585,15 +585,17 @@
 		reruns))))) ;; (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
-  (map (lambda (t)
-	 (cond
-	  ((vector? t)
-	   (conc (db:test-get-state t) "/" (db:test-get-status t)))
-	  ((string? t)
-	   t)
-	  (else 
-	   (conc t))))
-       inlst))
+  (if (null? inlst)
+      '()
+      (map (lambda (t)
+	     (cond
+	      ((vector? t)
+	       (conc (db:test-get-state t) "/" (db:test-get-status t)))
+	      ((string? t)
+	       t)
+	      (else 
+	       (conc t))))
+	   inlst)))
 
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
   (let* ((run-limits-info         (runs:can-run-more-tests jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
@@ -725,7 +727,6 @@
 	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
 						    (runs:mixed-list-testname-and-testrec->list-of-strings 
 						     prereqs-not-met) ", ")))
-      
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
@@ -744,13 +745,27 @@
 		    (list (runs:queue-next-hed tal reg reglen regfull)
 			  (runs:queue-next-tal tal reg reglen regfull)
 			  (runs:queue-next-reg tal reg reglen regfull)
-			  (cons hed reruns)))
+			  reruns ;; WAS: (cons hed reruns) ;; but that makes no sense?
+			  ))
 		  (begin
-		    (debug:print 0 "WARNING: Test not processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+		    (debug:print 0 "WARNING: Test may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (list hed tal reg reruns)
-		    (list (car newtal)(cdr newtal) reg reruns)
-		    ))))))))
+		    ;; (list (car newtal)(cdr newtal) reg reruns)
+		    (list (runs:queue-next-hed tal reg reglen regfull)
+			  (runs:queue-next-tal tal reg reglen regfull)
+			  (runs:queue-next-reg tal reg reglen regfull)
+			  reruns) ;; (cons hed reruns))
+		    ;;(list (if (null? tal)(car newtal)(car tal))
+		    ;;      tal
+		    ;;      reg
+		    ;;      reruns)
+		    ))
+	      ;; can't drop this - maybe running? Just keep trying
+	      (list hed
+		    tal
+		    reg
+		    reruns)))))))
 
 ;; every time though the loop increment the test/itempatt val.
 ;; when the min is > max-allowed and none running then force exit

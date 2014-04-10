@@ -2417,9 +2417,9 @@
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 
-		   ((and (equal? item-path "") ;; this is the parent test
+		   ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
 			 is-completed
-			 (or is-ok (not (null? (lset-intersection eq? mode '(toplevel itemmatch itemwait))))))
+			 (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
 		    (set! parent-waiton-met #t))
 		   ;; Special case for toplevel and KILLED
 		   ((and (equal? item-path "") ;; this is the parent test
