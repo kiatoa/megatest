@@ -1443,9 +1443,9 @@
 (define (db:test-get-paths-matching db keynames target fnamepatt #!key (res '()))
   ;; BUG: Move the values derived from args to parameters and push to megatest.scm
   (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
-	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
-	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
-	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (statepatt  (or (args:get-arg "-state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (or (args:get-arg "-status")  (args:get-arg ":status")   "%"))
+	 (runname    (or (args:get-arg "-runname") (args:get-arg ":runname")  "%"))
 	 (paths-from-db (cdb:remote-run db:test-get-paths-matching-keynames-target-new db keynames target res
 					testpatt:   testpatt
 					statepatt:  statepatt

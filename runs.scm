@@ -45,8 +45,8 @@
 		                 (exit 1)))))
 	  (runrec      (runs:runrec-make-record))
 	  (target      (common:args-get-target))
-	  (runname     (or (args:get-arg ":runname")
-		           (args:get-arg "-runname")))
+	  (runname     (or (args:get-arg "-runname")
+		           (args:get-arg ":runname")))
 	  (testpatt    (or (args:get-arg "-testpatt")
 		           (args:get-arg "-runtests")))
 	  (keys        (keys:config-get-fields mconfig))
@@ -617,7 +617,7 @@
 			    prereqs-not-met) ", ") ") fails: " fails)
     
     (if (not (null? prereqs-not-met))
-	(debug:print-info 1 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
+	(debug:print-info 2 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
 
     ;; Don't know at this time if the test have been launched at some time in the past
     ;; i.e. is this a re-launch?
@@ -1413,14 +1413,14 @@
 ;; Since many calls to a run require pretty much the same setup 
 ;; this wrapper is used to reduce the replication of code
 (define (general-run-call switchname action-desc proc)
-  (let ((runname (args:get-arg ":runname"))
+  (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	(target  (common:args-get-target)))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
       (exit 3))
      ((not runname)
-      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
+      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
       (let ((db   #f)
@@ -1510,7 +1510,7 @@
 
 ;; This could probably be refactored into one complex query ...
 (define (runs:rollup-run keys runname user keyvals)
-  (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
+  (debug:print 4 "runs:rollup-run, keys: " keys " -runname " runname " user: " user)
   (let* ((db              #f)
 	 (new-run-id      (cdb:remote-run db:register-run #f keyvals runname "new" "n/a" user))
 	 (prev-tests      (cdb:remote-run test:get-matching-previous-test-run-records db new-run-id "%" "%"))

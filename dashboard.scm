@@ -656,12 +656,12 @@ Misc
 			    test-patt
 			    " -target "
 			    target
-			    " :runname "
+			    " -runname "
 			    run-name
 			    )))
       ((remove-runs)
        (set! full-cmd (conc full-cmd
-			    " -remove-runs :runname "
+			    " -remove-runs -runname "
 			    run-name
 			    " -target " 
 			    target
