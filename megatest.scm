@@ -118,7 +118,6 @@ Misc
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -update-meta            : update the tests metadata for all tests
-  -env2file fname         : write the environment to fname.csh and fname.sh
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
@@ -131,6 +130,12 @@ Misc
   -repl                   : start a repl (useful for extending megatest)
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
+
+Utilities
+  -env2file fname         : write the environment to fname.csh and fname.sh
+  -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
+                            formats: perl, ruby, sqlite3
+  -o                      : output file for refdb2dat (defaults to stdout)
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -207,6 +212,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-section"
 			"-var"
 			"-dumpmode"
+			"-refdb2dat"
+			"-o"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -344,6 +351,48 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (common:get-disks) )
 	"\n"))
       (set! *didsomething* #t)))
+
+(if (args:get-arg "-refdb2dat")
+    (let* ((input-db (args:get-arg "-refdb2dat"))
+	   (out-file (args:get-arg "-o"))
+	   (out-port (if out-file (open-output-file out-file) (current-output-port)))
+	   (out-fmt  (or (args:get-arg "-dumpmode") "scheme"))
+	   (res-data (configf:read-refdb input-db))
+	   (data     (car res-data))
+	   (msg      (cadr res-data)))
+      (if (not data)
+	  (debug:print 0 data) ;; some error occurred
+	  (with-output-to-port out-port
+	    (lambda ()
+	      (case (string->symbol out-fmt)
+		((scheme)(pp data))
+		((perl)
+		 ;; (print "%hash = (")
+		 ;;        key1 => 'value1',
+		 ;;        key2 => 'value2',
+		 ;;        key3 => 'value3',
+		 ;; );
+		 (configf:map-all-hier-alist 
+		  data 
+		  (lambda (sheetname sectionname varname val)
+		    (print "$data{\"" sheetname "\"}{\"" sectionname "\"}{\"" varname "\"} = \"" val "\";"))))
+		((python ruby)
+		 (print "data={}")
+		 (configf:map-all-hier-alist
+		  data
+		  (lambda (sheetname sectionname varname val)
+		    (print "data[\"" sheetname "\"][\"" sectionname "\"][\"" varname "\"] = \"" val "\""))
+		  initproc1:
+		  (lambda (sheetname)
+		    (print "data[\"" sheetname "\"] = {}"))
+		  initproc2:
+		  (lambda (sheetname sectionname)
+		    (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}"))))
+		(else
+		 (pp data))))))
+      (if out-file (close-output-port out-port))
+      (exit) ;; yes, bending the rules here - need to exit since this is a utility
+      ))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)

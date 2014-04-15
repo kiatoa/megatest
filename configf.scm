@@ -275,6 +275,7 @@
       #f))
 
 (define configf:lookup config-lookup)
+(define configf:read-file read-config)
 
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
@@ -433,3 +434,56 @@
 	   (print line))
 	 (configf:expand-multi-lines fdat))))))
 
+;;======================================================================
+;; refdb
+;;======================================================================
+
+;; reads a refdb into an assoc array of assoc arrays
+;;   returns (list dat msg)
+(define (configf:read-refdb refdb-path)
+  (let ((sheets-file  (conc refdb-path "/sheet-names.cfg")))
+    (if (not (file-exists? sheets-file))
+	(list #f (conc "ERROR: no refdb found at " refdb-path))
+	(if (not (file-read-access? sheets-file))
+	    (list #f (conc "ERROR: refdb file not readable at " refdb-path))
+	    (let* ((sheets (with-input-from-file sheets-file
+			     (lambda ()
+			       (let loop ((inl (read-line))
+					  (res '()))
+				 (if (eof-object? inl)
+				     (reverse res)
+				     (loop (read-line)(cons inl res)))))))
+		   (data   '()))
+	      (for-each 
+	       (lambda (sheet-name)
+		 (let* ((dat-path  (conc refdb-path "/" sheet-name ".dat"))
+			(ref-dat   (configf:read-file dat-path #f #t))
+			(ref-assoc (map (lambda (key)
+					  (list key (hash-table-ref ref-dat key)))
+					(hash-table-keys ref-dat))))
+				   ;; (hash-table->alist ref-dat)))
+		   (set! data (append data (list (list sheet-name ref-assoc))))))
+	       sheets)
+	      (list data "NO ERRORS"))))))
+
+;; map over all pairs in a three level hierarchial alist and apply a function to the keys/val
+;;
+(define (configf:map-all-hier-alist data proc #!key (initproc1 #f)(initproc2 #f)(initproc3 #f))
+  (for-each 
+   (lambda (sheetname)
+     (let* ((sheettmp  (assoc sheetname data))
+	    (sheetdat  (if sheettmp (cadr sheettmp) '())))
+       (if initproc1 (initproc1 sheetname))
+       (for-each 
+	(lambda (sectionname)
+	  (let* ((sectiontmp  (assoc sectionname sheetdat))
+		 (sectiondat  (if sectiontmp (cadr sectiontmp) '())))
+	    (if initproc2 (initproc2 sheetname sectionname))
+	    (for-each
+	     (lambda (varname)
+	       (let* ((valtmp (assoc varname sectiondat))
+		      (val    (if valtmp (cadr valtmp) "")))
+		 (proc sheetname sectionname varname val)))
+	     (map car sectiondat))))
+	(map car sheetdat))))
+   (map car data)))
