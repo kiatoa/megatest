@@ -737,7 +737,7 @@
 	  (if (or (not (null? reg))(not (null? tal)))
 	      (if (vector? hed)
 		  (begin 
-		    (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+		    (debug:print 1 "WARNING: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
@@ -747,20 +747,46 @@
 			  (runs:queue-next-reg tal reg reglen regfull)
 			  reruns ;; WAS: (cons hed reruns) ;; but that makes no sense?
 			  ))
-		  (begin
-		    (debug:print 0 "WARNING: Test may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
-		    ;; (list hed tal reg reruns)
-		    ;; (list (car newtal)(cdr newtal) reg reruns)
-		    (list (runs:queue-next-hed tal reg reglen regfull)
-			  (runs:queue-next-tal tal reg reglen regfull)
-			  (runs:queue-next-reg tal reg reglen regfull)
-			  reruns) ;; (cons hed reruns))
-		    ;;(list (if (null? tal)(car newtal)(car tal))
-		    ;;      tal
-		    ;;      reg
-		    ;;      reruns)
-		    ))
+		  (let ((nth-try (hash-table-ref/default test-registry hed 0)))
+		    (cond
+		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
+		      (debug:print 0 "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet.")
+		      (thread-sleep! 4)
+		      (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns))
+		     ((or (not nth-try)
+			  (and (number? nth-try)
+			       (< nth-try 10)))
+		      (hash-table-set! test-registry hed (if (number? nth-try)
+							     (+ nth-try 1)
+							     0))
+		      (debug:print 0 "WARNING: not removing test " hed " from queue although it may not be runnable due to FAILED prerequisites")
+		      ;; may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+		      (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
+		      ;; (list hed tal reg reruns)
+		      ;; (list (car newtal)(cdr newtal) reg reruns)
+		      ;; (hash-table-set! test-registry hed 'removed)
+		      (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns))
+		     ((symbol? nth-try)
+		      (debug:print 0 "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry.")
+		      (hash-table-set! test-registry hed 0)
+		      (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns))
+		     (else
+		      (debug:print 0 "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now.")
+		      ;; (debug:print 0 "         prereqs: " prereqs-not-met)
+		      (hash-table-set! test-registry hed 'removed)
+		      (list (if (null? tal)(car newtal)(car tal))
+			    tal
+			    reg
+			    reruns)))))
 	      ;; can't drop this - maybe running? Just keep trying
 	      (list hed
 		    tal

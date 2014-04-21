@@ -37,7 +37,8 @@ SQLITE3_VERSION=3071401
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
-     spiffy-directory-listing ssax sxml-serializer sxml-modifications sqlite3
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications sqlite3 sql-de-lite \
+     srfi-19
 
 #
 # Derived variables

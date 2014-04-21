@@ -28,8 +28,7 @@ dashboard :
 	$(DASHBOARD) -rows 20 &
 
 compile :
-	$(MEGATEST) -stop-server 0
-	(cd ../../..;make && make install)
+	(cd ../../..;make -j && make install)
 
 clean :
 	rm -rf ../simple*/*/* megatest.db monitor.db
