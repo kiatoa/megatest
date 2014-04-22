@@ -1215,9 +1215,10 @@
 	   (debug:print 4 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
 	   (if (not runflag)
 	       (if (not parent-test)
-		   (debug:print 1 "NOTE: Not starting test " full-test-name " as it is state \"" (test:get-state testdat) 
-				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
-                                "\" or -force to override"))
+		   (if (runs:lownoise (conc "not starting test" full-test-name) 60)
+		       (debug:print 1 "NOTE: Not starting test " full-test-name " as it is state \"" (test:get-state testdat) 
+				    "\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
+				    "\" or -force to override")))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork

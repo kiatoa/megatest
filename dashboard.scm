@@ -1046,8 +1046,16 @@ Misc
 			     (dashboard:update-run-summary-tab)))
 		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		       ))))
+	 (cell-lookup (make-hash-table))
 	 (run-matrix (iup:matrix
-		      #:expand "YES"))
+		      #:expand "YES"
+		      #:click-cb
+		      (lambda (obj lin col status)
+			(let* ((toolpath (car (argv)))
+			       (key      (conc lin ":" col))
+			       (test-id  (hash-table-ref/default cell-lookup key -1))
+			       (cmd      (conc toolpath " -test " test-id "&")))
+			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (mt:get-runs-by-patt *keys* "%" #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
@@ -1113,8 +1121,9 @@ Misc
 					   ;; (set! colnum (+ colnum 1))
 					   ))))
 				 run-ids)
-		       (iup:attribute-set! run-matrix "CLEARVALUE" "CONTENTS")
+		       (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
 		       (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+		       (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
 		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
 		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
 		       ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
@@ -1131,18 +1140,6 @@ Misc
 					   (iup:attribute-set! run-matrix key name)))))
 				 row-indices)
 		       
-		       ;; Col labels
-		       (for-each (lambda (ind)
-				   (let* ((name (car ind))
-					  (num  (cadr ind))
-					  (key  (conc "0:" num)))
-				     (if (not (equal? (iup:attribute run-matrix key) name))
-					 (begin
-					   (set! changed #t)
-					   (iup:attribute-set! run-matrix key name)
-					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
-				 col-indices)
-		       
 		       ;; Cell contents
 		       (for-each (lambda (entry)
 				   (let* ((row-name  (cadr entry))
@@ -1157,13 +1154,28 @@ Misc
 					  (row-num   (cadr (assoc row-name row-indices)))
 					  (col-num   (cadr (assoc col-name col-indices)))
 					  (key       (conc row-num ":" col-num)))
+				     (hash-table-set! cell-lookup key test-id)
 				     (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
 					 (begin
 					   (set! changed #t)
 					   (iup:attribute-set! run-matrix key (cadr value))
 					   (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
 				 tests-mindat)
+		       
+		       ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc "0:" num)))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)
+					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
+				 col-indices)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
+    
     (set! dashboard:update-run-summary-tab updater)
     (dboard:data-set-runs-tree! *data* tb)
     (iup:split
