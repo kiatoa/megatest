@@ -578,11 +578,12 @@
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
      (else
-      (debug:print 1 "WARNING: FAILS or incomplete tests are preventing completion of this run. Dropping test " hed " from the run queue")
-      (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		reruns))))) ;; (list (car newtal)(cdr newtal) reg reruns)))))
+      (debug:print 0 "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
+      ;; (list (runs:queue-next-hed tal reg reglen regfull)
+      ;;   	(runs:queue-next-tal tal reg reglen regfull)
+      ;;   	(runs:queue-next-reg tal reg reglen regfull)
+      ;;   	reruns)
+      (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
   (if (null? inlst)
@@ -590,7 +591,11 @@
       (map (lambda (t)
 	     (cond
 	      ((vector? t)
-	       (conc (db:test-get-state t) "/" (db:test-get-status t)))
+	       (let ((test-name (db:test-get-testname t))
+		     (item-path (db:test-get-item-path t))
+		     (test-state (db:test-get-state t))
+		     (test-status (db:test-get-status t)))
+		 (conc test-name (if (equal? item-path "") "" "/") item-path ":" test-state "/" test-status)))
 	      ((string? t)
 	       t)
 	      (else 
@@ -736,11 +741,12 @@
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))
 	      (if (vector? hed)
-		  (begin 
-		    (debug:print 1 "WARNING: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+		  (begin
+		    (debug:print 1 "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
+		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
 		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
 		    (list (runs:queue-next-hed tal reg reglen regfull)
 			  (runs:queue-next-tal tal reg reglen regfull)
@@ -774,6 +780,7 @@
 			    reruns))
 		     ((symbol? nth-try)
 		      (debug:print 0 "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry.")
+		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
 		      (hash-table-set! test-registry hed 0)
 		      (list (runs:queue-next-hed newtal reg reglen regfull)
 			    (runs:queue-next-tal newtal reg reglen regfull)
@@ -783,15 +790,37 @@
 		      (debug:print 0 "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now.")
 		      ;; (debug:print 0 "         prereqs: " prereqs-not-met)
 		      (hash-table-set! test-registry hed 'removed)
+		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
+		      (mt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
 			    reruns)))))
 	      ;; can't drop this - maybe running? Just keep trying
-	      (list hed
-		    tal
-		    reg
-		    reruns)))))))
+	      (let ((runable-tests (runs:runable-tests prereqs-not-met)))
+		(if (null? runable-tests)
+		    #f   ;; I think we are truly done here
+		    (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns)))))))))
+
+;; scan a list of tests looking to see if any are potentially runnable
+(define (runs:runable-tests tests)
+  (filter (lambda (t)
+	    (if (not (vector? t))
+		t
+		(let ((state  (db:test-get-state t))
+		      (status (db:test-get-status t)))
+		  (case (string->symbol state)
+		    ((COMPLETED) #f)
+		    ((NOT_STARTED)
+		     (if (member status '("TEN_STRIKES" "BLOCKED"))
+			 #f
+			 t))
+		    ((DELETED) #f)
+		    (else t)))))
+	  tests))
 
 ;; every time though the loop increment the test/itempatt val.
 ;; when the min is > max-allowed and none running then force exit

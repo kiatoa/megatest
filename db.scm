@@ -1691,7 +1691,7 @@
   (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
 
 (define (cdb:top-test-set-per-pf-counts serverdat run-id test-name)
-  (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
+  (cdb:client-call serverdat 'top-test-set-per-pf-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name run-id test-name))
 
 ;;=
 
@@ -1790,9 +1790,14 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE run_id=? AND testname=?
                                                      AND item_path != '' 
+                                                     AND status NOT IN ('TEN_STRIKES','BLOCKED')
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
                             status=CASE 
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE run_id=? AND testname=?
+                                              AND item_path != ''
+                                              AND state IN ('NOT_STARTED','BLOCKED')) > 0 THEN 'FAIL'
                                   WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   WHEN (SELECT count(id) FROM tests
