@@ -394,7 +394,9 @@
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
-	       (rundir        logfile)
+	       (rundir        (if testdat 
+				  (db:test-get-rundir testdat)
+				  logfile))
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (db:get-compressed-steps test-id work-area: rundir) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
