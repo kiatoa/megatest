@@ -355,8 +355,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-refdb2dat")
     (let* ((input-db (args:get-arg "-refdb2dat"))
 	   (out-file (args:get-arg "-o"))
-	   (out-port (if out-file (open-output-file out-file) (current-output-port)))
 	   (out-fmt  (or (args:get-arg "-dumpmode") "scheme"))
+	   (out-port (if (and out-file 
+			      (not (equal? out-fmt "sqlite3")))
+			 (open-output-file out-file)
+			 (current-output-port)))
 	   (res-data (configf:read-refdb input-db))
 	   (data     (car res-data))
 	   (msg      (cadr res-data)))
@@ -388,6 +391,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  initproc2:
 		  (lambda (sheetname sectionname)
 		    (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}"))))
+		((sqlite3)
+		 (let* ((db-file   (or out-file (pathname-file input-db)))
+			(db-exists (file-exists? db-file))
+			(db        (sqlite3:open-database db-file)))
+		   (if (not db-exists)(sqlite3:execute db "CREATE TABLE data (sheet,section,var,val);"))
+		   (configf:map-all-hier-alist
+		    data
+		    (lambda (sheetname sectionname varname val)
+		      (sqlite3:execute db
+				       "INSERT OR REPLACE INTO data (sheet,section,var,val) VALUES (?,?,?,?);"
+				       sheetname sectionname varname val)))
+		   (sqlite3:finalize! db)))
 		(else
 		 (pp data))))))
       (if out-file (close-output-port out-port))
