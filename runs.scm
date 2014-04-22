@@ -1277,7 +1277,11 @@
 
 (define (runs:recursive-delete-with-error-msg real-dir)
   (if (> (system (conc "rm -rf " real-dir)) 0)
-      (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f")))
+      (begin
+	;; FAILED, possibly due to permissions, do chmod a+rwx then try one more time
+	(system (conc "chmod -R a+rwx " real-dir))
+	(if (> (system (conc "rm -rf " real-dir)) 0)
+	    (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f")))))
 
 (define (runs:safe-delete-test-dir real-dir)
   ;; first delete all sub-directories

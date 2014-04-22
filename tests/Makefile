@@ -22,15 +22,15 @@ TARGET     = "ubuntu/nfs/none"
 all : test1 test2 test3 test4 test5 test6 test7 test8 test9
 
 server :
-	cd ..;make;make install
+	cd ..;make -j;make install
 	cd fullrun;$(MEGATEST) -server - -debug 22
 
 stopserver :
-	cd ..;make && make install
+	cd ..;make -j && make install
 	cd fullrun;$(MEGATEST) -stop-server 0
 
 repl :
-	cd ..;make && make install
+	cd ..;make -j && make install
 	cd fullrun;$(MEGATEST) -repl
 
 test0 : cleanprep
@@ -149,7 +149,7 @@ test11 :
 	 cd fullrun;time (for a in 1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10 ;do   (megatest -test-paths -target %/%/% > /dev/null ) & done; wait; )
 
 minsetup : 
-	cd ..;make && make install
+	cd ..;make -j && make install
 	mkdir -p mintest/runs mintest/links
 	cd mintest;megatest -stop-server 0
 	cd mintest;megatest -server - -debug $(DEBUG) > server.log 2> server.log & 
@@ -158,7 +158,7 @@ minsetup :
 
 cleanprep : ../*.scm Makefile */*.config
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
-	cd ..;make;make install
+	cd ..;make -j;make install
 	rm -f */logging.db
 	touch cleanprep
 
