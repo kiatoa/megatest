@@ -105,8 +105,15 @@ setup-chicken4x.sh : $(EGGFLAGS)
 	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
 	mkdir -p $(PREFIX)
 
-chicken-core/chicken.scm :
-	git clone http://code.call-cc.org/git/chicken-core.git
+chicken-core/chicken.scm : chicken-4.9.0rc1.tar.gz
+	tar xfz chicken-4.9.0rc1.tar.gz
+	ln -sf chicken-4.9.0rc1 chicken-core
+	# git clone http://code.call-cc.org/git/chicken-core.git
+
+
+chicken-4.9.0rc1.tar.gz : 
+	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
+
 # git clone git://code.call-cc.org/chicken-core
 
 $(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
