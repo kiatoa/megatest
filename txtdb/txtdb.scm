@@ -272,6 +272,7 @@
 
 (define (get-value-type val expressions)
   (cond 
+   ((not val)            '(ValueType "60"))
    ((string->number val) '(ValueType "40"))
    ((equal? val "")      '(ValueType "60"))
    ((equal? (substring val 0 1) "=")
