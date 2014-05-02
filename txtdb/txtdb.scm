@@ -115,7 +115,7 @@
 			    (hash-table->alist colnums))))
       (with-output-to-file (conc targdir "/" sheet-name ".dat")
 	(lambda ()
-	  (print "[" col0title "]")
+	  (if (not (string-null? col0title))(print "[" col0title "]"))
 	  (for-each (lambda (colname)
 		      (print "[" colname "]")
 		      (for-each (lambda (row)
@@ -125,7 +125,9 @@
 					(print val)
 					(if (string-search blank-rx key)
 					    (print)
-					    (print key " " val)))))
+					    (if (string-search " " key)
+						(print "\"" key "\" " val)
+						(print key " " val))))))
 				(reverse (hash-table-ref cols colname)))
 		      ;; (print)
 		      )
@@ -219,6 +221,7 @@
 (define (read-dat fname)
   (let ((section-rx  (regexp "^\\[(.*)\\]\\s*$"))
 	(comment-rx  (regexp "^#.*"))          ;; This means a cell name cannot start with #
+	(quoted-cell-rx (regexp "^\"([^\"]*)\" (.*)$"))
 	(cell-rx     (regexp "^(\\S+) (.*)$")) ;; One space only for the cellname content separator 
 	(blank-rx    (regexp "^\\s*$"))
 	(continue-rx (regexp ".*\\\\$"))
@@ -254,6 +257,9 @@
 				    (loop (read-line inp) 
 					  sname 
 					  res)))
+	   (quoted-cell-rx (x k v)(loop (read-line inp)
+					section
+					(cons (list k section v) res)))
 	   (cell-rx   (x k v)     (loop (read-line inp)
 					section
 					(cons (list k section v) res)))
