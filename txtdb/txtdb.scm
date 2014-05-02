@@ -17,6 +17,7 @@
 (use posix)
 (use json)
 (use csv)
+(use srfi-18)
 
 (include "../megatest-fossil-hash.scm")
 
@@ -456,9 +457,25 @@ Version: " megatest-fossil-hash))
 	 (tmpf    (conc (create-temporary-file dbname) ".gnumeric")))
     (if (file-exists? (conc path "/sheet-names.cfg"))
 	(refdb-export path tmpf))
-    (let ((pid (process-run "gnumeric" (list tmpf))))
-      (process-wait pid)
-      (import-gnumeric-file tmpf path))))
+    (let* ((pid (process-run "gnumeric" (list tmpf))))
+      (let loop ((last-mod-time (current-seconds)))
+	(let-values (((pid-code exit-status exit-signal)(process-wait pid #t)))
+           (if (eq? pid-code 0) ;; still going
+	       (if (file-exists? tmpf)
+		   (let ((mod-time (file-modification-time tmpf)))
+		     (if (> mod-time last-mod-time)
+			 (begin
+			   (print "saved data to " path)
+			   (import-gnumeric-file tmpf path)))
+		     (thread-sleep! 0.5)
+		     (loop mod-time))
+		   (begin
+		     (thread-sleep! 0.5)
+		     (loop last-mod-time))))))
+      ;; all done
+      (print "all done, writing new data to " path)
+      (import-gnumeric-file tmpf path)
+      (print "data written, exiting refdb edit."))))
 
 ;;======================================================================
 ;; This routine dispaches or executes most of the commands for refdb
