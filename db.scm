@@ -484,9 +484,9 @@
 ;;                          end_time,strftime('%s','now') as now from tests where state in
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
-
 (define (db:find-and-mark-incomplete db #!key (ovr-deadtime #f))
   (let* ((incompleted '())
+	 (toplevels   '())
 	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
@@ -506,33 +506,59 @@
        ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
        ;;                     (db:test-get-run_duration testdat)))
        ;;                    600) 
+       (db:delay-if-busy)
        (sqlite3:for-each-row 
-	(lambda (test-id)
-	  (set! incompleted (cons test-id incompleted)))
+	(lambda (test-id run-dir uname testname item-path)
+	  (if (and (equal? uname "n/a")
+		   (equal? item-path "")) ;; this is a toplevel test
+	      ;; what to do with toplevel? call rollup?
+	      (begin
+		(set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+		(debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	      (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
 	db
-	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('RUNNING','REMOTEHOSTSTART');"
-	run-id deadtime)
+	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 600 AND state IN ('RUNNING','REMOTEHOSTSTART');"
+	run-id)
 
        ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
        ;;
+       (db:delay-if-busy)
        (sqlite3:for-each-row
-	(lambda (test-id)
-	  (set! incompleted (cons test-id incompleted)))
+	(lambda (test-id run-dir uname testname item-path)
+	  (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted)))
 	db
-	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('LAUNCHED');"
-	run-id (* 60 60 24)))
+	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+	run-id))
      run-ids)
-       
+    
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
-    (if (> (length incompleted) 0)
-	(begin
-	  (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc incompleted) ", ") " as INCOMPLETE")
-	  (sqlite3:execute 
-	   db
-	   (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
-		 (string-intersperse (map conc incompleted) ",")
-		 ");"))))))
+    (db:delay-if-busy)
+    (let* ((min-incompleted (filter (lambda (x)
+				     (let* ((testpath (cadr x))
+					    (tdatpath (conc testpath "/testdat.db"))
+					    (dbexists (file-exists? tdatpath)))
+				       (or (not dbexists) ;; if no file then something wrong - mark as incomplete
+					   (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
+				   incompleted))
+	  (min-incompleted-ids (map car min-incompleted)))
+      (if (> (length min-incompleted-ids) 0)
+	  (begin
+	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc min-incompleted-ids) ", ") " as INCOMPLETE")
+	    (sqlite3:execute 
+	     db
+	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
+		   (string-intersperse (map conc min-incompleted-ids) ",")
+		   ");")))))
+
+    ;; Now do rollups for the toplevel tests
+    ;;
+    (for-each
+     (lambda (toptest)
+       (let ((test-name (list-ref toptest 3))
+	     (run-id    (list-ref toptest 5)))
+	 (cdb:top-test-set-per-pf-counts *runremote* run-id test-name)))
+     toplevels)))
 		     
 ;; Clean out old junk and vacuum the database
 ;;
