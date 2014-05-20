@@ -1264,16 +1264,16 @@
      (lambda (count)
        (set! res count))
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
     res))
 
 (define (db:get-count-tests-running-for-run-id db run-id)
   (let ((res 0))
     (sqlite3:for-each-row
      (lambda (count)
-       (set! res count))
+       (set! res count))  ;; select * from tests where run_id=1 and uname = 'n/a' and item_path='';
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" run-id)
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
     res))
 
 (define (db:get-running-stats db)
@@ -1294,7 +1294,8 @@
 	   (set! res count))
 	 db
 	 "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART')
-             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?);"
+             AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
+             AND NOT (uname = 'n/a' AND item_path = '');"
 	 jobgroup)
 	res)))
 
@@ -1946,28 +1947,31 @@
     (set! *writes-total-delay* (+ *writes-total-delay* (- (current-milliseconds) start-time)))
     got-it))
 
-(define (db:delay-if-busy #!key (count 5))
+(define (db:delay-if-busy #!key (count 6))
   (let ((dbfj (conc *toppath* "/megatest.db-journal")))
     (if (file-exists? dbfj)
 	(case count
+	  ((6)
+	   (thread-sleep! 0.2)
+	   (db:delay-if-busy count: 5))
 	  ((5)
-	   (thread-sleep! 0.1)
+	   (thread-sleep! 0.4)
 	   (db:delay-if-busy count: 4))
 	  ((4)
-	   (thread-sleep! 0.4)
+	   (thread-sleep! 0.8)
 	   (db:delay-if-busy count: 3))
 	  ((3)
-	   (thread-sleep! 1.0)
+	   (thread-sleep! 1.6)
 	   (db:delay-if-busy count: 2))
 	  ((2)
-	   (thread-sleep! 2.0)
+	   (thread-sleep! 3.2)
 	   (db:delay-if-busy count: 1))
 	  ((1)
-	   (thread-sleep! 5.0)
+	   (thread-sleep! 6.4)
 	   (db:delay-if-busy count: 0))
 	  (else
 	   (debug:print-info 0 "delaying db access due to high database load.")
-	   (thread-sleep! 10))))))
+	   (thread-sleep! 12.8))))))
 
 (define (db:process-queue-item db item)
   (let* ((stmt-key       (cdb:packet-get-qtype item))
