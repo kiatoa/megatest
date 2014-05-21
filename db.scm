@@ -486,6 +486,7 @@
 
 (define (db:find-and-mark-incomplete db #!key (ovr-deadtime #f))
   (let* ((incompleted '())
+	 (oldlaunched '())
 	 (toplevels   '())
 	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
@@ -525,7 +526,11 @@
        (db:delay-if-busy)
        (sqlite3:for-each-row
 	(lambda (test-id run-dir uname testname item-path)
-	  (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted)))
+	  (if (and (equal? uname "n/a")
+		   (equal? item-path "")) ;; this is a toplevel test
+	      ;; what to do with toplevel? call rollup?
+	      (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	      (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
 	db
 	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
 	run-id))
@@ -541,14 +546,15 @@
 				       (or (not dbexists) ;; if no file then something wrong - mark as incomplete
 					   (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
 				   incompleted))
-	  (min-incompleted-ids (map car min-incompleted)))
-      (if (> (length min-incompleted-ids) 0)
+	  (min-incompleted-ids (map car min-incompleted))
+	  (all-ids             (append min-incompleted-ids (map car oldlaunched))))
+      (if (> (length all-ids) 0)
 	  (begin
-	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc min-incompleted-ids) ", ") " as INCOMPLETE")
+	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
 	    (sqlite3:execute 
 	     db
 	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
-		   (string-intersperse (map conc min-incompleted-ids) ",")
+		   (string-intersperse (map conc all-ids) ",")
 		   ");")))))
 
     ;; Now do rollups for the toplevel tests
