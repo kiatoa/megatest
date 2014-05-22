@@ -482,17 +482,24 @@
 (define (open-run-close-exception-handling proc idb . params)
   (handle-exceptions
    exn
-   (begin
-     (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-     (debug:print 0 "  " ((condition-property-accessor 'exn 'message) exn))
-     (print-call-chain)
-     (thread-sleep! (random 120))
-     (debug:print-info 0 "trying db call one more time....")
-     (apply open-run-close-no-exception-handling proc idb params))
+   (let ((sleep-time (random 30))
+	 (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     (case err-status
+       ((busy)
+	(thread-sleep! sleep-time))
+       (else
+	(debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	(print "exn=" (condition->list exn))
+	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	(print-call-chain)
+	(thread-sleep! sleep-time)
+	(debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
+     (apply open-run-close-exception-handling proc idb params))
    (apply open-run-close-no-exception-handling proc idb params)))
 
 ;; (define open-run-close 
-(define open-run-close ;; (if (debug:debug-mode 2)
+(define open-run-close open-run-close-exception-handling)
 		;;	   open-run-close-no-exception-handling
 			   open-run-close-exception-handling)
 ;;)
@@ -613,6 +620,8 @@
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+	      ;; Why use FULL here? This data is not that critical
+	      ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -1809,6 +1818,13 @@
 
 (define (db:tests-register-test dbstruct run-id test-name item-path)
   (sqlite3:execute (db:get-db dbstruct run-id) 'register-test run-id test-name item-path))
+       (let ((sleep-time (random 20))
+	     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	 (case err-status
+	   ((busy)(thread-sleep! 4))
+	   (else
+	    (debug:print 0 "WARNING: possible problem with call to cdb:remote-run, database may be read-only and locked, waiting and trying again ...")
+	    (thread-sleep! sleep-time)))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (let ((res #f))
@@ -1978,6 +1994,31 @@
 		  (if (null? tal)
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
+			   (let* ((remtries 10)
+				  (proc     #f))
+			     (set! proc (lambda (remtries)
+					  (if (> remtries 0)
+					      (handle-exceptions
+					       exn
+					       (let ((sleep-time (random 30))
+						     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+						 (case err-status
+						   ((busy)
+						    (thread-sleep! sleep-time)
+						    (proc 10)) ;; we never give up on busy
+						   (else
+						    (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+						    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+						    (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status)  exn))
+						    (print-call-chain)
+						    (debug:print 0 "Sleeping for " sleep-time)
+						    (thread-sleep! sleep-time)
+						    (debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")
+						    (proc (- remtries 1)))))
+					       (apply sqlite3:execute db query params))
+					      (debug:print 0 "ERROR: too many attempts to access db were made and no sucess. query: "
+							   query ", params: " params))))
+			     (proc remtries))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))

@@ -1218,8 +1218,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)
       (db:close-all dbstruct)))
 
-      
-
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
