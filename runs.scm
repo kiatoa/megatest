@@ -1312,7 +1312,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (keys         (cdb:remote-run db:get-keys db))
@@ -1441,7 +1441,8 @@
 						  (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 					      ))
 				      ;; Only delete the records *after* removing the directory. If things fail we have a record 
-				      (cdb:remote-run db:delete-test-records db #f (db:test-get-id test))
+				      (if (not remove-data-only)
+				          (cdb:remote-run db:delete-test-records db #f (db:test-get-id test)))
 				      (if (not (null? tal))
 					  (loop (car tal)(cdr tal))))))
 			       ((set-state-status)
