@@ -547,7 +547,7 @@
 									       (fullcmd (conc (dtests:get-pre-command)
 											      cmd 
 											      (dtests:get-post-command))))
-									  (debug:print-info 0 "Running command: " fullcmd)
+									  (debug:print-info 02 "Running command: " fullcmd)
 									  (system fullcmd)))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 

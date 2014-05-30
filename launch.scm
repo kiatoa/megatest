@@ -664,14 +664,14 @@
 				    ((mtest)     "../megatest")
 				    ((dashboard) "megatest")
 				    (else exe)))))
-	 (test-sig   (conc test-name ":" (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	 (item-path  (item-list->path itemdat))
+	 (test-sig   (conc test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	 (work-area  #f)
 	 (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	 (diskpath   #f)
 	 (cmdparms   #f)
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
-	 (item-path (item-list->path itemdat))
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (cdb:get-test-info-by-id *runremote* test-id))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
@@ -684,6 +684,10 @@
     (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
+    (if (args:get-arg "-preclean") ;; user has requested to preclean for this run
+	(begin 
+	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
+	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))

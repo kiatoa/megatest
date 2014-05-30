@@ -1378,10 +1378,6 @@
 				 (loop (car tal)(cdr tal))))
 			   (let* ((item-path     (db:test-get-item-path new-test-dat))
 				  (test-name     (db:test-get-testname new-test-dat))
-				  (run-dir       (db:test-get-rundir new-test-dat))    ;; run dir is from the link tree
-				  (real-dir      (if (file-exists? run-dir)
-						     (resolve-pathname run-dir)
-						     #f))
 				  (test-state    (db:test-get-state new-test-dat))
 				  (test-fulln    (db:test-get-fullname new-test-dat))
 				  (uname         (db:test-get-uname    new-test-dat))
@@ -1416,40 +1412,7 @@
 						(loop new-test-dat tal)
 						(loop (car tal)(append tal (list new-test-dat)))))
 					  (begin
-					    (mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f)
-					    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
-					    (if (and real-dir 
-						     (> (string-length real-dir) 5)
-						     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-						(begin ;; let* ((realpath (resolve-pathname run-dir)))
-						  (debug:print-info 1 "Recursively removing " real-dir)
-						  (if (file-exists? real-dir)
-						      (runs:safe-delete-test-dir real-dir)
-						      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
-						(if real-dir 
-						    (debug:print 0 "WARNING: directory " real-dir " does not exist")
-						    (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
-					    (if (symbolic-link? run-dir)
-						(begin
-						  (debug:print-info 1 "Removing symlink " run-dir)
-						  (handle-exceptions
-						   exn
-						   (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-						   (delete-file run-dir)))
-						(if (directory? run-dir)
-						    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-							(debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-							(handle-exceptions
-							 exn
-							 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-							 (delete-directory run-dir)))
-						    (if run-dir
-							(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
-							(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
-						    ))
-					    ;; Only delete the records *after* removing the directory. If things fail we have a record 
-					    (if (not remove-data-only)
-						(cdb:remote-run db:delete-test-records db #f (db:test-get-id test)))
+					    (runs:remove-test-directory db new-test-dat remove-data-only)
 					    (if (not (null? tal))
 						(loop (car tal)(cdr tal))))))))
 			       ((set-state-status)
@@ -1488,6 +1451,47 @@
 	 ))
      runs))
   #t)
+
+(define (runs:remove-test-directory db test remove-data-only)
+  (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
+	 (real-dir      (if (file-exists? run-dir)
+			    (resolve-pathname run-dir)
+			    #f)))
+    (if (not remove-data-only)
+	(mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f))
+    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
+    (if (and real-dir 
+	     (> (string-length real-dir) 5)
+	     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+	(begin ;; let* ((realpath (resolve-pathname run-dir)))
+	  (debug:print-info 1 "Recursively removing " real-dir)
+	  (if (file-exists? real-dir)
+	      (runs:safe-delete-test-dir real-dir)
+	      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
+	(if real-dir 
+	    (debug:print 0 "WARNING: directory " real-dir " does not exist")
+	    (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
+    (if (symbolic-link? run-dir)
+	(begin
+	  (debug:print-info 1 "Removing symlink " run-dir)
+	  (handle-exceptions
+	   exn
+	   (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+	   (delete-file run-dir)))
+	(if (directory? run-dir)
+	    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+		(debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+		(handle-exceptions
+		 exn
+		 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+		 (delete-directory run-dir)))
+	    (if run-dir
+		(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
+		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
+	    ))
+    ;; Only delete the records *after* removing the directory. If things fail we have a record 
+    (if (not remove-data-only)
+	(cdb:remote-run db:delete-test-records db #f (db:test-get-id test)))))
 
 ;;======================================================================
 ;; Routines for manipulating runs
