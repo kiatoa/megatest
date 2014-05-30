@@ -32,6 +32,19 @@
 (include "db_records.scm")
 (include "run_records.scm")
 
+;;======================================================================
+;; C O M M O N
+;;======================================================================
+
+(define (dtests:get-pre-command #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
+    (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
+
+(define (dtests:get-post-command #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
+    (or cfg-ovrd default-override ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+
+
 (define (test-info-panel testdat store-label widgets)
   (iup:frame 
    #:title "Test Info" ; #:expand "YES"
@@ -530,34 +543,36 @@
 	       (store-button store-label)
 	       (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
-									(let ((cmd (iup:attribute command-text-box "VALUE")))
-									  (system (conc cmd "  &"))))))
+									(let* ((cmd     (iup:attribute command-text-box "VALUE"))
+									       (fullcmd (conc (dtests:get-pre-command)
+											      cmd 
+											      (dtests:get-post-command))))
+									  (debug:print-info 0 "Running command: " fullcmd)
+									  (system fullcmd)))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " -runname "  runname 
+			     (conc "megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
-				   ;; (conc testname "/" (if (equal? item-path "") "%" item-path))
-				   " -state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   " -state RUNNING"))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " -runname " runname 
+			     (conc "megatest -target " keystring " -runname " runname 
 				   " -runtests " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
-				   " ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   ))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " -runname " runname
+			       (conc "megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
-						      "megatest -remove-runs -target " keystring " -runname " runname
+				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%"
 											   item-path))
@@ -565,16 +580,16 @@
 						      " -runtests " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
-						      " ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))
+						      )))
 				       (system (conc cmd " &")))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " -runname " runname
+			       (conc "megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))
+				     " -v"))
 			      )))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
