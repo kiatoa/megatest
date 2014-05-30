@@ -69,13 +69,13 @@
 	  (begin
 	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
 	    (exit))))
-  (let* ((dbpath    (conc *toppath* "/megatest.db")) ;; fname)
-	 (dbexists  (file-exists? dbpath))
+  (let* ((dbpath       (conc *toppath* "/megatest.db")) ;; fname)
+	 (dbexists     (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
-	 (db        (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
-					   (string->number (args:get-arg "-override-timeout"))
-					   6000)))) ;; NB// this is in milliseconds. 136000))) ;; 136000 = 2.2 minutes
+	 (db           (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (handler      (make-busy-timeout (if (args:get-arg "-override-timeout")
+					      (string->number (args:get-arg "-override-timeout"))
+					      6000)))) ;; NB// this is in milliseconds. 136000))) ;; 136000 = 2.2 minutes
     (if (and dbexists
 	     (not write-access))
 	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
@@ -1582,6 +1582,17 @@
 		    (if (null? tal)
 			#f
 			(loop (car tal)(cdr tal))))))))))
+
+(define (db:test-toplevel-num-items db run-id testname)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (num-items)
+       (set! res num-items))
+     db
+     "SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
+     run-id
+     testname)
+    res))
 
 ;;======================================================================
 ;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS

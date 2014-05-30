@@ -1,3 +1,5 @@
+;; Test record accessors
+;;
 (define (make-db:test)(make-vector 20))
 (define-inline (db:test-get-id           vec) (vector-ref vec 0))
 (define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
@@ -27,6 +29,14 @@
 (define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
 (define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
 (define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
+
+;; Test record utility functions
+
+;; Is a test a toplevel?
+;;
+(define (db:test-get-is-toplevel vec)
+  (and (equal? (db:test-get-item-path vec) "")      ;; test is not an item
+       (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
 
 ;; get rows and header from 
 (define-inline (db:get-header vec)(vector-ref vec 0))

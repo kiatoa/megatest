@@ -1202,19 +1202,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
-;; Wait on a run to complete
-;;======================================================================
-
-(if (args:get-arg "-run-wait")
-    (begin
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
-	    (exit 1)))
-      (operate-on 'run-wait)
-      (set! *didsomething* #t)))
-
-;;======================================================================
 ;; Update the tests meta data from the testconfig files
 ;;======================================================================
 
@@ -1251,6 +1238,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(repl)
 		(load (args:get-arg "-load"))))
 	  (exit))
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Wait on a run to complete
+;;======================================================================
+
+(if (args:get-arg "-run-wait")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      (operate-on 'run-wait)
       (set! *didsomething* #t)))
 
 ;;======================================================================
