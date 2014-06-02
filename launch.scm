@@ -332,26 +332,31 @@
 					     ;;       between tries?
 					     (let* ((pid (vector-ref exit-info 0)))
 					       (if (number? pid)
-						   (process-signal pid signal/kill)
-						   ;; (begin
-						   ;;   (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
-						   ;;   (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
-						   ;;     (for-each 
-						   ;;      (lambda (p)
-						   ;;        (let* ((parts  (string-split p))
-						   ;;      	 (p-id   (if (> (length parts) 0)
-						   ;;      		     (string->number (car parts))
-						   ;;      		     #f)))
-						   ;;          (if p-id
-						   ;;      	(begin
-						   ;;      	  (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
-						   ;;      	  (system (conc "kill -9 " p-id))))))
-						   ;;      (car processes))
-						   ;;     (system (conc "kill -9 -" pid))))
+						   (handle-exceptions
+						    exn
+						    (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+						    ;;(process-signal pid signal/kill))
+						    (begin
+						      (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
+						      (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
+							(for-each 
+							 (lambda (p)
+							   (let* ((parts  (string-split p))
+								  (p-id   (if (> (length parts) 0)
+									      (string->number (car parts))
+									      #f)))
+							     (if p-id
+								 (begin
+								   (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
+								   ;; (process-signal pid signal/kill))))) ;; 
+								   (system (conc "kill -9 " p-id))))))
+							 (car processes)))
+						      (system (conc "kill -9 -" pid))
+						      (tests:test-set-status! test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
-								     (args:get-arg "-m") #f)
+;;						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
+						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)
 						     (exit 1) ;; IS THIS NECESSARY OR WISE???
 						     )))
 					     (set! kill-tries (+ 1 kill-tries))
