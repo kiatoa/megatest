@@ -1209,9 +1209,10 @@
 	   (debug:print 4 "RUNNING => runflag: " runflag " STATE: " (test:get-state testdat) " STATUS: " (test:get-status testdat))
 	   (if (not runflag)
 	       (if (not parent-test)
-		   (debug:print 1 "NOTE: Not starting test " full-test-name " as it is state \"" (test:get-state testdat) 
-				"\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
-                                "\" or -force to override"))
+		   (if (runs:lownoise (conc "not starting test" full-test-name) 60)
+		       (debug:print 1 "NOTE: Not starting test " full-test-name " as it is state \"" (test:get-state testdat) 
+				    "\" and status \"" (test:get-status testdat) "\", use -rerun \"" (test:get-status testdat)
+				    "\" or -force to override")))
 	       ;; NOTE: No longer be checking prerequisites here! Will never get here unless prereqs are
 	       ;;       already met.
 	       ;; This would be a great place to do the process-fork
@@ -1272,7 +1273,11 @@
 
 (define (runs:recursive-delete-with-error-msg real-dir)
   (if (> (system (conc "rm -rf " real-dir)) 0)
-      (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f")))
+      (begin
+	;; FAILED, possibly due to permissions, do chmod a+rwx then try one more time
+	(system (conc "chmod -R a+rwx " real-dir))
+	(if (> (system (conc "rm -rf " real-dir)) 0)
+	    (debug:print 0 "ERROR: There was a problem removing " real-dir " with rm -f")))))
 
 (define (runs:safe-delete-test-dir real-dir)
   ;; first delete all sub-directories
