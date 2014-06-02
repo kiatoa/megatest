@@ -207,7 +207,7 @@
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
 	 (test-names         (tests:filter-test-names all-test-names test-patts))
-	 (required-tests     test-names))
+	 (required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 
     (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)

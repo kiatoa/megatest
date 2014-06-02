@@ -116,6 +116,8 @@ Queries
   -show-runconfig         : dump the internal representation of the runconfigs.config file
   -dumpmode json          : dump in json format instead of sexpr
   -show-cmdinfo           : dump the command info for a test (run in test environment)
+  -section sectionName
+  -var varName            : for config and runconfig lookup value for sectionName varName
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -208,6 +210,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-override-timeout"
 			"-test-files"  ;; -test-paths is for listing all
 			"-load"        ;; load and exectute a scheme file
+			"-section"
+			"-var"
 			"-dumpmode"
 			"-run-id"
 			"-ping"
@@ -478,6 +482,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
 	(cond
+	 ((and (args:get-arg "-section")
+	       (args:get-arg "-var"))
+	  (let ((val (configf:lookup data (args:get-arg "-section")(args:get-arg "-var"))))
+	    (if val (print val))))
 	 ((not (args:get-arg "-dumpmode"))
 	  (pp (hash-table->alist data)))
 	 ((string=? (args:get-arg "-dumpmode") "json")
@@ -493,6 +501,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (push-directory *toppath*)
       ;; keep this one local
       (cond 
+       ((and (args:get-arg "-section")
+	     (args:get-arg "-var"))
+	(let ((val (configf:lookup data (args:get-arg "-section")(args:get-arg "-var"))))
+	  (if val (print val))))
        ((not (args:get-arg "-dumpmode"))
 	(pp (hash-table->alist data)))
        ((string=? (args:get-arg "-dumpmode") "json")

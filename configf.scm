@@ -107,7 +107,8 @@
 	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
-	    (print "ERROR: " cmd " returned bad exit code " status))
+	    (lambda ()
+	      (print "ERROR: " cmd " returned bad exit code " status)))
 	  ""))))
 
 ;; Lookup a value in runconfigs based on -reqtarg or -target
@@ -341,7 +342,7 @@
 	      (begin
 		(close-input-port inp)
 		(reverse res))
-	      (loop (read-line inp)(cons inl)))))
+	      (loop (read-line inp)(cons inl res)))))
       '()))
 
 ;;======================================================================
