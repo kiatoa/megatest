@@ -45,8 +45,7 @@
 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
 		                 (exit 1)))))
 	  (runrec      (runs:runrec-make-record))
-	  (target      (or (args:get-arg "-reqtarg")
-		           (args:get-arg "-target")))
+	  (target      (common:args-get-target))
 	  (runname     (or (args:get-arg ":runname")
 		           (args:get-arg "-runname")))
 	  (testpatt    (or (args:get-arg "-testpatt")
@@ -92,8 +91,7 @@
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target      (or (args:get-arg "-reqtarg")
-			  (args:get-arg "-target")
+  (let* ((target      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
@@ -1392,10 +1390,7 @@
 ;; this wrapper is used to reduce the replication of code
 (define (general-run-call switchname action-desc proc)
   (let ((runname (args:get-arg ":runname"))
-	(target  (if (args:get-arg "-target")
-		     (args:get-arg "-target")
-		     (args:get-arg "-reqtarg"))))
-	;; (th1     #f))
+	(target  (common:args-get-target)))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
@@ -1405,9 +1400,7 @@
       (exit 3))
      (else
       (let ((db   #f)
-	    (keys #f)
-	    (target (or (args:get-arg "-reqtarg")
-			(args:get-arg "-target"))))
+	    (keys #f))
 	(if (not (setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
