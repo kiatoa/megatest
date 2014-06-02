@@ -676,9 +676,10 @@
 ;;                          end_time,strftime('%s','now') as now from tests where state in
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
-
 (define (db:find-and-mark-incomplete db #!key (ovr-deadtime #f))
   (let* ((incompleted '())
+	 (oldlaunched '())
+	 (toplevels   '())
 	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
@@ -698,33 +699,64 @@
        ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
        ;;                     (db:test-get-run_duration testdat)))
        ;;                    600) 
+       (db:delay-if-busy)
        (sqlite3:for-each-row 
-	(lambda (test-id)
-	  (set! incompleted (cons test-id incompleted)))
+	(lambda (test-id run-dir uname testname item-path)
+	  (if (and (equal? uname "n/a")
+		   (equal? item-path "")) ;; this is a toplevel test
+	      ;; what to do with toplevel? call rollup?
+	      (begin
+		(set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+		(debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	      (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
 	db
-	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('RUNNING','REMOTEHOSTSTART');"
-	run-id deadtime)
+	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 600 AND state IN ('RUNNING','REMOTEHOSTSTART');"
+	run-id)
 
        ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
        ;;
+       (db:delay-if-busy)
        (sqlite3:for-each-row
-	(lambda (test-id)
-	  (set! incompleted (cons test-id incompleted)))
+	(lambda (test-id run-dir uname testname item-path)
+	  (if (and (equal? uname "n/a")
+		   (equal? item-path "")) ;; this is a toplevel test
+	      ;; what to do with toplevel? call rollup?
+	      (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	      (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
 	db
-	"SELECT id FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time - run_duration) > ? AND state IN ('LAUNCHED');"
-	run-id (* 60 60 24)))
+	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+	run-id))
      run-ids)
-       
+    
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
-    (if (> (length incompleted) 0)
-	(begin
-	  (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc incompleted) ", ") " as INCOMPLETE")
-	  (sqlite3:execute 
-	   db
-	   (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
-		 (string-intersperse (map conc incompleted) ",")
-		 ");"))))))
+    (db:delay-if-busy)
+    (let* ((min-incompleted (filter (lambda (x)
+				     (let* ((testpath (cadr x))
+					    (tdatpath (conc testpath "/testdat.db"))
+					    (dbexists (file-exists? tdatpath)))
+				       (or (not dbexists) ;; if no file then something wrong - mark as incomplete
+					   (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
+				   incompleted))
+	  (min-incompleted-ids (map car min-incompleted))
+	  (all-ids             (append min-incompleted-ids (map car oldlaunched))))
+      (if (> (length all-ids) 0)
+	  (begin
+	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
+	    (sqlite3:execute 
+	     db
+	     (conc "UPDATE tests SET state='INCOMPLETE' WHERE id IN (" 
+		   (string-intersperse (map conc all-ids) ",")
+		   ");")))))
+
+    ;; Now do rollups for the toplevel tests
+    ;;
+    (for-each
+     (lambda (toptest)
+       (let ((test-name (list-ref toptest 3))
+	     (run-id    (list-ref toptest 5)))
+	 (cdb:top-test-set-per-pf-counts *runremote* run-id test-name)))
+     toplevels)))
 		     
 ;; Clean out old junk and vacuum the database
 ;;
@@ -1478,6 +1510,8 @@
      (lambda (count)
        (set! res count))
      (db:get-db dbstruct run-id)
+     ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
      run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
     res))
@@ -1489,9 +1523,9 @@
   (let ((res 0))
     (sqlite3:for-each-row
      (lambda (count)
-       (set! res count))
+       (set! res count))  ;; select * from tests where run_id=1 and uname = 'n/a' and item_path='';
      (db:get-db dbstruct run-id)
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" run-id)
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
     res))
 
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
@@ -1515,6 +1549,9 @@
 	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		   (string-intersperse testnames "','")
 		   "');")))
+             ;; DEBUG FIXME - need to merge this v.155 query correctly   
+             ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
+             ;; AND NOT (uname = 'n/a' AND item_path = '');"
 	res)))
 
 ;; done with run when:
@@ -1782,6 +1819,17 @@
      tstsqry)
     res))
 
+(define (db:test-toplevel-num-items db run-id testname)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (num-items)
+       (set! res num-items))
+     db
+     "SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
+     run-id
+     testname)
+    res))
+
 ;;======================================================================
 ;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS
 ;;======================================================================
@@ -2039,28 +2087,31 @@
 ;; 					      (debug:print 0 "ERROR: too many attempts to access db were made and no sucess. query: "
 ;; 							   query ", params: " params))))
 ;; 			     (proc remtries))
-(define (db:delay-if-busy #!key (count 5))
+(define (db:delay-if-busy #!key (count 6))
   (let ((dbfj (conc *toppath* "/megatest.db-journal")))
     (if (file-exists? dbfj)
 	(case count
+	  ((6)
+	   (thread-sleep! 0.2)
+	   (db:delay-if-busy count: 5))
 	  ((5)
-	   (thread-sleep! 0.1)
+	   (thread-sleep! 0.4)
 	   (db:delay-if-busy count: 4))
 	  ((4)
-	   (thread-sleep! 0.4)
+	   (thread-sleep! 0.8)
 	   (db:delay-if-busy count: 3))
 	  ((3)
-	   (thread-sleep! 1.0)
+	   (thread-sleep! 1.6)
 	   (db:delay-if-busy count: 2))
 	  ((2)
-	   (thread-sleep! 2.0)
+	   (thread-sleep! 3.2)
 	   (db:delay-if-busy count: 1))
 	  ((1)
-	   (thread-sleep! 5.0)
+	   (thread-sleep! 6.4)
 	   (db:delay-if-busy count: 0))
 	  (else
 	   (debug:print-info 0 "delaying db access due to high database load.")
-	   (thread-sleep! 10))))))
+	   (thread-sleep! 12.8))))))
 ;; (db:delay-if-busy)
 ;; (apply sqlite3:execute db query params)))
 ;; (db:delay-if-busy)

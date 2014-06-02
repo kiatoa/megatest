@@ -855,7 +855,7 @@
 				     (string->number mcj)
 				     1))) ;; length of the register queue ahead
 	(reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (current-seconds))
+	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
 	(last-time-some-running (current-seconds)))
 
     ;; Initialize the test-registery hash with tests that already have a record
@@ -874,13 +874,14 @@
 	       (tal         (cdr sorted-test-names))
 	       (reg         '()) ;; registered, put these at the head of tal 
 	       (reruns      '()))
+
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
-      ;; (if (> (current-seconds)(+ last-time-incomplete 900))
-      ;;     (begin
-      ;;       (set! last-time-incomplete (current-seconds))
-      ;;       (cdb:remote-run db:find-and-mark-incomplete #f)))
+      (if (> (current-seconds)(+ last-time-incomplete 900))
+          (begin
+            (set! last-time-incomplete (current-seconds))
+            (cdb:remote-run db:find-and-mark-incomplete #f)))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
@@ -1306,7 +1307,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (keys         (rmt:get-keys))
@@ -1377,71 +1378,43 @@
 				  (run-dir       ;;(filedb:get-path *fdb*
 				   ;; (rmt:sdb-qry 'getid 
 				   (db:test-get-rundir new-test-dat)) ;; )    ;; run dir is from the link tree
-				  (real-dir      (if (file-exists? run-dir)
-						     (resolve-pathname run-dir)
-						     #f))
 				  (test-state    (db:test-get-state new-test-dat))
-				  (test-fulln    (db:test-get-fullname new-test-dat)))
+				  (test-fulln    (db:test-get-fullname new-test-dat))
+				  (uname         (db:test-get-uname    new-test-dat))
+				  (toplevel-with-children (and (db:test-get-is-toplevel test)
+							       (> (cdb:remote-run db:test-toplevel-num-items db run-id test-name) 0))))
 			     (case action
 			       ((remove-runs)
-				(debug:print-info 0 "test: " test-name " itest-state: " test-state)
-				(if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
+				;; if the test is a toplevel-with-children issue an error and do not remove
+				(if toplevel-with-children
+				    (debug:print 0 "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
 				    (begin
-				      (if (not (hash-table-ref/default test-retry-time test-fulln #f))
+				      (debug:print-info 0 "test: " test-name " itest-state: " test-state)
+				      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
 					  (begin
-					    ;; want to set to REMOVING BUT CANNOT do it here?
-					    (hash-table-set! test-retry-time test-fulln (current-seconds))))
-				      (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
-					  ;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
-					  ;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
-					  ;; up and blow it away.
-					  (begin
-					    (debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
+					    (if (not (hash-table-ref/default test-retry-time test-fulln #f))
+						(begin
+						  ;; want to set to REMOVING BUT CANNOT do it here?
+						  (hash-table-set! test-retry-time test-fulln (current-seconds))))
+					    (if (> (- (current-seconds)(hash-table-ref test-retry-time test-fulln)) allow-run-time)
+						;; This test is not in a correct state for cleaning up. Let's try some graceful shutdown steps first
+						;; Set the test to "KILLREQ" and wait five seconds then try again. Repeat up to five times then give
+						;; up and blow it away.
+						(begin
+						  (debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
 					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "FAILEDKILL" "n/a" #f)
-					    (thread-sleep! 1))
-					  (begin
+						  (thread-sleep! 1))
+						(begin
 					    (mt:test-set-state-status-by-id run-id (db:test-get-id test) "KILLREQ" "n/a" #f)
-					    (thread-sleep! 1)))
-				      ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
-				      (if (null? tal)
-					  (loop new-test-dat tal)
-					  (loop (car tal)(append tal (list new-test-dat)))))
-				    (begin
-				      (mt:test-set-state-status-by-id run-id (db:test-get-id test) "REMOVING" "LOCKED" #f)
-				      (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
-				      (if (and real-dir 
-					       (> (string-length real-dir) 5)
-					       (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
-					  (begin ;; let* ((realpath (resolve-pathname run-dir)))
-					    (debug:print-info 1 "Recursively removing " real-dir)
-					    (if (file-exists? real-dir)
-						(runs:safe-delete-test-dir real-dir)
-						(debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
-					  (if real-dir 
-					      (debug:print 0 "WARNING: directory " real-dir " does not exist")
-					      (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
-				      (if (symbolic-link? run-dir)
+						  (thread-sleep! 1)))
+					    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
+					    (if (null? tal)
+						(loop new-test-dat tal)
+						(loop (car tal)(append tal (list new-test-dat)))))
 					  (begin
-					    (debug:print-info 1 "Removing symlink " run-dir)
-					    (handle-exceptions
-					     exn
-					     (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-					     (delete-file run-dir)))
-					  (if (directory? run-dir)
-					      (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
-						  (debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
-						  (handle-exceptions
-						   exn
-						   (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
-						   (delete-directory run-dir)))
-					      (if run-dir
-						  (debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
-						  (debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
-					      ))
-				      ;; Only delete the records *after* removing the directory. If things fail we have a record 
-				      (rmt:delete-test-records (db:test-get-run_id test)(db:test-get-id test))
-				      (if (not (null? tal))
-					  (loop (car tal)(cdr tal))))))
+					    (runs:remove-test-directory db new-test-dat remove-data-only)
+					    (if (not (null? tal))
+						(loop (car tal)(cdr tal))))))))
 			       ((set-state-status)
 				(debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
 				(mt:test-set-state-status-by-id run-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
@@ -1476,6 +1449,47 @@
 	 ))
      runs))
   #t)
+
+(define (runs:remove-test-directory db test remove-data-only)
+  (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
+	 (real-dir      (if (file-exists? run-dir)
+			    (resolve-pathname run-dir)
+			    #f)))
+    (if (not remove-data-only)
+	(mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f))
+    (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
+    (if (and real-dir 
+	     (> (string-length real-dir) 5)
+	     (file-exists? real-dir)) ;; bad heuristic but should prevent /tmp /home etc.
+	(begin ;; let* ((realpath (resolve-pathname run-dir)))
+	  (debug:print-info 1 "Recursively removing " real-dir)
+	  (if (file-exists? real-dir)
+	      (runs:safe-delete-test-dir real-dir)
+	      (debug:print 0 "WARNING: test dir " real-dir " appears to not exist or is not readable")))
+	(if real-dir 
+	    (debug:print 0 "WARNING: directory " real-dir " does not exist")
+	    (debug:print 0 "WARNING: no real directory corrosponding to link " run-dir ", nothing done")))
+    (if (symbolic-link? run-dir)
+	(begin
+	  (debug:print-info 1 "Removing symlink " run-dir)
+	  (handle-exceptions
+	   exn
+	   (debug:print 0 "ERROR:  Failed to remove symlink " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+	   (delete-file run-dir)))
+	(if (directory? run-dir)
+	    (if (> (directory-fold (lambda (f x)(+ 1 x)) 0 run-dir) 0)
+		(debug:print 0 "WARNING: refusing to remove " run-dir " as it is not empty")
+		(handle-exceptions
+		 exn
+		 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
+		 (delete-directory run-dir)))
+	    (if run-dir
+		(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
+		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
+	    ))
+    ;; Only delete the records *after* removing the directory. If things fail we have a record 
+    (if (not remove-data-only)
+	(cdb:remote-run db:delete-test-records db #f (db:test-get-id test)))))
 
 ;;======================================================================
 ;; Routines for manipulating runs

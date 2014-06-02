@@ -94,6 +94,14 @@
 (define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
 (define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
 
+;; Test record utility functions
+
+;; Is a test a toplevel?
+;;
+(define (db:test-get-is-toplevel vec)
+  (and (equal? (db:test-get-item-path vec) "")      ;; test is not an item
+       (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
+
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
 ;;
 (define (make-db:mintest)(make-vector 7))

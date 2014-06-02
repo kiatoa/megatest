@@ -40,10 +40,10 @@ test0 : cleanprep
 test1 : cleanprep
 
 test2 : fullprep
-	cd fullrun;$(MEGATEST) -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
-	cd fullrun;megatest -runtests % -target ubuntu/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
-	cd fullrun;megatest -runtests %/,%/ai -target ubuntu/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
-	cd fullrun;megatest -runtests runfirst/%,%/ai -target ubuntu/nfs/none :runname $(RUNNAME)_02 -debug $(DEBUG)
+	cd fullrun;$(MEGATEST) -preclean -runtests ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none :runname $(RUNNAME) -debug $(DEBUG) $(LOGGING)
+	cd fullrun;megatest -preclean -runtests % -target ubuntu/nfs/none :runname $(RUNNAME)_01 -testpatt %/,%/ai -debug $(DEBUG)
+	cd fullrun;megatest -preclean -runtests %/,%/ai -target ubuntu/nfs/none :runname $(RUNAME)_02 -debug $(DEBUG)
+	cd fullrun;megatest -preclean -runtests runfirst/%,%/ai -target ubuntu/nfs/none :runname $(RUNNAME)_02 -debug $(DEBUG)
 	cd fullrun;megatest -runtests %/,%/winter -target ubuntu/nfs/none :runname $(RUNNAME)_03  -debug $(DEBUG)
 	sleep 40;cd fullrun;megatest -target ubuntu/nfs/none :runname $(RUNNAME) -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -debug $(DEBUG) $(LOGGING)
 
@@ -52,35 +52,35 @@ test3 : fullprep test3a test3b
 
 test3a :
 	@echo Run runfirst and any waitons.
-	cd fullrun;$(MEGATEST) -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b 
+	cd fullrun;$(MEGATEST) -preclean -runtests runfirst -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b 
 
 test3b :
 	@echo Run all_toplevel and all waitons
-	cd fullrun;$(MEGATEST) -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_c
+	cd fullrun;$(MEGATEST) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_c
 
 test4 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
-	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 test4a : cleanprep
-	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 # NOTE: Only one instance can be a server
 test5 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
-	cd fullrun;sleep 0;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
-	cd fullrun;sleep 3;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
-	cd fullrun;sleep 6;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
-	cd fullrun;sleep 9;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
-	cd fullrun;sleep 12;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
-	cd fullrun;sleep 15;$(MEGATEST) -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &
+	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
+	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
+	cd fullrun;sleep 5;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ac -debug $(DEBUG) $(LOGGING) > ac.log 2> ac.log &
+	cd fullrun;sleep 8;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ad -debug $(DEBUG) $(LOGGING) > ad.log 2> ad.log &	
+#	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ae -debug $(DEBUG) $(LOGGING) > ae.log 2> ae.log &	
+#	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_af -debug $(DEBUG) $(LOGGING) > af.log 2> af.log &
 
 # MUST ADD THIS BACK IN ASAP!!!!
 	# cd fullrun;sleep 10;$(MEGATEST) -run-wait  -target $(TARGET) :runname % -testpatt % :state RUNNING,LAUNCHED,NOT_STARTED,REMOTEHOSTSTART;echo ALL DONE
 
 test6: fullprep
-	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
-	cd fullrun;$(MEGATEST) -runtests runfirst -testpatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
+	cd fullrun;$(MEGATEST) -preclean -runtests runfirst -testpatt %/1 -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -v
+	cd fullrun;$(MEGATEST) -preclean -runtests runfirst -testpatt %blahha% -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_itempatt -debug 10
 	cd fullrun;$(MEGATEST) -rollup :runname newrun -target ubuntu/nfs/none -debug 10
 
 test7: 
@@ -88,23 +88,23 @@ test7:
 	(cd simplerun; \
 	 $(MEGATEST) -server - -daemonize; \
          $(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
-         $(MEGATEST) -runtests %  -target a/b :runname c; sleep 5; \
+         $(MEGATEST) -preclean -runtests %  -target a/b :runname c; sleep 5; \
 	 $(MEGATEST) -remove-runs -target a/c :runname c; \
-	 $(MEGATEST) -runtests %  -target a/c :runname c; \
+	 $(MEGATEST) -preclean -runtests %  -target a/c :runname c; \
 	 $(MEGATEST) -remove-runs -target a/b :runname c -testpatt % ; \
-	 $(MEGATEST) -runtests %  -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
+	 $(MEGATEST) -preclean -runtests %  -target a/d :runname c;$(MEGATEST) -list-runs %|egrep ^Run:) > test7.log 2> test7.log 
 	logpro test7.logpro test7.html < test7.log
 	@echo 
 	@echo Run \"firefox test7.html\" to see the results.
 
 # This one failed with v1.55
 test8a : 
-	cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target ubuntu/nfs/none :runname $(RUNNAME)_waiton_single
+	cd fullrun;$(MEGATEST) -preclean -runtests priority_10_waiton_1 -target ubuntu/nfs/none :runname $(RUNNAME)_waiton_single
 
 test8 : test8a
-	cd fullrun;$(MEGATEST) -runtests lineitem_fail 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singletest
-	cd fullrun;$(MEGATEST) -runtests runfirst/fall 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem
-	cd fullrun;$(MEGATEST) -runtests test_mt_vars/2 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem_waiton
+	cd fullrun;$(MEGATEST) -preclean -runtests lineitem_fail 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singletest
+	cd fullrun;$(MEGATEST) -preclean -runtests runfirst/fall 1 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem
+	cd fullrun;$(MEGATEST) -preclean -runtests test_mt_vars/2 -target ubuntu/nfs/none :runname $(RUNNAME)_singleitem_waiton
 
 # Some simple checks for bootstrapping and run loop logic 
 
@@ -112,33 +112,33 @@ test9 : minsetup test9a test9b test9c test9d test9e
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
-	cd mintest;$(MEGATEST) -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9b :
 	@echo Run simple mintest d with one waiton c
-	cd mintest;$(MEGATEST) -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
-	cd mintest;$(MEGATEST) -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
 	@echo Run an itemized test with no items
-	cd mintest;$(MEGATEST) -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9e :
 	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
-	cd mintest;$(MEGATEST) -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously
 	(cd fullrun;$(MEGATEST) -server - ;sleep 2)&
 	for targ in mint/btrfs/mintdir sunos/sshfs/loc; do \
-	   (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$targ :runname $(RUNNAME) &); done
+	   (cd fullrun;$(MEGATEST) -preclean -runtests priority_10_waiton_1 -target $$targ :runname $(RUNNAME) &); done
 	for sys in ubuntu suse redhat debian;do \
 	  for fs in afs nfs zfs; do \
 	     for dpath in none tmp; do \
-	        (cd fullrun;$(MEGATEST) -runtests priority_10_waiton_1 -target $$sys/$$fs/$$dpath :runname $(RUNNAME) &);\
+	        (cd fullrun;$(MEGATEST) -preclean -runtests priority_10_waiton_1 -target $$sys/$$fs/$$dpath :runname $(RUNNAME) &);\
 	     done;done;done
 
 test11 :

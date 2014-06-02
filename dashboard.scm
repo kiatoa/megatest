@@ -1456,7 +1456,9 @@ Misc
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))
-	 (monitor-modtime (file-modification-time *monitor-db-path*))
+	 (monitor-modtime (if (file-exists? *monitor-db-path*)
+			      (file-modification-time *monitor-db-path*)
+			      -1))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
     (if (and (eq? *current-tab-number* 0)

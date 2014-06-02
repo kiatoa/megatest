@@ -27,7 +27,9 @@
 	 (dbpath       (conc linktree "/.db/monitor.db"))
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
-	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
+	 (mdb          (if (file-write-access? *toppath*)
+			   (sqlite3:open-database dbpath)
+			   (sqlite3:open-database ":memory:"))) ;; (never-give-up-open-db dbpath))
 	 (handler      (make-busy-timeout 36000)))
     (if (and exists
 	     (not write-access))

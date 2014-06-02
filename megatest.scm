@@ -72,6 +72,7 @@ Launching and managing runs
   -set-run-status status  : sets status for run to status, requires -target and -runname
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
+  -preclean               : remove the existing test directory before running the test
 
 Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs etc.)
   -target key1/key2/...   : run for key1, key2, etc.
@@ -234,6 +235,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-summarize-items"
 		        "-gui"
 			"-daemonize"
+			"-preclean"
 			;; misc
 			"-archive"
 			"-repl"
@@ -1196,19 +1198,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 ;;======================================================================
-;; Wait on a run to complete
-;;======================================================================
-
-(if (args:get-arg "-run-wait")
-    (begin
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
-	    (exit 1)))
-      (operate-on 'run-wait)
-      (set! *didsomething* #t)))
-
-;;======================================================================
 ;; Update the tests meta data from the testconfig files
 ;;======================================================================
 
@@ -1247,6 +1236,19 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		(load (args:get-arg "-load")))
 	    (db:close-all dbstruct))
 	  (exit))
+      (set! *didsomething* #t)))
+
+;;======================================================================
+;; Wait on a run to complete
+;;======================================================================
+
+(if (args:get-arg "-run-wait")
+    (begin
+      (if (not (setup-for-run))
+	  (begin
+	    (debug:print 0 "Failed to setup, exiting") 
+	    (exit 1)))
+      (operate-on 'run-wait)
       (set! *didsomething* #t)))
 
 ;; Not converted to use dbstruct yet
