@@ -571,11 +571,12 @@
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
      (else
-      (debug:print 1 "WARNING: FAILS or incomplete tests are preventing completion of this run. Dropping test " hed " from the run queue")
-      (list (runs:queue-next-hed tal reg reglen regfull)
-		(runs:queue-next-tal tal reg reglen regfull)
-		(runs:queue-next-reg tal reg reglen regfull)
-		reruns))))) ;; (list (car newtal)(cdr newtal) reg reruns)))))
+      (debug:print 0 "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
+      ;; (list (runs:queue-next-hed tal reg reglen regfull)
+      ;;   	(runs:queue-next-tal tal reg reglen regfull)
+      ;;   	(runs:queue-next-reg tal reg reglen regfull)
+      ;;   	reruns)
+      (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
   (if (null? inlst)
@@ -583,7 +584,11 @@
       (map (lambda (t)
 	     (cond
 	      ((vector? t)
-	       (conc (db:test-get-state t) "/" (db:test-get-status t)))
+	       (let ((test-name (db:test-get-testname t))
+		     (item-path (db:test-get-item-path t))
+		     (test-state (db:test-get-state t))
+		     (test-status (db:test-get-status t)))
+		 (conc test-name (if (equal? item-path "") "" "/") item-path ":" test-state "/" test-status)))
 	      ((string? t)
 	       t)
 	      (else 
@@ -610,7 +615,8 @@
 				  (conc " WARNING: t is not a vector=" t )))
 			    prereqs-not-met) ", ") ") fails: " fails)
     
-    (if (not (null? prereqs-not-met))
+    (if (and (not (null? prereqs-not-met))
+	     (runs:lownoise (conc "waiting on tests " prereqs-not-met hed) 60))
 	(debug:print-info 2 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
 
     ;; Don't know at this time if the test have been launched at some time in the past
@@ -717,49 +723,110 @@
       ;; If one or more of the prereqs-not-met are FAIL then we can issue
       ;; a message and drop hed from the items to be processed.
       ;; (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met)
-      (if (not (null? prereqs-not-met))
+      (if (and (not (null? prereqs-not-met))
+	       (runs:lownoise (conc "waiting on tests " prereqs-not-met hed) 60))
 	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
 						    (runs:mixed-list-testname-and-testrec->list-of-strings 
 						     prereqs-not-met) ", ")))
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
-	    (debug:print-info 0 "Waiting for more work to do...")
+	    (if  (runs:lownoise "Waiting for more work to do..." 60)
+		 (debug:print-info 0 "Waiting for more work to do..."))
 	    (thread-sleep! 1)
 	    (list (car newtal)(cdr newtal) reg reruns))
 	  ;; the waiton is FAIL so no point in trying to run hed ever again
 	  (if (or (not (null? reg))(not (null? tal)))
 	      (if (vector? hed)
-		  (begin 
-		    (debug:print 1 "WARN: Dropping test " (db:test-get-testname hed) "/" (db:test-get-item-path hed)
+		  (begin
+		    (debug:print 1 "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
+		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
 		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
 		    (list (runs:queue-next-hed tal reg reglen regfull)
 			  (runs:queue-next-tal tal reg reglen regfull)
 			  (runs:queue-next-reg tal reg reglen regfull)
 			  reruns ;; WAS: (cons hed reruns) ;; but that makes no sense?
 			  ))
-		  (begin
-		    (debug:print 0 "WARNING: Test may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
-		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
-		    ;; (list hed tal reg reruns)
-		    ;; (list (car newtal)(cdr newtal) reg reruns)
-		    (list (runs:queue-next-hed tal reg reglen regfull)
-			  (runs:queue-next-tal tal reg reglen regfull)
-			  (runs:queue-next-reg tal reg reglen regfull)
-			  reruns) ;; (cons hed reruns))
-		    ;;(list (if (null? tal)(car newtal)(car tal))
-		    ;;      tal
-		    ;;      reg
-		    ;;      reruns)
-		    ))
+		  (let ((nth-try (hash-table-ref/default test-registry hed 0)))
+		    (cond
+		     ((member "RUNNING" (map db:test-get-state prereqs-not-met))
+		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
+			  (debug:print 0 "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
+		      (thread-sleep! 4)
+		      (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns))
+		     ((or (not nth-try)
+			  (and (number? nth-try)
+			       (< nth-try 10)))
+		      (hash-table-set! test-registry hed (if (number? nth-try)
+							     (+ nth-try 1)
+							     0))
+		      (if (runs:lownoise (conc "not removing test " hed) 60)
+			  (debug:print 1 "WARNING: not removing test " hed " from queue although it may not be runnable due to FAILED prerequisites"))
+		      ;; may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+		      (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
+		      ;; (list hed tal reg reruns)
+		      ;; (list (car newtal)(cdr newtal) reg reruns)
+		      ;; (hash-table-set! test-registry hed 'removed)
+		      (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns))
+		     ((symbol? nth-try)
+		      (if (eq? nth-try 'removed) ;; removed is removed - drop it NOW
+			  (if (null? tal)
+			      #f ;; yes, really
+			      (list (car tal)(cdr tal) reg reruns))
+			  (begin
+			    (if (runs:lownoise (conc "FAILED prerequisites or other issue" hed) 60)
+				(debug:print 0 "WARNING: test " hed " has FAILED prerequisites or other issue. Internal state " nth-try " will be overridden and we'll retry."))
+			    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "KEEP_TRYING" #f)
+			    (hash-table-set! test-registry hed 0)
+			    (list (runs:queue-next-hed newtal reg reglen regfull)
+				  (runs:queue-next-tal newtal reg reglen regfull)
+				  (runs:queue-next-reg newtal reg reglen regfull)
+				  reruns))))
+		     (else
+		      (if (runs:lownoise (conc "FAILED prerequitests and we tried" hed) 60)
+			  (debug:print 0 "WARNING: test " hed " has FAILED prerequitests and we've tried at least 10 times to run it. Giving up now."))
+		      ;; (debug:print 0 "         prereqs: " prereqs-not-met)
+		      (hash-table-set! test-registry hed 'removed)
+		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
+		      (mt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
+		      (list (if (null? tal)(car newtal)(car tal))
+			    tal
+			    reg
+			    reruns)))))
 	      ;; can't drop this - maybe running? Just keep trying
-	      (list hed
-		    tal
-		    reg
-		    reruns)))))))
+	      (let ((runable-tests (runs:runable-tests prereqs-not-met)))
+		(if (null? runable-tests)
+		    #f   ;; I think we are truly done here
+		    (list (runs:queue-next-hed newtal reg reglen regfull)
+			    (runs:queue-next-tal newtal reg reglen regfull)
+			    (runs:queue-next-reg newtal reg reglen regfull)
+			    reruns)))))))))
+
+;; scan a list of tests looking to see if any are potentially runnable
+(define (runs:runable-tests tests)
+  (filter (lambda (t)
+	    (if (not (vector? t))
+		t
+		(let ((state  (db:test-get-state t))
+		      (status (db:test-get-status t)))
+		  (case (string->symbol state)
+		    ((COMPLETED) #f)
+		    ((NOT_STARTED)
+		     (if (member status '("TEN_STRIKES" "BLOCKED"))
+			 #f
+			 t))
+		    ((DELETED) #f)
+		    (else t)))))
+	  tests))
 
 ;; every time though the loop increment the test/itempatt val.
 ;; when the min is > max-allowed and none running then force exit
@@ -852,7 +919,8 @@
 	(if (member (hash-table-ref/default test-registry tfullname #f) 
 		    '(DONOTRUN removed)) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
 	    (begin
-	      (debug:print-info 0 "Skipping test " tfullname " as it has been marked do not run due to being completed or not runnable")
+	      (if (runs:lownoise (conc "been marked do not run " tfullname) 60)
+		  (debug:print-info 0 "Skipping test " tfullname " as it has been marked do not run due to being completed or not runnable"))
 	      (if (or (not (null? tal))(not (null? reg)))
 		  (loop (runs:queue-next-hed tal reg reglen regfull)
 			(runs:queue-next-tal tal reg reglen regfull)

@@ -27,7 +27,7 @@ dashboard :
 	$(DASHBOARD) -rows 20 &
 
 compile :
-	(cd ../../..;make && make install)
+	(cd ../../..;make -j && make install)
 
 clean :
 	rm -rf ../simple*/*/* megatest.db db/*

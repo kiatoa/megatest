@@ -1890,9 +1890,14 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
+                                                     AND status NOT IN ('TEN_STRIKES','BLOCKED')
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
                             status=CASE 
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE run_id=? AND testname=?
+                                              AND item_path != ''
+                                              AND state IN ('NOT_STARTED','BLOCKED')) > 0 THEN 'FAIL'
                                   WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   WHEN (SELECT count(id) FROM tests
