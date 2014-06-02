@@ -70,8 +70,8 @@
     (let* ((notpatt  (equal? (substring-index "~" patt) 0))
 	   (newpatt  (if notpatt (substring patt 1) patt))
 	   (finpatt  (if like
-			(string-substitute (regexp "%") ".*" newpatt)
-			(string-substitute (regexp "\\*") ".*" newpatt)))
+			(string-substitute (regexp "%") ".*" newpatt #f)
+			(string-substitute (regexp "\\*") ".*" newpatt #f)))
 	   (res      #f))
       ;; (print "tests:glob-like-match => notpatt: " notpatt ", newpatt: " newpatt ", finpatt: " finpatt)
       (set! res (string-match (regexp finpatt (if like #t #f)) str))

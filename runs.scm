@@ -205,11 +205,11 @@
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
-	 (required-tests    '())
 	 (test-records       (make-hash-table))
 	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     (hash-table-keys all-tests-registry))
-	 (test-names         (tests:filter-test-names all-test-names test-patts)))
+	 (test-names         (tests:filter-test-names all-test-names test-patts))
+	 (required-tests     test-names))
 
     (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
