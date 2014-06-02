@@ -501,7 +501,7 @@
 ;; (define open-run-close 
 (define open-run-close open-run-close-exception-handling)
 		;;	   open-run-close-no-exception-handling
-			   open-run-close-exception-handling)
+;;			   open-run-close-exception-handling)
 ;;)
 
 (define (db:initialize-main-db db)
@@ -1818,13 +1818,13 @@
 
 (define (db:tests-register-test dbstruct run-id test-name item-path)
   (sqlite3:execute (db:get-db dbstruct run-id) 'register-test run-id test-name item-path))
-       (let ((sleep-time (random 20))
-	     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-	 (case err-status
-	   ((busy)(thread-sleep! 4))
-	   (else
-	    (debug:print 0 "WARNING: possible problem with call to cdb:remote-run, database may be read-only and locked, waiting and trying again ...")
-	    (thread-sleep! sleep-time)))
+;;        (let ((sleep-time (random 20))
+;; 	     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+;; 	 (case err-status
+;; 	   ((busy)(thread-sleep! 4))
+;; 	   (else
+;; 	    (debug:print 0 "WARNING: possible problem with call to cdb:remote-run, database may be read-only and locked, waiting and trying again ...")
+;; 	    (thread-sleep! sleep-time)))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (let ((res #f))

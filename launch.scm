@@ -146,7 +146,9 @@
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
-	  (tests:set-full-meta-info test-id run-id 0 work-area)
+	  ;; (tests:set-full-meta-info #f test-id run-id 0 work-area)
+	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
+	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
 
 	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
 	  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
@@ -304,7 +306,9 @@
 							    (current-seconds) 
 							    start-seconds)))))
 					(kill-tries 0))
-				   (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
+				   ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
+				   ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
+				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
 				   (let loop ((minutes   (calc-minutes)))
 				     (begin
 				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
@@ -316,7 +320,9 @@
 										#t)
 									      #f)))))
 				       ;; open-run-close not needed for test-set-meta-info
+				       ;; (tests:set-partial-meta-info #f test-id run-id minutes work-area)
 				       (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
+				       ;; (tests:set-partial-meta-info #f test-id run-id minutes work-area 10)
 				       ;; (tests:set-partial-meta-info test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
