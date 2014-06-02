@@ -807,9 +807,11 @@
     res))
 
 (define (db:set-var dbstruct var val)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
 (define (db:del-var dbstruct var)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "DELETE FROM metadat WHERE var=?;" var))
 
 ;; use a global for some primitive caching, it is just silly to
@@ -909,6 +911,7 @@
     (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
+	  (db:delay-if-busy)
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
 		 allvals)
 	  (apply sqlite3:for-each-row 
@@ -919,6 +922,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
+	  (db:delay-if-busy)
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
@@ -1161,6 +1165,7 @@
       finalres)))
 
 (define (db:set-comment-for-run dbstruct run-id comment)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
 		   run-id))
 
@@ -1168,12 +1173,14 @@
 (define (db:delete-run dbstruct run-id)
   ;; First set any related tests to DELETED
   (let ((db (db:get-db dbstruct run-id)))
+    (db:delay-if-busy)
     (sqlite3:execute db "UPDATE tests SET state='DELETED',comment='';")
     (sqlite3:execute db "DELETE FROM test_steps;")
     (sqlite3:execute db "DELETE FROM test_data;")
     (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
 
 (define (db:update-run-event_time dbstruct run-id)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))
 
 (define (db:lock/unlock-run dbstruct run-id lock unlock user)
@@ -1182,11 +1189,13 @@
 			    "unlocked"
 			    "locked")))) ;; semi-failsafe
     (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
+    (db:delay-if-busy)
     (sqlite3:execute (db:get-db dbstruct #f) "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
 (define (db:set-run-status db run-id status #!key (msg #f))
+  (db:delay-if-busy)
   (if msg
       (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
       (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id)))
@@ -1387,6 +1396,7 @@
   (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
 (define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses #!key (not-in #f)(qryvals #f))
+  (db:delay-if-busy)
   (let ((res '()))
     (for-each 
      (lambda (run-id)
@@ -1404,6 +1414,7 @@
 (define (db:delete-test-records dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id)))
     (db:general-call db 'delete-test-step-records (list test-id))
+    (db:delay-if-busy)
     (db:general-call db 'delete-test-data-records (list test-id))
     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
@@ -1430,6 +1441,7 @@
 			       (if currstatus (conc "status='" currstatus "' AND ") "")
 			       " run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
 		;;(debug:print 0 "QRY: " qry)
+		(db:delay-if-busy)
 		(sqlite3:execute (db:get-db dbstruct run-id) qry run-id newstate newstatus testname testname)))
 	    testnames))
 
@@ -1437,6 +1449,7 @@
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
 ;;
 (define (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
+  (db:delay-if-busy)
   (let ((db (db:get-db dbstruct run-id)))
     (cond
      ((and newstate newstatus newcomment)
@@ -1453,6 +1466,7 @@
 
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
+  (db:delay-if-busy)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
  		   state status run-id test-name item-path))
 
@@ -1603,6 +1617,7 @@
     res))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
+  (db:delay-if-busy)
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
     (sqlite3:for-each-row
@@ -2024,6 +2039,31 @@
 ;; 					      (debug:print 0 "ERROR: too many attempts to access db were made and no sucess. query: "
 ;; 							   query ", params: " params))))
 ;; 			     (proc remtries))
+(define (db:delay-if-busy #!key (count 5))
+  (let ((dbfj (conc *toppath* "/megatest.db-journal")))
+    (if (file-exists? dbfj)
+	(case count
+	  ((5)
+	   (thread-sleep! 0.1)
+	   (db:delay-if-busy count: 4))
+	  ((4)
+	   (thread-sleep! 0.4)
+	   (db:delay-if-busy count: 3))
+	  ((3)
+	   (thread-sleep! 1.0)
+	   (db:delay-if-busy count: 2))
+	  ((2)
+	   (thread-sleep! 2.0)
+	   (db:delay-if-busy count: 1))
+	  ((1)
+	   (thread-sleep! 5.0)
+	   (db:delay-if-busy count: 0))
+	  (else
+	   (debug:print-info 0 "delaying db access due to high database load.")
+	   (thread-sleep! 10))))))
+;; (db:delay-if-busy)
+;; (apply sqlite3:execute db query params)))
+;; (db:delay-if-busy)
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
@@ -2054,10 +2094,12 @@
 
 ;; create a new record for a given testname
 (define (db:testmeta-add-record dbstruct testname)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))
 
 ;; update one of the testmeta fields
 (define (db:testmeta-update-field dbstruct testname field value)
+  (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
 
 (define (db:testmeta-get-all dbstruct)
