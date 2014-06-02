@@ -46,8 +46,8 @@
 		                 (exit 1)))))
 	  (runrec      (runs:runrec-make-record))
 	  (target      (common:args-get-target))
-	  (runname     (or (args:get-arg ":runname")
-		           (args:get-arg "-runname")))
+	  (runname     (or (args:get-arg "-runname")
+		           (args:get-arg ":runname")))
 	  (testpatt    (or (args:get-arg "-testpatt")
 		           (args:get-arg "-runtests")))
 	  (keys        (keys:config-get-fields mconfig))
@@ -91,12 +91,16 @@
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
 (define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target      (or (common:args-get-target)
-			  (get-environment-variable "MT_TARGET")))
+  (let* ((target    (or (common:args-get-target)
+			(get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
-	 (keyvals (if inkeyvals inkeyvals (keys:target->keyval keys target)))
-	 (vals (hash-table-ref/default *env-vars-by-run-id* run-id #f)))
+	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
+	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
+	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
     ;; get the info from the db and put it in the cache
+    (if link-tree
+	(setenv "MT_LINKTREE" link-tree)
+	(debug:print 0 "ERROR: linktree not set, should be set in megatest.config in [setup] section."))
     (if (not vals)
 	(let ((ht (make-hash-table)))
 	  (hash-table-set! *env-vars-by-run-id* run-id ht)
@@ -375,9 +379,10 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
@@ -573,24 +578,27 @@
 		reruns))))) ;; (list (car newtal)(cdr newtal) reg reruns)))))
 
 (define (runs:mixed-list-testname-and-testrec->list-of-strings inlst)
-  (map (lambda (t)
-	 (cond
-	  ((vector? t)
-	   (conc (db:test-get-state t) "/" (db:test-get-status t)))
-	  ((string? t)
-	   t)
-	  (else 
-	   (conc t))))
-       inlst))
+  (if (null? inlst)
+      '()
+      (map (lambda (t)
+	     (cond
+	      ((vector? t)
+	       (conc (db:test-get-state t) "/" (db:test-get-status t)))
+	      ((string? t)
+	       t)
+	      (else 
+	       (conc t))))
+	   inlst)))
 
-(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)
+(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap)
   (let* ((run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
 	 (loop-list               (list hed tal reg reruns)))
@@ -603,7 +611,7 @@
 			    prereqs-not-met) ", ") ") fails: " fails)
     
     (if (not (null? prereqs-not-met))
-	(debug:print-info 1 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
+	(debug:print-info 2 "waiting on tests; " (string-intersperse (runs:mixed-list-testname-and-testrec->list-of-strings prereqs-not-met) ", ")))
 
     ;; Don't know at this time if the test have been launched at some time in the past
     ;; i.e. is this a re-launch?
@@ -713,7 +721,6 @@
 	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
 						    (runs:mixed-list-testname-and-testrec->list-of-strings 
 						     prereqs-not-met) ", ")))
-      
       (if (null? fails)
 	  (begin
 	    ;; couldn't run, take a breather
@@ -732,13 +739,27 @@
 		    (list (runs:queue-next-hed tal reg reglen regfull)
 			  (runs:queue-next-tal tal reg reglen regfull)
 			  (runs:queue-next-reg tal reg reglen regfull)
-			  (cons hed reruns)))
+			  reruns ;; WAS: (cons hed reruns) ;; but that makes no sense?
+			  ))
 		  (begin
-		    (debug:print 0 "WARNING: Test not processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
+		    (debug:print 0 "WARNING: Test may not have processed correctly. Could be a race condition in your test implementation? Dropping test " hed) ;;  " as it has prerequistes that are FAIL. (NOTE: hed is not a vector)")
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (list hed tal reg reruns)
-		    (list (car newtal)(cdr newtal) reg reruns)
-		    ))))))))
+		    ;; (list (car newtal)(cdr newtal) reg reruns)
+		    (list (runs:queue-next-hed tal reg reglen regfull)
+			  (runs:queue-next-tal tal reg reglen regfull)
+			  (runs:queue-next-reg tal reg reglen regfull)
+			  reruns) ;; (cons hed reruns))
+		    ;;(list (if (null? tal)(car newtal)(car tal))
+		    ;;      tal
+		    ;;      reg
+		    ;;      reruns)
+		    ))
+	      ;; can't drop this - maybe running? Just keep trying
+	      (list hed
+		    tal
+		    reg
+		    reruns)))))))
 
 ;; every time though the loop increment the test/itempatt val.
 ;; when the min is > max-allowed and none running then force exit
@@ -801,6 +822,7 @@
 	     (jobgroup    (config-lookup tconfig "test_meta" "jobgroup"))
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 			    (if m (map string->symbol (string-split m)) '(normal))))
+	     (itemmap     (configf:lookup tconfig "requirements" "itemmap"))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
 	     (priority    (tests:testqueue-get-priority   test-record))
 	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
@@ -886,7 +908,7 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry)))
+	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap)))
 	    (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
@@ -941,7 +963,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
@@ -1389,14 +1411,14 @@
 ;; Since many calls to a run require pretty much the same setup 
 ;; this wrapper is used to reduce the replication of code
 (define (general-run-call switchname action-desc proc)
-  (let ((runname (args:get-arg ":runname"))
+  (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	(target  (common:args-get-target)))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the target with -target")
       (exit 3))
      ((not runname)
-      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with :runname runname")
+      (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
       (let ((db   #f)
@@ -1487,7 +1509,7 @@
 ;; NOT PORTED - DO NOT USE YET
 ;;
 (define (runs:rollup-run keys runname user keyvals)
-  (debug:print 4 "runs:rollup-run, keys: " keys " :runname " runname " user: " user)
+  (debug:print 4 "runs:rollup-run, keys: " keys " -runname " runname " user: " user)
   (let* ((db              #f)
 	 ;; register run operates on the main db
 	 (new-run-id      (rmt:register-run keyvals runname "new" "n/a" user))

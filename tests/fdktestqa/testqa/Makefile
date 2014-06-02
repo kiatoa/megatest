@@ -2,6 +2,9 @@ BINDIR    = $(PWD)/../../../bin
 PATH     := $(BINDIR):$(PATH)
 MEGATEST  = $(BINDIR)/megatest
 DASHBOARD = $(BINDIR)/dashboard
+RUNNAME   = a
+
+
 all :
 	$(MEGATEST) -remove-runs -target a/b :runname c -testpatt %/%
 	$(MEGATEST) -runtests % -target a/b :runname c
@@ -17,6 +20,9 @@ bigrun :
 bigrun2 :
 	$(MEGATEST) -runtests bigrun2 -target a/bigrun2 :runname a$(shell date +%V)
 
+bigrun3 :
+	$(MEGATEST) -runtests bigrun3 -target a/bigrun3 :runname $(RUNNAME)
+
 dashboard : 
 	$(DASHBOARD) -rows 20 &
 
@@ -25,3 +31,4 @@ compile :
 
 clean :
 	rm -rf ../simple*/*/* megatest.db db/*
+

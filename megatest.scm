@@ -63,13 +63,13 @@ Launching and managing runs
   -runall                 : run all tests that are not state COMPLETED and status PASS, 
                             CHECK or KILLED
   -runtests tst1,tst2 ... : run tests
-  -remove-runs            : remove the data for a run, requires :runname and -testpatt
+  -remove-runs            : remove the data for a run, requires -runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
-  -set-run-status status  : sets status for run to status, requires -target and :runname
+  -set-run-status status  : sets status for run to status, requires -target and -runname
   -get-run-status         : gets status for run specified by target and runname
   -run-wait               : wait on run specified by target and runname
 
@@ -77,9 +77,9 @@ Selectors (e.g. use for -runtests, -remove-runs, -set-state-status, -list-runs e
   -target key1/key2/...   : run for key1, key2, etc.
   -reqtarg key1/key2/...  : run for key1, key2, etc. but key1/key2 must be in runconfig
   -testpatt patt1/patt2,patt3/...  : % is wildcard
-  :runname                : required, name for this particular test run
-  :state                  : Applies to runs, tests or steps depending on context
-  :status                 : Applies to runs, tests or steps depending on context
+  -runname                : required, name for this particular test run
+  -state                  : Applies to runs, tests or steps depending on context
+  -status                 : Applies to runs, tests or steps depending on context
 
 Test helpers (for use inside tests)
   -step stepname
@@ -151,7 +151,7 @@ Getting started
 Examples
 
 # Get test path, use '.' to get a single path or a specific path/file pattern
-megatest -test-files 'logs/*.log' -target ubuntu/n%/no% :runname w49% -testpatt test_mt%
+megatest -test-files 'logs/*.log' -target ubuntu/n%/no% -runname w49% -testpatt test_mt%
 
 Called as " (string-intersperse (argv) " ") "
 Version " megatest-version ", built from " megatest-fossil-hash ))
@@ -166,7 +166,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-config"    ;; override the config file name
 			"-execute"   ;; run the command encoded in the base64 parameter
 			"-step"
-			":runname"   
 			"-target"
 			"-reqtarg"
 			":runname"
@@ -216,7 +215,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-run-id"
 			"-ping"
 			) 
-		 (list  "-h"
+		 (list  "-h" "-help" "--help"
 			"-version"
 		        "-force"
 		        "-xterm"
@@ -268,7 +267,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
-(if (args:get-arg "-h")
+(if (or (args:get-arg "-h")
+	(args:get-arg "-help")
+	(args:get-arg "--help"))
     (begin
       (print help)
       (exit)))
@@ -536,8 +537,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
       (exit 1))
-     ((not (args:get-arg ":runname"))
-      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with :runname patt")
+     ((not (or (args:get-arg ":runname")
+	       (args:get-arg "-runname")))
+      (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the run name pattern with -runname patt")
       (exit 2))
      ((not (args:get-arg "-testpatt"))
       (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
@@ -550,10 +552,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  ;; put test parameters into convenient variables
 	  (runs:operate-on  action
 			    target
-			    (args:get-arg ":runname")
+			    (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			    (args:get-arg "-testpatt")
-			    state: (args:get-arg ":state") 
-			    status: (args:get-arg ":status")
+			    state: (or (args:get-arg "-state")(args:get-arg ":state") )
+			    status: (or (args:get-arg "-status")(args:get-arg ":status"))
 			    new-state-status: (args:get-arg "-set-state-status")))
       (set! *didsomething* #t)))))
 	  
@@ -755,7 +757,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (runs:rollup-run keys
 			keyvals
-			(args:get-arg ":runname") 
+			(or (args:get-arg "-runname")(args:get-arg ":runname") )
 			user))))
 
 ;;======================================================================
@@ -770,7 +772,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (runs:handle-locking 
 		  target
 		  keys
-		  (args:get-arg ":runname") 
+		  (or (args:get-arg "-runname")(args:get-arg ":runname") )
 		  (args:get-arg "-lock")
 		  (args:get-arg "-unlock")
 		  user))))
@@ -878,7 +880,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let ((dbstruct   (make-dbr:dbstruct path: *toppath* local: #t))
 	     (outputfile (args:get-arg "-extract-ods"))
-	     (runspatt   (args:get-arg ":runname"))
+	     (runspatt   (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	     (pathmod    (args:get-arg "-pathmod")))
 	     ;; (keyvalalist (keys->alist keys "%")))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)

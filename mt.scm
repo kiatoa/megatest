@@ -84,7 +84,7 @@
 		  limit))
 	  full-list))))
 
-(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f) )
   (let* ((key    (list run-id waitons ref-item-path mode))
 	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
 	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
@@ -95,7 +95,8 @@
 	(let ((result (vector-ref res 1)))
 	  (debug:print 4 "Using lazy value res: " result)
 	  result)
-	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode)))
+	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap)))
+;;	(let ((newres (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
 	  newres))))
 
@@ -185,12 +186,19 @@
 	(let ((test-dirs (tests:get-tests-search-path *configdat*)))
 	  (let loop ((hed (car test-dirs))
 		     (tal (cdr test-dirs)))
+	    ;; Setting MT_LINKTREE here is almost certainly unnecessary. 
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
 	      (if (and (file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
-		  (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
-		    (hash-table-set! *testconfigs* test-name newtcfg)
-		    newtcfg)
+		  (let ((link-tree-path (configf:lookup *configdat* "setup" "linktree"))
+			(old-link-tree  (get-environment-variable "MT_LINKTREE")))
+		    (if link-tree-path (setenv "MT_LINKTREE" link-tree-path))
+		    (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
+		      (hash-table-set! *testconfigs* test-name newtcfg)
+		      (if old-link-tree 
+			  (setenv "MT_LINKTREE" old-link-tree)
+			  (unsetenv "MT_LINKTREE"))
+		      newtcfg))
 		  (if (null? tal)
 		      (begin
 			(debug:print 0 "ERROR: No readable testconfig found for " test-name)

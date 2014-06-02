@@ -2068,6 +2068,20 @@
 ;; M I S C   M A N A G E M E N T   I T E M S 
 ;;======================================================================
 
+;; A routine to map itempaths using a itemmap
+(define (db:compare-itempaths patha pathb itemmap)
+  (debug:print-info 3 "ITEMMAP is " itemmap)
+  (if itemmap
+      (let* ((mapparts    (string-split itemmap))
+	     (pattern     (car mapparts))
+	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
+	(if replacement
+	    (equal? (string-substitute pattern replacement patha)
+		    (string-substitute pattern replacement pathb))
+	    (equal? (string-substitute pattern "" patha)
+		    (string-substitute pattern "" pathb))))
+      (equal? patha pathb)))
+
 ;; the new prereqs calculation, looks also at itempath if specified
 ;; all prereqs must be met:
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
@@ -2077,7 +2091,8 @@
 ;;       mode 'toplevel means that tests must be COMPLETED only
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
-(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
+;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
+(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -2102,13 +2117,13 @@
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-		       (same-itempath     (equal? ref-item-path item-path)))
+		       (same-itempath     (db:compare-itempaths ref-item-path item-path itemmap))) ;; (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 
-		   ((and (equal? item-path "") ;; this is the parent test
+		   ((and (equal? item-path "") ;; this is the parent test of the waiton being examined
 			 is-completed
-			 (or is-ok (not (null? (lset-intersection eq? mode '(toplevel itemmatch itemwait))))))
+			 (or is-ok (not (null? (lset-intersection eq? mode '(toplevel)))))) ;;  itemmatch itemwait))))))
 		    (set! parent-waiton-met #t))
 		   ;; Special case for toplevel and KILLED
 		   ((and (equal? item-path "") ;; this is the parent test

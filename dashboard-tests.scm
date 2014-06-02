@@ -614,14 +614,14 @@
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname "  runname 
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
 				   ;; (conc testname "/" (if (equal? item-path "") "%" item-path))
-				   " :state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   " -state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname " runname 
+			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " -runname " runname 
 				   " -runtests " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
@@ -629,18 +629,18 @@
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
 				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
 	       (clean-run-execute  (lambda (x)
 				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
-						      "megatest -remove-runs -target " keystring " :runname " runname
+						      "megatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%"
 											   item-path))
-						      ";megatest -target " keystring " :runname " runname 
+						      ";megatest -target " keystring " -runname " runname 
 						      " -runtests " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
@@ -649,7 +649,7 @@
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
