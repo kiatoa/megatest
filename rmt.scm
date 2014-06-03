@@ -285,9 +285,19 @@
 (define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
 
+(define (rmt:find-and-mark-incomplete run-id #!key (ovr-deadtime #f))
+  (rmt:send-receive 'find-and-mark-incomplete #f (list run-id ovr-deadtime)))
+
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
 ;;======================================================================
+
+;; Need to move this to multi-run section and make associated changes
+(define (rmt:find-and-mark-incomplete-all-runs #!key (ovr-deadtime #f))
+  (let ((run-ids (rmt:get-all-run-ids)))
+    (for-each (lambda (run-id)
+	       (rmt:find-and-mark-incomplete run-id ovr-deadtime: ovr-deadtime))
+	     run-ids)))
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found

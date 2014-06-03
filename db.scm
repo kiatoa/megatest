@@ -619,9 +619,9 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
-	      ;; Why use FULL here? This data is not that critical
-	      ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+    ;; Why use FULL here? This data is not that critical
+    ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
@@ -676,7 +676,7 @@
 ;;                          end_time,strftime('%s','now') as now from tests where state in
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
-(define (db:find-and-mark-incomplete db #!key (ovr-deadtime #f))
+(define (db:find-and-mark-incomplete db run-id  #!key (ovr-deadtime #f))
   (let* ((incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
@@ -684,62 +684,58 @@
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
-			   7200)) ;; two hours
-	 (run-ids      (db:get-all-run-ids db))) ;; iterate over runs to divy up the calls
+			   7200))) ;; two hours
     (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
-    (for-each
-     (lambda (run-id)
-
-       ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
-       ;;
-       ;; THIS CANNOT WORK. The run_duration is not updated in the central db due to performance concerns.
-       ;;                   The testdat.db file must be consulted.
-       ;;
-       ;; HOWEVER: this code in run:test seems to work fine
-       ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-       ;;                     (db:test-get-run_duration testdat)))
-       ;;                    600) 
-       (db:delay-if-busy)
-       (sqlite3:for-each-row 
-	(lambda (test-id run-dir uname testname item-path)
-	  (if (and (equal? uname "n/a")
-		   (equal? item-path "")) ;; this is a toplevel test
-	      ;; what to do with toplevel? call rollup?
-	      (begin
-		(set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-		(debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
-	      (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
-	db
-	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 600 AND state IN ('RUNNING','REMOTEHOSTSTART');"
-	run-id)
-
-       ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
-       ;;
-       (db:delay-if-busy)
-       (sqlite3:for-each-row
-	(lambda (test-id run-dir uname testname item-path)
-	  (if (and (equal? uname "n/a")
-		   (equal? item-path "")) ;; this is a toplevel test
-	      ;; what to do with toplevel? call rollup?
-	      (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
-	      (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
-	db
-	"SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
-	run-id))
-     run-ids)
+    
+    ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+    ;;
+    ;; THIS CANNOT WORK. The run_duration is not updated in the central db due to performance concerns.
+    ;;                   The testdat.db file must be consulted.
+    ;;
+    ;; HOWEVER: this code in run:test seems to work fine
+    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+    ;;                     (db:test-get-run_duration testdat)))
+    ;;                    600) 
+    ;; (db:delay-if-busy)
+    (sqlite3:for-each-row 
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (begin
+	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 600 AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     run-id)
+    
+    ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+    ;;
+    ;; (db:delay-if-busy)
+    (sqlite3:for-each-row
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+     run-id)
     
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
-    (db:delay-if-busy)
+    ;; (db:delay-if-busy)
     (let* ((min-incompleted (filter (lambda (x)
-				     (let* ((testpath (cadr x))
-					    (tdatpath (conc testpath "/testdat.db"))
-					    (dbexists (file-exists? tdatpath)))
-				       (or (not dbexists) ;; if no file then something wrong - mark as incomplete
-					   (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
-				   incompleted))
-	  (min-incompleted-ids (map car min-incompleted))
-	  (all-ids             (append min-incompleted-ids (map car oldlaunched))))
+				      (let* ((testpath (cadr x))
+					     (tdatpath (conc testpath "/testdat.db"))
+					     (dbexists (file-exists? tdatpath)))
+					(or (not dbexists) ;; if no file then something wrong - mark as incomplete
+					    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
+				    incompleted))
+	   (min-incompleted-ids (map car min-incompleted))
+	   (all-ids             (append min-incompleted-ids (map car oldlaunched))))
       (if (> (length all-ids) 0)
 	  (begin
 	    (debug:print 0 "WARNING: Marking test(s); " (string-intersperse (map conc all-ids) ", ") " as INCOMPLETE")
@@ -839,11 +835,11 @@
     res))
 
 (define (db:set-var dbstruct var val)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
 
 (define (db:del-var dbstruct var)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "DELETE FROM metadat WHERE var=?;" var))
 
 ;; use a global for some primitive caching, it is just silly to
@@ -943,7 +939,7 @@
     (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
-	  (db:delay-if-busy)
+	  ;; (db:delay-if-busy)
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
 		 allvals)
 	  (apply sqlite3:for-each-row 
@@ -954,7 +950,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
-	  (db:delay-if-busy)
+	  ;; (db:delay-if-busy)
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
@@ -1197,7 +1193,7 @@
       finalres)))
 
 (define (db:set-comment-for-run dbstruct run-id comment)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
 		   run-id))
 
@@ -1205,14 +1201,14 @@
 (define (db:delete-run dbstruct run-id)
   ;; First set any related tests to DELETED
   (let ((db (db:get-db dbstruct run-id)))
-    (db:delay-if-busy)
+    ;; (db:delay-if-busy)
     (sqlite3:execute db "UPDATE tests SET state='DELETED',comment='';")
     (sqlite3:execute db "DELETE FROM test_steps;")
     (sqlite3:execute db "DELETE FROM test_data;")
     (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
 
 (define (db:update-run-event_time dbstruct run-id)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))
 
 (define (db:lock/unlock-run dbstruct run-id lock unlock user)
@@ -1221,13 +1217,13 @@
 			    "unlocked"
 			    "locked")))) ;; semi-failsafe
     (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
-    (db:delay-if-busy)
+    ;; (db:delay-if-busy)
     (sqlite3:execute (db:get-db dbstruct #f) "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
 (define (db:set-run-status db run-id status #!key (msg #f))
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (if msg
       (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
       (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id)))
@@ -1428,7 +1424,7 @@
   (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
 
 (define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses #!key (not-in #f)(qryvals #f))
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (let ((res '()))
     (for-each 
      (lambda (run-id)
@@ -1446,7 +1442,7 @@
 (define (db:delete-test-records dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id)))
     (db:general-call db 'delete-test-step-records (list test-id))
-    (db:delay-if-busy)
+    ;; (db:delay-if-busy)
     (db:general-call db 'delete-test-data-records (list test-id))
     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
@@ -1473,7 +1469,7 @@
 			       (if currstatus (conc "status='" currstatus "' AND ") "")
 			       " run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
 		;;(debug:print 0 "QRY: " qry)
-		(db:delay-if-busy)
+		;; (db:delay-if-busy)
 		(sqlite3:execute (db:get-db dbstruct run-id) qry run-id newstate newstatus testname testname)))
 	    testnames))
 
@@ -1481,7 +1477,7 @@
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
 ;;
 (define (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (let ((db (db:get-db dbstruct run-id)))
     (cond
      ((and newstate newstatus newcomment)
@@ -1498,7 +1494,7 @@
 
 ;; Never used, but should be?
 (define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
  		   state status run-id test-name item-path))
 
@@ -1654,7 +1650,7 @@
     res))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
-  (db:delay-if-busy)
+  ;; (db:delay-if-busy)
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
     (sqlite3:for-each-row

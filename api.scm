@@ -78,6 +78,7 @@
     ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
     ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
     ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
+    ((find-and-mark-incompete       (apply db:find-and-mark-incomplete dbstruct (car params) ovr-deadtime: (cadr params))))
 
     ;; STEPS
     ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))

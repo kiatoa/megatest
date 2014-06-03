@@ -881,7 +881,7 @@
       (if (> (current-seconds)(+ last-time-incomplete 900))
           (begin
             (set! last-time-incomplete (current-seconds))
-            (cdb:remote-run db:find-and-mark-incomplete #f)))
+            (rmt:find-and-mark-incomplete-all-runs)))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
