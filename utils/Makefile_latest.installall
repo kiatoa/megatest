@@ -16,8 +16,10 @@ help :
 	@echo sudo apt-get install libwebkitgtk-dev 
 	@echo sudo apt-get install libmotif3
 	@echo You are using PREFIX=$(PREFIX)
-	@echo You are using proxy="$(proxy)"
-	@echo If needed set proxy to host.dom:port
+	@echo You are using PROXY="$(PROXY)"
+	@echo If needed set PROXY to host.dom:port
+	@echo   http_proxy=$(http_proxy)
+	@echo   PROX=$(PROX)
 	@echo 
 	@echo To make all do: make all
 
@@ -32,6 +34,9 @@ PROXY=
 # Select version of chicken, sqlite3 etc
 CHICKEN_VERSION=4.8.0
 SQLITE3_VERSION=3071401
+
+# Override IUPBRANCH to use other than trunk
+IUPBRANCH=trunk
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -75,6 +80,7 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)" $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
 all : chkn eggs libiup logprobin
@@ -141,7 +147,7 @@ iuplib.fossil :
 
 iup/installall.sh : iuplib.fossil
 	mkdir -p iup
-	cd iup && if [ -e installall.sh ];then fossil update; else fossil open ../iuplib.fossil; fi
+	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
 iup/iup/alldone : iup/installall.sh
 	cd iup && ./makeall.sh
