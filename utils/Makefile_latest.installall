@@ -32,7 +32,7 @@ endif
 PROXY=
 
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.8.0
+CHICKEN_VERSION=4.9.0.1
 SQLITE3_VERSION=3071401
 
 # Override IUPBRANCH to use other than trunk
@@ -80,7 +80,7 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
-CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)" $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
 all : chkn eggs libiup logprobin
@@ -111,16 +111,19 @@ setup-chicken4x.sh : $(EGGFLAGS)
 	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
 	mkdir -p $(PREFIX)
 
-chicken-core/chicken.scm : chicken-4.9.0rc1.tar.gz
-	tar xfz chicken-4.9.0rc1.tar.gz
-	ln -sf chicken-4.9.0rc1 chicken-core
-	# git clone http://code.call-cc.org/git/chicken-core.git
+chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
+	tar xfz chicken-$(CHICKEN_VERSION).tar.gz
+	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
 
 
 chicken-4.9.0rc1.tar.gz : 
 	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
 
+chicken-4.9.0.1.tar.gz :
+	wget http://code.call-cc.org/releases/4.9.0/chicken-4.9.0.1.tar.gz
+
 # git clone git://code.call-cc.org/chicken-core
+# git clone http://code.call-cc.org/git/chicken-core.git
 
 $(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
@@ -149,17 +152,20 @@ iup/installall.sh : iuplib.fossil
 	mkdir -p iup
 	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/iup/alldone : iup/installall.sh
+iup/iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h
 	cd iup && ./makeall.sh
+
+$(PREFIX)/include/iup.h : iup/installall.sh
+	cd iup && ./installall.sh
 
 $(PREFIX)/lib/libiup.so : iup/iup/alldone
 	touch -c $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
-	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
 
 $(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
-	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+	CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
 
 clean :
 	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)
