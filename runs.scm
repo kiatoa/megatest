@@ -1365,6 +1365,7 @@
 								    (if (and (string? dira)(string? dirb))
 									(> (string-length dira)(string-length dirb))
 									#f)))))
+		       (toplevel-retries (make-hash-table)) ;; try three times to loop through and remove top level tests
 		       (test-retry-time  (make-hash-table))
 		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
 		   (let loop ((test (car sorted-tests))
@@ -1387,7 +1388,14 @@
 			       ((remove-runs)
 				;; if the test is a toplevel-with-children issue an error and do not remove
 				(if toplevel-with-children
-				    (debug:print 0 "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
+				    (begin
+				      (debug:print 0 "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
+				      (hash-table-set! toplevel-retries test-fulln (+ (hash-table-ref/default toplevel-retries test-fulln 0) 1))
+				      (if (> (hash-table-ref toplevel-retries test-fulln) 3)
+					  (if (not (null? tal))
+					      (loop (car tal)(cdr tal))) ;; no else clause - drop it if no more in queue and > 3 tries
+					  (let ((newtal (append tal (list test))))
+					    (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
 				    (begin
 				      (debug:print-info 0 "test: " test-name " itest-state: " test-state)
 				      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
