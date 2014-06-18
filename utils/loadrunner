@@ -1,7 +1,12 @@
 #!/bin/bash 
 
+LOADRUNNER=$0
+
 # load=`uptime|awk '{print $10}'|cut -d, -f1`
-load=`uptime|perl -pe 's/.*: (\d+.\d+),.*/$1/'`
+load=$(uptime|perl -pe 's/.*: (\d+.\d+),.*/$1/')
+load2=$(uptime|perl -pe 's/.*: (\d+.\d+), (\d+.\d+),.*/$2/')
+# echo "load2=$load2, load=$load"
+
 if which cpucheck > /dev/null;then
     numcpu=`cpucheck|tail -1|awk '{print $6}'`
 elif which lscpu > /dev/null;then
@@ -12,18 +17,30 @@ fi
 
 # NB// max_load is in units of percent.
 #
-lperc=`echo "100 * $load / $numcpu"|bc`
+lperc=$(echo "100 * $load / $numcpu"|bc)
+lperc2=$(echo "100 * $load2 / $numcpu"|bc)
 if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
   max_load=100
 else
   max_load=$MAX_ALLOWED_LOAD
 fi
 
+lfile=/tmp/loadrunner-$USER.lockfile
+lockfile -r 2 -l 20 $lfile
+
 if [[  $lperc -lt $max_load ]];then
-  echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD %"
-  echo "Starting command: \"$@\""
-  nbfake "$@"
+  if [[ $lperc -ge $lperc2 ]];then
+    echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
+    echo "Starting command: \"$@\""
+    nbfake "$@"
+  else
+   rm -f $lfile
+    echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
+  fi
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
-  echo "loadrunner $@" | at now + 2 minutes 2> /dev/null
+  echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
 fi
+
+sleep 1
+rm -f $lfile
