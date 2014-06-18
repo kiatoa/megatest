@@ -29,18 +29,21 @@ lfile=/tmp/loadrunner-$USER.lockfile
 lockfile -r 2 -l 20 $lfile
 
 if [[  $lperc -lt $max_load ]];then
-  if [[ $lperc -ge $lperc2 ]];then
+  if [[ $lperc -le $lperc2 ]];then
     echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
     echo "Starting command: \"$@\""
     nbfake "$@"
+    # we sleep ten seconds here to keep the lock and give time for
+    # the uptime to show a response
+    sleep 10
   else
    rm -f $lfile
-    echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
+   echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
   fi
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
   echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
 fi
 
-sleep 1
+sleep 4
 rm -f $lfile
