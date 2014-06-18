@@ -15,6 +15,7 @@ help :
 	@echo sudo apt-get install libreadline-dev
 	@echo sudo apt-get install libwebkitgtk-dev 
 	@echo sudo apt-get install libmotif3
+	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
 	@echo You are using PREFIX=$(PREFIX)
 	@echo You are using PROXY="$(PROXY)"
 	@echo If needed set PROXY to host.dom:port
@@ -33,16 +34,17 @@ PROXY=
 
 # Select version of chicken, sqlite3 etc
 CHICKEN_VERSION=4.9.0.1
-SQLITE3_VERSION=3071401
+SQLITE3_VERSION=3080500
+# http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 
 # Override IUPBRANCH to use other than trunk
-IUPBRANCH=trunk
+IUPBRANCH=iup-3.10.1
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
-     spiffy-directory-listing ssax sxml-serializer sxml-modifications sqlite3 sql-de-lite \
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
      srfi-19
 
 #
@@ -83,7 +85,7 @@ CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin
+all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -129,9 +131,25 @@ $(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX) install
 
-# 
-# IUP
-#
+#======================================================================
+# S Q L I T E 3
+#======================================================================
+
+sqlite-autoconf-$(SQLITE3_VERSION).tar.gz :
+	wget  http://www.sqlite.org/2014/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+sqlite-autoconf-$(SQLITE3_VERSION)/config.log : sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	tar xfz  sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+$(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
+	cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install
+
+$(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
+
+#======================================================================
+# I U P 
+#======================================================================
 
 ffcall.fossil :
 	fossil clone http://www.kiatoa.com/fossils/ffcall ffcall.fossil
@@ -166,6 +184,7 @@ $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
 	CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+
 
 clean :
 	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)
