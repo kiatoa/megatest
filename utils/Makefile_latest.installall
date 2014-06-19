@@ -45,7 +45,7 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
-     srfi-19
+     srfi-19 refdb
 
 #
 # Derived variables
@@ -170,14 +170,14 @@ iup/installall.sh : iuplib.fossil
 	mkdir -p iup
 	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h
+iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
 	cd iup && ./makeall.sh
 
-$(PREFIX)/include/iup.h : iup/installall.sh
+$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
 	cd iup && ./installall.sh
 
-$(PREFIX)/lib/libiup.so : iup/iup/alldone
-	touch -c $(PREFIX)/lib/libiup.so
+# $(PREFIX)/lib/libiup.so : iup/iup/alldone
+#	touch -c $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
 	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup

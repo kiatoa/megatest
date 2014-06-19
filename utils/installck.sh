@@ -15,6 +15,8 @@ if [[ -z $PREFIX ]];then
   exit
 fi
 
+export LD_LIBRARY_NAME=$PREFIX/lib
+
 logname=$(basename $PREFIX)
 
 script -c "make -f $myhome/Makefile_latest.installall all" $logname.log

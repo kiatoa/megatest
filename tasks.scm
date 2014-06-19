@@ -22,20 +22,32 @@
 ;; Tasks db
 ;;======================================================================
 
+;; If file exists AND
+;;    file readable
+;;         ==> open it
+;; If file exists AND
+;;    file NOT readable
+;;         ==> open in-mem version
+;; If file NOT exists
+;;    ==> open in-mem version
+;;
 (define (tasks:open-db)
   (let* ((dbpath       (conc *toppath* "/monitor.db"))
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
-	 (mdb          ;; (if (file-write-access? *toppath*)
-			   (sqlite3:open-database dbpath))
-			   ;; (sqlite3:open-database ":memory:"))) ;; (never-give-up-open-db dbpath))
+	 (mdb          (cond
+			((file-write-access? *toppath*)(sqlite3:open-database dbpath))
+			((file-read-access? dbpath)    (sqlite3:open-database dbpath))
+			(else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
 	 (handler      (make-busy-timeout 36000)))
     (if (and exists
 	     (not write-access))
 	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
     (sqlite3:set-busy-handler! mdb handler)
     (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
-    (if (not exists)
+    (if (or (and (not exists)
+		 (file-write-access? *toppath*))
+	    (not (file-read-access? dbpath)))
 	(begin
 	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
