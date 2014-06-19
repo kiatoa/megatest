@@ -28,6 +28,13 @@ function launchjob () {
   fi
 }
 
+function get_delay_time () {
+  RANGE=$1
+  number=$RANDOM
+  let "number %= $RANGE"
+  echo $number
+}
+
 if which cpucheck > /dev/null;then
     numcpu=`cpucheck|tail -1|awk '{print $6}'`
 elif which lscpu > /dev/null;then
@@ -65,5 +72,5 @@ else
   echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
 fi
 
-sleep 4
+sleep $(get_delay_time 10)
 rm -f $lfile
