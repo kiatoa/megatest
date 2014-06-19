@@ -7,6 +7,27 @@ load=$(uptime|perl -pe 's/.*: (\d+.\d+),.*/$1/')
 load2=$(uptime|perl -pe 's/.*: (\d+.\d+), (\d+.\d+),.*/$2/')
 # echo "load2=$load2, load=$load"
 
+# Run a job detached from stdin/stdout (i.e. daemonized)
+# Launch on remotehost if specified by TARGETHOST
+#
+function launchjob () {
+  # Can't always trust $PWD
+  CURRWD=`pwd`
+  if [[ $TARGETHOST_LOGF == "" ]]; then
+      TARGETHOST_LOGF=NBFAKE-`date +%GWW%V.%u_%T`
+  fi
+  echo "#======================================================================"
+  echo "# NBFAKE Running command:"
+  echo "#     \"$*\""
+  echo "#======================================================================"
+  
+  if [[ $TARGETHOST == ""  ]]; then
+    sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &"
+  else
+    ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &\""
+  fi
+}
+
 if which cpucheck > /dev/null;then
     numcpu=`cpucheck|tail -1|awk '{print $6}'`
 elif which lscpu > /dev/null;then
@@ -32,7 +53,7 @@ if [[  $lperc -lt $max_load ]];then
   if [[ $lperc -le $lperc2 ]];then
     echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
     echo "Starting command: \"$@\""
-    nbfake "$@"
+    launchjob "$@"
     # we sleep ten seconds here to keep the lock a little longer and give time for
     # the uptime to show a response
     sleep 10
