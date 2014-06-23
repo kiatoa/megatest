@@ -113,7 +113,7 @@
 
 ;; Lookup a value in runconfigs based on -reqtarg or -target
 (define (runconfigs-get config var)
-  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
+  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
 	(or (configf:lookup config targ var)
 	    (configf:lookup config "default" var))

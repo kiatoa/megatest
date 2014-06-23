@@ -420,7 +420,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (setup-for-run))
+    (let ((tl        (launch:setup-for-run))
 	  (transport (or (configf:lookup *configdat* "setup" "transport")
 			 (args:get-arg "-transport" "http"))))
       (debug:print 2 "Launching server using transport " transport)
@@ -435,7 +435,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     '("-list-servers"
 		       "-stop-server"
 		       "-show-cmdinfo")))
-	(if (setup-for-run)
+	(if (launch:setup-for-run)
 	    (begin
 
 	      ;; if not list or kill then start a client (if appropriate)
@@ -469,7 +469,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
-    (let ((tl (setup-for-run)))
+    (let ((tl (launch:setup-for-run)))
       (if tl 
 	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
@@ -540,12 +540,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (for-each (lambda (kt)
 				     (setenv (car kt) (cadr kt)))
 				   key-vals))
-		     (read-config "runconfigs.config" #f #t sections: sections))))
+		     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
     data))
 
 
 (if (args:get-arg "-show-runconfig")
-    (let ((tl (setup-for-run)))
+    (let ((tl (launch:setup-for-run)))
       (push-directory *toppath*)
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
@@ -564,7 +564,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-config")
-    (let ((tl   (setup-for-run))
+    (let ((tl   (launch:setup-for-run))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       (push-directory *toppath*)
       ;; keep this one local
@@ -668,7 +668,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
-    (if (setup-for-run)
+    (if (launch:setup-for-run)
 	(let* ((db       #f)
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
@@ -857,7 +857,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
@@ -908,7 +908,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
@@ -986,7 +986,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	;; (set! *runremote* runremote)
 	;; The transport is handled earlier in the loading process of megatest.
 	;; (set! *transport-type* (string->symbol transport))
-	(if (not (setup-for-run))
+	(if (not (launch:setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1038,7 +1038,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (status    (args:get-arg ":status")))
 	  ;; (set! *runremote* runremote)
 	  ;; (set! *transport-type* (string->symbol transport))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
@@ -1145,7 +1145,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
@@ -1176,7 +1176,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-rebuild-db")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1186,7 +1186,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-cleanup-db")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1196,7 +1196,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1209,7 +1209,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-update-meta")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1224,7 +1224,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
-    (let* ((toppath (setup-for-run))
+    (let* ((toppath (launch:setup-for-run))
 	   (db      (if toppath (open-db) #f)))
       (if db
 	  (begin
@@ -1248,7 +1248,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-run-wait")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))

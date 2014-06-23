@@ -71,7 +71,7 @@
 (define (zmq-transport:run hostn)
   (debug:print 2 "Attempting to start the server ...")
   (if (not *toppath*)
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
 	    (exit))))
@@ -363,7 +363,7 @@
 ;; all routes though here end in exit ...
 (define (zmq-transport:launch)
   (if (not *toppath*)
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))

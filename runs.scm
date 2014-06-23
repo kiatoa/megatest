@@ -38,7 +38,7 @@
 (define (runs:create-run-record)
   (let* ((mconfig      (if *configdat*
 		           *configdat*
-		           (if (setup-for-run)
+		           (if (launch:setup-for-run)
 		               *configdat*
 		               (begin
 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
@@ -94,7 +94,7 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
+(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((target    (or (common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
 	 (keys      (if inkeys    inkeys    (cdb:remote-run db:get-keys #f)))
@@ -222,9 +222,9 @@
     ;; This is done once here on a call to run tests rather than on every call to open-db
     (cdb:remote-run db:set-sync #f)
 
-    (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
+    (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
+	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 
     ;; Now generate all the tests lists
@@ -448,7 +448,7 @@
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
-	(set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+	(runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
 	(let ((items-list (items:get-items-from-config tconfig)))
 	  (if (list? items-list)
 	      (begin
@@ -1133,7 +1133,7 @@
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_ITEMPATH"  item-path)
     (setenv "MT_RUNNAME"   runname)
-    (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+    (runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
@@ -1529,7 +1529,7 @@
      (else
       (let ((db   #f)
 	    (keys #f))
-	(if (not (setup-for-run))
+	(if (not (launch:setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))

@@ -46,7 +46,7 @@
 ;; all routes though here end in exit ...
 (define (server:launch transport)
   (if (not *toppath*)
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
@@ -70,7 +70,7 @@
 ;; Flush the queue every third of a second. Can we assume that setup-for-run 
 ;; has already been done?
 (define (server:write-queue-handler)
-  (if (setup-for-run)
+  (if (launch:setup-for-run)
       (let ((db (open-db)))
 	(let loop ()
 	  (let ((last-write-flush-time #f))

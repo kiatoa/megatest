@@ -24,7 +24,7 @@
 ;; 
 (define (sdb:open) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (if (not *toppath*)
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: Attempted to open db when not in megatest area. Exiting.")
 	    (exit))))

@@ -58,7 +58,7 @@
 ;; client:setup
 (define (client:setup #!key (numtries 3))
   (if (not *toppath*)
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
 	    (exit))))
