@@ -237,7 +237,9 @@
     ;; test-patts (using % as wildcard)
 
     ;; (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
-    (debug:print-info 0 "test names " test-names)
+    (debug:print-info 0 "tests search path: " (tests:get-tests-search-path *configdat*))
+    (debug:print-info 0 "all tests:  " (string-intersperse (sort all-test-names string<) " "))
+    (debug:print-info 0 "test names: " (string-intersperse (sort test-names string<) " "))
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified

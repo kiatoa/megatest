@@ -31,8 +31,7 @@
 
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all)
-  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
-				   (tests:get-tests-search-path *configdat*))))
+  (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
