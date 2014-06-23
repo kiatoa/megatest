@@ -162,10 +162,15 @@ Misc
       (set! *tests-sort-reverse* (+ *tests-sort-reverse* 1)))
   *tests-sort-reverse*)
 
+(define *tests-sort-reverse* 
+  (let ((t-sort (assoc (configf:lookup *configdat* "dashboard" "testsort") *tests-sort-type-index*)))
+    (if t-sort
+	(cadr t-sort)
+	3)))
+
 (define (get-curr-sort)
   (vector-ref *tests-sort-options* *tests-sort-reverse*))
 
-(define *tests-sort-reverse* 3)
 (define *hide-empty-runs* #f)
 (define *hide-not-hide* #t) ;; toggle for hide/not hide
 (define *hide-not-hide-button* #f)
@@ -1207,9 +1212,10 @@ Misc
 					      #:action (lambda (obj val index lbstate)
 							 (set! *tests-sort-reverse* index)
 							 (mark-for-update))))
-		     (default-cmd (car cmds-list)))
+		     (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
 		(iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
-		(set! *tests-sort-reverse* 0)
+		(mark-for-update)
+		;; (set! *tests-sort-reverse* *tests-sort-reverse*0)
 		lb)
 	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
 	      ;;   				 (next-sort-option)
@@ -1533,4 +1539,25 @@ Misc
 			     (mutex-unlock! *update-mutex*))))
 		       1))))
 
-(iup:main-loop)
+(let ((th1 (make-thread (lambda ()
+			  (thread-sleep! 1)
+			  (set! *please-update-buttons* #t)
+			  (dashboard:run-update 1)) "update buttons once"))
+			  ;; need to wait for first *update-is-running* #t
+			  ;; (let loop ()
+			  ;;   (mutex-lock! *update-mutex*)
+			  ;;   (if *update-is-running*
+			  ;;       (begin
+			  ;;         (set! *please-update-buttons* #t)
+			  ;;         (mark-for-update)
+			  ;;         (print "Did redraw trigger")) "First update after startup")
+			  ;;   (mutex-unlock! *update-mutex*)
+			  ;;   (thread-sleep! 1)
+			  ;;   (if (not *please-update-buttons*)
+			  ;;       (loop))))))
+      (th2 (make-thread iup:main-loop "Main loop")))
+  (thread-start! th1)
+  (thread-start! th2)
+  (thread-join! th2))
+
+;; (iup:main-loop)
