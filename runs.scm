@@ -212,10 +212,11 @@
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
-	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
-	 (all-test-names     (hash-table-keys all-tests-registry))
-	 (test-names         (tests:filter-test-names all-test-names test-patts))
-	 (required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
+	 ;; need to process runconfigs before generating these lists
+	 (all-tests-registry #f)  ;; (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
+	 (all-test-names     #f)  ;; (hash-table-keys all-tests-registry))
+	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
+	 (required-tests     #f)) ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 
     ;; Update the synchronous setting in the db based on the default or what is set by the user
     ;; This is done once here on a call to run tests rather than on every call to open-db
@@ -225,6 +226,12 @@
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+
+    ;; Now generate all the tests lists
+    (set! all-tests-registry (tests:get-all))
+    (set! all-test-names     (hash-table-keys all-tests-registry))
+    (set! test-names         (tests:filter-test-names all-test-names test-patts))
+    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
