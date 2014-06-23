@@ -697,44 +697,10 @@ Misc
 	    (hash-table-set! tests-draw-state 'selected-tests (make-hash-table))
 	    ;; set these 
 	    (hash-table-set! tests-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
-	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
-      (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
-	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
-	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
-	     (boxw   90)
-	     (boxh   25)
-	     (gapx   20)
-	     (gapy   30)
-	     (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
-	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
-	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
-	(let loop ((hed (car (reverse sorted-testnames)))
-		   (tal (cdr (reverse sorted-testnames)))
-		   (llx xtorig)
-		   (lly ytorig)
-		   (urx (+ xtorig boxw))
-		   (ury (+ ytorig boxh)))
-	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	  (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-;;	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
-;;	  (canvas-rectangle! cnv llx urx lly ury)
-;;	  (if (hash-table-ref/default selected-tests hed #f)
-;;	      (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))
-	  (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly))) ;; NB// Swap ury and lly
-	  (if (not (null? tal))
-	      ;; leave a column of space to the right to list items
-	      (let ((have-room 
-		     (if #t ;; put "auto" here where some form of auto rearanging can be done
-			 (> (* 3 (+ boxw gapx)) (- urx xtorig))
-			 (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
-		(loop (car tal)
-		      (cdr tal)
-		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
-		      (if have-room lly (+ lly boxh gapy))
-		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-		      (if have-room ury (+ ury boxh gapy)))))))))
+	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+	    (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
+	  (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
+      ))
 
 ;;======================================================================
 ;; R U N   C O N T R O L S
