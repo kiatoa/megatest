@@ -710,10 +710,11 @@ Misc
 		   (urx (+ xtorig boxw))
 		   (ury (+ ytorig boxh)))
 	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
-	  (canvas-rectangle! cnv llx urx lly ury)
-	  (if (hash-table-ref/default selected-tests hed #f)
-	      (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))
+	  (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+;;	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
+;;	  (canvas-rectangle! cnv llx urx lly ury)
+;;	  (if (hash-table-ref/default selected-tests hed #f)
+;;	      (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))
 	  (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly))) ;; NB// Swap ury and lly
 	  (if (not (null? tal))
 	      ;; leave a column of space to the right to list items
@@ -813,7 +814,7 @@ Misc
 
 	(iup:frame
 	 #:title "Runname"
-	 (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
+	 (let* ((default-run-name (seconds->work-week/day (current-seconds)))
 		(tb (iup:textbox #:expand "HORIZONTAL"
 				 #:action (lambda (obj val txt)
 					    ;; (print "obj: " obj " val: " val " unk: " unk)
@@ -895,61 +896,72 @@ Misc
 	(let* ((updater #f)
 	       (last-xadj 0)
 	       (last-yadj 0)
-	       (canvas-obj   
-	(iup:canvas #:action (make-canvas-action
-			      (lambda (cnv xadj yadj)
-				(if (not updater)
-				    (set! updater (lambda (xadj yadj)
-						    ;; (print "cnv: " cnv " x: " x " y: " y)
-						    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames))))
-				(updater xadj yadj)
-				(set! last-xadj xadj)
-				(set! last-yadj yadj)))
-		    ;; Following doesn't work 
-		    ;; #:wheel-cb (make-canvas-action
-		    ;;           (lambda (cnv xadj yadj)
-		    ;;    	 ;; (print "cnv: " cnv " x: " x " y: " y)
-		    ;;    	 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    ;; #:size "50x50"
-		    #:expand "YES"
-		    #:scrollbar "YES"
-		    #:posx "0.5"
-		    #:posy "0.5"
-		    #:button-cb (lambda (obj btn pressed x y status)
-				  ;; (print "obj: " obj)
-				  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
-					(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
-				    ;; (print "x\ty\tllx\tlly\turx\tury")
-				    (for-each (lambda (test-name)
-						(let* ((rec-coords (hash-table-ref tests-info test-name))
-						       (llx        (list-ref rec-coords 0))
-						       (urx        (list-ref rec-coords 1))
-						       (lly        (list-ref rec-coords 2))
-						       (ury        (list-ref rec-coords 3)))
-						  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
-						  (if (and (eq? pressed 1)
-							   (> x llx)
-							   (> y lly)
-							   (< x urx)
-							   (< y ury))
-						      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
-							(let* ((selected     (not (member test-name patterns)))
-							       (newpatt-list (if selected
-										 (cons test-name patterns)
-										 (delete test-name patterns)))
-							       (newpatt      (string-intersperse newpatt-list "\n")))
-							  ;; (if cnv-obj
-							  ;;    (dashboard:draw-tests cnv-obj 0 0 tests-draw-state sorted-testnames))
-							  (iup:attribute-set! obj "REDRAW" "ALL")
-							  (hash-table-set! selected-tests test-name selected)
-							  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
-							  (dashboard:update-run-command)
-							  (if updater (updater last-xadj last-yadj)))))))
-					      (hash-table-keys tests-info)))))))
+	       (the-cnv   #f)
+	       (canvas-obj 
+                (iup:canvas #:action (make-canvas-action
+				      (lambda (cnv xadj yadj)
+					(if (not updater)
+					    (set! updater (lambda (xadj yadj)
+							    ;; (print "cnv: " cnv " xadj: " xadj " yadj: " yadj)
+							    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)
+							    (set! last-xadj xadj)
+							    (set! last-yadj yadj))))
+					(updater xadj yadj)
+					(set! the-cnv cnv)
+					))
+			    ;; Following doesn't work 
+			    #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
+					 (let ((xadj last-xadj)
+					       (yadj (+ last-yadj (if (> step 0)
+								      -0.01
+								      0.01))))
+					   ;; (print "step: " step " x: " x " y: " y " dir: \"" dir "\"")
+					   ;; (print "the-cnv: " the-cnv " obj: " obj " xadj: " xadj " yadj: " yadj " dir: " dir)
+					   (if the-cnv
+					       (dashboard:draw-tests the-cnv xadj yadj tests-draw-state sorted-testnames))
+					   (set! last-xadj xadj)
+					   (set! last-yadj yadj)
+					   ))
+			    ;; #:size "50x50"
+			    #:expand "YES"
+			    #:scrollbar "YES"
+			    #:posx "0.5"
+			    #:posy "0.5"
+			    #:button-cb (lambda (obj btn pressed x y status)
+					  ;; (print "obj: " obj)
+					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
+						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
+					    ;; (print "x\ty\tllx\tlly\turx\tury")
+					    (for-each (lambda (test-name)
+							(let* ((rec-coords (hash-table-ref tests-info test-name))
+							       (llx        (list-ref rec-coords 0))
+							       (urx        (list-ref rec-coords 1))
+							       (lly        (list-ref rec-coords 2))
+							       (ury        (list-ref rec-coords 3)))
+							  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
+							  (if (and (eq? pressed 1)
+								   (> x llx)
+								   (> y lly)
+								   (< x urx)
+								   (< y ury))
+							      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+								(let* ((selected     (not (member test-name patterns)))
+								       (newpatt-list (if selected
+											 (cons test-name patterns)
+											 (delete test-name patterns)))
+								       (newpatt      (string-intersperse newpatt-list "\n")))
+								  ;; (if cnv-obj
+								  ;;    (dashboard:draw-tests cnv-obj 0 0 tests-draw-state sorted-testnames))
+								  (iup:attribute-set! obj "REDRAW" "ALL")
+								  (hash-table-set! selected-tests test-name selected)
+								  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
+								  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
+								  (dashboard:update-run-command)
+								  (if updater (updater last-xadj last-yadj)))))))
+						      (hash-table-keys tests-info)))))))
 	  canvas-obj)))
       ;; (print "obj: " obj " btn: " btn " pressed: " pressed " x: " x " y: " y " status: " status))
-      
+       
       (iup:frame
        #:title "Logs" ;; To be replaced with tabs
        (let ((logs-tb (iup:textbox #:expand "YES"

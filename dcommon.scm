@@ -544,3 +544,15 @@
 		       ;;  )					     
 		       ))))
 
+;;======================================================================
+;; CANVAS STUFF FOR TESTS
+;;======================================================================
+
+(define (dcommon:draw-test cnv x y w h name selected)
+  (let* ((llx x)
+	 (lly y)
+	 (urx (+ x w))
+	 (ury (+ y h)))
+    (canvas-text! cnv (+ llx 5)(+ lly 5) name) ;; (conc testname " (" xtorig "," ytorig ")"))
+    (canvas-rectangle! cnv llx urx lly ury)
+    (if selected (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))))

@@ -543,7 +543,7 @@
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go
-		     #f))))))))
+		     (string-compare3 a b)))))))))
 
 ;; for each test:
 ;;   
