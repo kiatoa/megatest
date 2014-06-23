@@ -148,6 +148,13 @@ Misc
 				     (vector "Sort +s" 'statestatus "ASC")
 				     (vector "Sort -s" 'statestatus "DESC")))
 
+(define *tests-sort-type-index* '(("+testname" 0)
+				  ("-testname" 1)
+				  ("+event_time" 2)
+				  ("-event_time" 3)
+				  ("+statestatus" 4)
+				  ("-statestatus" 5)))
+
 ;; Don't forget to adjust the >= below if you add to the sort-options above
 (define (next-sort-option)
   (if (>= *tests-sort-reverse* 5)
@@ -1228,10 +1235,20 @@ Misc
 	      ))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort -t"   #:action (lambda (obj)
-						 (next-sort-option)
-						 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-						 (mark-for-update)))
+	      (let* ((cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
+		     (lb         (iup:listbox #:expand "HORIZONTAL"
+					      #:dropdown "YES"
+					      #:action (lambda (obj val index lbstate)
+							 (set! *tests-sort-reverse* index)
+							 (mark-for-update))))
+		     (default-cmd (car cmds-list)))
+		(iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
+		(set! *tests-sort-reverse* 0)
+		lb)
+	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
+	      ;;   				 (next-sort-option)
+	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	      ;;   				 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
 						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+HideE" "-HideE"))
