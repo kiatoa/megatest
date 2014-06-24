@@ -105,7 +105,11 @@
 	    ;; Now have runconfigs data loaded, set environment vars
 	    (for-each (lambda (section)
 			(for-each (lambda (varval)
-				    (setenv (car varval)(cadr varval)))
+				    (let ((var (car varval))
+					  (val (cadr varval)))
+				      (if (and (string? var)(string? val))
+					  (setenv var val)
+					  (debug:print 0 "ERROR: bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
 	  (change-directory work-area) 
@@ -694,7 +698,8 @@
     (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
-    (if (args:get-arg "-preclean") ;; user has requested to preclean for this run
+    (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
+	     (not (equal? (db:test-get-rundir testinfo) "n/a"))) ;; n/a is a placeholder and thus not a read dir
 	(begin 
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
