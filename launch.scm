@@ -108,7 +108,8 @@
 				    (let ((var (car varval))
 					  (val (cadr varval)))
 				      (if (and (string? var)(string? val))
-					  (setenv var val)
+					  (begin
+					    (setenv var (config:eval-string-in-environment val))) ;; val)
 					  (debug:print 0 "ERROR: bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
