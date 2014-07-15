@@ -483,7 +483,13 @@ Misc
 			   (teststate  (db:test-get-state    test))
 			   ;;(teststart  (db:test-get-event_time test))
 			   (runtime    (db:test-get-run_duration test))
-			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
+			   (buttontxt  (cond
+					((equal? teststate "COMPLETED") teststatus)
+					((and (equal? teststate "NOT_STARTED")
+					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "KEEP_TRYING" "TEN_STRIKES")))
+					 teststatus)
+					(else
+					 teststate)))
 			   (button     (vector-ref columndat rown))
 			   (color      (car (gutils:get-color-for-state-status teststate teststatus)))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))

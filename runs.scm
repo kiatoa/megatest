@@ -452,6 +452,9 @@
 	(let ((items-list (items:get-items-from-config tconfig)))
 	  (if (list? items-list)
 	      (begin
+		(if (null? items-list)
+		    (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name "")))
+		      (mt:test-set-state-status-by-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites")))
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
@@ -488,7 +491,7 @@
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
-		(mt:test-set-state-status-by-id test-id "DEQUEUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+		(mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites"))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
@@ -564,6 +567,8 @@
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
+	    (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
+	      (mt:test-set-state-status-by-id test-id "DEQUEDED" "TIMED_OUT" "Nothing seen running in a while."))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
 		  (runs:queue-next-reg tal reg reglen regfull)
@@ -573,6 +578,8 @@
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
+      (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
+	(mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -756,8 +763,11 @@
 		  (begin
 		    (debug:print 1 "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
+		    (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
+		      (mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
+		    ;; This next is for the items
 		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
 		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
 		    (list (runs:queue-next-hed tal reg reglen regfull)
