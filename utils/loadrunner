@@ -1,7 +1,40 @@
 #!/bin/bash 
 
+LOADRUNNER=$0
+
 # load=`uptime|awk '{print $10}'|cut -d, -f1`
-load=`uptime|perl -pe 's/.*: (\d+.\d+),.*/$1/'`
+load=$(uptime|perl -pe 's/.*: (\d+.\d+),.*/$1/')
+load2=$(uptime|perl -pe 's/.*: (\d+.\d+), (\d+.\d+),.*/$2/')
+# echo "load2=$load2, load=$load"
+
+# Run a job detached from stdin/stdout (i.e. daemonized)
+# Launch on remotehost if specified by TARGETHOST
+#
+function launchjob () {
+  # Can't always trust $PWD
+  CURRWD=`pwd`
+  if [[ $TARGETHOST_LOGF == "" ]]; then
+      TARGETHOST_LOGF=NBFAKE-`date +%GWW%V.%u_%T`
+  fi
+  echo "#======================================================================"
+  echo "# NBFAKE Running command:"
+  echo "#     \"$*\""
+  echo "#======================================================================"
+  
+  if [[ $TARGETHOST == ""  ]]; then
+    sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &"
+  else
+    ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &\""
+  fi
+}
+
+function get_delay_time () {
+  RANGE=$1
+  number=$RANDOM
+  let "number %= $RANGE"
+  echo $number
+}
+
 if which cpucheck > /dev/null;then
     numcpu=`cpucheck|tail -1|awk '{print $6}'`
 elif which lscpu > /dev/null;then
@@ -12,18 +45,32 @@ fi
 
 # NB// max_load is in units of percent.
 #
-lperc=`echo "100 * $load / $numcpu"|bc`
+lperc=$(echo "100 * $load / $numcpu"|bc)
+lperc2=$(echo "100 * $load2 / $numcpu"|bc)
 if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
   max_load=100
 else
   max_load=$MAX_ALLOWED_LOAD
 fi
 
+lfile=/tmp/loadrunner-$USER.lockfile
+lockfile -r 5 -l 60 $lfile
+
 if [[  $lperc -lt $max_load ]];then
-  echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD %"
-  echo "Starting command: \"$@\""
-  nbfake "$@"
+  if [[ $lperc -le $lperc2 ]];then
+    echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
+    echo "Starting command: \"$@\""
+    launchjob "$@"
+    # we sleep ten seconds here to keep the lock a little longer and give time for
+    # the uptime to show a response
+    sleep 10
+  else
+   echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
+  fi
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
-  echo "loadrunner $@" | at now + 2 minutes 2> /dev/null
+  echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
 fi
+
+sleep $(get_delay_time 10)
+rm -f $lfile

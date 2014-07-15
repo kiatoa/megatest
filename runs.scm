@@ -39,7 +39,7 @@
 (define (runs:create-run-record)
   (let* ((mconfig      (if *configdat*
 		           *configdat*
-		           (if (setup-for-run)
+		           (if (launch:setup-for-run)
 		               *configdat*
 		               (begin
 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
@@ -90,7 +90,7 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
+(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((target    (or (common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
@@ -208,21 +208,30 @@
 	 (deferred          '()) ;; delay running these since they have a waiton clause
 	 (runconfigf         (conc  *toppath* "/runconfigs.config"))
 	 (test-records       (make-hash-table))
-	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
-	 (all-test-names     (hash-table-keys all-tests-registry))
-	 (test-names         (tests:filter-test-names all-test-names test-patts))
-	 (required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
+	 ;; need to process runconfigs before generating these lists
+	 (all-tests-registry #f)  ;; (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
+	 (all-test-names     #f)  ;; (hash-table-keys all-tests-registry))
+	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
+	 (required-tests     #f)) ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 
-    (set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
+    (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals "pre-launch-env-vars")
+	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+
+    ;; Now generate all the tests lists
+    (set! all-tests-registry (tests:get-all))
+    (set! all-test-names     (hash-table-keys all-tests-registry))
+    (set! test-names         (tests:filter-test-names all-test-names test-patts))
+    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
     ;; (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
-    (debug:print-info 0 "test names " test-names)
+    (debug:print-info 0 "tests search path: " (tests:get-tests-search-path *configdat*))
+    (debug:print-info 0 "all tests:  " (string-intersperse (sort all-test-names string<) " "))
+    (debug:print-info 0 "test names: " (string-intersperse (sort test-names string<) " "))
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
@@ -432,10 +441,13 @@
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
-	(set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+	(runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
 	(let ((items-list (items:get-items-from-config tconfig)))
 	  (if (list? items-list)
 	      (begin
+		(if (null? items-list)
+		    (let ((test-id (rmt:get-test-id run-id test-name "")))
+		      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites")))
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
@@ -472,7 +484,7 @@
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (rmt:get-test-id run-id hed "")))
-		(mt:test-set-state-status-by-id test-id "DEQUEUED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites"))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
@@ -548,6 +560,8 @@
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
+	    (let ((test-id (rmt:get-test-id run-id hed "")))
+	      (mt:test-set-state-status-by-id run-id test-id "DEQUEDED" "TIMED_OUT" "Nothing seen running in a while."))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
 		  (runs:queue-next-reg tal reg reglen regfull)
@@ -557,6 +571,8 @@
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
+      (let ((test-id (rmt:get-test-id run-id hed "")))
+	(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -741,8 +757,11 @@
 		  (begin
 		    (debug:print 1 "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
+		    (let ((test-id (rmt:get-test-id run-id hed "")))
+		      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
+		    ;; This next is for the items
 		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
 		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
 		    (list (runs:queue-next-hed tal reg reglen regfull)
@@ -904,7 +923,7 @@
       (if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
-      (if (> (current-seconds)(+ last-time-some-running 60))
+      (if (> (current-seconds)(+ last-time-some-running 240))
 	  (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
 	;; (debug:print 0 "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
@@ -1118,7 +1137,7 @@
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_ITEMPATH"  item-path)
     (setenv "MT_RUNNAME"   runname)
-    (set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+    (runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated
@@ -1362,6 +1381,7 @@
 								    (if (and (string? dira)(string? dirb))
 									(> (string-length dira)(string-length dirb))
 									#f)))))
+		       (toplevel-retries (make-hash-table)) ;; try three times to loop through and remove top level tests
 		       (test-retry-time  (make-hash-table))
 		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
 		   (let loop ((test (car sorted-tests))
@@ -1387,7 +1407,14 @@
 			       ((remove-runs)
 				;; if the test is a toplevel-with-children issue an error and do not remove
 				(if toplevel-with-children
-				    (debug:print 0 "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
+				    (begin
+				      (debug:print 0 "WARNING: skipping removal of " test-fulln " with run-id " run-id " as it has sub tests")
+				      (hash-table-set! toplevel-retries test-fulln (+ (hash-table-ref/default toplevel-retries test-fulln 0) 1))
+				      (if (> (hash-table-ref toplevel-retries test-fulln) 3)
+					  (if (not (null? tal))
+					      (loop (car tal)(cdr tal))) ;; no else clause - drop it if no more in queue and > 3 tries
+					  (let ((newtal (append tal (list test))))
+					    (loop (car newtal)(cdr newtal))))) ;; loop with test still in queue
 				    (begin
 				      (debug:print-info 0 "test: " test-name " itest-state: " test-state)
 				      (if (member test-state (list "RUNNING" "LAUNCHED" "REMOTEHOSTSTART" "KILLREQ"))
@@ -1456,7 +1483,7 @@
 			    (resolve-pathname run-dir)
 			    #f)))
     (if (not remove-data-only)
-	(mt:test-set-state-status-by-id (db:test-get-id test) "REMOVING" "LOCKED" #f))
+	(mt:test-set-state-status-by-id (db:test-get-run-id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
@@ -1510,7 +1537,7 @@
      (else
       (let ((db   #f)
 	    (keys #f))
-	(if (not (setup-for-run))
+	(if (not (launch:setup-for-run))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))

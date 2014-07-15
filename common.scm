@@ -246,7 +246,7 @@
 		      (args:get-arg "-reqtarg")
 		      (if (args:get-arg "-target")
 			  (args:get-arg "-target")
-			  #f)))
+			  (getenv "MT_TARGET"))))
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
 		      (and (not (null? tlist))

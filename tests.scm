@@ -33,8 +33,7 @@
 
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all)
-  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
-				   (tests:get-tests-search-path *configdat*))))
+  (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
@@ -476,7 +475,7 @@
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go
-		     #f))))))))
+		     (string-compare3 a b)))))))))
 
 ;; for each test:
 ;;   

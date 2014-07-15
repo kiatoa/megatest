@@ -93,6 +93,30 @@
 	  (change-directory top-path)
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
+	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
+	  ;; one of these is defunct/redundant ...
+	  (if (not (launch:setup-for-run force: #t))
+	      (begin
+		(debug:print 0 "Failed to setup, exiting") 
+		;; (sqlite3:finalize! db)
+		;; (sqlite3:finalize! tdb)
+		(exit 1)))
+	  (change-directory *toppath*) 
+	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
+	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
+	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
+	    ;; Now have runconfigs data loaded, set environment vars
+	    (for-each (lambda (section)
+			(for-each (lambda (varval)
+				    (let ((var (car varval))
+					  (val (cadr varval)))
+				      (if (and (string? var)(string? val))
+					  (begin
+					    (setenv var (config:eval-string-in-environment val))) ;; val)
+					  (debug:print 0 "ERROR: bad variable spec, " var "=" val))))
+				  (configf:get-section rconfig section)))
+		      (list "default" target)))
+	  (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
@@ -126,23 +150,13 @@
 	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))))
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
-	  (if (not (setup-for-run))
-	      (begin
-		(debug:print 0 "Failed to setup, exiting") 
-		;; (sqlite3:finalize! db)
-		;; (sqlite3:finalize! tdb)
-		(exit 1)))
 	  ;; Can setup as client for server mode now
 	  ;; (client:setup)
 
-	  (change-directory *toppath*) 
-	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
-	  (change-directory work-area) 
-
-	  (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
+	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
+	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info
@@ -415,12 +429,12 @@
 		(exit 4)))))))
 
 ;; set up the very basics needed for doing anything here.
-(define (setup-for-run)
+(define (launch:setup-for-run #!key (force #f))
   ;; would set values for KEYS in the environment here for better support of env-override but 
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now
   ;; special case
-  (if (not (hash-table? *configdat*))  ;; no need to re-open on every call
+  (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
       (begin
 	(set! *configinfo* (find-and-read-config 
 			    (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
@@ -711,7 +725,8 @@
     (set! mt-bindir-path (pathname-directory remote-megatest))
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
-    (if (args:get-arg "-preclean") ;; user has requested to preclean for this run
+    (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
+	     (not (equal? (db:test-get-rundir testinfo) "n/a"))) ;; n/a is a placeholder and thus not a read dir
 	(begin 
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record

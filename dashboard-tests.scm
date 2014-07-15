@@ -662,7 +662,9 @@
 											   "%" 
 											   item-path))
 						      )))
-				       (system (conc cmd " &")))))
+				       (system (conc (dtests:get-pre-command)
+						     cmd 
+						     (dtests:get-post-command))))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"

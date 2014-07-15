@@ -15,9 +15,12 @@ help :
 	@echo sudo apt-get install libreadline-dev
 	@echo sudo apt-get install libwebkitgtk-dev 
 	@echo sudo apt-get install libmotif3
+	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
 	@echo You are using PREFIX=$(PREFIX)
-	@echo You are using proxy="$(proxy)"
-	@echo If needed set proxy to host.dom:port
+	@echo You are using PROXY="$(PROXY)"
+	@echo If needed set PROXY to host.dom:port
+	@echo   http_proxy=$(http_proxy)
+	@echo   PROX=$(PROX)
 	@echo 
 	@echo To make all do: make all
 
@@ -30,15 +33,19 @@ endif
 PROXY=
 
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.8.0
-SQLITE3_VERSION=3071401
+CHICKEN_VERSION=4.9.0.1
+SQLITE3_VERSION=3080500
+# http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
+
+# Override IUPBRANCH to use other than trunk
+IUPBRANCH=iup-3.10.1
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
-     spiffy-directory-listing ssax sxml-serializer sxml-modifications sqlite3 sql-de-lite \
-     srfi-19
+     spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
+     srfi-19 refdb
 
 #
 # Derived variables
@@ -75,9 +82,10 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin
+all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -105,24 +113,43 @@ setup-chicken4x.sh : $(EGGFLAGS)
 	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
 	mkdir -p $(PREFIX)
 
-chicken-core/chicken.scm : chicken-4.9.0rc1.tar.gz
-	tar xfz chicken-4.9.0rc1.tar.gz
-	ln -sf chicken-4.9.0rc1 chicken-core
-	# git clone http://code.call-cc.org/git/chicken-core.git
+chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
+	tar xfz chicken-$(CHICKEN_VERSION).tar.gz
+	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
 
 
 chicken-4.9.0rc1.tar.gz : 
 	wget http://code.call-cc.org/dev-snapshots/2014/04/17/chicken-4.9.0rc1.tar.gz
 
+chicken-4.9.0.1.tar.gz :
+	wget http://code.call-cc.org/releases/4.9.0/chicken-4.9.0.1.tar.gz
+
 # git clone git://code.call-cc.org/chicken-core
+# git clone http://code.call-cc.org/git/chicken-core.git
 
 $(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX) install
 
-# 
-# IUP
-#
+#======================================================================
+# S Q L I T E 3
+#======================================================================
+
+sqlite-autoconf-$(SQLITE3_VERSION).tar.gz :
+	wget  http://www.sqlite.org/2014/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+sqlite-autoconf-$(SQLITE3_VERSION)/config.log : sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	tar xfz  sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+
+$(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
+	cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install
+
+$(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
+
+#======================================================================
+# I U P 
+#======================================================================
 
 ffcall.fossil :
 	fossil clone http://www.kiatoa.com/fossils/ffcall ffcall.fossil
@@ -141,19 +168,23 @@ iuplib.fossil :
 
 iup/installall.sh : iuplib.fossil
 	mkdir -p iup
-	cd iup && if [ -e installall.sh ];then fossil update; else fossil open ../iuplib.fossil; fi
+	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/iup/alldone : iup/installall.sh
+iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
 	cd iup && ./makeall.sh
 
-$(PREFIX)/lib/libiup.so : iup/iup/alldone
-	touch -c $(PREFIX)/lib/libiup.so
+$(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
+	cd iup && ./installall.sh
+
+# $(PREFIX)/lib/libiup.so : iup/iup/alldone
+#	touch -c $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
-	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
 
 $(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
-	$(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+	CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
+
 
 clean :
 	rm -rf chicken-4.8.0 eggflags ffcall sqlite-autoconf-$(SQLITE3_VERSION)

@@ -430,7 +430,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (setup-for-run))
+    (let ((tl        (launch:setup-for-run))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
@@ -449,7 +449,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-stop-server"
 		       "-show-cmdinfo"
 		       "-list-runs")))
-	(if (setup-for-run)
+	(if (launch:setup-for-run)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -468,7 +468,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
-    (let ((tl (setup-for-run)))
+    (let ((tl (launch:setup-for-run)))
       (if tl 
 	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
@@ -539,12 +539,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (for-each (lambda (kt)
 				     (setenv (car kt) (cadr kt)))
 				   key-vals))
-		     (read-config "runconfigs.config" #f #t sections: sections))))
+		     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
     data))
 
 
 (if (args:get-arg "-show-runconfig")
-    (let ((tl (setup-for-run)))
+    (let ((tl (launch:setup-for-run)))
       (push-directory *toppath*)
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
@@ -563,7 +563,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-config")
-    (let ((tl   (setup-for-run))
+    (let ((tl   (launch:setup-for-run))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       (push-directory *toppath*)
       ;; keep this one local
@@ -669,7 +669,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
-    (if (setup-for-run)
+    (if (launch:setup-for-run)
 	(let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
@@ -867,7 +867,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
@@ -913,7 +913,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
 		(exit 1)))
@@ -987,7 +987,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	(if (not (setup-for-run))
+	(if (not (launch:setup-for-run))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1034,7 +1034,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (if (not (setup-for-run))
+	  (if (not (launch:setup-for-run))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
@@ -1139,7 +1139,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
@@ -1170,7 +1170,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-rebuild-db")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1180,7 +1180,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-cleanup-db")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1190,7 +1190,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1203,7 +1203,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-update-meta")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1218,7 +1218,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
-    (let* ((toppath (setup-for-run))
+    (let* ((toppath (launch:setup-for-run))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
       (if dbstruct
 	  (begin
@@ -1244,41 +1244,41 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-run-wait")
     (begin
-      (if (not (setup-for-run))
+      (if (not (launch:setup-for-run))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       (operate-on 'run-wait)
       (set! *didsomething* #t)))
 
-;; Not converted to use dbstruct yet
-;;
-(if (args:get-arg "-convert-to-norm")
-    (let* ((toppath (setup-for-run))
-	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t))))
-      (for-each 
-       (lambda (field)
-	 (let ((dat '()))
-	   (debug:print-info 0 "Getting data for field " field)
-	   (sqlite3:for-each-row
-	    (lambda (id val)
-	      (set! dat (cons (list id val) dat)))
-	    (get-db db run-id)
-	    (conc "SELECT id," field " FROM tests;"))
-	   (debug:print-info 0 "found " (length dat) " items for field " field)
-	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
-	     (for-each
-	      (lambda (item)
-		(let ((newval ;; (sdb:qry 'getid 
-		       (cadr item))) ;; )
-		  (if (not (equal? newval (cadr item)))
-		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
-		  (sqlite3:execute qry newval (car item))))
-	      dat)
-	     (sqlite3:finalize! qry))))
-       (db:close-all dbstruct)
-       (list "uname" "rundir" "final_logf" "comment"))
-      (set! *didsomething* #t)))
+;; ;; ;; redo me ;; Not converted to use dbstruct yet
+;; ;; ;; redo me ;;
+;; ;; ;; redo me (if (args:get-arg "-convert-to-norm")
+;; ;; ;; redo me     (let* ((toppath (setup-for-run))
+;; ;; ;; redo me 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t))))
+;; ;; ;; redo me       (for-each 
+;; ;; ;; redo me        (lambda (field)
+;; ;; ;; redo me 	 (let ((dat '()))
+;; ;; ;; redo me 	   (debug:print-info 0 "Getting data for field " field)
+;; ;; ;; redo me 	   (sqlite3:for-each-row
+;; ;; ;; redo me 	    (lambda (id val)
+;; ;; ;; redo me 	      (set! dat (cons (list id val) dat)))
+;; ;; ;; redo me 	    (db:get-db db run-id)
+;; ;; ;; redo me 	    (conc "SELECT id," field " FROM tests;"))
+;; ;; ;; redo me 	   (debug:print-info 0 "found " (length dat) " items for field " field)
+;; ;; ;; redo me 	   (let ((qry (sqlite3:prepare db (conc "UPDATE tests SET " field "=? WHERE id=?;"))))
+;; ;; ;; redo me 	     (for-each
+;; ;; ;; redo me 	      (lambda (item)
+;; ;; ;; redo me 		(let ((newval ;; (sdb:qry 'getid 
+;; ;; ;; redo me 		       (cadr item))) ;; )
+;; ;; ;; redo me 		  (if (not (equal? newval (cadr item)))
+;; ;; ;; redo me 		      (debug:print-info 0 "Converting " (cadr item) " to " newval " for test #" (car item)))
+;; ;; ;; redo me 		  (sqlite3:execute qry newval (car item))))
+;; ;; ;; redo me 	      dat)
+;; ;; ;; redo me 	     (sqlite3:finalize! qry))))
+;; ;; ;; redo me        (db:close-all dbstruct)
+;; ;; ;; redo me        (list "uname" "rundir" "final_logf" "comment"))
+;; ;; ;; redo me       (set! *didsomething* #t)))
 
 (if (args:get-arg "-import-megatest.db")
     (let* ((toppath  (setup-for-run))
