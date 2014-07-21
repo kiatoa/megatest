@@ -400,12 +400,14 @@
   (let* ((loop-list       (list hed tal reg reruns))
 	 (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
+	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
 	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
 		      "\n non-completed:   " (runs:pretty-string non-completed) 
+		      "\n prereq-fails:    " (runs:pretty-string prereq-fails)
 		      "\n fails:           " (runs:pretty-string fails)
 		      "\n testmode:        " testmode
 		      "\n (member 'toplevel testmode): " (member 'toplevel testmode)
@@ -462,6 +464,7 @@
 		(exit 1))))))
 
      ((and (null? fails)
+	   (null? prereq-fails)
 	   (not (null? non-completed)))
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
@@ -557,6 +560,7 @@
 ;; == == 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))) ;; an issue with prereqs not yet met?
 
      ((and (null? fails)
+	   (null? prereq-fails)
 	   (null? non-completed))
       (if  (runs:can-keep-running? hed 5)
 	  (begin
@@ -574,12 +578,17 @@
 		  (runs:queue-next-reg tal reg reglen regfull)
 		  reruns))))
 
-     ((and (not (null? fails))(member 'normal testmode))
+     ((and 
+       (or (not (null? fails))
+	   (not (null? prereq-fails)))
+       (member 'normal testmode))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
       (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id hed "")))
-	(mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+	(if (not (null? prereq-fails))
+	    (mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+	    (mt:test-set-state-status-by-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites")))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -1096,6 +1105,14 @@
 		 (equal? (db:test-get-state test) "COMPLETED")
 		 (not (member (db:test-get-status test)
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
+	  prereqs-not-met))
+
+(define (runs:calc-prereq-fail prereqs-not-met)
+  (filter (lambda (test)
+	    (and (vector? test) ;; not (string? test))
+		 (equal? (db:test-get-state test) "NOT_STARTED")
+		 (not (member (db:test-get-status test)
+			      '("n/a" "KEEP_TRYING")))))
 	  prereqs-not-met))
 
 (define (runs:calc-not-completed prereqs-not-met)
