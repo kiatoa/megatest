@@ -3,6 +3,7 @@
 
 BINPATH=$(shell readlink -m $(PWD)/../bin)
 MEGATEST=$(BINPATH)/megatest
+DASHBOARD=$(BINPATH)/dashboard
 PATH := $(BINPATH):$(PATH)
 RUNNAME := $(shell date +w%V.%u.%H.%M)
 IPADDR := "-"
@@ -89,6 +90,7 @@ test6: fullprep
 
 test7: 
 	@echo Only a/c testname c should remain. If there is a run a/b/c then there is a cache issue.
+	cd simplerun;$(DASHBOARD) &
 	(cd simplerun; \
 	 $(MEGATEST) -server - -daemonize; \
          $(MEGATEST) -remove-runs -target %/% :runname % -testpatt %; \
@@ -116,6 +118,7 @@ test9 : minsetup test9a test9b test9c test9d test9e
 
 test9a :
 	@echo Run super-simple mintest e, no waitons.
+	cd mintest;$(DASHBOARD)&
 	cd mintest;megatest -preclean -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9b :
