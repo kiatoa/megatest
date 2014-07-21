@@ -486,7 +486,7 @@ Misc
 			   (buttontxt  (cond
 					((equal? teststate "COMPLETED") teststatus)
 					((and (equal? teststate "NOT_STARTED")
-					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "KEEP_TRYING" "TEN_STRIKES")))
+					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "TIMED_OUT" "KEEP_TRYING" "TEN_STRIKES")))
 					 teststatus)
 					(else
 					 teststate)))
