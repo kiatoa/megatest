@@ -1181,13 +1181,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED DELETED)
+	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED" "INCOMPLETE"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
