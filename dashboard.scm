@@ -146,7 +146,8 @@ Misc
 				     (vector "Sort +t" 'event_time "ASC")
 				     (vector "Sort -t" 'event_time "DESC")
 				     (vector "Sort +s" 'statestatus "ASC")
-				     (vector "Sort -s" 'statestatus "DESC")))
+				     (vector "Sort -s" 'statestatus "DESC")
+				     (vector "Sort +a" 'testname   "ASC")))
 
 (define *tests-sort-type-index* '(("+testname" 0)
 				  ("-testname" 1)
