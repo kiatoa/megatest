@@ -30,5 +30,5 @@ compile :
 	(cd ../../..;make -j && make install)
 
 clean :
-	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/*
+	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/*
 
