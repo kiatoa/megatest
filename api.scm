@@ -42,7 +42,7 @@
     ((get-keys)                     (db:get-keys dbstruct))
 
     ;; TESTS
-    ;; json doesn't do vectors, convert to list
+    ((test-toplevel-num-items)         (apply db:test-toplevel-num-items dbstruct params))
     ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
     ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
     ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))

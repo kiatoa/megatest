@@ -191,6 +191,9 @@
 (define (rmt:test-set-status-state run-id test-id status state msg)
   (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
 
+(define (rmt:test-toplevel-num-items run-id test-name)
+  (rmt:send-receive 'test-toplevel-num-items run-id (list run-id test-name)))
+
 ;; (define (rmt:get-previous-test-run-record run-id test-name item-path)
 ;;   (rmt:send-receive 'get-previous-test-run-record run-id (list run-id test-name item-path)))
 

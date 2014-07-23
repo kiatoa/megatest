@@ -1383,7 +1383,7 @@
 				  (test-fulln    (db:test-get-fullname new-test-dat))
 				  (uname         (db:test-get-uname    new-test-dat))
 				  (toplevel-with-children (and (db:test-get-is-toplevel test)
-							       (> (cdb:remote-run db:test-toplevel-num-items db run-id test-name) 0))))
+							       (> (rmt:test-toplevel-num-items run-id test-name) 0))))
 			     (case action
 			       ((remove-runs)
 				;; if the test is a toplevel-with-children issue an error and do not remove
@@ -1497,7 +1497,7 @@
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
     (if (not remove-data-only)
-	(cdb:remote-run db:delete-test-records db #f (db:test-get-id test)))))
+	(rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test)))))
 
 ;;======================================================================
 ;; Routines for manipulating runs

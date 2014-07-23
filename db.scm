@@ -1815,12 +1815,12 @@
      tstsqry)
     res))
 
-(define (db:test-toplevel-num-items db run-id testname)
+(define (db:test-toplevel-num-items dbstruct run-id testname)
   (let ((res 0))
     (sqlite3:for-each-row
      (lambda (num-items)
        (set! res num-items))
-     db
+     (db:get-db dbstruct run-id)
      "SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
      run-id
      testname)
