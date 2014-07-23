@@ -512,7 +512,7 @@
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
 	    (let ((test-id (rmt:get-test-id run-id hed "")))
-	      (mt:test-set-state-status-by-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while."))
+	      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while."))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
 		  (runs:queue-next-reg tal reg reglen regfull)
