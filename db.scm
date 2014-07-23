@@ -1871,7 +1871,7 @@
 	(db:general-call db 'update-pass-fail-counts (list test-name test-name test-name))
 	(if (equal? status "RUNNING")
 	    (db:general-call db 'top-test-set-running (list test-name))
-	    (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name test-name)))
+	    (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name)))
 	#f)
       #f))
 

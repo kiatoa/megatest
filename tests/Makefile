@@ -60,7 +60,7 @@ test3b :
 
 test4 : cleanprep
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
-	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
+	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -runtests % -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
 
 test4a : cleanprep
 	cd fullrun;time $(MEGATEST) -debug $(DEBUG) -preclean -runtests all_toplevel -reqtarg ubuntu/nfs/none :runname $(RUNNAME)_b -m "This is a comment specific to a run" -v $(LOGGING)
