@@ -47,7 +47,7 @@ fi
 #
 lperc=$(echo "100 * $load / $numcpu"|bc)
 lperc2=$(echo "100 * $load2 / $numcpu"|bc)
-let lperc2adj="$lperc2 + 0.5"
+let "lperc2adj=$lperc2 + 1"
 if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
   max_load=100
 else
