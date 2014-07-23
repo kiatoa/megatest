@@ -393,12 +393,15 @@
 	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
-	 (non-completed   (runs:calc-not-completed prereqs-not-met)))
+	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
+	 (non-completed   (runs:calc-not-completed prereqs-not-met))
+	 (runnables       (runs:calc-runnable prereqs-not-met)))
     (debug:print-info 4 "START OF INNER COND #2 "
 		      "\n can-run-more:    " can-run-more
 		      "\n testname:        " hed
 		      "\n prereqs-not-met: " (runs:pretty-string prereqs-not-met)
 		      "\n non-completed:   " (runs:pretty-string non-completed) 
+		      "\n prereq-fails:    " (runs:pretty-string prereq-fails)
 		      "\n fails:           " (runs:pretty-string fails)
 		      "\n testmode:        " testmode
 		      "\n (member 'toplevel testmode): " (member 'toplevel testmode)
@@ -455,6 +458,7 @@
 		(exit 1))))))
 
      ((and (null? fails)
+	   (null? prereq-fails)
 	   (not (null? non-completed)))
       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
         		      (append newtal reruns)))
@@ -495,61 +499,8 @@
 			reruns)))
 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))
 
-     ;; (debug:print-info 1 "allinqueue: " allinqueue)
-     ;; (debug:print-info 1 "prereqstrs: " prereqstrs)
-     ;; (debug:print-info 1 "notinqueue: " notinqueue)
-     ;; (debug:print-info 1 "tal:        " tal)
-     ;; (debug:print-info 1 "newtal:     " newtal)
-     ;; (debug:print-info 1 "reg:        " reg)
-
-;; == ==       ;; num-retries code was here
-;; == ==       ;; we use this opportunity to move contents of reg to tal
-;; == ==       ;; but also lets check that the prerequisites are all in the newtal or reruns lists
-;; == == 
-;; == ==       (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
-;; == ==         		      (append newtal reruns)))
-;; == == 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
-;; == ==              (prereqstrs (map (lambda (x)(if (string? x) x (db:test-get-testname x)))
-;; == ==         		      prereqs-not-met))
-;; == == 	     ;; a prereq that is not found in allinqueue will be put in the notinqueue list
-;; == == 	     ;; 
-;; == ==              (notinqueue (filter (lambda (x)
-;; == ==         			   (not (member x allinqueue)))
-;; == ==         			 prereqstrs)))
-;; == ==         (if (not (null? notinqueue))
-;; == ==             (if (runs:can-keep-running? hed 5) ;; try five times
-;; == ==         	(begin
-;; == == 		  (debug:print-info 4 "increment cant-run-tests for " hed)
-;; == ==         	  (runs:inc-cant-run-tests hed)
-;; == ==         	  (list (car newtal)(append (cdr newtal) reg) '() reruns))
-;; == ==         	(begin
-;; == == 		  
-;; == == 		  (if (runs:lownoise (conc "no fails prereq, null notinqueue " hed) 30)
-;; == == 		      (begin
-;; == == 			(debug:print 1 "WARNING: test " hed " has no failed prerequisites but does have prerequistes that are NOT in the queue: " (string-intersperse notinqueue ", "))
-;; == == 			(debug:print-info 4 "allinqueue: " allinqueue)
-;; == == 			(debug:print-info 4 "prereqstrs: " prereqstrs)
-;; == == 			(debug:print-info 4 "notinqueue: " notinqueue)))
-;; == == 		  (if (and (null? tal)(null? reg))
-;; == == 		      (list (car newtal)(append (cdr newtal) reg) '() reruns)
-;; == == 		      (list (runs:queue-next-hed tal reg reglen regfull)
-;; == == 			    (runs:queue-next-tal tal reg reglen regfull)
-;; == == 			    (runs:queue-next-reg tal reg reglen regfull)
-;; == == 			    reruns))))
-;; == == 	    ;; have prereqs in queue, keep going.
-;; == == 	    (begin
-;; == == 	      (if (runs:lownoise (conc "no fails prereq " hed) 30)
-;; == == 		  (debug:print-info 1 "no fails in prerequisites for " hed ", waiting on tests; "
-;; == == 				    (string-intersperse (map (lambda (x)
-;; == == 							       (if (string? x)
-;; == == 								   x
-;; == == 								   (runs:make-full-test-name (db:test-get-testname x)
-;; == == 											     (db:test-get-item-path x))))
-;; == == 							     non-completed) ", ")
-;; == == 				    ". Delaying launch of " hed "."))
-;; == == 	      (list (car newtal)(append (cdr newtal) reg) '() reruns))))) ;; an issue with prereqs not yet met?
-
      ((and (null? fails)
+	   (null? prereq-fails)
 	   (null? non-completed))
       (if  (runs:can-keep-running? hed 5)
 	  (begin
@@ -561,18 +512,23 @@
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
 	    (let ((test-id (rmt:get-test-id run-id hed "")))
-	      (mt:test-set-state-status-by-id run-id test-id "DEQUEDED" "TIMED_OUT" "Nothing seen running in a while."))
+	      (mt:test-set-state-status-by-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while."))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
 		  (runs:queue-next-reg tal reg reglen regfull)
 		  reruns))))
 
-     ((and (not (null? fails))(member 'normal testmode))
+     ((and 
+       (or (not (null? fails))
+	   (not (null? prereq-fails)))
+       (member 'normal testmode))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
       (let ((test-id (rmt:get-test-id run-id hed "")))
-	(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+	(if (not (null? prereq-fails))
+	    (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+	    (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites")))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -586,6 +542,7 @@
       (if (or (not (null? reg))(not (null? tal)))
 	   (list (car newtal)(append (cdr newtal) reg) '() reruns)
 	  #f)) 
+     ((null? runnables) #f) ;; if we get here and non-completed is null the it's all over.
      (else
       (debug:print 0 "WARNING: FAILS or incomplete tests maybe preventing completion of this run. Watch for issues with test " hed ", continuing for now")
       ;; (list (runs:queue-next-hed tal reg reglen regfull)
@@ -840,7 +797,7 @@
 		  (case (string->symbol state)
 		    ((COMPLETED) #f)
 		    ((NOT_STARTED)
-		     (if (member status '("TEN_STRIKES" "BLOCKED"))
+		     (if (member status '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" ))
 			 #f
 			 t))
 		    ((DELETED) #f)
@@ -1092,11 +1049,35 @@
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
+(define (runs:calc-prereq-fail prereqs-not-met)
+  (filter (lambda (test)
+	    (and (vector? test) ;; not (string? test))
+		 (equal? (db:test-get-state test) "NOT_STARTED")
+		 (not (member (db:test-get-status test)
+			      '("n/a" "KEEP_TRYING")))))
+	  prereqs-not-met))
+
 (define (runs:calc-not-completed prereqs-not-met)
   (filter
    (lambda (t)
      (or (not (vector? t))
 	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+   prereqs-not-met))
+
+(define (runs:calc-not-completed prereqs-not-met)
+  (filter
+   (lambda (t)
+     (or (not (vector? t))
+	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+   prereqs-not-met))
+
+(define (runs:calc-runnable prereqs-not-met)
+  (filter 
+   (lambda (t)
+     (or (not (vector? t))
+	 (and (equal? "NOT_STARTED" (db:test-get-state t))
+	      (member (db:test-get-status t)
+			      '("n/a" "KEEP_TRYING")))))
    prereqs-not-met))
 
 (define (runs:pretty-string lst)
@@ -1194,13 +1175,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED DELETED)
+	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED" "INCOMPLETE"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
@@ -1483,7 +1464,7 @@
 			    (resolve-pathname run-dir)
 			    #f)))
     (if (not remove-data-only)
-	(mt:test-set-state-status-by-id (db:test-get-run-id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
+	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)

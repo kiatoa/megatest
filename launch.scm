@@ -366,10 +366,10 @@
 								   (system (conc "kill -9 " p-id))))))
 							 (car processes)))
 						      (system (conc "kill -9 -" pid))
-						      (tests:test-set-status! test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)))
+						      (tests:test-set-status! test-id "KILLED"  "KILLED" (args:get-arg "-m") #f)))
 						   (begin
 						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-;;						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL"
+						     (tests:test-set-status! test-id "KILLED"  "KILLED" (args:get-arg "-m") #f)
 						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)
 						     (exit 1) ;; IS THIS NECESSARY OR WISE???
 						     )))

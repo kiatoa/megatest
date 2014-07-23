@@ -16,10 +16,10 @@ function launchjob () {
   if [[ $TARGETHOST_LOGF == "" ]]; then
       TARGETHOST_LOGF=NBFAKE-`date +%GWW%V.%u_%T`
   fi
-  echo "#======================================================================"
-  echo "# NBFAKE Running command:"
-  echo "#     \"$*\""
-  echo "#======================================================================"
+  # echo "#======================================================================"
+  # echo "# NBFAKE Running command:"
+  # echo "#     \"$*\""
+  # echo "#======================================================================"
   
   if [[ $TARGETHOST == ""  ]]; then
     sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &"
@@ -47,6 +47,7 @@ fi
 #
 lperc=$(echo "100 * $load / $numcpu"|bc)
 lperc2=$(echo "100 * $load2 / $numcpu"|bc)
+let lperc2adj="$lperc2 + 0.5"
 if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
   max_load=100
 else
@@ -54,22 +55,22 @@ else
 fi
 
 lfile=/tmp/loadrunner-$USER.lockfile
-lockfile -r 5 -l 60 $lfile
+lockfile -r 5 -l 60 $lfile &> /dev/null
 
 if [[  $lperc -lt $max_load ]];then
-  if [[ $lperc -le $lperc2 ]];then
-    echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
-    echo "Starting command: \"$@\""
+  if [[ $lperc -le $lperc2adj ]];then
+    # echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
+    # echo "Starting command: \"$@\""
     launchjob "$@"
     # we sleep ten seconds here to keep the lock a little longer and give time for
     # the uptime to show a response
     sleep 10
   else
-   echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
+   echo "$LOADRUNNER $@" | at now + 2 minutes &> /dev/null
   fi
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
-  echo "$LOADRUNNER $@" | at now + 2 minutes 2> /dev/null
+  echo "$LOADRUNNER $@" | at now + 2 minutes &> /dev/null
 fi
 
 sleep $(get_delay_time 10)

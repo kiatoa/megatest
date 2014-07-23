@@ -138,7 +138,8 @@ Misc
 				     (vector "Sort +t" 'event_time "ASC")
 				     (vector "Sort -t" 'event_time "DESC")
 				     (vector "Sort +s" 'statestatus "ASC")
-				     (vector "Sort -s" 'statestatus "DESC")))
+				     (vector "Sort -s" 'statestatus "DESC")
+				     (vector "Sort +a" 'testname   "ASC")))
 
 (define *tests-sort-type-index* '(("+testname" 0)
 				  ("-testname" 1)
@@ -479,7 +480,7 @@ Misc
 			   (buttontxt  (cond
 					((equal? teststate "COMPLETED") teststatus)
 					((and (equal? teststate "NOT_STARTED")
-					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "KEEP_TRYING" "TEN_STRIKES")))
+					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "TIMED_OUT" "KEEP_TRYING" "TEN_STRIKES")))
 					 teststatus)
 					(else
 					 teststate)))
