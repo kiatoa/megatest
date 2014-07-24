@@ -1246,7 +1246,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Wait on a run to complete
 ;;======================================================================
 
-(if (args:get-arg "-run-wait")
+(if (and (args:get-arg "-run-wait")
+	 (not (args:get-arg "-runtests"))) ;; run-wait is built into runtests now
     (begin
       (if (not (launch:setup-for-run))
 	  (begin
