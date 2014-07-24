@@ -52,10 +52,10 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
 #
 
 ifeq ($(PROXY),)
-PROX=
+PROX:=
 else
-http_proxy=http://$(PROXY)
-PROX=-proxy $(PROXY)
+http_proxy:=http://$(PROXY)
+PROX:=-proxy $(PROXY)
 endif
 
 BUILDHOME=$(PWD)
