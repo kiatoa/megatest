@@ -881,7 +881,7 @@
 	     (tfullname   (runs:make-full-test-name test-name item-path))
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen))
-	     (num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id)))
+	     (num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f)))
 
       (if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
@@ -1042,8 +1042,16 @@
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
 	  (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
-	 ))) ;; LET* ((test-record
-    
+	 ))
+	;; now *if* -run-wait we wait for all tests to be done
+      (let loop ((num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f)))
+	(if (and (args:get-arg "-run-wait")
+		 (> num-running 0))
+	    (begin
+	      (debug:print-info 0 "-run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state.")
+	      (thread-sleep! 15)
+	      (loop (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f)))))
+      ) ;; LET* ((test-record
     ;; we get here on "drop through". All done!
     (debug:print-info 1 "All tests launched")))
 

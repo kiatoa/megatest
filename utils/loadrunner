@@ -47,6 +47,7 @@ fi
 #
 lperc=$(echo "100 * $load / $numcpu"|bc)
 lperc2=$(echo "100 * $load2 / $numcpu"|bc)
+let "lperc2adj=$lperc2 + $numcpu"
 if [[ "x$MAX_ALLOWED_LOAD" == "x" ]]; then
   max_load=100
 else
@@ -57,20 +58,21 @@ lfile=/tmp/loadrunner-$USER.lockfile
 lockfile -r 5 -l 60 $lfile &> /dev/null
 
 if [[  $lperc -lt $max_load ]];then
-  if [[ $lperc -le $lperc2 ]];then
+  if [[ $lperc -le $lperc2adj ]];then
     # echo "Load acceptable: lperc=$lperc %, max_load=$max_load %, load=$load, numcpu=$numcpu, MAX_ALLOWED_LOAD=$MAX_ALLOWED_LOAD % and $lperc2 < $lperc"
     # echo "Starting command: \"$@\""
     launchjob "$@"
     # we sleep ten seconds here to keep the lock a little longer and give time for
     # the uptime to show a response
-    sleep 10
+    # sleep 2
   else
    echo "$LOADRUNNER $@" | at now + 2 minutes &> /dev/null
+   # sleep 5
   fi
 else
   # echo "Load too high: lperc=$lperc, max_load=$max_load, waiting two minutes before trying to run command: \"$@\""
   echo "$LOADRUNNER $@" | at now + 2 minutes &> /dev/null
 fi
 
-sleep $(get_delay_time 10)
+sleep $(get_delay_time 3)
 rm -f $lfile

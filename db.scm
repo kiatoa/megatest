@@ -1299,13 +1299,21 @@
      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
     res))
 
-(define (db:get-count-tests-running-for-run-id db run-id)
-  (let ((res 0))
+;; override states to count with list of strings.
+;;
+(define (db:get-count-tests-running-for-run-id db run-id states)
+  (let ((res 0)
+	(sqrystr (conc "SELECT count(id) FROM tests WHERE state in ('"
+		       (if states
+			   (string-intersperse states "','")
+			   "RUNNING','LAUNCHED','REMOTEHOSTSTART")
+		       "') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');")))
     (sqlite3:for-each-row
      (lambda (count)
        (set! res count))  ;; select * from tests where run_id=1 and uname = 'n/a' and item_path='';
      db
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
+     sqrystr run-id)
+     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
     res))
 
 (define (db:get-running-stats db)
