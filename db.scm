@@ -1526,7 +1526,7 @@
 
  ;; override states to count with list of strings.
 ;;
-(define (db:get-count-tests-running-for-run-id -blah db run-id states)
+(define (db:get-count-tests-running-for-run-id-blah db run-id states)
   (let ((res 0)
 	(sqrystr (conc "SELECT count(id) FROM tests WHERE state in ('"
 		       (if states
