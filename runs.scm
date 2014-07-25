@@ -1038,13 +1038,13 @@
 	  (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	 ))
 	;; now *if* -run-wait we wait for all tests to be done
-      (let loop ((num-running (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f)))
+      (let loop ((num-running (rmt:get-count-tests-running-for-run-id run-id)))
 	(if (and (args:get-arg "-run-wait")
 		 (> num-running 0))
 	    (begin
 	      (debug:print-info 0 "-run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state.")
 	      (thread-sleep! 15)
-	      (loop (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f)))))
+	      (loop (rmt:get-count-tests-running-for-run-id run-id)))))
       ) ;; LET* ((test-record
     ;; we get here on "drop through". All done!
     (debug:print-info 1 "All tests launched")))
