@@ -52,10 +52,10 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
 #
 
 ifeq ($(PROXY),)
-PROX=
+PROX:=
 else
-http_proxy=http://$(PROXY)
-PROX=-proxy $(PROXY)
+http_proxy:=http://$(PROXY)
+PROX:=-proxy $(PROXY)
 endif
 
 BUILDHOME=$(PWD)
@@ -85,7 +85,7 @@ CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so
+all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -146,6 +146,23 @@ $(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
 
 $(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
+
+#======================================================================
+# M A T T S   U T I L S
+#======================================================================
+
+opensrc.fossil :
+	fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
+
+opensrc/histstore/histstore.scm : opensrc.fossil
+	mkdir -p opensrc
+	cd opensrc;fossil open ../opensrc.fossil
+
+opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/sqlite3.so 
+	cd opensrc/histstore;$(PREFIX)/bin/csc histstore.scm -o hs
+
+$(PREFIX)/bin/hs : opensrc/histstore/hs 
+	cp -f opensrc/histstore/hs $(PREFIX)/bin/hs
 
 #======================================================================
 # I U P 

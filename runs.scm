@@ -1038,13 +1038,21 @@
 	  (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
 	 ))
 	;; now *if* -run-wait we wait for all tests to be done
-      (let loop ((num-running (rmt:get-count-tests-running-for-run-id run-id)))
+      (let loop ((num-running (rmt:get-count-tests-running-for-run-id run-id))
+		 (prev-num-running 0))
 	(if (and (args:get-arg "-run-wait")
 		 (> num-running 0))
 	    (begin
-	      (debug:print-info 0 "-run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state.")
+	      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+	      (if (> (current-seconds)(+ last-time-incomplete 900))
+		  (begin
+		    (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
+		    (set! last-time-incomplete (current-seconds))
+		    (cdb:remote-run db:find-and-mark-incomplete #f)))
+	      (if (not (eq? num-running prev-num-running))
+		  (debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
 	      (thread-sleep! 15)
-	      (loop (rmt:get-count-tests-running-for-run-id run-id)))))
+	      (loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
       ) ;; LET* ((test-record
     ;; we get here on "drop through". All done!
     (debug:print-info 1 "All tests launched")))
@@ -1183,13 +1191,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
+	((NOT_STARTED COMPLETED DELETED)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED" "INCOMPLETE"))(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
@@ -1259,7 +1267,8 @@
 		600) ;; i.e. no update for more than 600 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "Test is stuck or dead" #f))
+	       (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
+	       ;; (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
 	     (debug:print 2 "NOTE: " test-name " is already running")))
 	(else      
 	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
