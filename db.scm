@@ -85,6 +85,7 @@
 	(db:initialize db))
     ;; Moving db:set-sync to a call in run.scm - it is a persistent value and only needs to be set once
     ;; (db:set-sync db)
+    (sqlite3:execute db "PRAGMA synchronous = 0;")
     db))
 
 ;; keeping it around for debugging purposes only
