@@ -18,7 +18,6 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
-(use trace)
 
 (declare (uses common))
 (declare (uses margs))

@@ -45,7 +45,7 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
-     srfi-19 refdb
+     srfi-19 refdb ini-file
 
 #
 # Derived variables

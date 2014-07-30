@@ -1042,24 +1042,33 @@
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
 	  (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
-	 ))
-	;; now *if* -run-wait we wait for all tests to be done
-      (let loop ((num-running      (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f))
-		 (prev-num-running 0))
-	(if (and (args:get-arg "-run-wait")
-		 (> num-running 0))
-	    (begin
-	      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
-	      (if (> (current-seconds)(+ last-time-incomplete 900))
-		  (begin
-		    (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
-		    (set! last-time-incomplete (current-seconds))
-		    (cdb:remote-run db:find-and-mark-incomplete #f)))
-	      (if (not (eq? num-running prev-num-running))
-		  (debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
-	      (thread-sleep! 15)
-	      (loop (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f) num-running))))
-      ) ;; LET* ((test-record
+	 )))
+    ;; now *if* -run-wait we wait for all tests to be done
+    
+    ;; if run-wait mode then wait 15 seconds for db to stabilize
+    (if (or (args:get-arg "-run-wait")
+	    (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
+	(thread-sleep! 15))
+    ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
+    (let wait-loop ((num-running      (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f))
+		    (prev-num-running 0))
+      ;; (debug:print 0 "num-running=" num-running ", prev-num-running=" prev-num-running)
+      (if (and (or (args:get-arg "-run-wait")
+		   (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
+	       (> num-running 0))
+	  (begin
+	    ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+	    ;; (debug:print 0 "Got here eh! num-running=" num-running " (> num-running 0) " (> num-running 0))
+	    (if (> (current-seconds)(+ last-time-incomplete 900))
+		(begin
+		  (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
+		  (set! last-time-incomplete (current-seconds))
+		  (cdb:remote-run db:find-and-mark-incomplete #f)))
+	    (if (not (eq? num-running prev-num-running))
+		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
+	    (thread-sleep! 15)
+	    (wait-loop (cdb:remote-run db:get-count-tests-running-for-run-id #f run-id #f) num-running))))
+    ;; LET* ((test-record
     ;; we get here on "drop through". All done!
     (debug:print-info 1 "All tests launched")))
 
@@ -1123,6 +1132,7 @@
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
+	 (incomplete-timeout (string->number (or (configf:lookup *configdat* "setup" "incomplete-timeout") "x")))
 	 (item-path     "")
 	 (db           #f)
 	 (full-test-name #f))
@@ -1269,7 +1279,8 @@
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
 				       (db:test-get-run_duration testdat)))
-		600) ;; i.e. no update for more than 600 seconds
+		(or incomplete-timeout
+		    6000)) ;; i.e. no update for more than 6000 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
 	       (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
