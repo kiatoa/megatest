@@ -357,12 +357,12 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (print "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
 	   (> count 0))
-      (print "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
