@@ -585,7 +585,11 @@
 	 (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
-	 (loop-list               (list hed tal reg reruns)))
+	 (loop-list               (list hed tal reg reruns))
+	 ;; configure the load runner
+	 (numcpus                 (common:get-num-cpus))
+	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
+	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 "have-resources: " have-resources " prereqs-not-met: (" 
 		      (string-intersperse 
 		       (map (lambda (t)
@@ -684,6 +688,10 @@
       ;; we are going to reset all the counters for test retries by setting a new hash table
       ;; this means they will increment only when nothing can be run
       (set! *max-tries-hash* (make-hash-table))
+      ;; well, first lets see if cpu load throttling is enabled. If so wait around until the
+      ;; average cpu load is under the threshold before continuing
+      (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
+	  (common:wait-for-cpuload maxload numcpus waitdelay))
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)

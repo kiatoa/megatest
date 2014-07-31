@@ -329,17 +329,54 @@
     freespc))
   
 (define (get-cpu-load)
-  (let* ((load-res (cmd-run->list "uptime"))
-	 (load-rx  (regexp "load average:\\s+(\\d+)"))
-	 (cpu-load #f))
-    (for-each (lambda (l)
-		(let ((match (string-search load-rx l)))
-		  (if match
-		      (let ((newval (string->number (cadr match))))
-			(if (number? newval)
-			    (set! cpu-load newval))))))
-	      (car load-res))
-    cpu-load))
+  (car (common:get-cpu-load)))
+;;   (let* ((load-res (cmd-run->list "uptime"))
+;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
+;; 	 (cpu-load #f))
+;;     (for-each (lambda (l)
+;; 		(let ((match (string-search load-rx l)))
+;; 		  (if match
+;; 		      (let ((newval (string->number (cadr match))))
+;; 			(if (number? newval)
+;; 			    (set! cpu-load newval))))))
+;; 	      (car load-res))
+;;     cpu-load))
+
+;; get cpu load by reading from /proc/loadavg, return all three values
+;;
+(define (common:get-cpu-load)
+  (with-input-from-file "/proc/loadavg" 
+    (lambda ()(list (read)(read)(read)))))
+
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000))
+  (let* ((loadavg (common:get-cpu-load))
+	 (first   (car loadavg))
+	 (next    (cadr loadavg))
+	 (adjload (* maxload numcpus))
+	 (loadjmp (- first next)))
+    (cond
+     ((and (> first adjload)
+	   (> count 0))
+      (print "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
+      (thread-sleep! waitdelay)
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
+     ((and (> loadjmp numcpus)
+	   (> count 0))
+      (print "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
+      (thread-sleep! waitdelay)
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+
+(define (common:get-num-cpus)
+  (with-input-from-file "/proc/cpuinfo"
+    (lambda ()
+      (let loop ((numcpu 0)
+		 (inl    (read-line)))
+	(if (eof-object? inl)
+	    numcpu
+	    (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
+		      (+ numcpu 1)
+		      numcpu)
+		  (read-line)))))))
 
 (define (get-uname . params)
   (let* ((uname-res (cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
