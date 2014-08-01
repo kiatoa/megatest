@@ -204,7 +204,7 @@
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
-(define (runs:run-tests target runname test-patts user flags) ;; test-names
+(define (runs:run-tests target runname test-patts user flags #!key (run-count 3)) ;; test-names
   (common:clear-caches) ;; clear all caches
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
@@ -350,9 +350,19 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	  (begin
+	    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
+	    (if (> run-count 0)
+		(begin
+		  (if (not (hash-table-ref/default flags "-preclean" #f))
+		      (hash-table-set! flags "-preclean" #t))
+		  (if (not (hash-table-ref/default flags "-rerun" #f))
+		      (hash-table-set! flags "-rerun" "STUCK/DEAD,n/a,ZERO_ITEMS"))
+		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
-    (debug:print-info 4 "All done by here")))
+    (debug:print-info 4 "All done by here")
+    ))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.
