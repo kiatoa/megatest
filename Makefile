@@ -167,3 +167,9 @@ deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 	csc -deploy $(OFILES) $(GOFILES) dashboard.scm -o deploytarg
 	mv deploytarg/deploytarg deploytarg/dboard
 
+DATASHAREO=configf.o common.o process.o
+datashare-testing/datashare : datashare.scm $(DATASHAREO)
+	csc datashare.scm $(DATASHAREO) -o datashare-testing/datashare
+
+datashare : datashare-testing/datashare
+	./datashare-testing/datashare

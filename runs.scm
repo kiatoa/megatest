@@ -201,7 +201,7 @@
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
 ;;            
-(define (runs:run-tests target runname test-patts user flags) ;; test-names
+(define (runs:run-tests target runname test-patts user flags #!key (run-count 3)) ;; test-names
   (let* ((keys               (keys:config-get-fields *configdat*))
 	 (keyvals            (keys:target->keyval keys target))
 	 (run-id             (rmt:register-run keyvals runname "new" "n/a" user))  ;;  test-name)))
@@ -342,9 +342,19 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	  (begin
+	    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
+	    (if (> run-count 0)
+		(begin
+		  (if (not (hash-table-ref/default flags "-preclean" #f))
+		      (hash-table-set! flags "-preclean" #t))
+		  (if (not (hash-table-ref/default flags "-rerun" #f))
+		      (hash-table-set! flags "-rerun" "STUCK/DEAD,n/a,ZERO_ITEMS"))
+		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
-    (debug:print-info 4 "All done by here")))
+    (debug:print-info 4 "All done by here")
+    ))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.
@@ -579,7 +589,11 @@
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
-	 (loop-list               (list hed tal reg reruns)))
+	 (loop-list               (list hed tal reg reruns))
+	 ;; configure the load runner
+	 (numcpus                 (common:get-num-cpus))
+	 (maxload                 (string->number (or (configf:lookup *configdat* "jobtools" "maxload") "3")))
+	 (waitdelay               (string->number (or (configf:lookup *configdat* "jobtools" "waitdelay") "60"))))
     (debug:print-info 4 "have-resources: " have-resources " prereqs-not-met: (" 
 		      (string-intersperse 
 		       (map (lambda (t)
@@ -678,6 +692,10 @@
       ;; we are going to reset all the counters for test retries by setting a new hash table
       ;; this means they will increment only when nothing can be run
       (set! *max-tries-hash* (make-hash-table))
+      ;; well, first lets see if cpu load throttling is enabled. If so wait around until the
+      ;; average cpu load is under the threshold before continuing
+      (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
+	  (common:wait-for-cpuload maxload numcpus waitdelay))
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
@@ -1036,24 +1054,29 @@
 	  (loop (car reg)(cdr reg) '() reruns))
 	 (else
 	  (debug:print-info 4 "Exiting loop with...\n  hed=" hed "\n  tal=" tal "\n  reruns=" reruns))
-	 ))
-	;; now *if* -run-wait we wait for all tests to be done
-      (let loop ((num-running (rmt:get-count-tests-running-for-run-id run-id))
-		 (prev-num-running 0))
-	(if (and (args:get-arg "-run-wait")
-		 (> num-running 0))
-	    (begin
-	      ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
-	      (if (> (current-seconds)(+ last-time-incomplete 900))
-		  (begin
-		    (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
-		    (set! last-time-incomplete (current-seconds))
-		    (cdb:remote-run db:find-and-mark-incomplete #f)))
-	      (if (not (eq? num-running prev-num-running))
-		  (debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
-	      (thread-sleep! 15)
-	      (loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
-      ) ;; LET* ((test-record
+	 )))
+    ;; now *if* -run-wait we wait for all tests to be done
+    ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
+    (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
+		    (prev-num-running 0))
+      ;; (debug:print 0 "num-running=" num-running ", prev-num-running=" prev-num-running)
+      (if (and (or (args:get-arg "-run-wait")
+		   (equal? (configf:lookup *configdat* "setup" "run-wait") "yes"))
+	       (> num-running 0))
+	  (begin
+	    ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+	    ;; (debug:print 0 "Got here eh! num-running=" num-running " (> num-running 0) " (> num-running 0))
+	    (if (> (current-seconds)(+ last-time-incomplete 900))
+		(begin
+		  (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
+		  (set! last-time-incomplete (current-seconds))
+		  (cdb:remote-run db:find-and-mark-incomplete #f)))
+	    (if (not (eq? num-running prev-num-running))
+		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
+	    (thread-sleep! 15)
+	    ;; (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
+	    (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
+    ;; LET* ((test-record
     ;; we get here on "drop through". All done!
     (debug:print-info 1 "All tests launched")))
 
@@ -1117,6 +1140,7 @@
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
+	 (incomplete-timeout (string->number (or (configf:lookup *configdat* "setup" "incomplete-timeout") "x")))
 	 (item-path     "")
 	 (db           #f)
 	 (full-test-name #f))
@@ -1264,7 +1288,8 @@
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
 				       (db:test-get-run_duration testdat)))
-		600) ;; i.e. no update for more than 600 seconds
+		(or incomplete-timeout
+		    6000)) ;; i.e. no update for more than 6000 seconds
 	     (begin
 	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
 	       (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "" #f))

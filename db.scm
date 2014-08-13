@@ -156,7 +156,7 @@
 		       run-id)
 		      )) ;; add strings db to rundb, not in use yet
 		(sqlite3:set-busy-handler! db handler)
-		(sqlite3:execute db "PRAGMA synchronous = 1;"))) ;; was 0 but 0 is a gamble
+		(sqlite3:execute db "PRAGMA synchronous = 0;"))) ;; was 0 but 0 is a gamble, changed back to 0
 	  (dbr:dbstruct-set-rundb!  dbstruct db)
 	  (dbr:dbstruct-set-inuse!  dbstruct #t)
 	  (dbr:dbstruct-set-olddb!  dbstruct olddb)

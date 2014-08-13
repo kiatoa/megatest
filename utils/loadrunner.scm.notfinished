@@ -1,0 +1,192 @@
+
+;; Copyright 2006-2013, Matthew Welland.
+;; 
+;;  This program is made available under the GNU GPL version 2.0 or
+;;  greater. See the accompanying file COPYING for details.
+;; 
+;;  This program is distributed WITHOUT ANY WARRANTY; without even the
+;;  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;;  PURPOSE.
+
+(use ssax)
+(use sxml-serializer)
+(use sxml-modifications)
+(use regex)
+(use srfi-69)
+(use regex-case)
+(use posix)
+(use json)
+(use csv)
+(use srfi-18)
+(use format)
+
+(require-library iup)
+(import (prefix iup iup:))
+(require-library ini-file)
+(import (prefix ini-file ini:))
+
+(use canvas-draw)
+(import canvas-draw-iup)
+
+(use sqlite3 srfi-1 posix regex regex-case srfi-69)
+(import (prefix sqlite3 sqlite3:))
+
+(include "megatest-fossil-hash.scm")
+
+;;
+;; GLOBALS
+;;
+(define *loadrunner:current-tab-number* 0)
+(define loadrunner:unrecognised-command "ERROR: Unrecognised command or missing params. Try \"loadrunner help\"")
+(define loadrunner:help (conc "Usage: loadrunner [action [params ...]]
+
+Note: run loadrunner without parameters to start the gui.
+
+  run cmd [params ..]   : Run cmd params ... when system load drops
+  process               : Process the queue
+
+Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
+
+Version: " megatest-fossil-hash)) ;; "
+
+;;======================================================================
+;; DB
+;;======================================================================
+
+(define (loadrunner:initialize-db db)
+  (for-each
+   (lambda (qry)
+     (sqlite3:execute db qry))
+   (list 
+    "CREATE TABLE pkgs 
+         (id        INTEGER PRIMARY KEY,
+          cmd       TEXT,
+          datetime  TEXT);")))
+
+;; Create the sqlite db
+(define (loadrunner:open-db path) 
+  (if (and path
+	   (directory? path)
+	   (file-read-access? path))
+      (let* ((dbpath    (conc path "/loadrunner.db"))
+	     (writeable (file-write-access? dbpath))
+	     (dbexists  (file-exists? dbpath))
+	     (handler   (make-busy-timeout 136000)))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print 2 "ERROR: problem accessing db " dbpath
+			((condition-property-accessor 'exn 'message) exn))
+	   (exit))
+	 (set! db (sqlite3:open-database dbpath)))
+	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
+	(if (not dbexists)
+	    (begin
+	      (loadrunner:initialize-db db)))
+	db)))
+
+;;======================================================================
+;; GUI
+;;======================================================================
+
+;; The main menu 
+(define (loadrunner:main-menu)
+  (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
+   (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
+		       (iup:menu-item "Open"  action: (lambda (obj)
+							(iup:show (iup:file-dialog))
+							(print "File->open " obj)))
+		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
+		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
+   (iup:menu-item "Tools" (iup:menu
+		       (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
+		       ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
+		       ;;  					   (show message-window
+		       ;;  					     #:modal? #t
+		       ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
+		       ;;  					     ;; #:x 'mouse
+		       ;;  					     ;; #:y 'mouse
+		       ;;  )					     
+		       ))))
+
+(define (loadrunner:publish-view)
+  (iup:vbox
+   (iup:hbox 
+    (iup:button "Pushme" 
+		#:expand "YES"
+		))))
+
+(define (loadrunner:get-view)
+  (iup:vbox
+   (iup:hbox 
+    (iup:button "Pushme"
+		#:expand "YES"
+		))))
+
+(define (loadrunner:manage-view)
+  (iup:vbox
+   (iup:hbox 
+    (iup:button "Pushme"
+		#:expand "YES"
+		))))
+
+(define (loadrunner:gui)
+  (iup:show
+   (iup:dialog 
+    #:title (conc "Loadrunner dashboard " (current-user-name) ":" (current-directory))
+    #:menu (loadrunner:main-menu)
+    (let* ((tabs (iup:tabs
+		  #:tabchangepos-cb (lambda (obj curr prev)
+				      (set! *loadrunner:current-tab-number* curr))
+		  (loadrunner:publish-view)
+		  (loadrunner:get-view)
+		  (loadrunner:manage-view)
+		  )))
+	;; (set! (iup:callback tabs tabchange-cb:) (lambda (a b c)(print "SWITCHED TO TAB: " a " " b " " c)))
+	(iup:attribute-set! tabs "TABTITLE0" "Publish")
+	(iup:attribute-set! tabs "TABTITLE1" "Get")
+	(iup:attribute-set! tabs "TABTITLE2" "Manage")
+	;; (iup:attribute-set! tabs "BGCOLOR" "190 190 190")
+	tabs)))
+  (iup:main-loop))
+
+;;======================================================================
+;; MAIN
+;;======================================================================
+
+(define (loadrunner:load-config path)
+  (let ((fname (conc path "/.loadrunner.config")))
+    (ini:property-separator-patt " *  *")
+    (ini:property-separator #\space)
+    (if (file-exists? fname)
+	(ini:read fname)
+	'())))
+
+(define (main)
+  (let* ((args (argv))
+	 (prog (car args))
+	 (rema (cdr args))
+	 (conf (loadrunner:load-config (pathname-directory prog))))
+    ;; (    ?????
+    (cond
+     ((eq? (length rema) 1)
+      (case (string->symbol (car rema))
+	((process)(loadrunner:process-queue))
+	((pause)
+	 (loadrunner:pause-queue (cdr rema)))
+	((help -h -help --h --help)
+	 (print loadrunner:help))
+	(else
+	 (print loadrunner:unrecognised-command))))
+     ((null? rema)(loadrunner:gui))
+     ((>= (length rema) 2)
+      (case (string->symbol (car rema))
+	((run)
+	 (loadrunner:process-cmd (cdr rema)))
+	((remove)
+	 (loadrunner:remove-cmds (cdr rema)))
+	(else
+	 (print loadrunner:unrecognised-command))))
+     (else (print loadrunner:unrecognised-command)))))
+
+(main)

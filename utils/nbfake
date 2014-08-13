@@ -11,7 +11,10 @@ echo "#     \"$*\""
 echo "#======================================================================"
 
 if [[ $TARGETHOST == ""  ]]; then
-  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &"
+  unset TARGETHOST
+  TARGETHOST_LOGF_TEMP=$TARGETHOST_LOGF
+  unset TARGETHOST_LOGF
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF_TEMP 2>&1 &"
 else
   ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > $TARGETHOST_LOGF 2>&1 &\""
 fi
