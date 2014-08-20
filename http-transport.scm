@@ -71,7 +71,7 @@
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
-    (set! db *inmemdb*)
+    ;; (set! db *inmemdb*)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -88,7 +88,7 @@
 				 (cond
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "api"))
-				   (send-response body:    (api:process-request db $) ;; the $ is the request vars proc
+				   (send-response body:    (api:process-request *inmemdb* $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
 				   (set! *last-db-access* (current-seconds))
@@ -315,7 +315,7 @@
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (http-transport:keep-running server-id)
+(define (http-transport:keep-running server-id run-id)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -360,10 +360,12 @@
 	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
 
       ;;
-      ;; set_running after our first pass through
+      ;; set_running after our first pass through and start the db
       ;;
       (if (eq? server-state 'available)
-	  (tasks:server-set-state! tdb server-id "running"))
+	  (begin
+	    (set! *inmemdb*  (db:setup run-id))
+	    (tasks:server-set-state! tdb server-id "running")))
 
       (if (and (<= rem-time 4)
 	       (> rem-time 0))
@@ -469,10 +471,16 @@
 				    run-id
 				    server-id)) "Server run"))
 	       (th3 (make-thread (lambda ()
-				   (http-transport:keep-running server-id))
+				   (http-transport:keep-running server-id run-id))
 				 "Keep running")))
 	  ;; Database connection
-	  (set! *inmemdb*  (db:setup run-id))
+
+
+	  ;; don't start the db here
+
+	  ;; (set! *inmemdb*  (db:setup run-id))
+
+
 	  (thread-start! th2)
 	  (thread-start! th3)
 	  (set! *didsomething* #t)
