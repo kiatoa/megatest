@@ -399,9 +399,9 @@
       (if (and *server-run*
 	       (or (> (db:get-count-tests-running *inmemdb* run-id) 0)
 		   (and (eq? run-id 0)
-			(> (tasks:num-servers-non-zero-running tdb) 0)))
-	       (> (+ last-access server-timeout)
-		  (current-seconds)))
+			(> (tasks:num-servers-non-zero-running tdb) 0))
+		   (> (+ last-access server-timeout)
+		      (current-seconds))))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	    ;;
