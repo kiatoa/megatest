@@ -394,9 +394,12 @@
 
       ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
       ;;
-      ;; no_traffic
+      ;; no_traffic, no running tests, if server 0, no running servers
       ;;
       (if (and *server-run*
+	       (or (> (db:get-count-tests-running *inmemdb* run-id) 0)
+		   (and (eq? run-id 0)
+			(> (tasks:num-servers-non-zero-running tdb) 0)))
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
 	  (begin

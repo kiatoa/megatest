@@ -144,6 +144,16 @@
      run-id)
     res))
 
+(define (tasks:num-servers-non-zero-running mdb)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (num-running)
+       (set! res num-running))
+     mdb
+     "SELECT count(id) FROM servers WHERE run_id != 0 AND state = 'running';"
+     run-id)
+    res))
+
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
 		   (conc "defunct" tag) run-id))
