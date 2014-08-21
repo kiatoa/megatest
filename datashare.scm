@@ -131,26 +131,55 @@ Version: " megatest-fossil-hash)) ;; "
 		       ))))
 
 (define (datashare:publish-view configdat)
-  (let* ((label-size  "50x")
-	 (areas-sel   (iup:listbox #:expand "YES" #:dropdown "YES"))
-	 (version-val (iup:textbox #:expand "YES" #:size "50x"))
-	 (iteration   (iup:textbox #:expand "YES" #:size "20x"))
-	 (comment     (iup:textbox #:expand "YES"))
-	 (source-path (iup:textbox #:expand "YES"))
+  (pp (hash-table->alist configdat))
+  (let* ((areas       (configf:get-section configdat "areas"))
+	 (label-size  "70x")
+	 (areas-sel   (iup:listbox #:expand "HORIZONTAL" #:dropdown "YES"))
+	 (version-tb  (iup:textbox #:expand "HORIZONTAL")) ;;  #:size "50x"))
+	 ;; (iteration   (iup:textbox #:expand "HORIZONTAL" #:size "20x"))
+	 (comment-tb  (iup:textbox #:expand "YES" #:multiline "YES"))
+	 (source-tb   (iup:textbox #:expand "HORIZONTAL"
+				   #:value (or (configf:lookup configdat "target" "basepath")
+					       "")))
+	 (publish     (lambda (publish-type)
+			(let* ((area-num  (or (string->number (iup:attribute areas-sel "VALUE")) 0))
+			       (area-dat  (if (> area-num 0)(list-ref areas (- area-num 1))'("NOT SELECTED" "NOT SELECTED")))
+			       (area-path (cadr area-dat))
+			       (area-name (car  area-dat))
+			       (version   (iup:attribute version-tb "VALUE"))
+			       (comment   (iup:attribute comment-tb "VALUE"))
+			       (spath     (iup:attribute source-tb  "VALUE")))
+			  (print "Publish: type=" publish-type ", area-name=" area-name ", spath=" spath ", area-path=" area-path ))))
+	 (copy        (iup:button "Copy and Publish"
+				  #:expand "HORIZONTAL"
+				  #:action (lambda (obj)
+					     (publish 'copy))))
+	 (link        (iup:button "Link and Publish"
+				  #:expand "HORIZONTAL"
+				  #:action (lambda (obj)
+					     (publish 'link))))
 	 (browse-btn  (iup:button "Browse"
 				  #:size "40x"
 				  #:action (lambda (obj)
 					     (let* ((fd  (iup:file-dialog #:dialogtype "DIR"))
 						    (top (iup:show fd #:modal? "YES")))
-					       (iup:attribute-set! source-path "VALUE"
+					       (iup:attribute-set! source-tb "VALUE"
 								   (iup:attribute fd "VALUE"))
 					       (iup:destroy! fd))))))
+    (print "areas")
+    (pp areas)
+    (fold (lambda (areadat num)
+	    ;; (print "Adding num=" num ", areadat=" areadat)
+	    (iup:attribute-set! areas-sel (conc num) (car areadat))
+	    (+ 1 num))
+	  1 areas)
     (iup:vbox
      (iup:hbox (iup:label "Area:"        #:size label-size)   areas-sel)
-     (iup:hbox (iup:label "Version:"     #:size label-size)   version-val
-	       (iup:label "Iteration:")   iteration)
-     (iup:hbox (iup:label "Comment:"     #:size label-size)   comment)
-     (iup:hbox (iup:label "Source path:" #:size label-size)   source-path browse-btn))))
+     (iup:hbox (iup:label "Version:"     #:size label-size)   version-tb)
+     ;; 	       (iup:label "Iteration:")   iteration)
+     (iup:hbox (iup:label "Comment:"     #:size label-size)   comment-tb)
+     (iup:hbox (iup:label "Source base path:" #:size label-size)   source-tb browse-btn)
+     (iup:hbox copy link))))
 
 (define (datashare:get-view configdat)
   (iup:vbox
