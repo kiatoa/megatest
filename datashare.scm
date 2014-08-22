@@ -32,6 +32,16 @@
 (import (prefix sqlite3 sqlite3:))
 
 (declare (uses configf))
+(declare (uses tree))
+;; (declare (uses dcommon))
+;; (declare (uses margs))
+;; (declare (uses launch))
+;; (declare (uses gutils))
+;; (declare (uses db))
+;; (declare (uses synchash))
+;; (declare (uses server))
+;; (declare (uses megatest-version))
+;; (declare (uses tbd))
 
 (include "megatest-fossil-hash.scm")
 
@@ -53,6 +63,42 @@ Note: run datashare without parameters to start the gui.
 Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
 
 Version: " megatest-fossil-hash)) ;; "
+
+;;======================================================================
+;; RECORDS
+;;======================================================================
+
+;; make-vector-record "testing" datastore pkg id area version_name store_type copied source_path iteration submitter datetime storegrp datavol quality disk_id comment
+;; testing
+(define (make-datastore:pkg)(make-vector 14))
+(define-inline (datastore:pkg-get-id             vec)    (vector-ref  vec 0))
+(define-inline (datastore:pkg-get-area           vec)    (vector-ref  vec 1))
+(define-inline (datastore:pkg-get-version_name   vec)    (vector-ref  vec 2))
+(define-inline (datastore:pkg-get-store_type     vec)    (vector-ref  vec 3))
+(define-inline (datastore:pkg-get-copied         vec)    (vector-ref  vec 4))
+(define-inline (datastore:pkg-get-source_path    vec)    (vector-ref  vec 5))
+(define-inline (datastore:pkg-get-iteration      vec)    (vector-ref  vec 6))
+(define-inline (datastore:pkg-get-submitter      vec)    (vector-ref  vec 7))
+(define-inline (datastore:pkg-get-datetime       vec)    (vector-ref  vec 8))
+(define-inline (datastore:pkg-get-storegrp       vec)    (vector-ref  vec 9))
+(define-inline (datastore:pkg-get-datavol        vec)    (vector-ref  vec 10))
+(define-inline (datastore:pkg-get-quality        vec)    (vector-ref  vec 11))
+(define-inline (datastore:pkg-get-disk_id        vec)    (vector-ref  vec 12))
+(define-inline (datastore:pkg-get-comment        vec)    (vector-ref  vec 13))
+(define-inline (datastore:pkg-set-id!            vec val)(vector-set! vec 0 val))
+(define-inline (datastore:pkg-set-area!          vec val)(vector-set! vec 1 val))
+(define-inline (datastore:pkg-set-version_name!  vec val)(vector-set! vec 2 val))
+(define-inline (datastore:pkg-set-store_type!    vec val)(vector-set! vec 3 val))
+(define-inline (datastore:pkg-set-copied!        vec val)(vector-set! vec 4 val))
+(define-inline (datastore:pkg-set-source_path!   vec val)(vector-set! vec 5 val))
+(define-inline (datastore:pkg-set-iteration!     vec val)(vector-set! vec 6 val))
+(define-inline (datastore:pkg-set-submitter!     vec val)(vector-set! vec 7 val))
+(define-inline (datastore:pkg-set-datetime!      vec val)(vector-set! vec 8 val))
+(define-inline (datastore:pkg-set-storegrp!      vec val)(vector-set! vec 9 val))
+(define-inline (datastore:pkg-set-datavol!       vec val)(vector-set! vec 10 val))
+(define-inline (datastore:pkg-set-quality!       vec val)(vector-set! vec 11 val))
+(define-inline (datastore:pkg-set-disk_id!       vec val)(vector-set! vec 12 val))
+(define-inline (datastore:pkg-set-comment!       vec val)(vector-set! vec 13 val))
 
 ;;======================================================================
 ;; DB
@@ -167,6 +213,17 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define open-run-close open-run-close-no-exception-handling)
 
+(define (datashare:get-pkgs db area-filter version-filter iter-filter)
+  (let ((res '()))
+    (sqlite3:for-each-row ;; replace with fold ...
+     (lambda (a . b)
+       (set! res (cons (list->vector (cons a b)) res)))
+     db 
+     (conc "SELECT id,area,version_name,store_type,copied,source_path,iteration,submitter,datetime,storegrp,datavol,quality,disk_id,comment "
+	   " FROM pkgs WHERE area like ? AND version_name LIKE ? AND iteration " iter-filter ";")
+     area-filter version-filter)
+    (reverse res)))
+
 ;;======================================================================
 ;; DATA IMPORT/EXPORT
 ;;======================================================================
@@ -276,12 +333,59 @@ Version: " megatest-fossil-hash)) ;; "
      (iup:hbox (iup:label "Source base path:" #:size label-size)   source-tb browse-btn)
      (iup:hbox copy link))))
 
+(define (datastore:lst->path pathlst)
+  (conc "/" (string-intersperse (map conc pathlst) "/")))
+
 (define (datashare:get-view configdat)
   (iup:vbox
-   (iup:hbox 
-    (iup:button "Pushme"
-		#:expand "YES"
-		))))
+   (iup:hbox
+    (let* ((label-size     "60x")
+	   (area-filter    "%")
+	   (version-filter "%")
+	   (iter-filter    ">= 0")
+	   (dat            (make-hash-table)) ;; reverse lookup
+	   (apply          (iup:button "Apply"))
+	   (source         (iup:textbox))
+	   (submitter      (iup:label "" #:expand "HORIZONTAL"))
+	   (date-submitted (iup:label "" #:expand "HORIZONTAL"))
+	   (source-data    (iup:label "" #:expand "HORIZONTAL"))
+	   (tb             (iup:treebox
+			    #:value 0
+			    #:name "Packages"
+			    #:expand "YES"
+			    #:addexpanded "NO"
+			    #:selection-cb
+			    (lambda (obj id state)
+			      ;; (print "obj: " obj ", id: " id ", state: " state)
+			      (let* ((path   (datastore:lst->path (cdr (tree:node->path obj id))))
+				     (record (hash-table-ref/default dat path #f)))
+				(if record
+				    (begin
+				      (iup:attribute-set! submitter "TITLE" (datastore:pkg-get-submitter record))
+				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datastore:pkg-get-datetime record))))))
+				(print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
+				))))
+	   (refresh        (lambda (obj)
+			     (let ((db (datashare:open-db configdat)))
+			       (for-each
+				(lambda (pkgitem)
+				  (let* ((pkg-path   (list (datastore:pkg-get-area  pkgitem)
+							   (datastore:pkg-get-version_name pkgitem)
+							   (datastore:pkg-get-iteration pkgitem)))
+					 (pkg-id     (datastore:pkg-get-id          pkgitem))
+					 (path       (datastore:lst->path pkg-path)))
+				    ;; (print "tree:add-node tb=" tb ", pkg-path=" pkg-path ", pkg-id=" pkg-id)
+				    (if (not (hash-table-ref/default dat path #f))
+					(tree:add-node tb "Packages" pkg-path userdata: (conc "pkg-id: " pkg-id)))
+				    ;; (print "path=" path " pkgitem=" pkgitem)
+				    (hash-table-set! dat path pkgitem)))
+				(datashare:get-pkgs db area-filter version-filter iter-filter))
+			       (sqlite3:finalize! db)))))
+      (iup:vbox 
+       tb 
+       (iup:hbox (iup:button "Refresh" #:action refresh) apply)
+       (iup:hbox (iup:label "Submitter:" #:size label-size)(iup:hbox submitter)(iup:label "Date submitted:" #:size label-size))
+       )))))
 
 (define (datashare:manage-view configdat)
   (iup:vbox

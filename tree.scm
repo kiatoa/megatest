@@ -67,10 +67,11 @@
 
 ;; top is the top node name zeroeth node VALUE=0
 (define (tree:add-node obj top nodelst #!key (userdata #f))
-  (if (not (iup:attribute obj "TITLE0"))
+  (if (or (not (string? (iup:attribute obj "TITLE0")))
+	  (string-null? (iup:attribute obj "TITLE0")))
       (iup:attribute-set! obj "ADDBRANCH0" top))
   (cond
-   ((not (string=? top (iup:attribute obj "TITLE0")))
+   ((not (equal? top (iup:attribute obj "TITLE0")))
     (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
    ((null? nodelst))
    (else
