@@ -64,17 +64,20 @@ Version: " megatest-fossil-hash)) ;; "
      (sqlite3:execute db qry))
    (list 
     "CREATE TABLE pkgs 
-         (id        INTEGER PRIMARY KEY,
-          area      TEXT,
-          key       TEXT,
-          iteration INTEGER,
-          submitter TEXT,
-          datetime  TEXT,
-          storegrp  TEXT,
-          datavol   INTEGER,
-          quality   TEXT,
-          disk_id   INTEGER,
-          comment   TEXT);"
+         (id           INTEGER PRIMARY KEY,
+          area         TEXT,
+          version_name TEXT,
+          store_type   TEXT DEFAULT 'copy',
+          copied       INTEGER DEFAULT 0,
+          source_path  TEXT,
+          iteration    INTEGER DEFAULT 0,
+          submitter    TEXT,
+          datetime     TIMESTAMP DEFAULT (strftime('%s','now')),
+          storegrp     TEXT,
+          datavol      INTEGER,
+          quality      TEXT,
+          disk_id      INTEGER,
+          comment      TEXT);"
     "CREATE TABLE refs
          (id        INTEGER PRIMARY KEY,
           pkg_id    INTEGER,
@@ -84,27 +87,101 @@ Version: " megatest-fossil-hash)) ;; "
           storegrp   TEXT,
           path       TEXT);")))
 
+(define (datashare:register-data db area version-name store-type submitter quality source-path comment)
+  (let ((iter-qry       (sqlite3:prepare db "SELECT max(iteration) FROM pkgs WHERE area=? AND version_name=?;"))
+	(next-iteration 0))
+    (sqlite3:with-transaction
+     db
+     (lambda ()
+       (sqlite3:for-each-row
+	(lambda (iteration)
+	  (if (and (number? iteration)
+		   (>= iteration next-iteration))
+	      (set! next-iteration (+ iteration 1))))
+	iter-qry area version-name)
+       ;; now store the data
+       (sqlite3:execute db "INSERT INTO pkgs (area,version_name,iteration,store_type,submitter,source_path,quality,comment) 
+                                 VALUES (?,?,?,?,?,?,?,?);"
+			area version-name next-iteration store-type submitter source-path quality comment)))
+    (sqlite3:finalize! iter-qry)
+    next-iteration))
+  
+(define (datashare:get-pkg-record db area version-name iteration)
+  #f)
+
 ;; Create the sqlite db
-(define (datashare:open-db path) 
-  (if (and path
-	   (directory? path)
-	   (file-read-access? path))
-      (let* ((dbpath    (conc path "/datashare.db"))
-	     (writeable (file-write-access? dbpath))
-	     (dbexists  (file-exists? dbpath))
-	     (handler   (make-busy-timeout 136000)))
-	(handle-exceptions
-	 exn
-	 (begin
-	   (debug:print 2 "ERROR: problem accessing db " dbpath
-			((condition-property-accessor 'exn 'message) exn))
-	   (exit))
-	 (set! db (sqlite3:open-database dbpath)))
-	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
-	(if (not dbexists)
-	    (begin
-	      (datashare:initialize-db db)))
-	db)))
+(define (datashare:open-db configdat) 
+  (let ((path (configf:lookup configdat "database" "location")))
+    (if (and path
+	     (directory? path)
+	     (file-read-access? path))
+	(let* ((dbpath    (conc path "/datashare.db"))
+	       (writeable (file-write-access? dbpath))
+	       (dbexists  (file-exists? dbpath))
+	       (handler   (make-busy-timeout 136000)))
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 2 "ERROR: problem accessing db " dbpath
+			  ((condition-property-accessor 'exn 'message) exn))
+	     (exit))
+	   (set! db (sqlite3:open-database dbpath)))
+	  (if *db-write-access* (sqlite3:set-busy-handler! db handler))
+	  (if (not dbexists)
+	      (begin
+		(datashare:initialize-db db)))
+	  db)
+	(print "ERROR: invalid path for storing database: " path))))
+
+(define (open-run-close-exception-handling proc idb . params)
+  (handle-exceptions
+   exn
+   (let ((sleep-time (random 30))
+         (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     (case err-status
+       ((busy)
+        (thread-sleep! sleep-time))
+       (else
+        (print "EXCEPTION: database overloaded or unreadable.")
+        (print " message: " ((condition-property-accessor 'exn 'message) exn))
+        (print "exn=" (condition->list exn))
+        (print " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+        (print-call-chain)
+        (thread-sleep! sleep-time)
+        (print "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
+     (apply open-run-close-exception-handling proc idb params))
+   (apply open-run-close-no-exception-handling proc idb params)))
+
+(define (open-run-close-no-exception-handling  proc idb . params)
+  ;; (print "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)
+  (let* ((db (cond
+	      ((sqlite3:database? idb)     idb)
+	      ((not idb)                   (print "ERROR: cannot open-run-close with #f anymore"))
+	      ((procedure? idb)            (idb))
+	      (else                        (print "ERROR: cannot open-run-close with #f anymore"))))
+	 (res #f))
+    (set! res (apply proc db params))
+    (if (not idb)(sqlite3:finalize! dbstruct))
+    ;; (print "open-run-close-no-exception-handling END" )
+    res))
+
+(define open-run-close open-run-close-no-exception-handling)
+
+;;======================================================================
+;; DATA IMPORT/EXPORT
+;;======================================================================
+
+(define (datashare:import-data source-path dest-path area version iteration)
+  (let ((targ-path (conc dest-path "/" area "/" version "/" iteration)))
+    (create-directory targ-path #t)
+    (process-run "rsync" (list "-av" source-path targ-path))
+    #t)) ;; #t on success
+
+(define (datastore:get-best-storage configdat)
+  (let ((store-areas (configf:get-section configdat "storage")))
+    (print "store-areas:")
+    (pp store-areas)
+    (cadar store-areas)))
 
 ;;======================================================================
 ;; GUI
@@ -136,20 +213,35 @@ Version: " megatest-fossil-hash)) ;; "
 	 (label-size  "70x")
 	 (areas-sel   (iup:listbox #:expand "HORIZONTAL" #:dropdown "YES"))
 	 (version-tb  (iup:textbox #:expand "HORIZONTAL")) ;;  #:size "50x"))
+	 (areas-sel   (iup:listbox #:expand "HORIZONTAL" #:dropdown "YES"))
+	 (component   (iup:listbox #:expand "HORIZONTAL" #:dropdown "YES" ))
+	 (version-val (iup:textbox #:expand "HORIZONTAL" #:size "50x"))
+	 ;; (iteration   (iup:textbox #:expand "YES" #:size "20x"))
 	 ;; (iteration   (iup:textbox #:expand "HORIZONTAL" #:size "20x"))
 	 (comment-tb  (iup:textbox #:expand "YES" #:multiline "YES"))
+	 (import-type "copy")
 	 (source-tb   (iup:textbox #:expand "HORIZONTAL"
 				   #:value (or (configf:lookup configdat "target" "basepath")
 					       "")))
 	 (publish     (lambda (publish-type)
-			(let* ((area-num  (or (string->number (iup:attribute areas-sel "VALUE")) 0))
-			       (area-dat  (if (> area-num 0)(list-ref areas (- area-num 1))'("NOT SELECTED" "NOT SELECTED")))
-			       (area-path (cadr area-dat))
-			       (area-name (car  area-dat))
-			       (version   (iup:attribute version-tb "VALUE"))
-			       (comment   (iup:attribute comment-tb "VALUE"))
-			       (spath     (iup:attribute source-tb  "VALUE")))
-			  (print "Publish: type=" publish-type ", area-name=" area-name ", spath=" spath ", area-path=" area-path ))))
+			(let* ((area-num   (or (string->number (iup:attribute areas-sel "VALUE")) 0))
+			       (area-dat   (if (> area-num 0)(list-ref areas (- area-num 1))'("NOT SELECTED" "NOT SELECTED")))
+			       (area-path  (cadr area-dat))
+			       (area-name  (car  area-dat))
+			       (version    (iup:attribute version-tb "VALUE"))
+			       (comment    (iup:attribute comment-tb "VALUE"))
+			       (spath      (iup:attribute source-tb  "VALUE"))
+			       (submitter  (current-user-name))
+			       (quality    2)
+			       (db         (datashare:open-db configdat))
+			       (iteration  (datashare:register-data db area-name version import-type submitter quality spath comment))
+			       (dest-store (datastore:get-best-storage configdat)))
+			  (if iteration
+			      (if (equal? "copy" import-type)
+				  (datashare:import-data spath dest-store area-name version iteration))
+			      (print "ERROR: Failed to get an iteration number"))
+			  (sqlite3:finalize! db))))
+			  ;; (print "Publish: type=" publish-type ", area-name=" area-name ", spath=" spath ", area-path=" area-path ))))
 	 (copy        (iup:button "Copy and Publish"
 				  #:expand "HORIZONTAL"
 				  #:action (lambda (obj)
@@ -220,7 +312,8 @@ Version: " megatest-fossil-hash)) ;; "
 ;;======================================================================
 
 (define (datashare:load-config path)
-  (let ((fname (conc path "/.datashare.config")))
+  (let* ((exename (pathname-file (car (argv))))
+	 (fname   (conc path "/." exename ".config")))
     (ini:property-separator-patt " *  *")
     (ini:property-separator #\space)
     (if (file-exists? fname)
