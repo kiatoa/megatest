@@ -235,10 +235,26 @@ Version: " megatest-fossil-hash)) ;; "
     #t)) ;; #t on success
 
 (define (datastore:get-best-storage configdat)
-  (let ((store-areas (configf:get-section configdat "storage")))
-    (print "store-areas:")
-    (pp store-areas)
-    (cadar store-areas)))
+  (let* ((storage     (configf:lookup configdat "setup" "storage"))
+	 (store-areas (if storage (string-split storage) '())))
+    (datastore:find-most-space store-areas)))
+
+(define (datastore:find-most-space paths)
+  (fold (lambda (area res)
+	  ;; (print "area=" area " res=" res)
+	  (let ((maxspace (car res))
+		(currpath (cdr res)))
+	    ;; (print currpath " " maxspace)
+	    (if (file-write-access? area)
+		(let ((currspace (with-input-from-pipe 
+				  (conc "df --output=avail " area)
+				  (lambda ()(read)(read)))))
+		  (if (> currspace maxspace) 
+		      (cons currspace area)
+		      res))
+		res)))
+	(cons 0 #f)
+	paths))
 
 ;;======================================================================
 ;; GUI
@@ -278,7 +294,7 @@ Version: " megatest-fossil-hash)) ;; "
 	 ;; (iteration   (iup:textbox #:expand "HORIZONTAL" #:size "20x"))
 	 (comment-tb  (iup:textbox #:expand "YES" #:multiline "YES"))
 	 (source-tb   (iup:textbox #:expand "HORIZONTAL"
-				   #:value (or (configf:lookup configdat "target" "basepath")
+				   #:value (or (configf:lookup configdat "settings" "basepath")
 					       "")))
 	 (publish     (lambda (publish-type)
 			(let* ((area-num    (or (string->number (iup:attribute areas-sel "VALUE")) 0))
@@ -345,10 +361,12 @@ Version: " megatest-fossil-hash)) ;; "
 	   (iter-filter    ">= 0")
 	   (dat            (make-hash-table)) ;; reverse lookup
 	   (apply          (iup:button "Apply"))
-	   (source         (iup:textbox))
 	   (submitter      (iup:label "" #:expand "HORIZONTAL"))
 	   (date-submitted (iup:label "" #:expand "HORIZONTAL"))
-	   (source-data    (iup:label "" #:expand "HORIZONTAL"))
+	   (comment        (iup:label "" #:expand "HORIZONTAL"))
+	   (copy-link      (iup:label "" #:expand "HORIZONTAL"))
+	   (quality        (iup:label "" #:expand "HORIZONTAL"))
+	   ;; (source-data    (iup:label "" #:expand "HORIZONTAL"))
 	   (tb             (iup:treebox
 			    #:value 0
 			    #:name "Packages"
@@ -361,8 +379,32 @@ Version: " megatest-fossil-hash)) ;; "
 				     (record (hash-table-ref/default dat path #f)))
 				(if record
 				    (begin
-				      (iup:attribute-set! submitter "TITLE" (datastore:pkg-get-submitter record))
-				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datastore:pkg-get-datetime record))))))
+				      (iup:attribute-set! submitter      "TITLE" (datastore:pkg-get-submitter record))
+				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datastore:pkg-get-datetime record))))
+				      (iup:attribute-set! comment        "TITLE" (datastore:pkg-get-comment record))
+				      (iup:attribute-set! quality        "TITLE" (datastore:pkg-get-quality record))
+				      (iup:attribute-set! copy-link      "TITLE" (datastore:pkg-get-store_type record))
+				      ))
+				(print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
+				))))
+	   (tb2             (iup:treebox
+			    #:value 0
+			    #:name "Packages"
+			    #:expand "YES"
+			    #:addexpanded "NO"
+			    #:selection-cb
+			    (lambda (obj id state)
+			      ;; (print "obj: " obj ", id: " id ", state: " state)
+			      (let* ((path   (datastore:lst->path (cdr (tree:node->path obj id))))
+				     (record (hash-table-ref/default dat path #f)))
+				(if record
+				    (begin
+				      (iup:attribute-set! submitter      "TITLE" (datastore:pkg-get-submitter record))
+				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datastore:pkg-get-datetime record))))
+				      (iup:attribute-set! comment        "TITLE" (datastore:pkg-get-comment record))
+				      (iup:attribute-set! quality        "TITLE" (datastore:pkg-get-quality record))
+				      (iup:attribute-set! copy-link      "TITLE" (datastore:pkg-get-store_type record))
+				      ))
 				(print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
 				))))
 	   (refresh        (lambda (obj)
@@ -382,9 +424,18 @@ Version: " megatest-fossil-hash)) ;; "
 				(datashare:get-pkgs db area-filter version-filter iter-filter))
 			       (sqlite3:finalize! db)))))
       (iup:vbox 
-       tb 
+       (iup:hbox tb tb2)
        (iup:hbox (iup:button "Refresh" #:action refresh) apply)
-       (iup:hbox (iup:label "Submitter:" #:size label-size)(iup:hbox submitter)(iup:label "Date submitted:" #:size label-size))
+       (iup:hbox (iup:label "Submitter: ") ;;  #:size label-size)
+		 submitter 
+		 (iup:label "Submitted on: ") ;;  #:size label-size)
+		 date-submitted)
+       (iup:hbox (iup:label "Data stored: ")
+		 copy-link
+		 (iup:label "Quality: ")
+		 quality)
+       (iup:hbox (iup:label "Comment: ")
+		 comment)
        )))))
 
 (define (datashare:manage-view configdat)
