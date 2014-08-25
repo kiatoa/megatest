@@ -46,8 +46,9 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES) dashboard.scm
 	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
-# newdboard : newdashboard.scm $(OFILES) $(GOFILES)
-# 	csc $(OFILES) $(GOFILES) newdashboard.scm -o newdboard
+ndboard : newdashboard.scm $(OFILES) $(GOFILES)
+	csc $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
 #	csc utils/revtagfsl.scm -o $(PREFIX)/bin/revtagfsl
@@ -79,10 +80,12 @@ $(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
 	utils/mk_wrapper $(PREFIX) mtest $(PREFIX)/bin/megatest
 	chmod a+x $(PREFIX)/bin/megatest
 
-# $(PREFIX)/bin/newdboard : newdboard
-# 	$(INSTALL) newdboard $(PREFIX)/bin/newdboard
-# 	utils/mk_wrapper $(PREFIX) newdboard $(PREFIX)/bin/newdashboard
-#	chmod a+x $(PREFIX)/bin/newdashboard
+$(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
+	$(INSTALL) ndboard $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+
+$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
+	chmod a+x $(PREFIX)/bin/newdashboard
 
 $(HELPERS) : utils/mt_* 
 	$(INSTALL) $< $@
@@ -123,8 +126,10 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 	chmod a+x $(PREFIX)/bin/dashboard
 	$(INSTALL) dboard $(PREFIX)/bin/.$(ARCHSTR)/dboard
 
-install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-          $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm
+install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
+          $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
+	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm \
+          $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)

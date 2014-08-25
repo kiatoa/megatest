@@ -129,7 +129,7 @@
 ;;  3. Add extraction of filters to synchash calls
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
-(define (run-update keys data runname keypatts testpatt states statuses mode window-id)
+(define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
@@ -231,6 +231,7 @@
 				     (test-path (append run-path (if (equal? itempath "") 
 								     (list testname)
 								     (list testname itempath)))))
+				(print "INFONOTE: run-path: " run-path)
 				(tree:add-node (dboard:data-get-tests-tree *data*) "Runs" 
 					       test-path
 					       userdata: (conc "test-id: " test-id))

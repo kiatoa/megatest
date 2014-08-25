@@ -74,12 +74,20 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(if (args:get-arg "-host")
-    (begin
-      (set! *runremote* (string-split (args:get-arg "-host" ":")))
-      (client:launch))
-    (client:launch))
+;; (if (args:get-arg "-host")
+;;     (begin
+;;       (set! *runremote* (string-split (args:get-arg "-host" ":")))
+;;       (client:launch))
+;;     (client:launch))
 
+
+(define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
+					     local: #t))
+(define *db-file-path* (db:dbfile-path 0))
+
+;; HACK ALERT: this is a hack, please fix.
+(define *read-only* (not (file-read-access? *db-file-path*)))
 
 (debug:setup)
 
@@ -592,11 +600,12 @@ Misc
 			 ;; 2x delta time has not passed since last query
 			 (if (< nextmintime (current-milliseconds))
 			     (let* ((starttime (current-milliseconds))
-				    (changes   (run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
+				    (changes   (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
 				    (endtime   (current-milliseconds)))
 			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
 			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
 			     (debug:print-info 11 "Server overloaded"))))))
 
-(newdashboard)    
+(dboard:data-set-updaters! *data* (make-hash-table))
+(newdashboard *dbstruct-local*)    
 (iup:main-loop)
