@@ -375,7 +375,11 @@ Version: " megatest-fossil-hash)) ;; "
 			       (dest-store  (datastore:get-best-storage configdat)))
 			  (if iteration
 			      (if (eq? 'copy publish-type)
-				  (datashare:import-data configdat spath dest-store area-name version iteration))
+				  (datashare:import-data configdat spath dest-store area-name version iteration)
+				  (let ((id (datastore:get-id db area-name version iteration)))
+				    (datastore:set-stored-path db id spath)
+				    (datastore:set-copied db id "yes")
+				    (datastore:set-copied db id "n/a")))
 			      (print "ERROR: Failed to get an iteration number"))
 			  (sqlite3:finalize! db))))
 	 (copy        (iup:button "Copy and Publish"
