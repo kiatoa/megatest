@@ -1307,9 +1307,9 @@
 ;; not-in #t = above behaviour, #f = must match
 (define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
   (if (not (number? run-id))
-      (begin
-	(debug:print 0 "ERROR: call to db:get-tests-for-run with bad run-id=" run-id)
-	(print-call-chain)
+      (begin ;; no need to treat this as an error by default
+	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
+	;; (print-call-chain)
 	'())
       (let* ((qryvalstr       (case qryvals
 				((shortlist) "id,run_id,testname,item_path,state,status")
