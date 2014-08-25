@@ -278,6 +278,8 @@ Version: " megatest-fossil-hash)) ;; "
     (print "Looking for available space in " store-areas)
     (datastore:find-most-space store-areas)))
 
+;; (string->number (list-ref (with-input-from-pipe "df -B1000000 /tmp" (lambda ()(read-line)(string-split (read-line)))) 3))
+
 (define (datastore:find-most-space paths)
   (fold (lambda (area res)
 	  ;; (print "area=" area " res=" res)
@@ -285,15 +287,35 @@ Version: " megatest-fossil-hash)) ;; "
 		(currpath (cdr res)))
 	    ;; (print currpath " " maxspace)
 	    (if (file-write-access? area)
-		(let ((currspace (with-input-from-pipe 
-				  (conc "df --output=avail " area)
-				  (lambda ()(read)(read)))))
+		(let ((currspace (string->number
+				  (list-ref
+				   (with-input-from-pipe 
+				    ;; (conc "df --output=avail " area)
+				    (conc "df -B1000000 " area)
+				    ;; (lambda ()(read)(read))
+				    (lambda ()(read-line)(string-split (read-line))))
+				   3))))
 		  (if (> currspace maxspace) 
 		      (cons currspace area)
 		      res))
 		res)))
 	(cons 0 #f)
 	paths))
+
+;; remove existing link and if possible ...
+;; create path to next of tip of target, create link back to source
+(define (datastore:build-dir-make-link source target)
+  (if (file-exists? target)(datastore:backup-move target))
+  (create-directory (pathname-directory target) #t)
+  (create-symbolic-link source target))
+
+(define (datastore:backup-move path)
+  (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
+	 (trashfile (conc trashdir "/" (current-seconds) "-" (pathname-file path))))
+    (create-directory trashdir #t)
+    (if (directory? path)
+	(system (conc "mv " path " " trashfile))
+	(file-move path trash-file))))
 
 ;;======================================================================
 ;; GUI
@@ -397,7 +419,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datastore:pathdat-apply-heuristics configdat path)
   (cond
    ((file-exists? path) "found")
-   (else "not installed")))
+   (else (conc path " not installed"))))
 
 (define (datashare:get-view configdat)
   (iup:vbox
@@ -483,20 +505,24 @@ Version: " megatest-fossil-hash)) ;; "
 					 (fullpath (conc basepath path)))
 				    (if (not (hash-table-ref/default installed-dat path #f))
 					(tree:add-node tb2 "Installed" (datastore:path->lst path)))
-				    (hash-table-set! installed-dat path (datastore:pathdat-apply-heuristics configdat path))))
+				    (hash-table-set! installed-dat path (datastore:pathdat-apply-heuristics configdat fullpath))))
 				areas)
 			       (sqlite3:finalize! db))))
 	   (apply          (iup:button "Apply"
 				       #:action
 				       (lambda (obj)
 					 (if curr-record
-					     (let* ((stored-path (datastore:pkg-get-stored_path curr-record))
-						    (source-type (datastore:pkg-get-store_type curr-record))
+					     (let* ((area        (datastore:pkg-get-area        curr-record))
+						    (stored-path (datastore:pkg-get-stored_path curr-record))
+						    (source-type (datastore:pkg-get-store_type  curr-record))
 						    (source-path (case source-type ;;  (equal? source-type "link"))
 								   ((link)(datastore:pkg-get-source-path curr-record))
 								   ((copy)stored-path)
-								   (else #f))))
-					       (print "Creating link from " stored-path " to " basepath)))))))
+								   (else #f)))
+						    (dest-stub   (configf:lookup configdat "areas" area))
+						    (target-path (conc basepath "/" dest-stub)))
+					       (datastore:build-dir-make-link stored-path target-path)
+					       (print "Creating link from " stored-path " to " target-path)))))))
       (iup:vbox 
        (iup:hbox tb tb2)
        (iup:frame 
