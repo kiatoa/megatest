@@ -69,7 +69,9 @@
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(rmt:send-receive cmd run-id params))))
-	(rmt:open-qry-close-locally cmd run-id params))))
+	(begin
+	  (debug:print-info 0 "no server and read-only query, bypassing normal channel")
+	  (rmt:open-qry-close-locally cmd run-id params)))))
 
 (define (rmt:open-qry-close-locally cmd run-id params)
   (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
