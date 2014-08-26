@@ -13,6 +13,39 @@
 (declare (uses rmt))
 (declare (uses db))
 
+;; allow these queries through without starting a server
+;;
+(define api:read-only-queries
+  '(get-key-val-pairs
+    get-keys
+    test-toplevel-num-items
+    get-test-info-by-id
+    test-get-rundir-from-test-id
+    get-count-tests-running
+    get-count-tests-running-in-jobgroup
+    get-previous-test-run-record
+    get-matching-previous-test-run-records
+    test-get-logfile-info
+    test-get-records-for-index-file
+    get-testinfo-state-status
+    test-get-paths-matching-keynames-target-new
+    get-prereqs-not-met
+    get-count-tests-running-for-run-id
+    get-run-info
+    register-run
+    get-tests-for-run
+    get-test-id
+    get-tests-for-runs-mindata
+    get-run-name-from-id
+    get-runs
+    get-all-run-ids
+    get-prev-run-ids
+    get-run-ids-matching-target
+    get-runs-by-patt
+    get-steps-data
+    login
+    testmeta-get-record))
+
 ;; These are called by the server on recipt of /api calls
 
 (define (api:execute-requests dbstruct cmd params)

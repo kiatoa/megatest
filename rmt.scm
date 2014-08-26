@@ -38,28 +38,48 @@
 ;; vars is a json string encoding the parameters for the call
 ;;
 (define (rmt:send-receive cmd rid params)
-  (let* ((run-id  (if rid rid 0))
+  (let* ((run-id          (if rid rid 0))
 	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
 			    (if cinfo
 				cinfo
-				(let loop ((numtries 100))
-				  (let ((res (client:setup run-id)))
-				    (if res 
-					(hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
-					(if (> numtries 0)
-					    (begin
-					      (thread-sleep! 10)
-					      (loop (- numtries 1)))
-					    (begin
-					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
-					      (exit 1)))))))))
-	 (jparams         (db:obj->string params))
-	 (res     (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
-    (if res
-	(db:string->obj res)
-	(let ((new-connection-info (client:setup run-id)))
-	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-	  (rmt:send-receive cmd run-id params)))))
+				;; if read only query and server not already running
+				;; bypass starting the server. 
+				;;
+				;; NB// can cache the answer for server running for 10 seconds ...
+				;;
+				(if (and (member cmd api:read-only-queries)
+					 (not (open-run-close tasks:get-server tasks:open-db run-id)))
+				    #f
+				    (let loop ((numtries 100))
+				      (let ((res (client:setup run-id)))
+					(if res 
+					    (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
+					    (if (> numtries 0)
+						(begin
+						  (thread-sleep! 10)
+						  (loop (- numtries 1)))
+						(begin
+						  (debug:print 0 "ERROR: 100 tries and no server, giving up")
+						  (exit 1))))))))))
+	 (jparams         (db:obj->string params)))
+    (if connection-info
+	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	  (if res
+	      (db:string->obj res)
+	      (let ((new-connection-info (client:setup run-id)))
+		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+		(rmt:send-receive cmd run-id params))))
+	(rmt:open-qry-close-locally cmd run-id params))))
+
+(define (rmt:open-qry-close-locally cmd run-id params)
+  (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+	 (dbstruct-local (make-dbr:dbstruct path:  dbdir
+					    local: #t))
+	 (db-file-path   (db:dbfile-path 0))
+	 ;; (read-only      (not (file-read-access? db-file-path)))
+	 (res            (api:execute-requests dbstruct-local (symbol->string cmd) params)))
+    (db:close-all dbstruct-local)
+    res))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
