@@ -244,7 +244,7 @@
 	(olddb  (dbr:dbstruct-get-olddb dbstruct))
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
-    (debug:print-info 0 "Syncing for run-id " run-id)
+    (debug:print-info 4 "Syncing for run-id: " run-id)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
 	(if maindb
@@ -257,7 +257,10 @@
 		  num-synced)
 		0)
 	    (begin
-	      (debug:print 0 "WARNING: call to sync main.db to megatest.db but main not initialized")
+	      ;; this can occur when using local access (i.e. not in a server)
+	      ;; need a flag to turn it off.
+	      ;;
+	      (debug:print 3 "WARNING: call to sync main.db to megatest.db but main not initialized")
 	      0))
 	;; any other runid is a run
 	(if (or (not (number? mtime))
@@ -272,7 +275,7 @@
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   ;; finalize main.db
-  (db:sync-touched dbstruct force-sync: #t)
+  (db:sync-touched dbstruct 0 force-sync: #t)
   (sqlite3:finalize! (db:get-db dbstruct #f))
   (let* ((local (dbr:dbstruct-get-local dbstruct))
 	 (rundb (dbr:dbstruct-get-rundb dbstruct)))
@@ -373,8 +376,8 @@
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 (define (db:sync-tables tbls fromdb todb . slave-dbs)
   (cond
-   ((not fromdb) (debug:print 0 "ERROR: db:sync-tables called with fromdb missing") -1)
-   ((not todb)   (debug:print 0 "ERROR: db:sync-tables called with todb missing") -2)
+   ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
+   ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
    ((not (sqlite3:database? fromdb))
     (debug:print 0 "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
    ((not (sqlite3:database? todb))

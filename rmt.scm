@@ -34,6 +34,25 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
+(define (rmt:write-frequency-over-limit? cmd run-id)
+  (or (member cmd api:read-only-queries)
+      (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
+	     (record (if tmprec tmprec 
+			 (let ((v (vector (current-seconds) 0)))
+			   (hash-table-set! *write-frequency* run-id v)
+			   v)))
+	     (count  (+ 1 (vector-ref record 1)))
+	     (start  (vector-ref record 0)))
+	(vector-set! record 1 count)
+	(if (and (> count 1) 
+		 (< (/ (- (current-seconds) start)
+		       count) ;; seconds per count
+		    10))
+	    (begin
+	      (debug:print-info 1 "db write rate too high, starting a server")
+	      #t)
+	    #f)))) ;; less than 10 seconds per count - start up a server
+
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
@@ -47,8 +66,8 @@
 				;;
 				;; NB// can cache the answer for server running for 10 seconds ...
 				;;
-				(if (and (member cmd api:read-only-queries)
-					 (not (open-run-close tasks:get-server tasks:open-db run-id)))
+				(if (and (not (rmt:write-frequency-over-limit? cmd run-id))
+					 (not (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)))
 				    #f
 				    (let loop ((numtries 100))
 				      (let ((res (client:setup run-id)))
@@ -70,7 +89,7 @@
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(rmt:send-receive cmd run-id params))))
 	(begin
-	  (debug:print-info 0 "no server and read-only query, bypassing normal channel")
+	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
 	  (rmt:open-qry-close-locally cmd run-id params)))))
 
 (define (rmt:open-qry-close-locally cmd run-id params)

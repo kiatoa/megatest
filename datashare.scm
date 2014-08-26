@@ -257,9 +257,9 @@ Version: " megatest-fossil-hash)) ;; "
 	(begin
 	  (create-directory targ-path #t)
 	  (datastore:set-stored-path db id targ-path)
-	  (print "Running command: rsync -av " source-path " " targ-path)
+	  (print "Running command: rsync -av " source-path "/ " targ-path "/")
 	  (let ((th1 (make-thread (lambda ()
-				    (let ((pid (process-run "rsync" (list "-av" source-path targ-path))))
+				    (let ((pid (process-run "rsync" (list "-av" (conc source-path "/") (conc targ-path "/")))))
 				      (process-wait pid)
 				      (datastore:set-copied db id "yes")
 				      (sqlite3:finalize! db)))
@@ -342,7 +342,7 @@ Version: " megatest-fossil-hash)) ;; "
 		       ))))
 
 (define (datashare:publish-view configdat)
-  (pp (hash-table->alist configdat))
+  ;; (pp (hash-table->alist configdat))
   (let* ((areas       (configf:get-section configdat "areas"))
 	 (label-size  "70x")
 	 (areas-sel   (iup:listbox #:expand "HORIZONTAL" #:dropdown "YES"))
@@ -399,7 +399,7 @@ Version: " megatest-fossil-hash)) ;; "
 								   (iup:attribute fd "VALUE"))
 					       (iup:destroy! fd))))))
     (print "areas")
-    (pp areas)
+    ;; (pp areas)
     (fold (lambda (areadat num)
 	    ;; (print "Adding num=" num ", areadat=" areadat)
 	    (iup:attribute-set! areas-sel (conc num) (car areadat))
@@ -467,7 +467,7 @@ Version: " megatest-fossil-hash)) ;; "
 				      (iup:attribute-set! quality        "TITLE" (datastore:pkg-get-quality record))
 				      (iup:attribute-set! copy-link      "TITLE" (datastore:pkg-get-store_type record))
 				      ))
-				(print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
+				;; (print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
 				))))
 	   (tb2             (iup:treebox
 			    #:value 0
@@ -577,12 +577,26 @@ Version: " megatest-fossil-hash)) ;; "
   (iup:main-loop))
 
 ;;======================================================================
+;; MISC
+;;======================================================================
+
+(define (datastore:find name paths)
+  (if (null? paths)
+      #f
+      (let loop ((hed (car paths))
+		 (tal (cdr paths)))
+	(if (file-exists? (conc hed "/" name))
+	    hed
+	    (if (null? tal)
+		#f
+		(loop (car tal)(cdr tal)))))))
+
+;;======================================================================
 ;; MAIN
 ;;======================================================================
 
-(define (datashare:load-config path)
-  (let* ((exename (pathname-file (car (argv))))
-	 (fname   (conc path "/." exename ".config")))
+(define (datashare:load-config exe-dir exe-name)
+  (let* ((fname   (conc exe-dir "/." exe-name ".config")))
     (ini:property-separator-patt " *  *")
     (ini:property-separator #\space)
     (if (file-exists? fname)
@@ -590,11 +604,19 @@ Version: " megatest-fossil-hash)) ;; "
 	(read-config fname #f #t)
 	(make-hash-table))))
 
+;; ease debugging by loading ~/.dashboardrc - remove from production!
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.datasharerc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
+
 (define (main)
   (let* ((args      (argv))
 	 (prog      (car args))
 	 (rema      (cdr args))
-	 (configdat (datashare:load-config (pathname-directory prog))))
+	 (exe-name  (pathname-file (car (argv))))
+	 (exe-dir   (or (pathname-directory prog)
+			(datastore:find exe-name (string-split (get-environment-variable "PATH") ":"))))
+	 (configdat (datashare:load-config exe-dir exe-name)))
     (cond
      ((eq? (length rema) 1)
       (case (string->symbol (car rema))
