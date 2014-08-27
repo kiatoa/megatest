@@ -1,5 +1,4 @@
 
-
 ;; Copyright 2006-2014, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
@@ -46,18 +45,18 @@
 			 (res  #f))
 		    (set! curr (sqlite3:fold-row
 				(lambda (var curr)
-				  (or var curr))
+				  (or curr var curr))
 				"not-tried"
 				qry3
 				portnum))
-		    (print "curr=" curr)
+		    ;; (print "curr=" curr)
 		    (set! res (case (string->symbol curr)
 				((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
 				((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
 				((taken)                                            'already-taken)
 				((failed)                                           'failed)
 				(else                                               'error)))
-		    (print "res=" res)
+		    ;; (print "res=" res)
 		    res)))))
     (sqlite3:finalize! qry1)
     (sqlite3:finalize! qry2)
@@ -67,21 +66,32 @@
 ;; set port to "released", "failed" etc.
 ;; 
 (define (portlogger:set-port db portnum value)
-  (sqlite3:execute db "UPDATE ports SET state=? WHERE portnum=?;" value portnum))
+  (sqlite3:execute db "UPDATE ports SET state=? WHERE port=?;" value portnum))
+
+;; set port to failed (attempted to take but got error)
+;;
+(define (portlogger:set-failed db portnum)
+  (sqlite3:execute db "UPDATE ports SET state='failed',fail_count=fail_count+1 WHERE port=?;" portnum))
 
 ;;======================================================================
 ;; MAIN
 ;;======================================================================
 
-(let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name))))
-       (args    (cdr (argv)))
-       (numargs (length args)))
-  (cond
-   ((> numargs 1) ;; most commands
-    (case (string->symbol (car args)) ;; commands with two or more params
-      ((take)(portlogger:take-port db (string->number (cadr args))))
-      ((set) (portlogger:set-port db 
-				  (string->number (cadr args))
-				  (caddr args))))))
-  (sqlite3:finalize! db))
+
+
+(define (portlogger:main . args)
+  (let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name))))
+	 (numargs (length args))
+	 (result  (cond
+		   ((> numargs 1) ;; most commands
+		    (case (string->symbol (car args)) ;; commands with two or more params
+		      ((take)(portlogger:take-port db (string->number (cadr args))))
+		      ((set) (portlogger:set-port db 
+						  (string->number (cadr args))
+						  (caddr args))
+		       (caddr args))
+		      ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed))))))
+    (sqlite3:finalize! db)
+    result))
      
+(print (apply portlogger:main (cdr (argv))))
