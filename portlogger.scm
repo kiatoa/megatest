@@ -42,19 +42,22 @@
 		db
 		(lambda ()
 		  ;; (fold-row (lambda (var curr) (or var curr)) #f db "SELECT var FROM foo WHERE id=100;")
-		  (let* ((curr (sqlite3:fold-row
+		  (let* ((curr #f)
+			 (res  #f))
+		    (set! curr (sqlite3:fold-row
 				(lambda (var curr)
 				  (or var curr))
 				"not-tried"
 				qry3
 				portnum))
-			 (res   (case (string->symbol curr)
-				  ((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
-				  ((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
-				  ((taken)                                            'already-taken)
-				  ((failed)                                           'failed)
-				  (else                                               'error))))
-		    (print "curr=" curr " res=" res)
+		    (print "curr=" curr)
+		    (set! res (case (string->symbol curr)
+				((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
+				((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
+				((taken)                                            'already-taken)
+				((failed)                                           'failed)
+				(else                                               'error)))
+		    (print "res=" res)
 		    res)))))
     (sqlite3:finalize! qry1)
     (sqlite3:finalize! qry2)
