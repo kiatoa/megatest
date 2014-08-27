@@ -138,7 +138,7 @@
    exn
    (begin
      (print-error-message exn)
-     (if (< portnum 9000)
+     (if (< portnum 90000)
 	 (begin 
 	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)

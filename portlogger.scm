@@ -24,38 +24,61 @@
 	 (canwrite (file-write-access? fname)))
     (sqlite3:set-busy-handler! db handler)
     (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (sqlite3:execute 
-     db
-     "CREATE TABLE ports (
-        port INTEGER PRIMARY KEY,
-        state TEXT DEFAULT 'not-used',
-        fail_count INTEGER DEFAULT 0);")
+    (if (not exists)
+	(sqlite3:execute 
+	 db
+	 "CREATE TABLE ports (
+            port INTEGER PRIMARY KEY,
+            state TEXT DEFAULT 'not-used',
+            fail_count INTEGER DEFAULT 0);"))
     db))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
-  (let* ((qry1 (sqlite3:prepare "INSERT INTO ports (port,state) VALUES (?,?);"))
-	 (qry2 (sqlite3:prepare "UPDATE ports SET state=? WHERE port=?;"))
-	 (qry3 (sqlite3:prepare "SELECT state FROM ports WHERE port=?;"))
+  (let* ((qry1 (sqlite3:prepare db "INSERT INTO ports (port,state) VALUES (?,?);"))
+	 (qry2 (sqlite3:prepare db "UPDATE ports SET state=? WHERE port=?;"))
+	 (qry3 (sqlite3:prepare db "SELECT state FROM ports WHERE port=?;"))
 	 (res  (sqlite3:with-transaction
 		db
 		(lambda ()
 		  ;; (fold-row (lambda (var curr) (or var curr)) #f db "SELECT var FROM foo WHERE id=100;")
-		  (let ((curr (sqlite3:fold-row
-			       (lambda (var curr)
-				 (or var curr))
-			       "not-tried"
-			       qry3
-			       portnum))
-			(res   (case (string->symbol curr)
-				 ((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
-				 ((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
-				 ((taken)                                            'already-taken)
-				 ((failed)                                           'failed)
-				 (else                                               'error))))
+		  (let* ((curr (sqlite3:fold-row
+				(lambda (var curr)
+				  (or var curr))
+				"not-tried"
+				qry3
+				portnum))
+			 (res   (case (string->symbol curr)
+				  ((released)  (sqlite3:execute qry2 "taken" portnum) 'taken)
+				  ((not-tried) (sqlite3:execute qry1 portnum "taken") 'taken)
+				  ((taken)                                            'already-taken)
+				  ((failed)                                           'failed)
+				  (else                                               'error))))
+		    (print "curr=" curr " res=" res)
 		    res)))))
     (sqlite3:finalize! qry1)
     (sqlite3:finalize! qry2)
     (sqlite3:finalize! qry3)
     res))
-       
+
+;; set port to "released", "failed" etc.
+;; 
+(define (portlogger:set-port db portnum value)
+  (sqlite3:execute db "UPDATE ports SET state=? WHERE portnum=?;" value portnum))
+
+;;======================================================================
+;; MAIN
+;;======================================================================
+
+(let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name))))
+       (args    (cdr (argv)))
+       (numargs (length args)))
+  (cond
+   ((> numargs 1) ;; most commands
+    (case (string->symbol (car args)) ;; commands with two or more params
+      ((take)(portlogger:take-port db (string->number (cadr args))))
+      ((set) (portlogger:set-port db 
+				  (string->number (cadr args))
+				  (caddr args))))))
+  (sqlite3:finalize! db))
+     
