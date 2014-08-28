@@ -70,7 +70,8 @@
 					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
+	 (start-port      (or (portlogger:open-run-close portlogger:get-prev-used-port)
+			      (open-run-close tasks:server-get-next-port tasks:open-db)))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     ;; (set! db *inmemdb*)
     (root-path     (if link-tree-path 
@@ -430,7 +431,7 @@
 	    ;;
 	    ;; start_shutdown
 	    ;;
-	    ( tasks:server-set-state! tdb server-id "shutting-down")
+	    (tasks:server-set-state! tdb server-id "shutting-down")
 	    (portlogger:open-run-close portlogger:set-port port "released")
 	    (thread-sleep! 5)
 	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)

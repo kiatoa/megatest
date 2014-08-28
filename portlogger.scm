@@ -75,6 +75,14 @@
     (sqlite3:finalize! qry3)
     res))
 
+(define (portlogger:get-prev-used-port db)
+  (sqlite3:fold-row
+   (lambda (var curr)
+     (or curr var curr))
+   #f
+   db
+   "SELECT (port) FROM ports WHERE state='released' LIMIT 1;"))
+
 ;; set port to "released", "failed" etc.
 ;; 
 (define (portlogger:set-port db portnum value)

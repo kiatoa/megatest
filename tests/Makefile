@@ -11,6 +11,7 @@ RUNID    := 1
 SERVER    = 
 DEBUG     = 1
 LOGGING   = 
+ROWS      = 20
 
 OS  = $(shell grep ID /etc/*-release|cut -d= -f2)
 FS  = $(shell df -T .|tail -1|awk '{print $$2}')
@@ -165,7 +166,7 @@ fullprep : cleanprep
 	cd fullrun;$(BINPATH)/dashboard -rows 15 &
 
 dashboard : cleanprep
-	cd fullrun && $(BINPATH)/dashboard -rows 20 &
+	cd fullrun && $(BINPATH)/dashboard -rows $(ROWS) &
 
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
