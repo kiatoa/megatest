@@ -70,8 +70,7 @@
 					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port      (or (portlogger:open-run-close portlogger:get-prev-used-port)
-			      (open-run-close tasks:server-get-next-port tasks:open-db)))
+	 (start-port      (portlogger:open-run-close portlogger:find-port))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     ;; (set! db *inmemdb*)
     (root-path     (if link-tree-path 
@@ -140,37 +139,34 @@
    exn
    (begin
      (print-error-message exn)
-     (if (< portnum 90000)
+     (if (< portnum 61000)
 	 (begin 
 	   (portlogger:open-run-close portlogger:set-failed portnum)
 	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
 
 	   ;; get_next_port goes here
-
-	   (http-transport:try-start-server run-id ipaddrstr (+ portnum 1) server-id))
+	   (http-transport:try-start-server run-id
+					    ipaddrstr
+					    (portlogger:open-run-close portlogger:find-port)
+					    server-id))
 	 (begin
 	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
 	   (print "ERROR: Tried and tried but could not start the server"))))
    ;; any error in following steps will result in a retry
-   (case (portlogger:open-run-close portlogger:take-port portnum)
-     ((taken)
-      (set! *server-info* (list ipaddrstr portnum))
-      (open-run-close tasks:server-set-interface-port 
-		      tasks:open-db 
-		      server-id 
-		      ipaddrstr portnum)
-      (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
-      ;; This starts the spiffy server
-      ;; NEED WAY TO SET IP TO #f TO BIND ALL
-      ;; (start-server bind-address: ipaddrstr port: portnum)
-      (start-server port: portnum)
-      (portlogger:open-run-close portlogger:set-port portnum "released")
-      (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
-      (debug:print 1 "INFO: server has been stopped"))
-     (else
-      (http-transport:try-start-server run-id ipaddrstr (+ portnum 1) server-id)))
-   (portlogger:open-run-close portlogger:set-port portnum "released")))
+   (set! *server-info* (list ipaddrstr portnum))
+   (open-run-close tasks:server-set-interface-port 
+		   tasks:open-db 
+		   server-id 
+		   ipaddrstr portnum)
+   (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
+   ;; This starts the spiffy server
+   ;; NEED WAY TO SET IP TO #f TO BIND ALL
+   ;; (start-server bind-address: ipaddrstr port: portnum)
+   (start-server port: portnum)
+   ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
+   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+   (debug:print 1 "INFO: server has been stopped")))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 

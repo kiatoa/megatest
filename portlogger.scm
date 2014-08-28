@@ -38,7 +38,11 @@
 (define (portlogger:open-run-close proc . params)
   (handle-exceptions
    exn
-   (print "ERROR: portlogger:open-run-close failed. " proc " " params)
+   (begin
+     (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 "exn=" (condition->list exn))
+     (print-call-chain))
    (let* ((db  (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
 	  (res (apply proc db params)))
      (sqlite3:finalize! db)
@@ -82,6 +86,13 @@
    #f
    db
    "SELECT (port) FROM ports WHERE state='released' LIMIT 1;"))
+
+(define (portlogger:find-port db)
+  (let ((portnum (or (portlogger:get-prev-used-port db)
+		     (+ 50000 ;; top of registered ports
+			(random (- 60000 50000))))))
+    (portlogger:take-port db portnum)
+    portnum))
 
 ;; set port to "released", "failed" etc.
 ;; 
