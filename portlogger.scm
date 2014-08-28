@@ -31,7 +31,8 @@
 	 "CREATE TABLE ports (
             port INTEGER PRIMARY KEY,
             state TEXT DEFAULT 'not-used',
-            fail_count INTEGER DEFAULT 0);"))
+            fail_count INTEGER DEFAULT 0,
+            update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))
     db))
 
 (define (portlogger:open-run-close proc . params)
@@ -46,7 +47,7 @@
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
   (let* ((qry1 (sqlite3:prepare db "INSERT INTO ports (port,state) VALUES (?,?);"))
-	 (qry2 (sqlite3:prepare db "UPDATE ports SET state=? WHERE port=?;"))
+	 (qry2 (sqlite3:prepare db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;"))
 	 (qry3 (sqlite3:prepare db "SELECT state FROM ports WHERE port=?;"))
 	 (res  (sqlite3:with-transaction
 		db
@@ -77,12 +78,12 @@
 ;; set port to "released", "failed" etc.
 ;; 
 (define (portlogger:set-port db portnum value)
-  (sqlite3:execute db "UPDATE ports SET state=? WHERE port=?;" value portnum))
+  (sqlite3:execute db "UPDATE ports SET state=?,update_time=strftime('%s','now') WHERE port=?;" value portnum))
 
 ;; set port to failed (attempted to take but got error)
 ;;
 (define (portlogger:set-failed db portnum)
-  (sqlite3:execute db "UPDATE ports SET state='failed',fail_count=fail_count+1 WHERE port=?;" portnum))
+  (sqlite3:execute db "UPDATE ports SET state='failed',fail_count=fail_count+1,update_time=strftime('%s','now') WHERE port=?;" portnum))
 
 ;;======================================================================
 ;; MAIN

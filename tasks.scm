@@ -150,8 +150,7 @@
      (lambda (num-running)
        (set! res num-running))
      mdb
-     "SELECT count(id) FROM servers WHERE run_id != 0 AND state = 'running';"
-     run-id)
+     "SELECT count(id) FROM servers WHERE run_id != 0 AND state = 'running';")
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
