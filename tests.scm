@@ -352,7 +352,12 @@
 							 "&nbsp;"
 							 comment) "</td>"
 							 "</tr>"))))
-		       testdat)
+		       (if (list? testdat)
+			   testdat
+			   (begin
+			     (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
+			     '())))
+			   
 		      (print "<table><tr><td valign=\"top\">")
 		      ;; Print out stats for status
 		      (set! tot 0)
