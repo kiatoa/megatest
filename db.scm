@@ -2136,14 +2136,12 @@
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
     (sqlite3:for-each-row 
-     (lambda (id itempath state status run_duration logf-id comment-id)
-       (let ((logf    (db:get-string dbstruct logf-id))
-	     (comment (db:get-string dbstruct comment-id)))
+     (lambda (id itempath state status run_duration logf comment)
        (set! res (cons (vector id itempath state status run_duration logf comment) res)))
      (db:get-db dbstruct run-id)
      "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '';"
      test-name)
-    res)))
+    res))
 
 ;;======================================================================
 ;; Tests meta data
