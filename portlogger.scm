@@ -13,6 +13,8 @@
 (use sqlite3 srfi-1 posix srfi-69 hostinfo)
 (import (prefix sqlite3 sqlite3:))
 
+(declare (unit portlogger))
+
 ;; lsof -i
 
 
@@ -31,6 +33,15 @@
             state TEXT DEFAULT 'not-used',
             fail_count INTEGER DEFAULT 0);"))
     db))
+
+(define (portlogger:open-run-close proc . params)
+  (handle-exceptions
+   exn
+   (print "ERROR: portlogger:open-run-close failed. " proc " " params)
+   (let* ((db  (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
+	  (res (apply proc db params)))
+     (sqlite3:finalize! db)
+     res)))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
@@ -80,7 +91,7 @@
 
 
 (define (portlogger:main . args)
-  (let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name))))
+  (let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
 	 (numargs (length args))
 	 (result  (cond
 		   ((> numargs 1) ;; most commands
@@ -94,4 +105,4 @@
     (sqlite3:finalize! db)
     result))
      
-(print (apply portlogger:main (cdr (argv))))
+;; (print (apply portlogger:main (cdr (argv))))

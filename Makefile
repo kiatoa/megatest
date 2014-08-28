@@ -9,7 +9,7 @@ SRCFILES = common.scm items.scm launch.scm \
 	   http-transport.scm filedb.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
 	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
-	   rmt.scm api.scm tdb.scm
+	   rmt.scm api.scm tdb.scm portlogger.scm
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \

@@ -27,6 +27,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses server))
 (declare (uses daemon))
+(declare (uses portlogger))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -140,6 +141,7 @@
      (print-error-message exn)
      (if (< portnum 90000)
 	 (begin 
+	   (portlogger:open-run-close portlogger:set-failed portnum)
 	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)
 
@@ -150,18 +152,24 @@
 	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
 	   (print "ERROR: Tried and tried but could not start the server"))))
    ;; any error in following steps will result in a retry
-   (set! *server-info* (list ipaddrstr portnum))
-   (open-run-close tasks:server-set-interface-port 
-		   tasks:open-db 
-		   server-id 
-		   ipaddrstr portnum)
-   (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   ;; This starts the spiffy server
-   ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   ;; (start-server bind-address: ipaddrstr port: portnum)
-   (start-server port: portnum)
-   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
-   (debug:print 1 "INFO: server has been stopped")))
+   (case (portlogger:open-run-close portlogger:take-port portnum)
+     ((taken)
+      (set! *server-info* (list ipaddrstr portnum))
+      (open-run-close tasks:server-set-interface-port 
+		      tasks:open-db 
+		      server-id 
+		      ipaddrstr portnum)
+      (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
+      ;; This starts the spiffy server
+      ;; NEED WAY TO SET IP TO #f TO BIND ALL
+      ;; (start-server bind-address: ipaddrstr port: portnum)
+      (start-server port: portnum)
+      (portlogger:open-run-close portlogger:set-port portnum "released")
+      (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+      (debug:print 1 "INFO: server has been stopped"))
+     (else
+      (http-transport:try-start-server run-id ipaddrstr (+ portnum 1) server-id)))
+   (portlogger:open-run-close portlogger:set-port portnum "released")))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -397,11 +405,12 @@
       ;; no_traffic, no running tests, if server 0, no running servers
       ;;
       (if (and *server-run*
-	       (or (> (db:get-count-tests-running *inmemdb* run-id) 0)
+	       (or (> (+ last-access server-timeout)
+		      (current-seconds))
 		   (and (eq? run-id 0)
 			(> (tasks:num-servers-non-zero-running tdb) 0))
-		   (> (+ last-access server-timeout)
-		      (current-seconds))))
+		   (> (db:get-count-tests-running *inmemdb* run-id) 0)
+		   ))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	    ;;
@@ -421,6 +430,7 @@
 	    ;; start_shutdown
 	    ;;
 	    ( tasks:server-set-state! tdb server-id "shutting-down")
+	    (portlogger:open-run-close portlogger:set-port port "released")
 	    (thread-sleep! 5)
 	    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
 	    (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
