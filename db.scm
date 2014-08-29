@@ -131,20 +131,24 @@
 ;;
 (define (db:lock-create-open fname initproc)
   (if (file-exists? fname)
-      ;; (values 
-      (sqlite3:open-database fname) ;; #t)
+      (let ((db (sqlite3:open-database fname)))
+	(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+	(sqlite3:execute db "PRAGMA synchronous = 0;")
+	db)
       (let* ((parent-dir   (pathname-directory fname))
 	     (dir-writable (file-write-access? parent-dir)))
 	(if dir-writable
+	    (let ((lock    (obtain-dot-lock fname 1 5 10))
+		  (exists  (file-exists? fname))
+		  (db      (sqlite3:open-database fname)))
+	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+	      (sqlite3:execute db "PRAGMA synchronous = 0;")
+	      (if (not exists)(initproc db))
+	      (release-dot-lock fname)
+	      db)
 	    (begin
-	      (obtain-dot-lock fname 1 5 10)
-	      (let ((db (sqlite3:open-database fname)))
-		(initproc db)
-		(release-dot-lock fname)
-		db)) ;; (values db #f)))
-	    #f ;;(values #f #f)
-	    ))))
-	 
+	      (debug:print 0 "ERROR: no such db in non-writable dir " fname)
+	      (sqlite3:open-database fname))))))
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
@@ -171,22 +175,10 @@
 	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (db:open-megatest-db))
 	       (write-access (file-write-access? dbpath))
-	       (handler      (make-busy-timeout 136000)))
+	       ;; (handler      (make-busy-timeout 136000))
+	       )
 	  (if (and dbexists (not write-access))
 	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	  ;;(if write-access
-	  ;;    (begin
-	  ;;      (if (not dbexists)
-	  ;;          (begin
-	  ;;            (db:initialize-run-id-db db)
-	  ;;            (sqlite3:execute 
-	  ;;             db
-	  ;;             "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-	  ;;             (* run-id 30000) ;; allow for up to 30k tests per run
-	  ;;             run-id)
-	  ;;            )) ;; add strings db to rundb, not in use yet
-	  ;;      (sqlite3:set-busy-handler! db handler)
-	  ;;      (sqlite3:execute db "PRAGMA synchronous = 0;"))) ;; was 0 but 0 is a gamble, changed back to 0
 	  (dbr:dbstruct-set-rundb!  dbstruct db)
 	  (dbr:dbstruct-set-inuse!  dbstruct #t)
 	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
@@ -208,26 +200,13 @@
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
-	(let* (;; (toppath      (dbr:dbstruct-get-path dbstruct))
-	       ;; (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	       (dbpath       (db:dbfile-path 0)) ;; (let ((dbdir (conc *toppath* "/db"))) ;; use this opportunity to create our db dir
-			                         ;;       (if (not (directory-exists? dbdir))
-				                 ;;           (create-direcory dbdir))
-			                         ;;           (conc *toppath* "/db/main.db")))
+	(let* ((dbpath       (db:dbfile-path 0))
 	       (dbexists     (file-exists? dbpath))
-	       (db           (sqlite3:open-database dbpath))
+	       (db           (db:lock-create-open dbpath db:initialize-main-db))
 	       (olddb        (db:open-megatest-db))
-	       (write-access (file-write-access? dbpath))
-	       (handler      (make-busy-timeout 136000)))
+	       (write-access (file-write-access? dbpath)))
 	  (if (and dbexists (not write-access))
 	      (set! *db-write-access* #f))
-	  (if write-access 
-	      (begin
-		(sqlite3:set-busy-handler! db handler)
-		(sqlite3:execute db "PRAGMA synchronous = 0;")))
-	  (if (not dbexists)
-	      (db:initialize-main-db db))
-	  ;; (dbr:dbstruct-set-run-id! dbstruct 0) ;; main.db is the zeroth "run"
 	  (dbr:dbstruct-set-main!   dbstruct db)
 	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
 	  db))))
@@ -237,9 +216,6 @@
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
-    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
-    ;; isn't this a hold-over from the multi-db in one process? Commenting it out for now ....
-    ;; (db:get-db dbstruct #f) ;; force one call to main
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
@@ -247,19 +223,13 @@
 (define (db:open-megatest-db)
   (let* ((dbpath       (conc *toppath* "/megatest.db"))
 	 (dbexists     (file-exists? dbpath))
-	 (db           (sqlite3:open-database dbpath))
-	 (write-access (file-write-access? dbpath))
-	 (handler      (make-busy-timeout 136000)))
+	 (db           (db:lock-create-open dbpath
+					    (lambda (db)
+					      (db:initialize-main-db db)
+					      (db:initialize-run-id-db db))))
+	 (write-access (file-write-access? dbpath)))
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
-    (if write-access 
-	(begin
-	  (sqlite3:set-busy-handler! db handler)
-	  (sqlite3:execute db "PRAGMA synchronous = 0;")))
-    (if (not dbexists)
-	(begin
-	  (db:initialize-main-db db)
-	  (db:initialize-run-id-db db)))
     db))
 
 ;; sync run to disk if touched
