@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (require-extension (srfi 18) extras tcp)
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -125,6 +125,27 @@
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (conc dbdir fname)))
 	       
+;; open an sql database inside a file lock
+;;
+;; returns: db existed-prior-to-opening
+;;
+(define (db:lock-create-open fname initproc)
+  (if (file-exists? fname)
+      ;; (values 
+      (sqlite3:open-database fname) ;; #t)
+      (let* ((parent-dir   (pathname-directory fname))
+	     (dir-writable (file-write-access? parent-dir)))
+	(if dir-writable
+	    (begin
+	      (obtain-dot-lock fname 1 5 10)
+	      (let ((db (sqlite3:open-database fname)))
+		(initproc db)
+		(release-dot-lock fname)
+		db)) ;; (values db #f)))
+	    #f ;;(values #f #f)
+	    ))))
+	 
+
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
 (define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
@@ -138,25 +159,34 @@
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
-	       (db           (sqlite3:open-database dbpath))
+	       (db           (db:lock-create-open dbpath 
+						  (lambda (db)
+						    (db:initialize-run-id-db db)
+						    (sqlite3:execute 
+						     db
+						     "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+						     (* run-id 30000) ;; allow for up to 30k tests per run
+						     run-id)
+						    ))) ;; add strings db to rundb, not in use yet
+	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (db:open-megatest-db))
 	       (write-access (file-write-access? dbpath))
 	       (handler      (make-busy-timeout 136000)))
 	  (if (and dbexists (not write-access))
 	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	  (if write-access
-	      (begin
-		(if (not dbexists)
-		    (begin
-		      (db:initialize-run-id-db db)
-		      (sqlite3:execute 
-		       db
-		       "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-		       (* run-id 30000) ;; allow for up to 30k tests per run
-		       run-id)
-		      )) ;; add strings db to rundb, not in use yet
-		(sqlite3:set-busy-handler! db handler)
-		(sqlite3:execute db "PRAGMA synchronous = 0;"))) ;; was 0 but 0 is a gamble, changed back to 0
+	  ;;(if write-access
+	  ;;    (begin
+	  ;;      (if (not dbexists)
+	  ;;          (begin
+	  ;;            (db:initialize-run-id-db db)
+	  ;;            (sqlite3:execute 
+	  ;;             db
+	  ;;             "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+	  ;;             (* run-id 30000) ;; allow for up to 30k tests per run
+	  ;;             run-id)
+	  ;;            )) ;; add strings db to rundb, not in use yet
+	  ;;      (sqlite3:set-busy-handler! db handler)
+	  ;;      (sqlite3:execute db "PRAGMA synchronous = 0;"))) ;; was 0 but 0 is a gamble, changed back to 0
 	  (dbr:dbstruct-set-rundb!  dbstruct db)
 	  (dbr:dbstruct-set-inuse!  dbstruct #t)
 	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
