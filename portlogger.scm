@@ -36,20 +36,21 @@
     db))
 
 (define (portlogger:open-run-close proc . params)
-  (handle-exceptions
-   exn
-   (begin
-     (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-     (debug:print 0 "exn=" (condition->list exn))
-     (print-call-chain))
-   (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
-	  (lock   (obtain-dot-lock fname 1 5 10))
-	  (db     (portlogger:open-db fname))
-	  (res    (apply proc db params)))
-     (sqlite3:finalize! db)
-     (release-dot-lock fname)
-     res)))
+  (let ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db")))
+    (handle-exceptions
+     exn
+     (begin
+       (release-dot-lock fname)
+       (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 "exn=" (condition->list exn))
+       (print-call-chain))
+     (let* ((lock   (obtain-dot-lock fname 1 5 10))
+	    (db     (portlogger:open-db fname))
+	    (res    (apply proc db params)))
+       (sqlite3:finalize! db)
+       (release-dot-lock fname)
+       res))))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
 (define (portlogger:take-port db portnum)
