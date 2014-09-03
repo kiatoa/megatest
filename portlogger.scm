@@ -45,7 +45,7 @@
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 "exn=" (condition->list exn))
        (print-call-chain))
-     (let* ((lock   (obtain-dot-lock fname 1 5 10))
+     (let* ((lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))
 	    (res    (apply proc db params)))
        (sqlite3:finalize! db)
