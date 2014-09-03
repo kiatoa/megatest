@@ -94,9 +94,14 @@
    "SELECT (port) FROM ports WHERE state='released' LIMIT 1;"))
 
 (define (portlogger:find-port db)
-  (let ((portnum (or (portlogger:get-prev-used-port db)
-		     (+ 50000 ;; top of registered ports
-			(random (- 60000 50000))))))
+  (let ((lowport (let ((val (configf:lookup *configdat* "server" "lowport")))
+		   (if (and val 
+			    (string->number val))
+		       (string->number val)
+		       32768)))
+	(portnum (or (portlogger:get-prev-used-port db)
+		     (+ lowport ;; top of registered ports is 49152 but lets use ports in the registered range
+			(random (- 64000 lowport))))))
     (portlogger:take-port db portnum)
     portnum))
 
