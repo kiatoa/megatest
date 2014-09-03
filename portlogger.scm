@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix srfi-69 hostinfo)
+(use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit portlogger))
@@ -43,9 +43,12 @@
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (debug:print 0 "exn=" (condition->list exn))
      (print-call-chain))
-   (let* ((db  (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
-	  (res (apply proc db params)))
+   (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
+	  (lock   (obtain-dot-lock fname 1 5 10))
+	  (db     (portlogger:open-db fname))
+	  (res    (apply proc db params)))
      (sqlite3:finalize! db)
+     (release-dot-lock fname)
      res)))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
