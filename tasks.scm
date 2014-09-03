@@ -22,6 +22,22 @@
 ;; Tasks db
 ;;======================================================================
 
+;; wait up to aprox n seconds for a journal to go away
+;;
+(define (tasks:wait-on-journal path n)
+  (let ((fullpath (conc path "-journal")))
+    (let loop ((journal-exists (file-exists? fullpath))
+	       (count          n)) ;; wait ten times ...
+      (if journal-exists
+	  (if (> count 0)
+	      #f
+	      (begin
+		(thread-sleep! 1)
+		(loop (file-exists? fullpath)
+		      (- count 1))))
+	  #t))))
+
+
 ;; If file exists AND
 ;;    file readable
 ;;         ==> open it
@@ -34,6 +50,7 @@
 (define (tasks:open-db)
   (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
 	 (dbpath       (conc linktree "/.db/monitor.db"))
+	 (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
 	 (mdb          (cond

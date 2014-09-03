@@ -19,7 +19,8 @@
 
 
 (define (portlogger:open-db fname)
-  (let* ((exists   (file-exists? fname))
+  (let* ((avail    (tasks:wait-on-journal fname 10)) ;; wait up to about 10 seconds for the journal to go away
+	 (exists   (file-exists? fname))
 	 (db       (sqlite3:open-database fname))
 	 (handler  (make-busy-timeout 136000))
 	 (canwrite (file-write-access? fname)))
@@ -36,20 +37,21 @@
     db))
 
 (define (portlogger:open-run-close proc . params)
-  (let ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db")))
+  (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
+	 (avail  (tasks:wait-on-journal fname 10))) ;; wait up to about 10 seconds for the journal to go away
     (handle-exceptions
      exn
      (begin
-       (release-dot-lock fname)
+       ;; (release-dot-lock fname)
        (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 "exn=" (condition->list exn))
        (print-call-chain))
-     (let* ((lock   (obtain-dot-lock fname 2 9 10))
+     (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))
 	    (res    (apply proc db params)))
        (sqlite3:finalize! db)
-       (release-dot-lock fname)
+       ;; (release-dot-lock fname)
        res))))
 
 ;; (fold-row PROC INIT DATABASE SQL . PARAMETERS) 
