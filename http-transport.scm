@@ -141,6 +141,9 @@
      (print-error-message exn)
      (if (< portnum 61000)
 	 (begin 
+	   (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 "exn=" (condition->list exn))
 	   (portlogger:open-run-close portlogger:set-failed portnum)
 	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	   (thread-sleep! 0.1)

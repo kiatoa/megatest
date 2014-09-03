@@ -1,6 +1,6 @@
 #!/bin/bash
 if [ $NUMBER -lt 10 ];then 
-   sleep 2
+   sleep 20
    sleep `echo 4 * $NUMBER | bc`
 else
    sleep 130
