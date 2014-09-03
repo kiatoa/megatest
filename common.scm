@@ -47,6 +47,8 @@
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
 (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
+(define *alt-log-file* #f)  ;; used by -log
+
 
 ;; DATABASE
 (define *open-dbs* (vector #f (make-hash-table))) ;; megatestdb run-id-dbs

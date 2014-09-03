@@ -459,7 +459,12 @@
 (define (http-transport:launch run-id)
   (set! *run-id*   run-id)
   (if (args:get-arg "-daemonize")
-      (daemon:ize))
+      (begin
+	(daemon:ize)
+	(if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
+	    (begin
+	      (current-error-port *alt-log-file*)
+	      (current-output-port *alt-log-file*)))))
   (if (server:check-if-running run-id)
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")

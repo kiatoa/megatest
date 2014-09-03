@@ -130,6 +130,7 @@ Misc
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
   -daemonize              : fork into background and disconnect from stdin/out
+  -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
   -stop-server id         : stop server specified by id (see output of -list-servers), use
                             0 to kill all
@@ -222,6 +223,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-ping"
 			"-refdb2dat"
 			"-o"
+			"-log"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -275,6 +277,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       )
 		 args:arg-hash
 		 0))
+
+(if (args:get-arg "-log")
+    (let ((oup (open-output-file (args:get-arg "-log"))))
+      (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
+      (current-error-port oup)
+      (current-output-port oup)))
 
 (if (or (args:get-arg "-h")
 	(args:get-arg "-help")

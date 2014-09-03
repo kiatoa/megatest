@@ -119,8 +119,6 @@
 ;; MAIN
 ;;======================================================================
 
-
-
 (define (portlogger:main . args)
   (let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
 	 (numargs (length args))
