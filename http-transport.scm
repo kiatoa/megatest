@@ -166,7 +166,9 @@
    ;; This starts the spiffy server
    ;; NEED WAY TO SET IP TO #f TO BIND ALL
    ;; (start-server bind-address: ipaddrstr port: portnum)
-   (start-server port: portnum)
+   (if (configf:lookup *configdat* "server" "hostname") ;; this is a hint to bind directly
+       (start-server port: portnum bind-address: (configf:lookup *configdat* "server" "hostname"))
+       (start-server port: portnum))
    ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
    (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
    (debug:print 1 "INFO: server has been stopped")))
