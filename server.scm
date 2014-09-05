@@ -89,7 +89,7 @@
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
-									      (conc " >> " logfile " 2>&1 &")))))
+									      "")))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
@@ -101,10 +101,10 @@
 	     (not (equal? curr-ip target-host)))
 	(begin
 	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
-	  (setenv "TARGETHOST" target-host)
-	  (setenv "TARGETHOST_LOGF" logfile)
-	  (system (conc "nbfake " cmdln)))
-	(system cmdln))
+	  (setenv "TARGETHOST" target-host)))
+    (setenv "TARGETHOST_LOGF" logfile)
+    (system (conc "nbfake " cmdln))
+    ;; (system cmdln)
     (pop-directory)))
 
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given

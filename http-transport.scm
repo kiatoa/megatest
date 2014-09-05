@@ -135,43 +135,47 @@
 ;; This is recursively run by http-transport:run until sucessful
 ;;
 (define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
-  (handle-exceptions
-   exn
-   (begin
-     (print-error-message exn)
-     (if (< portnum 61000)
-	 (begin 
-	   (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
-	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 "exn=" (condition->list exn))
-	   (portlogger:open-run-close portlogger:set-failed portnum)
-	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
-	   (thread-sleep! 0.1)
+  (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
+    (debug:print-info 2 "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (handle-exceptions
+     exn
+     (begin
+       (print-error-message exn)
+       (if (< portnum 64000)
+	   (begin 
+	     (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 "exn=" (condition->list exn))
+	     (portlogger:open-run-close portlogger:set-failed portnum)
+	     (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
+	     (thread-sleep! 0.1)
 
-	   ;; get_next_port goes here
-	   (http-transport:try-start-server run-id
-					    ipaddrstr
-					    (portlogger:open-run-close portlogger:find-port)
-					    server-id))
-	 (begin
-	   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
-	   (print "ERROR: Tried and tried but could not start the server"))))
-   ;; any error in following steps will result in a retry
-   (set! *server-info* (list ipaddrstr portnum))
-   (open-run-close tasks:server-set-interface-port 
-		   tasks:open-db 
-		   server-id 
-		   ipaddrstr portnum)
-   (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   ;; This starts the spiffy server
-   ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   ;; (start-server bind-address: ipaddrstr port: portnum)
-   (if (configf:lookup *configdat* "server" "hostname") ;; this is a hint to bind directly
-       (start-server port: portnum bind-address: (configf:lookup *configdat* "server" "hostname"))
-       (start-server port: portnum))
-   ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
-   (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
-   (debug:print 1 "INFO: server has been stopped")))
+	     ;; get_next_port goes here
+	     (http-transport:try-start-server run-id
+					      ipaddrstr
+					      (portlogger:open-run-close portlogger:find-port)
+					      server-id))
+	   (begin
+	     (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+	     (print "ERROR: Tried and tried but could not start the server"))))
+     ;; any error in following steps will result in a retry
+     (set! *server-info* (list ipaddrstr portnum))
+     (open-run-close tasks:server-set-interface-port 
+		     tasks:open-db 
+		     server-id 
+		     ipaddrstr portnum)
+     (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
+     ;; This starts the spiffy server
+     ;; NEED WAY TO SET IP TO #f TO BIND ALL
+     ;; (start-server bind-address: ipaddrstr port: portnum)
+     (if config-hostname ;; this is a hint to bind directly
+	 (start-server port: portnum bind-address: (if (equal? config-hostname "-")
+						       ipaddrstr
+						       config-hostname))
+	 (start-server port: portnum))
+     ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
+     (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+     (debug:print 1 "INFO: server has been stopped"))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
