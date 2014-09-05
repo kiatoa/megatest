@@ -44,7 +44,7 @@
 	     (count  (+ 1 (vector-ref record 1)))
 	     (start  (vector-ref record 0)))
 	(vector-set! record 1 count)
-	(if (and (> count 1) 
+	(if (and (> count 10) 
 		 (< (/ (- (current-seconds) start)
 		       count) ;; seconds per count
 		    10))
