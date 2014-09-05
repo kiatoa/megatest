@@ -157,7 +157,7 @@
      (lambda (num-in-queue)
        (set! res num-in-queue))
      mdb
-     "SELECT count(id) FROM servers WHERE run_id=? AND state = 'available';"
+     "SELECT count(id) FROM servers WHERE run_id=? AND state = 'available' AND (strftime('%s','now') - start_time) < 30 ;"
      run-id)
     res))
 
@@ -290,7 +290,7 @@
      (lambda (id)
        (set! res id))
      mdb
-     "SELECT id FROM servers WHERE run_id=? AND state in ('running','available');" run-id)
+     "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'available' AND  (strftime('%s','now') - start_time) < 30));" run-id)
     res))
 
 (define (tasks:get-all-servers mdb)

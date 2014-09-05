@@ -466,10 +466,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
 		  (debug:print-info 1 "Server connection not needed")
 		  (begin
-		    (if run-id 
-			(client:launch run-id) 
-			(client:launch 0)      ;; without run-id we'll start a server for "0"
-			)))))))
+		    ;; (if run-id 
+		    ;;     (client:launch run-id) 
+		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+		    #t
+		    ))))))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))

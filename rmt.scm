@@ -34,8 +34,10 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
+;; #t means - please start a server!
+;;
 (define (rmt:write-frequency-over-limit? cmd run-id)
-  (or (member cmd api:read-only-queries)
+  (or (not (member cmd api:read-only-queries))
       (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
 	     (record (if tmprec tmprec 
 			 (let ((v (vector (current-seconds) 0)))
@@ -49,7 +51,7 @@
 		       count) ;; seconds per count
 		    10))
 	    (begin
-	      (debug:print-info 1 "db write rate too high, starting a server")
+	      (debug:print-info 1 "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id)
 	      #t)
 	    #f)))) ;; less than 10 seconds per count - start up a server
 
@@ -75,6 +77,9 @@
 					    (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
 					    (if (> numtries 0)
 						(begin
+						  ;; junk records can cause stuckness here. use this time to
+						  ;; clean out
+						  (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id "auto-start-clean-up")
 						  (thread-sleep! 10)
 						  (loop (- numtries 1)))
 						(begin
