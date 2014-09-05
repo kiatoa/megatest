@@ -576,33 +576,34 @@
 	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
 	(hash-table-set! tests-draw-state 'xtorig xtorig)
 	(hash-table-set! tests-draw-state 'ytorig ytorig)
-	(let ((longest-str   (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b)))))))
+	(let ((longest-str   (if (null? sorted-testnames) "         " (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b))))))))
 	  (let-values (((x-max y-max) (canvas-text-size cnv longest-str)))
              (if (> x-max boxw)(set! boxw (+ 10 x-max)))))
 	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
-	(let loop ((hed (car (reverse sorted-testnames)))
-		   (tal (cdr (reverse sorted-testnames)))
-		   (llx xtorig)
-		   (lly ytorig)
-		   (urx (+ xtorig boxw))
-		   (ury (+ ytorig boxh)))
-	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	  (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	  ;; data used by mouse click calc. keep the wacky order for now.
-	  (hash-table-set! tests-hash hed  (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh)) 
-	  ;; (list llx lly boxw boxh)) ;; NB// Swap ury and lly
-	  (if (not (null? tal))
-	      ;; leave a column of space to the right to list items
-	      (let ((have-room 
-		     (if #t ;; put "auto" here where some form of auto rearanging can be done
-			 (> (* 3 (+ boxw gapx)) (- urx xtorig))
-			 (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
-		(loop (car tal)
-		      (cdr tal)
-		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
-		      (if have-room lly (+ lly boxh gapy))
-		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-		      (if have-room ury (+ ury boxh gapy))))))))
+	(if (not (null? sorted-testnames))
+	    (let loop ((hed (car (reverse sorted-testnames)))
+		       (tal (cdr (reverse sorted-testnames)))
+		       (llx xtorig)
+		       (lly ytorig)
+		       (urx (+ xtorig boxw))
+		       (ury (+ ytorig boxh)))
+					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
+	      (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	      ;; data used by mouse click calc. keep the wacky order for now.
+	      (hash-table-set! tests-hash hed  (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh)) 
+	      ;; (list llx lly boxw boxh)) ;; NB// Swap ury and lly
+	      (if (not (null? tal))
+		  ;; leave a column of space to the right to list items
+		  (let ((have-room 
+			 (if #t ;; put "auto" here where some form of auto rearanging can be done
+			     (> (* 3 (+ boxw gapx)) (- urx xtorig))
+			     (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
+		    (loop (car tal)
+			  (cdr tal)
+			  (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
+			  (if have-room lly (+ lly boxh gapy))
+			  (if have-room (+ urx boxw gapx) (+ xtorig boxw))
+			  (if have-room ury (+ ury boxh gapy)))))))))
 
 (define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
   (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
@@ -616,19 +617,20 @@
 	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
     (hash-table-set! tests-draw-state 'xtorig xtorig)
     (hash-table-set! tests-draw-state 'ytorig ytorig)
-    (let loop ((hed (car (reverse sorted-testnames)))
-	       (tal (cdr (reverse sorted-testnames))))
-      (let* ((tvals (hash-table-ref tests-hash hed))
-	     (llx   (+ xdelta (list-ref tvals 0)))
-	     (lly   (+ ydelta (list-ref tvals 4)))
-	     (boxw  (list-ref tvals 5))
-	     (boxh  (list-ref tvals 6))
-	     (urx   (+ llx boxw))
-	     (ury   (+ lly boxh)))
-	(dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
-	(hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh))
-	(if (not (null? tal))
-	    ;; leave a column of space to the right to list items
-	    (loop (car tal)
-		  (cdr tal)))))))
+    (if (not (null? sorted-testnames))
+	(let loop ((hed (car (reverse sorted-testnames)))
+		   (tal (cdr (reverse sorted-testnames))))
+	  (let* ((tvals (hash-table-ref tests-hash hed))
+		 (llx   (+ xdelta (list-ref tvals 0)))
+		 (lly   (+ ydelta (list-ref tvals 4)))
+		 (boxw  (list-ref tvals 5))
+		 (boxh  (list-ref tvals 6))
+		 (urx   (+ llx boxw))
+		 (ury   (+ lly boxh)))
+	    (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh))
+	    (if (not (null? tal))
+		;; leave a column of space to the right to list items
+		(loop (car tal)
+		      (cdr tal))))))))
 
