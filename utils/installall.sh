@@ -196,11 +196,11 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-
 
 cd $BUILDHOME  
 
-git clone https://bitbucket.org/DerGuteMoritz/zmq/commits/branch/3.2 zmq-3.2
-cd zmq-3.2
-chicken-install
-
-cd $BUILDHOME
+# git clone https://bitbucket.org/DerGuteMoritz/zmq/commits/branch/3.2 zmq-3.2
+# cd zmq-3.2
+# chicken-install
+#
+# cd $BUILDHOME
 
 ## WEBKIT=WebKit-r131972
 ## if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then
