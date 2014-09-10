@@ -171,7 +171,7 @@
     res))
 
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','dbprep','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
 		   (conc "defunct" tag) run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id tag)
@@ -190,7 +190,7 @@
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
 		   (conc "defunct" tag) server-id)
   ;; use this opportuntity to clean out records over one month old or over 10 minutes old with port = -1 (i.e. a never used placeholder)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;")
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down','dbprep') AND (strftime('%s','now') - start_time) > 2628000;")
   (sqlite3:execute mdb "DELETE FROM servers WHERE state like 'defunct%' AND port=-1 AND (strftime('%s','now') - start_time) > 600;")
   )
 
@@ -266,7 +266,7 @@
      (lambda (a . b)
        (set! res (cons (apply vector a b) res)))
      mdb
-     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running') ORDER BY start_time DESC;")
+     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running','dbprep') ORDER BY start_time DESC;")
      run-id)
     (vector header res)))
 
@@ -289,8 +289,8 @@
     (sqlite3:for-each-row
      (lambda (id)
        (set! res id))
-     mdb
-     "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'available' AND  (strftime('%s','now') - start_time) < 30));" run-id)
+     mdb ;; NEEDS dbprep ADDED
+     "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
 
 (define (tasks:get-all-servers mdb)
@@ -335,6 +335,7 @@
 		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
 		  (process-signal pid signal/kill)) 
 		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
+
 
 ;;======================================================================
 ;; Tasks and Task monitors

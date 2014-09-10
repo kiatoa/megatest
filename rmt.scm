@@ -71,7 +71,7 @@
 				(if (and (not (rmt:write-frequency-over-limit? cmd run-id))
 					 (not (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)))
 				    #f
-				    (let loop ((numtries 100))
+				    (let loop ((numtries 2))
 				      (let ((res (client:setup run-id)))
 					(if res 
 					    (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
@@ -80,11 +80,10 @@
 						  ;; junk records can cause stuckness here. use this time to
 						  ;; clean out
 						  (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id "auto-start-clean-up")
-						  (thread-sleep! 10)
+						  (thread-sleep! 1)
 						  (loop (- numtries 1)))
-						(begin
-						  (debug:print 0 "ERROR: 100 tries and no server, giving up")
-						  (exit 1))))))))))
+						#f) ;; try couple times to start server - give up and do local queries
+					    )))))))
 	 (jparams         (db:obj->string params)))
     (if connection-info
 	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))

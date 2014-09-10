@@ -267,6 +267,8 @@
        ;; process and return it.
        (let* ((send-recieve (lambda ()
 			      (mutex-lock! *http-mutex*)
+			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
+			      ;;					       ((exn http client-error) e (print e)))
 			      (set! res (with-input-from-request ;; was dat
 					 fullurl 
 					 (list (cons 'key "thekey")
@@ -378,6 +380,8 @@
       ;;
       (if (eq? server-state 'available)
 	  (begin
+	    (tasks:server-set-state! tdb server-id "dbprep")
+	    (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
 	    (set! *inmemdb*  (db:setup run-id))
 	    (tasks:server-set-state! tdb server-id "running")))
 
