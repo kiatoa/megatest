@@ -19,7 +19,7 @@
 
 
 (define (portlogger:open-db fname)
-  (let* ((avail    (tasks:wait-on-journal fname 1 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
+  (let* ((avail    (tasks:wait-on-journal fname 5 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists   (file-exists? fname))
 	 (db       (if avail 
 		       (sqlite3:open-database fname)
