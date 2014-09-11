@@ -1295,7 +1295,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	   (mtdb     (if toppath (db:open-megatest-db)))
 	   (run-ids  (if toppath (db:get-all-run-ids mtdb))))
+
+      ;; adjust test-ids to fit into proper range
+      ;;
+      (db:prep-megatest.db-for-migration mtdb)
+
       ;; sync runs, test_meta etc.
+      ;;
       (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
       (for-each 
        (lambda (run-id)

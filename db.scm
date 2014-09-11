@@ -1598,6 +1598,20 @@
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"   "item_path"
                                 "run_duration" "final_logf" "comment"   "shortdir"))
 
+;; fields *must* be a non-empty list
+;;
+(define (db:field->number fieldname fields)
+  (if (null? fields)
+      #f
+      (let loop ((hed  (car fields))
+		 (tal  (cdr fields))
+		 (indx 0))
+	(if (equal? fieldname hed)
+	    indx
+	    (if (null? tal)
+		#f
+		(loop (car tal)(cdr tal)(+ indx 1)))))))
+
 (define db:test-record-qry-selector (string-intersperse db:test-record-fields ","))
 
 ;; NOTE: Use db:test-get* to access records
@@ -1628,7 +1642,47 @@
 		     (apply sqlite3:execute qry (vector->list rec)))
 		   testrecs)
 		  (sqlite3:finalize! qry)))))
+
+;; map a test-id into the proper range
+;;
+(define (db:adj-test-id mtdb min-test-id test-id)
+  (if (> test-id min-test-id)
+      test-id
+      (let loop ((new-id min-test-id))
+	(let ((test-id-found #f))
+	  (sqlite3:for-each-row 
+	   (lambda (id)
+	     (set! test-id-found id))
+	   mtdb
+	   "SELECT id FROM tests WHERE id=?;"
+	   new-id)
+	  ;; if test-id-found then need to try again
+	  (if test-id-found
+	      (loop (+ new-id 1))
+	      (begin
+		(debug:print 0 "New test id " new-id " found for test with id " test-id)
+		(sqlite3:execute mtdb "UPDATE tests SET id=? WHERE id=?;" new-id test-id)))))))
+
+;; move test ids into the 30k * run_id range
+;;
+(define (db:prep-megatest.db-adj-test-ids mtdb run-id testrecs)
+  (let ((min-test-id (* run-id 30000)))
+    (for-each 
+     (lambda (testrec)
+       (let* ((test-id (vector-ref testrec (db:field->number "id" db:test-record-fields))))
+	 (db:adj-test-id mtdb min-test-id test-id)))
+     testrecs)))
 	
+;; 1. move test ids into the 30k * run_id range
+;; 2. move step ids into the 30k * run_id range
+;;
+(define (db:prep-megatest.db-for-migration mtdb)
+  (let* ((run-ids (db:get-all-run-ids mtdb)))
+    (for-each 
+     (lambda (run-id)
+       (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
+	 (db:prep-megatest.db-adj-test-ids mtdb run-id testrecs)))
+     run-ids)))
 
 ;; Get test data using test_id
 (define (db:get-test-info-by-id dbstruct run-id test-id)
