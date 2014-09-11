@@ -124,6 +124,7 @@ Misc
   -start-dir path         : switch to this directory before running megatest
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
+  -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
