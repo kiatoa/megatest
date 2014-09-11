@@ -1635,10 +1635,10 @@
 		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
 		       (qry    (sqlite3:prepare db qrystr)))
-		  (debug:print 0 "INFO: replace-test-records, qrystr=" qrystr)
+		  (debug:print 0 "INFO: migrating test records for run with id " run-id)
 		  (for-each 
 		   (lambda (rec)
-		     (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
+		     ;; (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
 		     (apply sqlite3:execute qry (vector->list rec)))
 		   testrecs)
 		  (sqlite3:finalize! qry)))))
@@ -1646,7 +1646,7 @@
 ;; map a test-id into the proper range
 ;;
 (define (db:adj-test-id mtdb min-test-id test-id)
-  (if (> test-id min-test-id)
+  (if (>= test-id min-test-id)
       test-id
       (let loop ((new-id min-test-id))
 	(let ((test-id-found #f))
@@ -1660,12 +1660,13 @@
 	  (if test-id-found
 	      (loop (+ new-id 1))
 	      (begin
-		(debug:print 0 "New test id " new-id " found for test with id " test-id)
+		(debug:print-info 0 "New test id " new-id " selected for test with id " test-id)
 		(sqlite3:execute mtdb "UPDATE tests SET id=? WHERE id=?;" new-id test-id)))))))
 
 ;; move test ids into the 30k * run_id range
 ;;
 (define (db:prep-megatest.db-adj-test-ids mtdb run-id testrecs)
+  (debug:print-info 0 "Adjusting test ids in megatest.db for run " run-id)
   (let ((min-test-id (* run-id 30000)))
     (for-each 
      (lambda (testrec)
