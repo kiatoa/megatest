@@ -768,11 +768,9 @@
 ;;    a. If have tests that are not deleted, set state='unknown'
 ;;    b. ....
 ;;
-(define (db:clean-up dbstruct)
-
-  (debug:print 0 "ERROR: db clean up not ported yet")
-
-  (let* ((db         (db:get-db dbstruct #f))
+(define (db:clean-up db)
+  (debug:print 0 "WARNING: db clean up not ported to v1.60, cleanup action will be on megatest.db")
+  (let* (;; (db         (db:get-db dbstruct #f))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
 	 (map (lambda (stmt)
@@ -801,7 +799,7 @@
 			     count-stmt)))
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
-    (db:find-and-mark-incomplete db)
+    ;; (db:find-and-mark-incomplete db)
     (sqlite3:execute db "VACUUM;")))
 
 ;;======================================================================
@@ -1636,11 +1634,14 @@
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
 		       (qry    (sqlite3:prepare db qrystr)))
 		  (debug:print 0 "INFO: migrating test records for run with id " run-id)
-		  (for-each 
-		   (lambda (rec)
-		     ;; (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
-		     (apply sqlite3:execute qry (vector->list rec)))
-		   testrecs)
+		  (sqlite3:with-transaction
+		   db
+		   (lambda ()
+		     (for-each 
+		      (lambda (rec)
+			;; (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
+			(apply sqlite3:execute qry (vector->list rec)))
+		      testrecs)))
 		  (sqlite3:finalize! qry)))))
 
 ;; map a test-id into the proper range

@@ -1295,7 +1295,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((toppath  (launch:setup-for-run))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	   (mtdb     (if toppath (db:open-megatest-db)))
-	   (run-ids  (if toppath (db:get-all-run-ids mtdb))))
+	   (run-ids  (if toppath (db:get-all-run-ids mtdb)))
+	   (mdb     (tasks:open-db))
+	   (servers (tasks:get-all-servers mdb)))
+      
+      ;; kill servers
+      (for-each
+       (lambda (server)
+	 (tasks:server-delete-record mdb (vector-ref server 0) "dbmigration")
+	 (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
+       servers)
+      (sqlite3:finalize! mdb)
+
+      ;; clear out junk records
+      ;;
+      (db:clean-up mtdb)
 
       ;; adjust test-ids to fit into proper range
       ;;

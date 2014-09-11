@@ -297,44 +297,46 @@
   (let ((res '()))
     (sqlite3:for-each-row
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
-       ;;                       0   1        2         3    4       5          6        7     8          9          10        11     12
+       ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
      mdb
      "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
 
-(define (tasks:kill-server status hostname port pid)
-  (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
-  (if port
-      (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
-      (open-run-close tasks:server-deregister tasks:open-db hostname pid:  pid))
-  (if status ;; #t means alive
-      (begin
-	(if (equal? hostname (get-host-name))
-	    (handle-exceptions
-	     exn
-	     (debug:print-info 0 "server may or may not be dead, check for megatest -server running as pid " pid "\n"
-			       "  EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
-	     (process-signal pid signal/term)
-	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
-	     ;;(process-signal pid signal/kill)
-	     ) ;; local machine, send sig term
-	    (begin
-	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
-	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-	      (let ((serverdat (list hostname port)))
-		(hash-table-set! *runremote* run-id (http-transport:client-connect hostname port))
-	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
-      (begin
-	(if status 
-	    (if (equal? hostname (get-host-name))
-		(begin
-		  (debug:print-info 1 "Sending signal/term to " pid " on " hostname)
-		  (process-signal pid signal/term)  ;; local machine, send sig term
-		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
-		  (process-signal pid signal/kill)) 
-		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
+;; no elegance here ...
+;;
+(define (tasks:kill-server hostname pid)
+  (debug:print-info 0 "Attempting to kill server process " pid " on host " hostname)
+  (setenv "TARGETHOST" hostname)
+  (system (conc "nbfake kill " pid)))
+ 
+;;   (if status ;; #t means alive
+;;       (begin
+;; 	(if (equal? hostname (get-host-name))
+;; 	    (handle-exceptions
+;; 	     exn
+;; 	     (debug:print-info 0 "server may or may not be dead, check for megatest -server running as pid " pid "\n"
+;; 			       "  EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
+;; 	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
+;; 	     (process-signal pid signal/term)
+;; 	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
+;; 	     ;;(process-signal pid signal/kill)
+;; 	     ) ;; local machine, send sig term
+;; 	    (begin
+;; 	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
+;; 	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
+;; 	      (let ((serverdat (list hostname port)))
+;; 		(hash-table-set! *runremote* run-id (http-transport:client-connect hostname port))
+;; 	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
+;;       (begin
+;; 	(if status 
+;; 	    (if (equal? hostname (get-host-name))
+;; 		(begin
+;; 		  (debug:print-info 1 "Sending signal/term to " pid " on " hostname)
+;; 		  (process-signal pid signal/term)  ;; local machine, send sig term
+;; 		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
+;; 		  (process-signal pid signal/kill)) 
+;; 		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
 
 
 ;;======================================================================
