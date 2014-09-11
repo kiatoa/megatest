@@ -24,19 +24,20 @@
 
 ;; wait up to aprox n seconds for a journal to go away
 ;;
-(define (tasks:wait-on-journal path n)
+(define (tasks:wait-on-journal path n #!key (remove #f))
   (let ((fullpath (conc path "-journal")))
     (let loop ((journal-exists (file-exists? fullpath))
 	       (count          n)) ;; wait ten times ...
       (if journal-exists
 	  (if (> count 0)
-	      #f
 	      (begin
 		(thread-sleep! 1)
 		(loop (file-exists? fullpath)
-		      (- count 1))))
+		      (- count 1)))
+	      (begin
+		(if remove (system (conc "rm -rf " path)))
+		#f))
 	  #t))))
-
 
 ;; If file exists AND
 ;;    file readable

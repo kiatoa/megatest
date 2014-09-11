@@ -73,6 +73,7 @@
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
     ;; (set! db *inmemdb*)
+    (debug:print-info 0 "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -349,6 +350,7 @@
 				   (> (- (current-seconds) start-time) 2))
 			      sdat
                               (begin
+				(debug:print-info 0 "Still waiting, last-sdat=" last-sdat)
                                 (sleep 4)
                                 (loop start-time
 				      (equal? sdat last-sdat)

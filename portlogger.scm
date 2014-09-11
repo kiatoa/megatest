@@ -19,9 +19,13 @@
 
 
 (define (portlogger:open-db fname)
-  (let* ((avail    (tasks:wait-on-journal fname 10)) ;; wait up to about 10 seconds for the journal to go away
+  (let* ((avail    (tasks:wait-on-journal fname 1 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists   (file-exists? fname))
-	 (db       (sqlite3:open-database fname))
+	 (db       (if avail 
+		       (sqlite3:open-database fname)
+		       (begin
+			 (system (conc "rm -f " fname))
+			 (sqlite3:open-database fname))))
 	 (handler  (make-busy-timeout 136000))
 	 (canwrite (file-write-access? fname)))
     (sqlite3:set-busy-handler! db handler)
