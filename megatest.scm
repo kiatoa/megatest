@@ -1291,7 +1291,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; ;; ;; redo me       (set! *didsomething* #t)))
 
 (if (args:get-arg "-import-megatest.db")
-    (let* ((toppath  (setup-for-run))
+    (let* ((toppath  (launch:setup-for-run))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	   (mtdb     (if toppath (db:open-megatest-db)))
 	   (run-ids  (if toppath (db:get-all-run-ids mtdb))))
