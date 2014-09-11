@@ -1621,10 +1621,10 @@
 		(let* ((qmarks (string-intersperse (make-list (length db:test-record-fields) "?") ","))
 		       (qrystr (conc "INSERT OR REPLACE INTO tests (" db:test-record-qry-selector ") VALUES (" qmarks ");"))
 		       (qry    (sqlite3:prepare db qrystr)))
-		  ;; (debug:print 8 "INFO: replace-test-records, qrystr=" qrystr)
+		  (debug:print 0 "INFO: replace-test-records, qrystr=" qrystr)
 		  (for-each 
 		   (lambda (rec)
-		     (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ", "))
+		     (debug:print 0 "INFO: Inserting values: " (string-intersperse (map conc (vector->list rec)) ",") "\n")
 		     (apply sqlite3:execute qry (vector->list rec)))
 		   testrecs)
 		  (sqlite3:finalize! qry)))))
