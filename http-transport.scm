@@ -136,7 +136,7 @@
 ;;
 (define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
   (let ((config-hostname (configf:lookup *configdat* "server" "hostname")))
-    (debug:print-info 2 "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (debug:print-info 0 "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
     (handle-exceptions
      exn
      (begin
@@ -164,7 +164,7 @@
 		     tasks:open-db 
 		     server-id 
 		     ipaddrstr portnum)
-     (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
+     (debug:print 0 "INFO: Trying to start server on " ipaddrstr ":" portnum)
      ;; This starts the spiffy server
      ;; NEED WAY TO SET IP TO #f TO BIND ALL
      ;; (start-server bind-address: ipaddrstr port: portnum)
@@ -339,6 +339,8 @@
 				 (changed    #t)
 				 (last-sdat  "not this"))
                         (let ((sdat #f))
+			  (thread-sleep! 0.01)
+			  (debug:print-info 0 "Waiting for server alive signal")
                           (mutex-lock! *heartbeat-mutex*)
                           (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
@@ -493,6 +495,7 @@
 	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
 	      ))
 	(let* ((th2 (make-thread (lambda ()
+				   (debug:print-info 0 "Server run thread started")
 				   (http-transport:run 
 				    (if (args:get-arg "-server")
 					(args:get-arg "-server")
@@ -500,6 +503,7 @@
 				    run-id
 				    server-id)) "Server run"))
 	       (th3 (make-thread (lambda ()
+				   (debug:print-info 0 "Server monitor thread started")
 				   (http-transport:keep-running server-id run-id))
 				 "Keep running")))
 	  ;; Database connection
