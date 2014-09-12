@@ -70,37 +70,37 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; make-vector-record "testing" datastore pkg id area version_name store_type copied source_path iteration submitter datetime storegrp datavol quality disk_id comment
 ;; testing
-(define (make-datastore:pkg)(make-vector 15))
-(define-inline (datastore:pkg-get-id             vec)    (vector-ref  vec 0))
-(define-inline (datastore:pkg-get-area           vec)    (vector-ref  vec 1))
-(define-inline (datastore:pkg-get-version_name   vec)    (vector-ref  vec 2))
-(define-inline (datastore:pkg-get-store_type     vec)    (vector-ref  vec 3))
-(define-inline (datastore:pkg-get-copied         vec)    (vector-ref  vec 4))
-(define-inline (datastore:pkg-get-source_path    vec)    (vector-ref  vec 5))
-(define-inline (datastore:pkg-get-iteration      vec)    (vector-ref  vec 6))
-(define-inline (datastore:pkg-get-submitter      vec)    (vector-ref  vec 7))
-(define-inline (datastore:pkg-get-datetime       vec)    (vector-ref  vec 8))
-(define-inline (datastore:pkg-get-storegrp       vec)    (vector-ref  vec 9))
-(define-inline (datastore:pkg-get-datavol        vec)    (vector-ref  vec 10))
-(define-inline (datastore:pkg-get-quality        vec)    (vector-ref  vec 11))
-(define-inline (datastore:pkg-get-disk_id        vec)    (vector-ref  vec 12))
-(define-inline (datastore:pkg-get-comment        vec)    (vector-ref  vec 13))
-(define-inline (datastore:pkg-get-stored_path    vec)    (vector-ref  vec 14))
-(define-inline (datastore:pkg-set-id!            vec val)(vector-set! vec 0 val))
-(define-inline (datastore:pkg-set-area!          vec val)(vector-set! vec 1 val))
-(define-inline (datastore:pkg-set-version_name!  vec val)(vector-set! vec 2 val))
-(define-inline (datastore:pkg-set-store_type!    vec val)(vector-set! vec 3 val))
-(define-inline (datastore:pkg-set-copied!        vec val)(vector-set! vec 4 val))
-(define-inline (datastore:pkg-set-source_path!   vec val)(vector-set! vec 5 val))
-(define-inline (datastore:pkg-set-iteration!     vec val)(vector-set! vec 6 val))
-(define-inline (datastore:pkg-set-submitter!     vec val)(vector-set! vec 7 val))
-(define-inline (datastore:pkg-set-datetime!      vec val)(vector-set! vec 8 val))
-(define-inline (datastore:pkg-set-storegrp!      vec val)(vector-set! vec 9 val))
-(define-inline (datastore:pkg-set-datavol!       vec val)(vector-set! vec 10 val))
-(define-inline (datastore:pkg-set-quality!       vec val)(vector-set! vec 11 val))
-(define-inline (datastore:pkg-set-disk_id!       vec val)(vector-set! vec 12 val))
-(define-inline (datastore:pkg-set-comment!       vec val)(vector-set! vec 13 val))
-(define-inline (datastore:pkg-set-stored_path!   vec val)(vector-set! vec 14 val))
+(define (make-datashare:pkg)(make-vector 15))
+(define-inline (datashare:pkg-get-id             vec)    (vector-ref  vec 0))
+(define-inline (datashare:pkg-get-area           vec)    (vector-ref  vec 1))
+(define-inline (datashare:pkg-get-version_name   vec)    (vector-ref  vec 2))
+(define-inline (datashare:pkg-get-store_type     vec)    (vector-ref  vec 3))
+(define-inline (datashare:pkg-get-copied         vec)    (vector-ref  vec 4))
+(define-inline (datashare:pkg-get-source_path    vec)    (vector-ref  vec 5))
+(define-inline (datashare:pkg-get-iteration      vec)    (vector-ref  vec 6))
+(define-inline (datashare:pkg-get-submitter      vec)    (vector-ref  vec 7))
+(define-inline (datashare:pkg-get-datetime       vec)    (vector-ref  vec 8))
+(define-inline (datashare:pkg-get-storegrp       vec)    (vector-ref  vec 9))
+(define-inline (datashare:pkg-get-datavol        vec)    (vector-ref  vec 10))
+(define-inline (datashare:pkg-get-quality        vec)    (vector-ref  vec 11))
+(define-inline (datashare:pkg-get-disk_id        vec)    (vector-ref  vec 12))
+(define-inline (datashare:pkg-get-comment        vec)    (vector-ref  vec 13))
+(define-inline (datashare:pkg-get-stored_path    vec)    (vector-ref  vec 14))
+(define-inline (datashare:pkg-set-id!            vec val)(vector-set! vec 0 val))
+(define-inline (datashare:pkg-set-area!          vec val)(vector-set! vec 1 val))
+(define-inline (datashare:pkg-set-version_name!  vec val)(vector-set! vec 2 val))
+(define-inline (datashare:pkg-set-store_type!    vec val)(vector-set! vec 3 val))
+(define-inline (datashare:pkg-set-copied!        vec val)(vector-set! vec 4 val))
+(define-inline (datashare:pkg-set-source_path!   vec val)(vector-set! vec 5 val))
+(define-inline (datashare:pkg-set-iteration!     vec val)(vector-set! vec 6 val))
+(define-inline (datashare:pkg-set-submitter!     vec val)(vector-set! vec 7 val))
+(define-inline (datashare:pkg-set-datetime!      vec val)(vector-set! vec 8 val))
+(define-inline (datashare:pkg-set-storegrp!      vec val)(vector-set! vec 9 val))
+(define-inline (datashare:pkg-set-datavol!       vec val)(vector-set! vec 10 val))
+(define-inline (datashare:pkg-set-quality!       vec val)(vector-set! vec 11 val))
+(define-inline (datashare:pkg-set-disk_id!       vec val)(vector-set! vec 12 val))
+(define-inline (datashare:pkg-set-comment!       vec val)(vector-set! vec 13 val))
+(define-inline (datashare:pkg-set-stored_path!   vec val)(vector-set! vec 14 val))
 
 ;;======================================================================
 ;; DB
@@ -155,7 +155,7 @@ Version: " megatest-fossil-hash)) ;; "
     (sqlite3:finalize! iter-qry)
     next-iteration))
 
-(define (datastore:get-id db area version-name iteration)
+(define (datashare:get-id db area version-name iteration)
   (let ((res #f))
     (sqlite3:for-each-row
      (lambda (id)
@@ -165,15 +165,34 @@ Version: " megatest-fossil-hash)) ;; "
      area version-name iteration)
     res))
 
-(define (datastore:set-stored-path db id path)
+(define (datashare:set-stored-path db id path)
   (sqlite3:execute db "UPDATE pkgs SET stored_path=? WHERE id=?;" path id))
 
-(define (datastore:set-copied db id value)
+(define (datashare:set-copied db id value)
   (sqlite3:execute db "UPDATE pkgs SET copied=? WHERE id=?;" value id))
   
 (define (datashare:get-pkg-record db area version-name iteration)
-  #f)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (a . b)
+       (set! res (apply vector a b)))
+     db 
+     "SELECT * FROM pkgs WHERE area=? AND version_name=? AND iteration=?;"
+     area 
+     version-name
+     iteration)
+    res))
 
+;; take version-name iteration and register or update "lastest/0"
+;;
+(define (datashare:set-latest db id area version-name iteration)
+  (let* ((rec         (datashare:get-pkg-record db area version-name iteration))
+	 (latest-id   (datashare:get-id db area "latest" 0))
+	 (stored-path (datashare:pkg-get-stored_path rec)))
+    (if latest-id ;; have a record - bump the link pointer
+	(datashare:set-stored-path db latest-id stored-path)
+	(datashare:register-data db area "latest" 'link "auto" "na" stored-path "latest data"))))
+  
 ;; Create the sqlite db
 (define (datashare:open-db configdat) 
   (let ((path (configf:lookup configdat "database" "location")))
@@ -251,36 +270,36 @@ Version: " megatest-fossil-hash)) ;; "
   (let* ((space-avail (car dest-path))
 	 (disk-path   (cdr dest-path))
 	 (targ-path   (conc disk-path "/" area "/" version "/" iteration))
-	 (id          (datastore:get-id db area version iteration))
+	 (id          (datashare:get-id db area version iteration))
 	 (db          (datashare:open-db configdat)))
     (if (> space-avail 10000) ;; dumb heuristic
 	(begin
 	  (create-directory targ-path #t)
-	  (datastore:set-stored-path db id targ-path)
+	  (datashare:set-stored-path db id targ-path)
 	  (print "Running command: rsync -av " source-path "/ " targ-path "/")
 	  (let ((th1 (make-thread (lambda ()
 				    (let ((pid (process-run "rsync" (list "-av" (conc source-path "/") (conc targ-path "/")))))
 				      (process-wait pid)
-				      (datastore:set-copied db id "yes")
+				      (datashare:set-copied db id "yes")
 				      (sqlite3:finalize! db)))
 				   "Data copy")))
 	    (thread-start! th1))
 	  #t)
 	(begin
 	  (print "ERROR: Not enough space in storage area " dest-path)
-	  (datastore:set-copied db id "no")
+	  (datashare:set-copied db id "no")
 	  (sqlite3:finalize! db)
 	  #f))))
 
-(define (datastore:get-best-storage configdat)
+(define (datashare:get-best-storage configdat)
   (let* ((storage     (configf:lookup configdat "settings" "storage"))
 	 (store-areas (if storage (string-split storage) '())))
     (print "Looking for available space in " store-areas)
-    (datastore:find-most-space store-areas)))
+    (datashare:find-most-space store-areas)))
 
 ;; (string->number (list-ref (with-input-from-pipe "df -B1000000 /tmp" (lambda ()(read-line)(string-split (read-line)))) 3))
 
-(define (datastore:find-most-space paths)
+(define (datashare:find-most-space paths)
   (fold (lambda (area res)
 	  ;; (print "area=" area " res=" res)
 	  (let ((maxspace (car res))
@@ -304,12 +323,12 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; remove existing link and if possible ...
 ;; create path to next of tip of target, create link back to source
-(define (datastore:build-dir-make-link source target)
-  (if (file-exists? target)(datastore:backup-move target))
+(define (datashare:build-dir-make-link source target)
+  (if (file-exists? target)(datashare:backup-move target))
   (create-directory (pathname-directory target) #t)
   (create-symbolic-link source target))
 
-(define (datastore:backup-move path)
+(define (datashare:backup-move path)
   (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
 	 (trashfile (conc trashdir "/" (current-seconds) "-" (pathname-file path))))
     (create-directory trashdir #t)
@@ -372,14 +391,18 @@ Version: " megatest-fossil-hash)) ;; "
 			       ;;  		'link))
 			       (db          (datashare:open-db configdat))
 			       (iteration   (datashare:register-data db area-name version publish-type submitter quality spath comment))
-			       (dest-store  (datastore:get-best-storage configdat)))
+			       (dest-store  (datashare:get-best-storage configdat)))
 			  (if iteration
 			      (if (eq? 'copy publish-type)
-				  (datashare:import-data configdat spath dest-store area-name version iteration)
-				  (let ((id (datastore:get-id db area-name version iteration)))
-				    (datastore:set-stored-path db id spath)
-				    (datastore:set-copied db id "yes")
-				    (datastore:set-copied db id "n/a")))
+				  (begin
+				    (datashare:import-data configdat spath dest-store area-name version iteration)
+				    (let ((id (datashare:get-id db area-name version iteration)))
+				      (datashare:set-latest db id area-name version iteration)))
+				  (let ((id (datashare:get-id db area-name version iteration)))
+				    (datashare:set-stored-path db id spath)
+				    (datashare:set-copied db id "yes")
+				    (datashare:set-copied db id "n/a")
+				    (datashare:set-latest db id area-name version iteration)))
 			      (print "ERROR: Failed to get an iteration number"))
 			  (sqlite3:finalize! db))))
 	 (copy        (iup:button "Copy and Publish"
@@ -414,13 +437,13 @@ Version: " megatest-fossil-hash)) ;; "
      (iup:hbox (iup:label "Source base path:" #:size label-size)   source-tb browse-btn)
      (iup:hbox copy link))))
 
-(define (datastore:lst->path pathlst)
+(define (datashare:lst->path pathlst)
   (conc "/" (string-intersperse (map conc pathlst) "/")))
 
-(define (datastore:path->lst path)
+(define (datashare:path->lst path)
   (string-split path "/"))
 
-(define (datastore:pathdat-apply-heuristics configdat path)
+(define (datashare:pathdat-apply-heuristics configdat path)
   (cond
    ((file-exists? path) "found")
    (else (conc path " not installed"))))
@@ -456,16 +479,16 @@ Version: " megatest-fossil-hash)) ;; "
 			    #:selection-cb
 			    (lambda (obj id state)
 			      ;; (print "obj: " obj ", id: " id ", state: " state)
-			      (let* ((path   (datastore:lst->path (cdr (tree:node->path obj id))))
+			      (let* ((path   (datashare:lst->path (cdr (tree:node->path obj id))))
 				     (record (hash-table-ref/default srcdat path #f)))
 				(if record
 				    (begin
 				      (set! curr-record record)
-				      (iup:attribute-set! submitter      "TITLE" (datastore:pkg-get-submitter record))
-				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datastore:pkg-get-datetime record))))
-				      (iup:attribute-set! comment        "TITLE" (datastore:pkg-get-comment record))
-				      (iup:attribute-set! quality        "TITLE" (datastore:pkg-get-quality record))
-				      (iup:attribute-set! copy-link      "TITLE" (datastore:pkg-get-store_type record))
+				      (iup:attribute-set! submitter      "TITLE" (datashare:pkg-get-submitter record))
+				      (iup:attribute-set! date-submitted "TITLE" (time->string (seconds->local-time (datashare:pkg-get-datetime record))))
+				      (iup:attribute-set! comment        "TITLE" (datashare:pkg-get-comment record))
+				      (iup:attribute-set! quality        "TITLE" (datashare:pkg-get-quality record))
+				      (iup:attribute-set! copy-link      "TITLE" (datashare:pkg-get-store_type record))
 				      ))
 				;; (print  "id=" id " path=" path " record=" record);; (tree:node->path obj id) " run-id: " run-id)
 				))))
@@ -477,7 +500,7 @@ Version: " megatest-fossil-hash)) ;; "
 			    #:selection-cb
 			    (lambda (obj id state)
 			      ;; (print "obj: " obj ", id: " id ", state: " state)
-			      (let* ((path   (datastore:lst->path (cdr (tree:node->path obj id))))
+			      (let* ((path   (datashare:lst->path (cdr (tree:node->path obj id))))
 				     (status (hash-table-ref/default installed-dat path #f)))
 				(iup:attribute-set! installed-status "TITLE" (if status status ""))
 				))))
@@ -489,11 +512,11 @@ Version: " megatest-fossil-hash)) ;; "
 			       ;;
 			       (for-each
 				(lambda (pkgitem)
-				  (let* ((pkg-path   (list (datastore:pkg-get-area  pkgitem)
-							   (datastore:pkg-get-version_name pkgitem)
-							   (datastore:pkg-get-iteration pkgitem)))
-					 (pkg-id     (datastore:pkg-get-id          pkgitem))
-					 (path       (datastore:lst->path pkg-path)))
+				  (let* ((pkg-path   (list (datashare:pkg-get-area  pkgitem)
+							   (datashare:pkg-get-version_name pkgitem)
+							   (datashare:pkg-get-iteration pkgitem)))
+					 (pkg-id     (datashare:pkg-get-id          pkgitem))
+					 (path       (datashare:lst->path pkg-path)))
 				    ;; (print "tree:add-node tb=" tb ", pkg-path=" pkg-path ", pkg-id=" pkg-id)
 				    (if (not (hash-table-ref/default srcdat path #f))
 					(tree:add-node tb "Packages" pkg-path userdata: (conc "pkg-id: " pkg-id)))
@@ -508,24 +531,24 @@ Version: " megatest-fossil-hash)) ;; "
 				  (let* ((path     (conc "/" (cadr area)))
 					 (fullpath (conc basepath path)))
 				    (if (not (hash-table-ref/default installed-dat path #f))
-					(tree:add-node tb2 "Installed" (datastore:path->lst path)))
-				    (hash-table-set! installed-dat path (datastore:pathdat-apply-heuristics configdat fullpath))))
+					(tree:add-node tb2 "Installed" (datashare:path->lst path)))
+				    (hash-table-set! installed-dat path (datashare:pathdat-apply-heuristics configdat fullpath))))
 				areas)
 			       (sqlite3:finalize! db))))
 	   (apply          (iup:button "Apply"
 				       #:action
 				       (lambda (obj)
 					 (if curr-record
-					     (let* ((area        (datastore:pkg-get-area        curr-record))
-						    (stored-path (datastore:pkg-get-stored_path curr-record))
-						    (source-type (datastore:pkg-get-store_type  curr-record))
+					     (let* ((area        (datashare:pkg-get-area        curr-record))
+						    (stored-path (datashare:pkg-get-stored_path curr-record))
+						    (source-type (datashare:pkg-get-store_type  curr-record))
 						    (source-path (case source-type ;;  (equal? source-type "link"))
-								   ((link)(datastore:pkg-get-source-path curr-record))
+								   ((link)(datashare:pkg-get-source-path curr-record))
 								   ((copy)stored-path)
 								   (else #f)))
 						    (dest-stub   (configf:lookup configdat "areas" area))
 						    (target-path (conc basepath "/" dest-stub)))
-					       (datastore:build-dir-make-link stored-path target-path)
+					       (datashare:build-dir-make-link stored-path target-path)
 					       (print "Creating link from " stored-path " to " target-path)))))))
       (iup:vbox 
        (iup:hbox tb tb2)
@@ -580,7 +603,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; MISC
 ;;======================================================================
 
-(define (datastore:find name paths)
+(define (datashare:find name paths)
   (if (null? paths)
       #f
       (let loop ((hed (car paths))
@@ -615,7 +638,7 @@ Version: " megatest-fossil-hash)) ;; "
 	 (rema      (cdr args))
 	 (exe-name  (pathname-file (car (argv))))
 	 (exe-dir   (or (pathname-directory prog)
-			(datastore:find exe-name (string-split (get-environment-variable "PATH") ":"))))
+			(datashare:find exe-name (string-split (get-environment-variable "PATH") ":"))))
 	 (configdat (datashare:load-config exe-dir exe-name)))
     (cond
      ((eq? (length rema) 1)
