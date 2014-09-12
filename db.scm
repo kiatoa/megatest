@@ -375,6 +375,7 @@
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 (define (db:sync-tables tbls fromdb todb . slave-dbs)
+  (mutex-lock! *db-sync-mutex*)
   (cond
    ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
    ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
@@ -463,7 +464,8 @@
 	     (if (> count 0)
 		 (debug:print 0 (format #f "    ~10a ~5a" tblname count)))))
 	 (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
-      tot-count))))
+      tot-count)))
+  (mutex-unlock! *db-sync-mutex*))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -2239,7 +2241,7 @@
 
 ;; A routine to map itempaths using a itemmap
 (define (db:compare-itempaths patha pathb itemmap)
-  (debug:print-info 3 "ITEMMAP is " itemmap)
+  (debug:print-info 6 "ITEMMAP is " itemmap)
   (if itemmap
       (let* ((mapparts    (string-split itemmap))
 	     (pattern     (car mapparts))
