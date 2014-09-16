@@ -53,12 +53,11 @@
 
 Note: run datashare without parameters to start the gui.
 
-  publish <area> <key> [group]        : Publish data to share, use group to protect (i)
-  get <area> <key> [destpath]         : Get a link to data, put the link in destpath (ii)
-  update <area> <key>                 : Update the link to data to the latest iteration.
+  publish path <area> version         : Publish data to share, use group to protect
+  get <area> version [destpath]       : Get a link to data, put the link in destpath (i)
+  update <area>                       : Update the link to data to the latest iteration.
 
-(i)  Uses group ownership of files to be published for group if not specified
-(ii) Uses local path or looks up script to find path in configs
+(i) Uses local path or looks up script to find path in configs
 
 Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
 
