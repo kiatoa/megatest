@@ -33,8 +33,8 @@
 
 (declare (uses configf))
 (declare (uses tree))
+(declare (uses margs))
 ;; (declare (uses dcommon))
-;; (declare (uses margs))
 ;; (declare (uses launch))
 ;; (declare (uses gutils))
 ;; (declare (uses db))
@@ -49,10 +49,13 @@
 ;; GLOBALS
 ;;
 (define *datashare:current-tab-number* 0)
+(define *args-hash* (make-hash-table))
 (define datashare:help (conc "Usage: datashare [action [params ...]]
 
 Note: run datashare without parameters to start the gui.
 
+  list-areas                          : List the allowed areas
+  list-versions <area>                : List versions available in <area>
   publish <path> <area> <version>     : Publish data to share, use group to protect
   get <area> <version>                : Get a link to data, put the link in destpath (i)
   update <area>                       : Update the link to data to the latest iteration.
@@ -261,6 +264,18 @@ Version: " megatest-fossil-hash)) ;; "
      area-filter version-filter)
     (reverse res)))
 
+(define (datashare:get-versions-for-area db area-name #!key (version-patt "%"))
+  (let ((res '())
+	(data (make-hash-table)))
+    (sqlite3:for-each-row
+     (lambda (version-name submitter iteration submitted-time comment)
+       ;;                                              0           1         2           3           4
+       (hash-table-set! data version-name (vector version-name submitter iteration submitted-time comment)))
+     db 
+     "SELECT version_name,submitter,iteration,datetime,comment FROM pkgs WHERE area='megatest' AND version_name != 'latest' AND version_name LIKE ? ORDER BY datetime asc;"
+     version-patt)
+    (map (lambda (x)(hash-table-ref data x))(sort (hash-table-keys data) string-ci>=))))
+
 ;;======================================================================
 ;; DATA IMPORT/EXPORT
 ;;======================================================================
@@ -290,23 +305,34 @@ Version: " megatest-fossil-hash)) ;; "
 	  (sqlite3:finalize! db)
 	  #f))))
 
-(define (datashare:publish area-name version comment spath submitter quality)
-  (let ((db          (datashare:open-db configdat))
-	(iteration   (datashare:register-data db area-name version publish-type submitter quality spath comment))
-	(dest-store  (datashare:get-best-storage configdat)))
-    (if iteration
-	(if (eq? 'copy publish-type)
-	    (begin
-	      (datashare:import-data configdat spath dest-store area-name version iteration)
+(define (datashare:get-areas configdat)
+  (let* ((areadat (configf:get-section configdat "areas"))
+	 (areas   (if areadat (map car areadat) '())))
+    areas))
+
+(define (datashare:publish configdat publish-type area-name version comment spath submitter quality)
+  ;; input checks
+  (cond 
+   ((not (member area-name (datashare:get-areas configdat)))
+    (cons #f (conc "Illegal area name \"" area-name "\"")))
+   (else
+    (let ((db          (datashare:open-db configdat))
+	  (iteration   (datashare:register-data db area-name version publish-type submitter quality spath comment))
+	  (dest-store  (datashare:get-best-storage configdat)))
+      (if iteration
+	  (if (eq? 'copy publish-type)
+	      (begin
+		(datashare:import-data configdat spath dest-store area-name version iteration)
+		(let ((id (datashare:get-id db area-name version iteration)))
+		  (datashare:set-latest db id area-name version iteration)))
 	      (let ((id (datashare:get-id db area-name version iteration)))
+		(datashare:set-stored-path db id spath)
+		(datashare:set-copied db id "yes")
+		(datashare:set-copied db id "n/a")
 		(datashare:set-latest db id area-name version iteration)))
-	    (let ((id (datashare:get-id db area-name version iteration)))
-	      (datashare:set-stored-path db id spath)
-	      (datashare:set-copied db id "yes")
-	      (datashare:set-copied db id "n/a")
-	      (datashare:set-latest db id area-name version iteration)))
-	(print "ERROR: Failed to get an iteration number"))
-    (sqlite3:finalize! db)))
+	  (print "ERROR: Failed to get an iteration number"))
+      (sqlite3:finalize! db)
+      (cons #t "Successfully saved data")))))
 
 (define (datashare:get-best-storage configdat)
   (let* ((storage     (configf:lookup configdat "settings" "storage"))
@@ -403,7 +429,7 @@ Version: " megatest-fossil-hash)) ;; "
 			       (spath       (iup:attribute source-tb  "VALUE"))
 			       (submitter   (current-user-name))
 			       (quality     2))
-			  (datashare:publish area-name version comment spath submitter quality))))
+			  (datashare:publish configdat publish-type area-name version comment spath submitter quality))))
 	 (copy        (iup:button "Copy and Publish"
 				  #:expand "HORIZONTAL"
 				  #:action (lambda (obj)
@@ -602,6 +628,17 @@ Version: " megatest-fossil-hash)) ;; "
 ;; MISC
 ;;======================================================================
 
+
+(define (datashare:do-as-calling-user proc)
+  (let ((eid (current-effective-user-id))
+        (cid (current-user-id)))
+    (if (not (eq? eid cid)) ;; running suid
+            (set! (current-effective-user-id) cid))
+    ;; (print "running as " (current-effective-user-id))
+    (proc)
+    (if (not (eq? eid cid))
+        (set! (current-effective-user-id) eid))))
+
 (define (datashare:find name paths)
   (if (null? paths)
       #f
@@ -626,18 +663,58 @@ Version: " megatest-fossil-hash)) ;; "
 	(read-config fname #f #t)
 	(make-hash-table))))
 
-(define (datashare:process-action configdat action args)
+(define (datashare:process-action configdat action . args)
   (case (string->symbol action)
     ((publish)
      (if (< (length args) 3)
 	 (begin 
 	   (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	   (exit))
+	   (exit 1))
 	 (let* ((srcpath  (list-ref args 0))
 		(areaname (list-ref args 1))
 		(version  (list-ref args 2))
-		(remargs  (drop args 3)))
-	   (datashare:import-data configdat srcpath dest-path area version iteration))))))
+		(remargs  (args:get-args (drop args 3)
+					 '("-type" ;; link or copy (default is copy)
+					   "-m")
+ 					 '()
+ 					 args:arg-hash
+ 					 0))
+		(publish-type (if (equal? (args:get-arg "-type") "link") 'link 'copy))
+		(comment      (args:get-arg "-m"))
+		(submitter    (current-user-name))
+		(quality      (args:get-arg "-quality"))
+		(publish-res  (datashare:publish configdat publish-type areaname version comment srcpath submitter quality)))
+	   (if (not (car publish-res))
+	       (begin
+		 (print "ERROR: " (cdr publish-res))
+		 (exit 1))))))
+    ((list-versions)
+     (let ((area-name (car args)) ;;      version patt   full print
+	   (remargs   (args:get-args args '("-vpatt") '("-full") args:arg-hash 0))
+	   (db        (datashare:open-db configdat))
+	   (versions  (datashare:get-versions-for-area db (car args) version-patt: (args:get-arg "-vpatt"))))
+       ;; (print "area-name=" area-name " args=" args " *args-hash*=" (hash-table->alist *args-hash*))
+       (map (lambda (x)
+	      (if (args:get-arg "-full")
+		  (format #t 
+			  "~10a~10a~4a~27a~30a\n"
+			  (vector-ref x 0)
+			  (vector-ref x 1) 
+			  (vector-ref x 2) 
+			  (conc "\"" (time->string (seconds->local-time (vector-ref x 3))) "\"")
+			  (conc "\"" (vector-ref x 4) "\""))
+		  (print (vector-ref x 0))))
+	    versions)
+       (sqlite3:finalize! db)))))
+;; use for get
+
+;; 		(remargs  (args:get-args (drop args 3)
+;; 					 '("-i") ;; iteration
+;; 					 '()
+;; 					 *args-hash*
+;; 					 0))
+;; 		;; if -i specified use it as a number, default to -1 which is use highest iteration
+;; 		(iteration (if (args:get-arg "-i")(string->number (args:get-arg "-i")) -1)))
 
 ;; ease debugging by loading ~/.dashboardrc - remove from production!
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.datasharerc")))
@@ -653,12 +730,16 @@ Version: " megatest-fossil-hash)) ;; "
 			(datashare:find exe-name (string-split (get-environment-variable "PATH") ":"))))
 	 (configdat (datashare:load-config exe-dir exe-name)))
     (cond
+     ;; one-word commands
      ((eq? (length rema) 1)
       (case (string->symbol (car rema))
 	((help -h -help --h --help)
 	 (print datashare:help))
+	((list-areas)
+	 (map print (datashare:get-areas configdat)))
 	(else
 	 (print "ERROR: Unrecognised command. Try \"datashare help\""))))
+     ;; multi-word commands
      ((null? rema)(datashare:gui configdat))
      ((>= (length rema) 2)
       (apply datashare:process-action configdat (car rema)(cdr rema)))
