@@ -179,5 +179,7 @@ datashare-testing/datashare : datashare.scm $(OFILES)
 
 datashare : datashare-testing/datashare
 	mkdir -p /tmp/$(USER)/datashare/disk1 /tmp/$(USER)/basepath
-	BASEPATH=/tmp/$(USER)/basepath ./datashare-testing/datashare
+
+xterm : datashare
+	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
