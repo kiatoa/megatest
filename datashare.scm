@@ -55,14 +55,19 @@
 Note: run datashare without parameters to start the gui.
 
   list-areas                          : List the allowed areas
+
   list-versions <area>                : List versions available in <area>
-  publish <path> <area> <version>     : Publish data to share, use group to protect
-  get <area> <version>                : Get a link to data, put the link in destpath (i)
+         options : -full, -vpatt patt
+
+  publish <path> <area> <version>     : Publish data for area and with version
+
+  get <area> <version>                : Get a link to data, put the link in destpath
+         options : -i iteration
+
   update <area>                       : Update the link to data to the latest iteration.
 
-(i) Uses local path or looks up script to find path in configs
-
-Part of the Megatest tool suite. Learn more at http://www.kiatoa.com/fossils/megatest
+Part of the Megatest tool suite.
+Learn more at http://www.kiatoa.com/fossils/megatest
 
 Version: " megatest-fossil-hash)) ;; "
 
@@ -194,7 +199,27 @@ Version: " megatest-fossil-hash)) ;; "
     (if latest-id ;; have a record - bump the link pointer
 	(datashare:set-stored-path db latest-id stored-path)
 	(datashare:register-data db area "latest" 'link "auto" "na" stored-path "latest data"))))
+
+;; set a package ref, this is the location where the link back to the stored data 
+;; is put. 
+;;
+;; if there is nothing at that location then the record can be removed
+;; if there are no refs for a particular pkg-id then that pkg-id is a 
+;; candidate for removal
+;;
+(define (datashare:record-pkg-ref db pkg-id dest-link)
+  (sqlite3:execute db "INSERT INTO refs (pkg_id,destlink) VALUES (?,?);" pkg-id dest-link))
   
+(define (datashare:count-refs db pkg-id)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     db
+     "SELECT count(id) FROM refs WHERE pkg_id=?;"
+     pkg-id)
+    res))
+
 ;; Create the sqlite db
 (define (datashare:open-db configdat) 
   (let ((path (configf:lookup configdat "database" "location")))
@@ -264,7 +289,30 @@ Version: " megatest-fossil-hash)) ;; "
      area-filter version-filter)
     (reverse res)))
 
-(define (datashare:get-versions-for-area db area-name #!key (version-patt "%"))
+(define (datashare:get-pkg db area-name version-name #!key (iteration #f))
+  (let ((dat '())
+	(res #f))
+    (sqlite3:for-each-row ;; replace with fold ...
+     (lambda (a . b)
+       (set! dat (cons (list->vector (cons a b)) dat)))
+     db 
+     (conc "SELECT id,area,version_name,store_type,copied,source_path,iteration,submitter,datetime,storegrp,datavol,quality,disk_id,comment,stored_path "
+	   " FROM pkgs WHERE area=? AND version_name=? ORDER BY iteration ASC;")
+     area-name version-name)
+    ;; now filter for iteration, either max if #f or specific one
+    (if (null? dat)
+	#f
+	(let loop ((hed (car dat))
+		   (tal (cdr dat))
+		   (cur 0))
+	  (let ((itr (datashare:pkg-get-iteration hed)))
+	    (if (equal? itr iteration) ;; this is the one if iteration is specified
+		hed
+		(if (null? tal)
+		    hed
+		    (loop (car tal)(cdr tal)))))))))
+
+(define (datashare:get-versions-for-area db area-name #!key (version-patt #f))
   (let ((res '())
 	(data (make-hash-table)))
     (sqlite3:for-each-row
@@ -273,7 +321,7 @@ Version: " megatest-fossil-hash)) ;; "
        (hash-table-set! data version-name (vector version-name submitter iteration submitted-time comment)))
      db 
      "SELECT version_name,submitter,iteration,datetime,comment FROM pkgs WHERE area='megatest' AND version_name != 'latest' AND version_name LIKE ? ORDER BY datetime asc;"
-     version-patt)
+     (or version-patt "%"))
     (map (lambda (x)(hash-table-ref data x))(sort (hash-table-keys data) string-ci>=))))
 
 ;;======================================================================
@@ -415,6 +463,7 @@ Version: " megatest-fossil-hash)) ;; "
 	 ;; (copy-link   (iup:toggle  #:expand "HORIZONTAL"))
 	 ;; (iteration   (iup:textbox #:expand "YES" #:size "20x"))
 	 ;; (iteration   (iup:textbox #:expand "HORIZONTAL" #:size "20x"))
+	 (area-filter (iup:textbox #:expand "HORIZONTAL" #:value "%"))
 	 (comment-tb  (iup:textbox #:expand "YES" #:multiline "YES"))
 	 (source-tb   (iup:textbox #:expand "HORIZONTAL"
 				   #:value (or (configf:lookup configdat "settings" "basepath")
@@ -454,7 +503,8 @@ Version: " megatest-fossil-hash)) ;; "
 	    (+ 1 num))
 	  1 areas)
     (iup:vbox
-     (iup:hbox (iup:label "Area:"        #:size label-size)   areas-sel)
+     (iup:hbox (iup:label "Area:"        #:size label-size) ;; area-filter 
+	       areas-sel)
      (iup:hbox (iup:label "Version:"     #:size label-size)   version-tb)
      ;; (iup:hbox (iup:label "Link only"    #:size label-size)   copy-link)
      ;; 	       (iup:label "Iteration:")   iteration)
@@ -665,6 +715,34 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (datashare:process-action configdat action . args)
   (case (string->symbol action)
+    ((get)
+     (if (< (length args) 2)
+	 (begin 
+	   (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	   (exit 1))
+	 (let* ((basepath    (configf:lookup configdat "settings" "basepath"))
+		(db          (datashare:open-db configdat))
+		(area        (car args))
+		(version     (cadr args)) ;;    iteration
+		(remargs     (args:get-args args '("-i") '() args:arg-hash 0))
+		(iteration   (if (args:get-arg "-i")(string->number (args:get-arg "-i")) #f))
+		(curr-record (datashare:get-pkg db area version iteration: iteration)))
+	   (if (not curr-record)
+	       (begin
+		 (print "ERROR: No matching record found; area=" area ", version=" version ", iteration=" (if iteration iteration "(max)"))
+		 (exit 1))
+	       (let* ((stored-path (datashare:pkg-get-stored_path curr-record))
+		      (source-type (datashare:pkg-get-store_type  curr-record))
+		      (source-path (case source-type ;;  (equal? source-type "link"))
+				     ((link) (datashare:pkg-get-source-path curr-record))
+				     ((copy) stored-path)
+				     (else #f)))
+		      (dest-stub   (configf:lookup configdat "areas" area))
+		      (target-path (conc basepath "/" dest-stub)))
+		 (datashare:build-dir-make-link stored-path target-path)
+		 (datashare:record-pkg-ref db (datashare:pkg-get-id curr-record) target-path)
+		 (sqlite3:finalize! db)
+		 (print "Creating link from " stored-path " to " target-path))))))
     ((publish)
      (if (< (length args) 3)
 	 (begin 
@@ -673,14 +751,14 @@ Version: " megatest-fossil-hash)) ;; "
 	 (let* ((srcpath  (list-ref args 0))
 		(areaname (list-ref args 1))
 		(version  (list-ref args 2))
-		(remargs  (args:get-args (drop args 3)
+		(remargs  (args:get-args (drop args 2)
 					 '("-type" ;; link or copy (default is copy)
 					   "-m")
  					 '()
  					 args:arg-hash
  					 0))
 		(publish-type (if (equal? (args:get-arg "-type") "link") 'link 'copy))
-		(comment      (args:get-arg "-m"))
+		(comment      (or (args:get-arg "-m") ""))
 		(submitter    (current-user-name))
 		(quality      (args:get-arg "-quality"))
 		(publish-res  (datashare:publish configdat publish-type areaname version comment srcpath submitter quality)))
@@ -706,17 +784,8 @@ Version: " megatest-fossil-hash)) ;; "
 		  (print (vector-ref x 0))))
 	    versions)
        (sqlite3:finalize! db)))))
-;; use for get
 
-;; 		(remargs  (args:get-args (drop args 3)
-;; 					 '("-i") ;; iteration
-;; 					 '()
-;; 					 *args-hash*
-;; 					 0))
-;; 		;; if -i specified use it as a number, default to -1 which is use highest iteration
-;; 		(iteration (if (args:get-arg "-i")(string->number (args:get-arg "-i")) -1)))
-
-;; ease debugging by loading ~/.dashboardrc - remove from production!
+;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.datasharerc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
