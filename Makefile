@@ -174,12 +174,12 @@ deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 
 # DATASHAREO=configf.o common.o process.o tree.o dcommon.o margs.o launch.o gutils.o db.o synchash.o server.o \
 #            megatest-version.o tdb.o ods.o mt.o keys.o
-datashare-testing/datashare : datashare.scm $(OFILES)
-	csc datashare.scm $(OFILES) -o datashare-testing/datashare
+datashare-testing/sd : datashare.scm $(OFILES)
+	csc datashare.scm $(OFILES) -o datashare-testing/sd
 
-datashare : datashare-testing/datashare
+sd : datashare-testing/sd
 	mkdir -p /tmp/$(USER)/datashare/disk1 /tmp/$(USER)/basepath
 
-xterm : datashare
+xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
