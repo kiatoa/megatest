@@ -141,7 +141,7 @@
 
  	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
-				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data test-ids)
+				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
 				   '()))
 
 	 ;; Now can calculate the run-ids
