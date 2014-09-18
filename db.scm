@@ -1754,7 +1754,7 @@
 
 ;; more transactioned calls, these for roll-up-pass-fail stuff
 (define (cdb:update-pass-fail-counts serverdat run-id test-name)
-  (cdb:client-call serverdat 'update-fail-pass-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name))
+  (cdb:client-call serverdat 'update-fail-pass-counts #t *default-numtries* run-id test-name run-id test-name run-id test-name run-id test-name))
 
 (define (cdb:top-test-set-running serverdat run-id test-name)
   (cdb:client-call serverdat 'top-test-set-running #t *default-numtries* run-id test-name))
@@ -1852,6 +1852,7 @@
 	'(update-fail-pass-counts "UPDATE tests 
              SET fail_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
                  pass_count=(SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
+                 event_time=min(SELECT event_time FROM tests WHERE run_id=? AND testname=? AND item_path !='' AND status NOT IN ('DELETED')
              WHERE run_id=? AND testname=? AND item_path='';")
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE run_id=? AND testname=? AND item_path='';")
 	'(top-test-set-per-pf-counts "UPDATE tests
