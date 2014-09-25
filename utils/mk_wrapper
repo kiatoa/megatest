@@ -5,8 +5,17 @@ cmd=$2
 target=$3
 
 if [ "$LD_LIBRARY_PATH" != "" ];then
+  cfgfile="$prefix/bin/.$(lsb_release -sr)/cfg.sh"
   echo "INFO: Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >&2
-  echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > $prefix/bin/.$(lsb_release -sr)/cfg.sh
+( cat << __EOF
+if [ "\$LD_LIBRARY_PATH" != "" ];then
+  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH
+else
+  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+fi
+__EOF
+) > $cfgfile
+  echo 
 else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi

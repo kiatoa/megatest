@@ -427,7 +427,7 @@
 	"unknown"
 	(caar uname-res))))
 	      
-(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
+(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF")))
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
