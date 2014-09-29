@@ -13,7 +13,7 @@
 help :
 	@echo You may need to do the following first:
 	@echo sudo apt-get install libreadline-dev
-	@echo sudo apt-get install libwebkitgtk-dev libfreetype6-dev libx11-dev libxpm-dev libxmu-dev libxft-dev libgtk2.0-dev libgl1-mesa-dev libglu1-mesa-dev
+	@echo sudo apt-get install libwebkitgtk-dev libfreetype6-dev libx11-dev libxpm-dev libxmu-dev libxft-dev libgtk2.0-dev libgl1-mesa-dev libglu1-mesa-dev libpangox-1.0-dev bison
 	@echo sudo apt-get install libmotif3
 	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
 	@echo You are using PREFIX=$(PREFIX)

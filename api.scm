@@ -32,6 +32,7 @@
     get-prereqs-not-met
     get-count-tests-running-for-run-id
     get-run-info
+    get-run-status
     register-run
     get-tests-for-run
     get-test-id
@@ -97,6 +98,8 @@
 
     ;; RUNS
     ((get-run-info)                 (apply db:get-run-info dbstruct params))
+    ((get-run-status)               (apply db:get-run-status dbstruct params))
+    ((set-run-status)               (apply db:set-run-status dbstruct params))
     ((register-run)                 (apply db:register-run dbstruct params))
     ((set-tests-state-status)       (apply db:set-tests-state-status dbstruct params))
     ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))

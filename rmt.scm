@@ -318,6 +318,13 @@
 (define (rmt:lock/unlock-run run-id lock unlock user)
   (rmt:send-receive 'lock/unlock-run #f (list run-id lock unlock user)))
 
+;; set/get status
+(define (rmt:get-run-status run-id)
+  (rmt:send-receive 'get-run-status #f (list run-id)))
+
+(define (rmt:set-run-status run-id run-status #!key (msg #f))
+  (rmt:send-receive 'set-run-status #f (list run-id msg)))
+
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
 

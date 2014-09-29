@@ -241,7 +241,9 @@
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
-	  (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
+	  (for-each (lambda (state)
+		      (rmt:general-call 'delete-tests-in-state run-id state))
+		    (cons "NOT_STARTED" (string-split (or (configf:lookup *configdat* "setup" "allow-auto-rerun") ""))))
 	  (rmt:set-tests-state-status run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
 
     ;; Ensure all tests are registered in the test_meta table

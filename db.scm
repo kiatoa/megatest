@@ -1225,7 +1225,7 @@
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
-(define (db:set-run-status db run-id status #!key (msg #f))
+(define (db:set-run-status db run-id status msg)
   ;; (db:delay-if-busy)
   (if msg
       (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)

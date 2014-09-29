@@ -655,7 +655,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-set-run-status"
      "set run status"
      (lambda (target runname keys keyvals)
-       (let* ((runsdat  (cdb:remote-run db:get-runs-by-patt #f keys runname 
+       (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
 					#f #f))
 	      (header   (vector-ref runsdat 0))
@@ -667,8 +667,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (let* ((row      (car (vector-ref runsdat 1)))
 		    (run-id   (db:get-value-by-header row header "id")))
 	       (if (args:get-arg "-set-run-status")
-		   (cdb:remote-run db:set-run-status #f run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
-		   (print (open-run-close db:get-run-status #f run-id))
+		   (rmt:set-run-status run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
+		   (print (rmt:get-run-status run-id))
 		   )))))))
 
 ;;======================================================================
