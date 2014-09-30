@@ -1225,18 +1225,18 @@
 		     user (conc newlockval " " run-id))
     (debug:print-info 1 "" newlockval " run number " run-id)))
 
-(define (db:set-run-status db run-id status msg)
-  ;; (db:delay-if-busy)
-  (if msg
-      (sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
-      (sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id)))
+(define (db:set-run-status dbstruct run-id status msg)
+  (let ((db (db:get-db dbstruct #f)))
+    (if msg
+	(sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
+	(sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))))
 
-(define (db:get-run-status db run-id)
+(define (db:get-run-status dbstruct run-id)
   (let ((res "n/a"))
     (sqlite3:for-each-row 
      (lambda (status)
        (set! res status))
-     db 
+     (db:get-db dbstruct #f)
      "SELECT status FROM runs WHERE id=?;" 
      run-id)
     res))

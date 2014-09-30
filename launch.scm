@@ -726,8 +726,8 @@
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
     (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
-	     (not (equal? (db:test-get-rundir testinfo) "n/a"))) ;; n/a is a placeholder and thus not a read dir
-	(begin 
+	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
+	(begin
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
     (set! diskpath (get-best-disk *configdat*))

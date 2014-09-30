@@ -1535,7 +1535,8 @@
 		 exn
 		 (debug:print 0 "ERROR:  Failed to remove directory " run-dir ((condition-property-accessor 'exn 'message) exn) ", attempting to continue")
 		 (delete-directory run-dir)))
-	    (if run-dir
+	    (if (and run-dir
+		     (not (member run-dir (list "n/a" "/tmp/badname"))))
 		(debug:print 0 "WARNING: not removing " run-dir " as it either doesn't exist or is not a symlink")
 		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 	    ))

@@ -323,7 +323,7 @@
   (rmt:send-receive 'get-run-status #f (list run-id)))
 
 (define (rmt:set-run-status run-id run-status #!key (msg #f))
-  (rmt:send-receive 'set-run-status #f (list run-id msg)))
+  (rmt:send-receive 'set-run-status #f (list run-id run-status msg)))
 
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
