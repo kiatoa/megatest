@@ -861,7 +861,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     ;; if we are in a test use the MT_CMDINFO data
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
-	       (cmdinfo   (commond:read-encoded-string (getenv "MT_CMDINFO")))
+	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
