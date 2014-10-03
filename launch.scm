@@ -50,11 +50,11 @@
 (define (launch:get-cmdinfo-assoc-list #!key (encoded-cmd #f))
   (let ((enccmd (if encoded-cmd encoded-cmd (getenv "MT_CMDINFO"))))
     (if enccmd
-	(read (open-input-string (base64:base64-decode enccmd)))
+	(common:read-encoded-string enccmd)
 	'())))
 
 (define (launch:execute encoded-cmd)
-  (let* ((cmdinfo   (read (open-input-string (z3:decode-buffer (base64:base64-decode encoded-cmd))))))
+  (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))

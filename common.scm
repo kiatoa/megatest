@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml)
+(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3)
 (require-extension sqlite3 regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -119,6 +119,12 @@
 
 (define (common:get-megatest-exe)
   (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
+
+(define (common:read-encoded-string instr)
+  (handle-exceptions
+   exn
+   (open-input-string (base64:base64-decode instr))
+   (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
