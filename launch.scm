@@ -77,6 +77,7 @@
 	       (runname   (assoc/default 'runname   cmdinfo))
 	       (megatest  (assoc/default 'megatest  cmdinfo))
 	       (runtlim   (assoc/default 'runtlim   cmdinfo))
+	       (item-path (item-list->path itemdat))
 	       (mt-bindir-path (assoc/default 'mt-bindir-path cmdinfo))
 	       (keys      #f)
 	       (keyvals   #f)
@@ -91,6 +92,15 @@
                                               runscript))))) ;; assume it is on the path
 	       (rollup-status 0))
 	  (change-directory top-path)
+
+
+
+
+	  ;; ADD here - is test already RUNNING? If so ---- ABORT RUN ATTEMPT
+
+
+
+
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
@@ -144,6 +154,7 @@
 	      (list  "MT_TEST_RUN_DIR" work-area)
 	      (list  "MT_TEST_NAME" test-name)
 	      (list  "MT_ITEM_INFO" (conc itemdat))
+	      (list  "MT_ITEMPATH"  item-path)
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
@@ -194,6 +205,7 @@
 
 				 (thread-sleep! 0.3)
 				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
+				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING")
 				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
@@ -540,7 +552,8 @@
 	 (lnkpath  (conc lnkbase "/" testname))
 	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
 
-    ;; Update the rundir path in the test record for all
+    ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
+    ;;                                                 rundir   shortdir
     (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
@@ -752,6 +765,7 @@
 				     (list 'runscript runscript) 
 				     (list 'run-id    run-id   )
 				     (list 'test-id   test-id  )
+				     ;; (list 'item-path item-path )
 				     (list 'itemdat   itemdat  )
 				     (list 'megatest  remote-megatest)
 				     (list 'ezsteps   ezsteps) 
@@ -762,10 +776,10 @@
 				     (list 'runname   runname)
 				     (list 'mt-bindir-path mt-bindir-path)))))))
     ;; clean out step records from previous run if they exist
-    ;; (debug:print-info 4 "FIXMEEEEE!!!! This can be removed some day, perhaps move all test records to the test db?")
-    ;; (open-run-close db:delete-test-step-records db test-id)
+    ;; (rmt:delete-test-step-records run-id test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED")
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

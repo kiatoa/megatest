@@ -1945,12 +1945,14 @@
 
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP")))
+	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
       (let ((db (db:get-db dbstruct run-id)))
 	(db:general-call db 'update-pass-fail-counts (list test-name test-name test-name))
 	(if (equal? status "RUNNING")
 	    (db:general-call db 'top-test-set-running (list test-name))
-	    (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name)))
+	    (if (equal? status "LAUNCHED")
+		(db:general-call db 'top-test-set (list "LAUNCHED" test-name))
+		(db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
 	#f)
       #f))
 
@@ -2022,6 +2024,7 @@
              SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE testname=? AND item_path='';") ;; DONE
+	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set-per-pf-counts "UPDATE tests
                        SET state=CASE 
@@ -2046,8 +2049,8 @@
                        WHERE testname=? AND item_path='';") ;; DONE
 
 	;; STEPS
-	'(delete-test-step-records "UPDATE test_steps SET status='DELETED' WHERE id=?;")
-	'(delete-test-data-records "UPDATE test_data  SET status='DELETED' WHERE id=?;") ;; using status since no state field
+	'(delete-test-step-records "UPDATE test_steps SET status='DELETED' WHERE test_id=?;")
+	'(delete-test-data-records "UPDATE test_data  SET status='DELETED' WHERE test_id=?;") ;; using status since no state field
 	))
 
 (define (db:lookup-query qry-name)

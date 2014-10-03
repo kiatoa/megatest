@@ -83,6 +83,7 @@
     ((get-count-tests-running)         (apply db:get-count-tests-running dbstruct params))
     ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
     ((delete-test-records)             (apply db:delete-test-records dbstruct params))
+    ((delete-test-step-records)        (apply db:delete-test-step-records dbstruct params))
     ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
     ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
     ((get-previous-test-run-record)    (apply db:get-previous-test-run-record dbstruct params))

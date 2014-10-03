@@ -744,7 +744,8 @@
 					 (let ((proc
 						(lambda (testdat)
 						  (let ((max-row 0))
-						  (if (not (null? teststeps))
+						  (if (null? teststeps)
+						      (iup:attribute-set! steps-matrix "CLEARVALUE" "CONTENTS")
 						      (let loop ((hed    (car teststeps))
 								 (tal    (cdr teststeps))
 								 (rownum 1)

@@ -224,6 +224,11 @@
 (define (rmt:delete-test-records run-id test-id)
   (rmt:send-receive 'delete-test-records run-id (list run-id test-id)))
 
+;; This is not needed as test steps are deleted on test delete call
+;;
+;; (define (rmt:delete-test-step-records run-id test-id)
+;;   (rmt:send-receive 'delete-test-step-records run-id (list run-id test-id)))
+
 (define (rmt:test-set-status-state run-id test-id status state msg)
   (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
 
