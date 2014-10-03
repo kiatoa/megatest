@@ -123,7 +123,7 @@
 (define (common:read-encoded-string instr)
   (handle-exceptions
    exn
-   (open-input-string (base64:base64-decode instr))
+   (read (open-input-string (base64:base64-decode instr)))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================
