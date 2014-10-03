@@ -13,7 +13,7 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3)
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -54,7 +54,7 @@
 	'())))
 
 (define (launch:execute encoded-cmd)
-  (let* ((cmdinfo   (read (open-input-string (base64:base64-decode encoded-cmd)))))
+  (let* ((cmdinfo   (read (open-input-string (z3:decode-buffer (base64:base64-decode encoded-cmd))))))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -754,27 +754,28 @@
 	  (create-directory work-area #t)
 	  (debug:print 0 "WARNING: No disk work area specified - running in the test directory under tmp_run")))
     (set! cmdparms (base64:base64-encode 
-		    (with-output-to-string
-		      (lambda () ;; (list 'hosts     hosts)
-			(write (list (list 'testpath  test-path)
-				     (list 'transport (conc *transport-type*))
-				     (list 'serverinf *server-info*)
-				     (list 'toppath   *toppath*)
-				     (list 'work-area work-area)
-				     (list 'test-name test-name) 
-				     (list 'runscript runscript) 
-				     (list 'run-id    run-id   )
-				     (list 'test-id   test-id  )
-				     ;; (list 'item-path item-path )
-				     (list 'itemdat   itemdat  )
-				     (list 'megatest  remote-megatest)
-				     (list 'ezsteps   ezsteps) 
-				     (list 'target    mt_target)
-				     (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
-				     (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
-				     (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
-				     (list 'runname   runname)
-				     (list 'mt-bindir-path mt-bindir-path)))))))
+		    (z3:encode-buffer 
+		     (with-output-to-string
+		       (lambda () ;; (list 'hosts     hosts)
+			 (write (list (list 'testpath  test-path)
+				      (list 'transport (conc *transport-type*))
+				      (list 'serverinf *server-info*)
+				      (list 'toppath   *toppath*)
+				      (list 'work-area work-area)
+				      (list 'test-name test-name) 
+				      (list 'runscript runscript) 
+				      (list 'run-id    run-id   )
+				      (list 'test-id   test-id  )
+				      ;; (list 'item-path item-path )
+				      (list 'itemdat   itemdat  )
+				      (list 'megatest  remote-megatest)
+				      (list 'ezsteps   ezsteps) 
+				      (list 'target    mt_target)
+				      (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
+				      (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
+				      (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
+				      (list 'runname   runname)
+				      (list 'mt-bindir-path mt-bindir-path))))))))
     ;; clean out step records from previous run if they exist
     ;; (rmt:delete-test-step-records run-id test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
