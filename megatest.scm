@@ -347,6 +347,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
+(on-exit (lambda ()
+	   (if *megatest-db*
+	       (db:close-all *megatest-db*))))
+
 ;;======================================================================
 ;; Misc general calls
 ;;======================================================================

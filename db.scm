@@ -173,7 +173,11 @@
 						     run-id)
 						    ))) ;; add strings db to rundb, not in use yet
 	       ;;   )) ;; (sqlite3:open-database dbpath))
-	       (olddb        (db:open-megatest-db))
+	       (olddb        (if *megatest-db*
+				 *megatest-db* 
+				 (let ((db (db:open-megatest-db)))
+				   (set! *megatest-db* db)
+				   db)))
 	       (write-access (file-write-access? dbpath))
 	       ;; (handler      (make-busy-timeout 136000))
 	       )
@@ -284,10 +288,11 @@
 	 (lambda (db)
 	   (if (sqlite3:database? db)
 	       (sqlite3:finalize! db)))
-	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct)))
+	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
+    (if rundb
 	(if (sqlite3:database? rundb)
 	    (sqlite3:finalize! rundb)
-	    (debug:print 0 "WARNING: attempting to close databases but got " rundb " instead of a database")))))
+	    (debug:print 2 "WARNING: attempting to close databases but got " rundb " instead of a database")))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))

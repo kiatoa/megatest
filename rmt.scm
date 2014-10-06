@@ -67,14 +67,13 @@
 				;; bypass starting the server. 
 				;;
 				;; NB// can cache the answer for server running for 10 seconds ...
-				;;
-				(if (and (not (rmt:write-frequency-over-limit? cmd run-id))
-					 (not (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)))
-				    #f
+				;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
+				(if (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)
 				    (let ((res (client:setup run-id)))
 				      (if res 
 					  (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
-					  #f))))))
+					  #f))
+				    #f))))
 	 (jparams         (db:obj->string params)))
     (if connection-info
 	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
@@ -89,12 +88,15 @@
 
 (define (rmt:open-qry-close-locally cmd run-id params)
   (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	 (dbstruct-local (make-dbr:dbstruct path:  dbdir
-					    local: #t))
+	 (dbstruct-local (if *megatest-db*
+			     *megatest-db*
+			     (let ((db (make-dbr:dbstruct path:  dbdir local: #t)))
+			       (set! *megatest-db* db)
+			       db)))
 	 (db-file-path   (db:dbfile-path 0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (res            (api:execute-requests dbstruct-local (symbol->string cmd) params)))
-    (db:close-all dbstruct-local)
+    ;; (db:close-all dbstruct-local)
     res))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)

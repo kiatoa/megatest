@@ -51,7 +51,7 @@
 (define *db-sync-mutex* (make-mutex))
 
 ;; DATABASE
-(define *open-dbs* (vector #f (make-hash-table))) ;; megatestdb run-id-dbs
+(define *dbstruct-db*  #f)
 
 ;; SERVER
 (define *my-client-signature* #f)
