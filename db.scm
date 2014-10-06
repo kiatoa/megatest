@@ -1520,6 +1520,20 @@
      run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
     res))
 
+;; NEW BEHAVIOR: Count tests running in only one run!
+;;
+(define (db:get-count-tests-actually-running dbstruct run-id)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (count)
+       (set! res count))
+     (db:get-db dbstruct run-id)
+     ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
+     "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
+     run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
+    res))
+
 ;; NEW BEHAVIOR: Look only at single run with run-id
 ;; 
 ;; (define (db:get-running-stats dbstruct run-id)
