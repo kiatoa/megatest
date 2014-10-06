@@ -88,10 +88,10 @@
 
 (define (rmt:open-qry-close-locally cmd run-id params)
   (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	 (dbstruct-local (if *megatest-db*
-			     *megatest-db*
+	 (dbstruct-local (if *dbstruct-db*
+			     *dbstruct-db*
 			     (let ((db (make-dbr:dbstruct path:  dbdir local: #t)))
-			       (set! *megatest-db* db)
+			       (set! *dbstruct-db* db)
 			       db)))
 	 (db-file-path   (db:dbfile-path 0))
 	 ;; (read-only      (not (file-read-access? db-file-path)))

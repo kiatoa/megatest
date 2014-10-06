@@ -348,8 +348,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-delete! args:arg-hash "-itempatt")))
 
 (on-exit (lambda ()
-	   (if *megatest-db*
-	       (db:close-all *megatest-db*))))
+	   (if *dbstruct-db* (db:close-all *dbstruct-db*))
+	   (if *megatest-db* (sqlite3:finalize! *megatest-db*))))
 
 ;;======================================================================
 ;; Misc general calls
