@@ -2032,7 +2032,8 @@
 	;; '(test-set-rundir-by-test-id "UPDATE tests SET rundir=? WHERE id=?")        ;; DONE
 	;; '(test-set-rundir         "UPDATE tests SET rundir=? AND testname=? AND item_path=?;") ;; DONE
 	'(test-set-rundir-shortdir "UPDATE tests SET rundir=?,shortdir=? WHERE testname=? AND item_path=?;")
-	'(delete-tests-in-state   "DELETE FROM tests WHERE state=?;")                  ;; DONE
+	'(delete-tests-in-state   ;; "DELETE FROM tests WHERE state=?;")                  ;; DONE
+	  "UPDATE tests SET state='DELETED' WHERE state=?")
 	'(tests:test-set-toplog   "UPDATE tests SET final_logf=? WHERE run_id=? AND testname=? AND item_path='';")
 	'(update-cpuload-diskfree "UPDATE tests SET cpuload=?,diskfree=? WHERE id=?;") ;; DONE
 	'(update-uname-host       "UPDATE tests SET uname=?,host=? WHERE id=?;")       ;; DONE

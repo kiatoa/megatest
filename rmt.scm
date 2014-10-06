@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use json)
+(use json format)
 
 (declare (unit rmt))
 (declare (uses api))
@@ -79,14 +79,20 @@
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(rmt:send-receive cmd run-id params))))
-	(begin
+	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "800"))))
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
-	  (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
+	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
+	  (let ((curr-max (rmt:get-max-query-average)))
+	    (if (> (cdr curr-max) max-avg-qry)
+		(begin
+		  (debug:print-info 0 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
+		  (server:kind-run run-id))))
 	  (rmt:open-qry-close-locally cmd run-id params)))))
 
-(define (rmt:update-db-stats cmd duration)
+(define (rmt:update-db-stats rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
-  (let ((stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+  (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
+	 (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
     (if (not stat-vec)
 	(let ((newvec (vector 0 0)))
 	  (hash-table-set! *db-stats* cmd newvec)
@@ -94,6 +100,46 @@
     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration)))
   (mutex-unlock! *db-stats-mutex*))
+
+
+(define (rmt:print-db-stats)
+  (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
+    (debug:print 18 "DB Stats\n========")
+    (debug:print 18 (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
+    (for-each (lambda (cmd)
+		(let ((cmd-dat (hash-table-ref *db-stats* cmd)))
+		  (debug:print 18 (format #f fmtstr cmd (vector-ref cmd-dat 0) (vector-ref cmd-dat 1) (/ (vector-ref cmd-dat 1)(vector-ref cmd-dat 0))))))
+	      (sort (hash-table-keys *db-stats*)
+		    (lambda (a b)
+		      (> (vector-ref (hash-table-ref *db-stats* a) 0)
+			 (vector-ref (hash-table-ref *db-stats* b) 0)))))))
+
+(define (rmt:get-max-query-average)
+  (mutex-lock! *db-stats-mutex*)
+  (let* ((cmds (hash-table-keys *db-stats*))
+	 (res  (if (null? cmds)
+		   (cons 'none 0)
+		   (let loop ((cmd (car cmds))
+			      (tal (cdr cmds))
+			      (max-cmd (car cmds))
+			      (res 0))
+;; 		     (if (member cmd '(delete-tests-in-state)) ;; black list these outliers
+;; 			 (if (null? tal)
+;; 			     (if (> tot 20)
+;; 				 (cons 
+;; 
+		     (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
+			    (tot     (vector-ref cmd-dat 0))
+			    (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction
+			    (currmax (max res curravg))
+			    (newmax-cmd (if (> curravg res) cmd max-cmd)))
+		       (if (null? tal)
+			   (if (> tot 10)
+			       (cons newmax-cmd currmax)
+			       (cons 'none 0))
+			   (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
+    (mutex-unlock! *db-stats-mutex*)
+    res))
 	  
 (define (rmt:open-qry-close-locally cmd run-id params)
   (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
@@ -107,7 +153,7 @@
     (let* ((start         (current-milliseconds))
 	   (res           (api:execute-requests dbstruct-local (symbol->string cmd) params))
 	   (duration      (- (current-milliseconds) start)))
-      (rmt:update-db-stats cmd duration)
+      (rmt:update-db-stats cmd params duration)
       res)))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
