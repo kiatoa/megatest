@@ -52,6 +52,8 @@
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
+(define *db-stats* (make-hash-table)) ;; hash of vectors < count duration-total >
+(define *db-stats-mutex*      (make-mutex))
 
 ;; SERVER
 (define *my-client-signature* #f)

@@ -1072,7 +1072,7 @@
 		(begin
 		  (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
 		  (set! last-time-incomplete (current-seconds))
-		  (cdb:remote-run db:find-and-mark-incomplete #f)))
+		  (rmt:find-and-mark-incomplete run-id)))
 	    (if (not (eq? num-running prev-num-running))
 		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
 	    (thread-sleep! 15)
