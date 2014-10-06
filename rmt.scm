@@ -37,23 +37,23 @@
 ;; #t means - please start a server!
 ;;
 (define (rmt:write-frequency-over-limit? cmd run-id)
-  (or (not (member cmd api:read-only-queries))
-      (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
-	     (record (if tmprec tmprec 
-			 (let ((v (vector (current-seconds) 0)))
-			   (hash-table-set! *write-frequency* run-id v)
-			   v)))
-	     (count  (+ 1 (vector-ref record 1)))
-	     (start  (vector-ref record 0)))
-	(vector-set! record 1 count)
-	(if (and (> count 10) 
-		 (< (/ (- (current-seconds) start)
-		       count) ;; seconds per count
-		    10))
-	    (begin
-	      (debug:print-info 1 "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id)
-	      #t)
-	    #f)))) ;; less than 10 seconds per count - start up a server
+  (and (not (member cmd api:read-only-queries))
+       (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
+	      (record (if tmprec tmprec 
+			  (let ((v (vector (current-seconds) 0)))
+			    (hash-table-set! *write-frequency* run-id v)
+			    v)))
+	      (count  (+ 1 (vector-ref record 1)))
+	      (start  (vector-ref record 0))
+	      (queries-per-second (/ (* count 1.0)
+				     (max (- (current-seconds) start) 1))))
+	 (vector-set! record 1 count)
+	 (if (and (> count 10)
+		  (> queries-per-second 10))
+	     (begin
+	       (debug:print-info 1 "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
+	       #t)
+	     #f))))
 
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
@@ -63,9 +63,6 @@
 	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
 			    (if cinfo
 				cinfo
-				;; if read only query and server not already running
-				;; bypass starting the server. 
-				;;
 				;; NB// can cache the answer for server running for 10 seconds ...
 				;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
 				(if (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)
@@ -84,6 +81,7 @@
 		(rmt:send-receive cmd run-id params))))
 	(begin
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
+	  (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
 	  (rmt:open-qry-close-locally cmd run-id params)))))
 
 (define (rmt:open-qry-close-locally cmd run-id params)
