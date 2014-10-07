@@ -350,7 +350,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (on-exit (lambda ()
 	   (rmt:print-db-stats)
 	   (if *dbstruct-db* (db:close-all *dbstruct-db*))
-	   (if *megatest-db* (sqlite3:finalize! *megatest-db*))))
+	   (if *megatest-db* (sqlite3:finalize! *megatest-db*))
+	   (if *task-db*     (sqlite3:finalize! (vector-ref *task-db* 0)))))
 
 ;;======================================================================
 ;; Misc general calls

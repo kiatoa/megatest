@@ -84,7 +84,7 @@
 			(thread-sleep! 1))
 		    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 	    ;; YUK: rename server-dat here
-	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
+	    (let* ((server-dat (tasks:get-server (tasks:get-db) run-id)))
 	      (debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-dat
 		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
@@ -101,18 +101,17 @@
 			  (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 			  (http-transport:close-connections run-id)
 			  (hash-table-delete! *runremote* run-id)
-			  (open-run-close tasks:server-force-clean-run-record
-					  tasks:open-db
-					  run-id 
-					  (tasks:hostinfo-get-interface server-dat)
-					  (tasks:hostinfo-get-port      server-dat)
-					  " client:setup (server-dat = #t)")
+			  (tasks:server-force-clean-run-record (tasks:get-db)
+							       run-id 
+							       (tasks:hostinfo-get-interface server-dat)
+							       (tasks:hostinfo-get-port      server-dat)
+							       " client:setup (server-dat = #t)")
 			  (thread-sleep! 2)
 			  (server:try-running run-id)
 			  (thread-sleep! 10) ;; give server a little time to start up
 			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))
 		  (begin    ;; no server registered
-		    (let ((num-available (open-run-close tasks:num-in-available-state tasks:open-db run-id)))
+		    (let ((num-available (tasks:num-in-available-state (tasks:get-db) run-id)))
 		      (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
 		      (thread-sleep! 2) 
 		      (if (< num-available 2)

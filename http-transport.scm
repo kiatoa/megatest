@@ -157,12 +157,12 @@
 					      (portlogger:open-run-close portlogger:find-port)
 					      server-id))
 	   (begin
-	     (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+	     (tasks:server-force-clean-run-record (tasks:get-db) run-id ipaddrstr portnum " http-transport:try-start-server")
 	     (print "ERROR: Tried and tried but could not start the server"))))
      ;; any error in following steps will result in a retry
      (set! *server-info* (list ipaddrstr portnum))
-     (open-run-close tasks:server-set-interface-port 
-		     tasks:open-db 
+     (tasks:server-set-interface-port 
+		     (tasks:get-db)
 		     server-id 
 		     ipaddrstr portnum)
      (debug:print 0 "INFO: Trying to start server on " ipaddrstr ":" portnum)
@@ -175,7 +175,7 @@
 						       config-hostname))
 	 (start-server port: portnum))
      ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
-     (open-run-close tasks:server-force-clean-run-record tasks:open-db run-id ipaddrstr portnum " http-transport:try-start-server")
+     (tasks:server-force-clean-run-record (tasks:get-db) run-id ipaddrstr portnum " http-transport:try-start-server")
      (debug:print 1 "INFO: server has been stopped"))))
 
 ;;======================================================================
@@ -483,18 +483,18 @@
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
-  (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
+  (let loop ((server-id (tasks:server-lock-slot (tasks:get-db) run-id))
 	     (remtries  4))
     (if (not server-id)
 	(if (> remtries 0)
 	    (begin
 	      (thread-sleep! 2)
-	      (loop (open-run-close tasks:server-lock-slot tasks:open-db run-id)
+	      (loop (tasks:server-lock-slot (tasks:get-db) run-id)
 		    (- remtries 1)))
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " http-transport:launch")
+	      (tasks:server-delete-records-for-this-pid tasks:get-db " http-transport:launch")
 	      ))
 	(let* ((th2 (make-thread (lambda ()
 				   (debug:print-info 0 "Server run thread started")

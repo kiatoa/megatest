@@ -39,6 +39,13 @@
 		#f))
 	  #t))))
 
+(define (tasks:get-task-db-path)
+  (if *task-db*
+      (vector-ref *task-db* 1)
+      (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
+	     (dbpath       (conc linktree "/.db/monitor.db")))
+	dbpath)))
+
 ;; If file exists AND
 ;;    file readable
 ;;         ==> open it
@@ -49,8 +56,7 @@
 ;;    ==> open in-mem version
 ;;
 (define (tasks:open-db)
-  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
-	 (dbpath       (conc linktree "/.db/monitor.db"))
+  (let* ((dbpath       (tasks:get-task-db-path))
 	 (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists       (file-exists? dbpath))
 	 (write-access (file-write-access? dbpath))
@@ -111,7 +117,15 @@
                                   
 	  ))
     mdb))
-    
+
+(define (tasks:get-db)
+  (if *task-db*
+      *task-db*
+      (let ((db  (tasks:open-db))
+	    (pth (tasks:get-task-db-path)))
+	(set! *task-db* (vector db pth))
+	db)))
+  
 ;;======================================================================
 ;; Server and client management
 ;;======================================================================

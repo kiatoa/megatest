@@ -93,7 +93,7 @@
 		      " -debug 4 "))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (if (not (directory-exists? "logs"))(create-directory "logs"))
+    (if (not (directory-exists? "logs"))(create-directory "logs"))l
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 
@@ -126,7 +126,7 @@
       (rmt:start-server run-id)))
 
 (define (server:check-if-running run-id)
-  (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
+  (let loop ((server (tasks:get-server (tasks:get-db) run-id))
 	     (trycount 0))
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
@@ -142,7 +142,7 @@
 	      #t
 	      (begin
 		(debug:print-info 0 "server at " server " not responding, removing record")
-		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id 
+		(tasks:server-force-clean-running-records-for-run-id (tasks:get-db) run-id 
 				" server:check-if-running")
 		res)))
 	#f)))
@@ -155,7 +155,7 @@
 			  (list (car slst)(string->number (cadr slst)))
 			  #f)))
 	 (toppath       (launch:setup-for-run))
-	 (server-db-dat (if (not host-port)(open-run-close tasks:get-server tasks:open-db run-id) #f)))
+	 (server-db-dat (if (not host-port)(tasks:get-server (tasks:get-db) run-id) #f)))
     (if (not run-id)
 	  (begin
 	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")

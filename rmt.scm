@@ -65,7 +65,7 @@
 				cinfo
 				;; NB// can cache the answer for server running for 10 seconds ...
 				;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-				(if (open-run-close tasks:server-running-or-starting? tasks:open-db run-id)
+				(if (tasks:server-running-or-starting? (tasks:get-db) run-id)
 				    (let ((res (client:setup run-id)))
 				      (if res 
 					  (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)

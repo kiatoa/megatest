@@ -48,20 +48,23 @@
 (define *passnum*           0) ;; when running track calls to run-tests or similar
 (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
-(define *db-sync-mutex* (make-mutex))
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
 (define *db-stats* (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
+(define *db-sync-mutex* (make-mutex))
+(define *megatest-db*       #f)
+(define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
+(define *db-write-access*   #t)
+(define *inmemdb*           #f)
+(define *task-db*           #f) ;; (vector db path-to-db)
 
 ;; SERVER
 (define *my-client-signature* #f)
 (define *transport-type*    'http)
-(define *megatest-db*       #f)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
-(define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
 (define *client-non-blocking-mode* #f)
@@ -71,8 +74,6 @@
 (define *received-response* #f)
 (define *default-numtries*  10)
 (define *server-run*        #t)
-(define *db-write-access*   #t)
-(define *inmemdb*           #f)
 (define *run-id*            #f)
 (define *server-kind-run*   (make-hash-table))
 

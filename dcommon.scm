@@ -452,7 +452,7 @@
 				     ))
 	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
-			   (let ((servers (open-run-close tasks:get-all-servers tasks:open-db)))
+			   (let ((servers (tasks:get-all-servers (tasks:get-db))))
 			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 			     ;; (set! colnum 0)
 			     ;; (for-each (lambda (colname)
