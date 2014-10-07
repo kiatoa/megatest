@@ -123,11 +123,6 @@
 			      (tal (cdr cmds))
 			      (max-cmd (car cmds))
 			      (res 0))
-;; 		     (if (member cmd '(delete-tests-in-state)) ;; black list these outliers
-;; 			 (if (null? tal)
-;; 			     (if (> tot 20)
-;; 				 (cons 
-;; 
 		     (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
 			    (tot     (vector-ref cmd-dat 0))
 			    (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction

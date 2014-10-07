@@ -1332,6 +1332,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (db:replace-test-records dbstruct run-id testrecs)
 	   (sqlite3:finalize! (dbr:dbstruct-get-rundb dbstruct))))
        run-ids)
+      ;; now ensure all newdb data are synced to megatest.db
+      (for-each
+       (lambda (run-id)
+	 (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+	   (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)))
+       run-ids)
       (set! *didsomething* #t)
       (db:close-all dbstruct)))
 
