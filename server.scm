@@ -93,7 +93,7 @@
 		      " -debug 4 "))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (if (not (directory-exists? "logs"))(create-directory "logs"))l
+    (if (not (directory-exists? "logs"))(create-directory "logs"))
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 
