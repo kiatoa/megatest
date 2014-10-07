@@ -494,7 +494,7 @@
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	      (tasks:server-delete-records-for-this-pid tasks:get-db " http-transport:launch")
+	      (tasks:server-delete-records-for-this-pid (tasks:get-db) " http-transport:launch")
 	      ))
 	(let* ((th2 (make-thread (lambda ()
 				   (debug:print-info 0 "Server run thread started")

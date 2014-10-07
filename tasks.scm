@@ -120,7 +120,7 @@
 
 (define (tasks:get-db)
   (if *task-db*
-      *task-db*
+      (vector-ref *task-db* 0)
       (let ((db  (tasks:open-db))
 	    (pth (tasks:get-task-db-path)))
 	(set! *task-db* (vector db pth))
