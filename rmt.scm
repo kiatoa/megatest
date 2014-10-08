@@ -156,7 +156,7 @@
 	    (let ((last-sync (hash-table-ref/default *db-local-sync* run-id 0)))
 	      (if (> (- start-time last-sync) 5) ;; every five seconds
 		  (begin
-		    (db:multi-db-sync run-id 'new2old)
+		    (db:multi-db-sync (list run-id) 'new2old)
 		    (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds")
 		    (hash-table-set! *db-local-sync* run-id start-time))))
 	    (mutex-unlock! *db-sync-mutex*)))
