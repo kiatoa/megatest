@@ -475,7 +475,7 @@ Misc
 			   (teststatus (db:test-get-status   test))
 			   (teststate  (db:test-get-state    test))
 			   ;;(teststart  (db:test-get-event_time test))
-			   (runtime    (db:test-get-run_duration test))
+			   ;;(runtime    (db:test-get-run_duration test))
 			   (buttontxt  (cond
 					((equal? teststate "COMPLETED") teststatus)
 					((and (equal? teststate "NOT_STARTED")
