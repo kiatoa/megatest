@@ -49,32 +49,29 @@ get-tests-for-run                             4     11.0                2.75
 get-run-info                                  4      0.0                0.00
 set-tests-state-status                        4     17.0                4.25
 
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
-A
+DB Stats another run, converted one or two non-relevant functions to sqlite3:first-result
+========
+Cmd                                     Count   TotTime   Avg       
+get-count-tests-running-for-run-id          987    157.0                0.16
+get-count-tests-running-in-jobgroup         836     79.0                0.09
+get-count-tests-running                     836    121.0                0.14
+get-prereqs-not-met                         836    513.0                0.61
+get-test-info-by-id                         673     85.0                0.13
+get-keys                                    476      0.0                0.00
+get-test-id                                 356     32.0                0.09
+testmeta-get-record                         203     19.0                0.09
+roll-up-pass-fail-counts                    159     27.0                0.17
+register-test                               140     23.0                0.16
+test-set-rundir-shortdir                    128     35.0                0.27
+test-set-status-state                        94     20.0                0.21
+find-and-mark-incomplete                     40      0.0                0.00
+state-status-msg                             25      5.0                0.20
+delete-tests-in-state                        12      1.0                0.08
+get-tests-for-run-mindata                    10      0.0                0.00
+get-all-run-ids                               5      0.0                0.00
+set-tests-state-status                        4     15.0                3.75
+register-run                                  4      2.0                0.50
+get-run-info                                  4      1.0                0.25
+get-tests-for-run                             4     12.0                3.00
+
 
