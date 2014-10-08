@@ -149,6 +149,17 @@
 	   (res           (api:execute-requests dbstruct-local (symbol->string cmd) params))
 	   (duration      (- (current-milliseconds) start)))
       (rmt:update-db-stats cmd params duration)
+      ;; mark this run as dirty if this was a write
+      (if (not (member cmd api:read-only-queries))
+	  (let ((start-time (current-seconds)))
+	    (mutex-lock! *db-sync-mutex*)
+	    (let ((last-sync (hash-table-ref/default *db-local-sync* run-id 0)))
+	      (if (> (- start-time last-sync) 5) ;; every five seconds
+		  (begin
+		    (db:multi-db-sync run-id 'new2old)
+		    (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds")
+		    (hash-table-set! *db-local-sync* run-id start-time))))
+	    (mutex-unlock! *db-sync-mutex*)))
       res)))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)

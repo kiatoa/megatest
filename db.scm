@@ -472,6 +472,70 @@
       tot-count)))
   (mutex-unlock! *db-sync-mutex*))
 
+;; options:
+;;
+;;  'killservers  - kills all servers
+;;  'dejunk       - removes junk records
+;;  'adj-testids  - move test-ids into correct ranges
+;;  'old2new      - sync megatest.db records to .db/{main,1,2 ...}.db
+;;  'new2old      - sync .db/{main,1,2,3 ...}.db to megatest.db
+;;  'closeall     - close all opened dbs
+;;
+;;  run-ids: '(1 2 3 ...) or #f (for all)
+;;
+(define (db:multi-db-sync run-ids . options)
+  (let* ((toppath  (launch:setup-for-run))
+	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
+	 (mtdb     (if toppath (db:open-megatest-db)))
+	 (run-ids  (if run-ids 
+		       run-ids
+		       (if toppath (db:get-all-run-ids mtdb))))
+	 (mdb     (tasks:open-db))
+	 (servers (tasks:get-all-servers mdb)))
+    
+    ;; kill servers
+    (if (member 'killservers options)
+	(for-each
+	 (lambda (server)
+	   (tasks:server-delete-record mdb (vector-ref server 0) "dbmigration")
+	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
+	 servers))
+
+    ;; clear out junk records
+    ;;
+    (if (member 'dejunk options)
+	(db:clean-up mtdb))
+
+    ;; adjust test-ids to fit into proper range
+    ;;
+    (if (member 'adj-testids options)
+	(db:prep-megatest.db-for-migration mtdb))
+
+    ;; sync runs, test_meta etc.
+    ;;
+    (if (member 'old2new options)
+	(begin
+	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
+	  (for-each 
+	   (lambda (run-id)
+	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
+		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
+	       (db:replace-test-records dbstruct run-id testrecs)
+	       (sqlite3:finalize! (dbr:dbstruct-get-rundb dbstruct))))
+	   run-ids)))
+
+    ;; now ensure all newdb data are synced to megatest.db
+    (if (member 'old2new options)
+	(for-each
+	 (lambda (run-id)
+	   (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+	     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)))
+	 run-ids))
+    
+    (db:close-all dbstruct)
+    (sqlite3:finalize! mdb)))
+
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
   (debug:print-info 11 "open-run-close-no-exception-handling START given a db=" (if idb "yes " "no ") ", params=" params)

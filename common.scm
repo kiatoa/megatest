@@ -53,12 +53,13 @@
 (define *dbstruct-db*  #f)
 (define *db-stats* (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
-(define *db-sync-mutex* (make-mutex))
-(define *megatest-db*       #f)
-(define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
-(define *db-write-access*   #t)
-(define *inmemdb*           #f)
-(define *task-db*           #f) ;; (vector db path-to-db)
+(define *db-sync-mutex*       (make-mutex))
+(define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
+(define *megatest-db*         #f)
+(define *last-db-access*      (current-seconds))  ;; update when db is accessed via server
+(define *db-write-access*     #t)
+(define *inmemdb*             #f)
+(define *task-db*             #f) ;; (vector db path-to-db)
 
 ;; SERVER
 (define *my-client-signature* #f)

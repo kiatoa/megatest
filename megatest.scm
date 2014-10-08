@@ -349,6 +349,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (on-exit (lambda ()
 	   (rmt:print-db-stats)
+	   (let ((run-ids (hash-table-keys *db-local-sync*)))
+	     (if (not (null? run-ids))
+		 (db:multi-db-sync run-ids 'new2old)))
 	   (if *dbstruct-db* (db:close-all *dbstruct-db*))
 	   (if *megatest-db* (sqlite3:finalize! *megatest-db*))
 	   (if *task-db*     (sqlite3:finalize! (vector-ref *task-db* 0)))))
@@ -1298,49 +1301,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; ;; ;; redo me       (set! *didsomething* #t)))
 
 (if (args:get-arg "-import-megatest.db")
-    (let* ((toppath  (launch:setup-for-run))
-	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
-	   (mtdb     (if toppath (db:open-megatest-db)))
-	   (run-ids  (if toppath (db:get-all-run-ids mtdb)))
-	   (mdb     (tasks:open-db))
-	   (servers (tasks:get-all-servers mdb)))
-      
-      ;; kill servers
-      (for-each
-       (lambda (server)
-	 (tasks:server-delete-record mdb (vector-ref server 0) "dbmigration")
-	 (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
-       servers)
-      (sqlite3:finalize! mdb)
-
-      ;; clear out junk records
-      ;;
-      (db:clean-up mtdb)
-
-      ;; adjust test-ids to fit into proper range
-      ;;
-      (db:prep-megatest.db-for-migration mtdb)
-
-      ;; sync runs, test_meta etc.
-      ;;
-      (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
-      (for-each 
-       (lambda (run-id)
-	 (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
-	       (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	   (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
-	   (db:replace-test-records dbstruct run-id testrecs)
-	   (sqlite3:finalize! (dbr:dbstruct-get-rundb dbstruct))))
-       run-ids)
-      ;; now ensure all newdb data are synced to megatest.db
-      (for-each
-       (lambda (run-id)
-	 (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	   (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)))
-       run-ids)
-      (set! *didsomething* #t)
-      (db:close-all dbstruct)))
-
+    (begin
+      (db:multi-db-sync 
+       #f ;; do all run-ids
+       'killservers
+       'dejunk
+       'adj-testids
+       'old2new
+       'new2old
+       )
+      (set! *didsomething* #t)))
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
