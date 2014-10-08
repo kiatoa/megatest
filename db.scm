@@ -530,7 +530,9 @@
 	(for-each
 	 (lambda (run-id)
 	   (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)))
+	     (if (eq? run-id 0)
+		 (db:sync-tables (db:sync-main-list dbstruct)(db:get-db fromdb run-id) mtdb)
+		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
 	 run-ids))
     
     (db:close-all dbstruct)
