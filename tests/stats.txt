@@ -1,0 +1,77 @@
+DB Stats:  a1236d6bf92ec5cb8955f490761b21b0d3eea9d3
+========
+Cmd                                     Count   TotTime   Avg       
+get-count-tests-running-for-run-id         1035    237.0                0.23
+get-count-tests-running-in-jobgroup         884    119.0                0.13
+get-count-tests-running                     884    169.0                0.19
+get-prereqs-not-met                         884    732.0                0.83
+get-test-info-by-id                         673    122.0                0.18
+get-keys                                    476      1.0                0.00
+get-test-id                                 356     42.0                0.12
+testmeta-get-record                         203     24.0                0.12
+roll-up-pass-fail-counts                    159     39.0                0.25
+register-test                               140     30.0                0.21
+test-set-rundir-shortdir                    128     98.0                0.77
+test-set-status-state                        94     45.0                0.48
+find-and-mark-incomplete                     32      0.0                0.00
+state-status-msg                             25      4.0                0.16
+delete-tests-in-state                        12      4.0                0.33
+get-tests-for-run-mindata                     8      0.0                0.00
+get-all-run-ids                               5      2.0                0.40
+get-run-info                                  4      0.0                0.00
+register-run                                  4      5.0                1.25
+set-tests-state-status                        4     15.0                3.75
+get-tests-for-run                             4     15.0                3.75
+
+# After converting first three functions above to sqlite3:first-result
+DB Stats
+========
+Cmd                                     Count   TotTime   Avg       
+get-count-tests-running-for-run-id         1138    179.0                0.16
+get-count-tests-running-in-jobgroup         987     91.0                0.09
+get-count-tests-running                     987    171.0                0.17
+get-prereqs-not-met                         987    892.0                0.90
+get-test-info-by-id                         672     95.0                0.14
+get-keys                                    476      0.0                0.00
+get-test-id                                 355     41.0                0.12
+testmeta-get-record                         203     15.0                0.07
+roll-up-pass-fail-counts                    159     30.0                0.19
+register-test                               140     22.0                0.16
+test-set-rundir-shortdir                    128    855.0                6.68
+test-set-status-state                        94     20.0                0.21
+find-and-mark-incomplete                     36      1.0                0.03
+state-status-msg                             24      5.0                0.21
+delete-tests-in-state                        12      2.0                0.17
+get-tests-for-run-mindata                     9      0.0                0.00
+get-all-run-ids                               5      1.0                0.20
+register-run                                  4      1.0                0.25
+get-tests-for-run                             4     11.0                2.75
+get-run-info                                  4      0.0                0.00
+set-tests-state-status                        4     17.0                4.25
+
+DB Stats another run, converted one or two non-relevant functions to sqlite3:first-result
+========
+Cmd                                     Count   TotTime   Avg       
+get-count-tests-running-for-run-id          987    157.0                0.16
+get-count-tests-running-in-jobgroup         836     79.0                0.09
+get-count-tests-running                     836    121.0                0.14
+get-prereqs-not-met                         836    513.0                0.61
+get-test-info-by-id                         673     85.0                0.13
+get-keys                                    476      0.0                0.00
+get-test-id                                 356     32.0                0.09
+testmeta-get-record                         203     19.0                0.09
+roll-up-pass-fail-counts                    159     27.0                0.17
+register-test                               140     23.0                0.16
+test-set-rundir-shortdir                    128     35.0                0.27
+test-set-status-state                        94     20.0                0.21
+find-and-mark-incomplete                     40      0.0                0.00
+state-status-msg                             25      5.0                0.20
+delete-tests-in-state                        12      1.0                0.08
+get-tests-for-run-mindata                    10      0.0                0.00
+get-all-run-ids                               5      0.0                0.00
+set-tests-state-status                        4     15.0                3.75
+register-run                                  4      2.0                0.50
+get-run-info                                  4      1.0                0.25
+get-tests-for-run                             4     12.0                3.00
+
+

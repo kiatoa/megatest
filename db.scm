@@ -1575,42 +1575,30 @@
 ;; NEW BEHAVIOR: Count tests running in only one run!
 ;;
 (define (db:get-count-tests-running dbstruct run-id)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))
-     (db:get-db dbstruct run-id)
-     ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
-     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
-     run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
-    res))
+  (sqlite3:first-result 
+   (db:get-db dbstruct run-id)
+   ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
+   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
+   run-id))
 
 ;; NEW BEHAVIOR: Count tests running in only one run!
 ;;
 (define (db:get-count-tests-actually-running dbstruct run-id)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))
-     (db:get-db dbstruct run-id)
-     ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
-     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
-     run-id) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
-    res))
+  (sqlite3:first-result
+   (db:get-db dbstruct run-id)
+   ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
+   "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
+   run-id)) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
 ;; 
 ;; (define (db:get-running-stats dbstruct run-id)
 (define (db:get-count-tests-running-for-run-id dbstruct run-id)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))  ;; select * from tests where run_id=1 and uname = 'n/a' and item_path='';
-     (db:get-db dbstruct run-id)
-     "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
-    res))
+  (sqlite3:first-result
+   (db:get-db dbstruct run-id)
+   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))
 
  ;; override states to count with list of strings.
 ;;
@@ -1633,8 +1621,7 @@
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
   (if (not jobgroup)
       0 ;; 
-      (let ((res        0)
-	    (testnames '()))
+      (let ((testnames '()))
 	;; get the testnames
 	(sqlite3:for-each-row
 	 (lambda (testname)
@@ -1644,40 +1631,31 @@
 	 jobgroup)
 	;; get the jobcount NB// EXTEND THIS TO OPPERATE OVER ALL RUNS?
 	(if (not (null? testnames))
-	    (sqlite3:for-each-row
-	     (lambda (count)
-	       (set! res count))
+	    (sqlite3:first-result
 	     (db:get-db dbstruct run-id)
 	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		   (string-intersperse testnames "','")
-		   "');")))
+		   "');"))
+	    0))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
              ;; AND NOT (uname = 'n/a' AND item_path = '');"
-	res)))
 
 ;; done with run when:
 ;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
 (define (db:estimated-tests-remaining dbstruct run-id)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))
-     (db:get-db dbstruct run-id) ;; NB// KILLREQ means the jobs is still probably running
-     "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');")
-    res))
+  (sqlite3:first-result
+   (db:get-db dbstruct run-id) ;; NB// KILLREQ means the jobs is still probably running
+   "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');"))
 
 ;; map run-id, testname item-path to test-id
 (define (db:get-test-id dbstruct run-id testname item-path)
-  (let* ((db (db:get-db dbstruct run-id))
-	 (res #f))
-    (sqlite3:for-each-row
-     (lambda (id) ;;  run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )
-       (set! res id)) ;; (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run_duration final_logf comment )))
+  (let* ((db (db:get-db dbstruct run-id)))
+    (db:first-result-default
      (db:get-db dbstruct run-id)
      "SELECT id FROM tests WHERE testname=? AND item_path=?;"
-     testname item-path)
-    res))
+     #f ;; the default
+     testname item-path)))
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"   "item_path"
@@ -1814,16 +1792,11 @@
     res))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
-  ;; (db:delay-if-busy)
-  (let ((db (db:get-db dbstruct run-id))
-	(res #f))
-    (sqlite3:for-each-row
-     (lambda (tpath)
-       (set! res tpath))
-     (db:get-db dbstruct run-id)
-     "SELECT rundir FROM tests WHERE id=?;"
-     test-id)
-    res))
+  (db:first-result-default
+   (db:get-db dbstruct run-id)
+   "SELECT rundir FROM tests WHERE id=?;"
+   #f ;; default result
+   test-id))
 
 ;;======================================================================
 ;; S T E P S
@@ -2416,6 +2389,24 @@
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	 waitons)
 	(delete-duplicates result))))
+
+;;======================================================================
+;; SQLITE3 HELPERS
+;;======================================================================
+
+;; convert to -inline
+(define (db:first-result-default db stmt default . params)
+  (handle-exceptions
+   exn
+   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
+     (if (eq? err-status 'done)
+	 default
+	 (begin
+	   (debug:print 0 "ERROR:  query " stmt " failed " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain)
+	   default)))
+   (apply sqlite3:first-result db stmt params)))
 
 ;;======================================================================
 ;; Extract ods file from the db

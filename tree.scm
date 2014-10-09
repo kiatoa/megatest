@@ -115,3 +115,22 @@
 	  (loop (+ currnode 1)
 		newpath)))))
 	
+#|
+
+  (let* ((tb      (iup:treebox
+                   #:value 0
+                   #:name "Runs"
+                   #:expand "YES"
+                   #:addexpanded "NO"
+                   #:selection-cb
+                   (lambda (obj id state)
+                     ;; (print "obj: " obj ", id: " id ", state: " state)
+                     (let* ((run-path (tree:node->path obj id))
+                            (run-id   (tree-path->run-id (cdr run-path))))
+                       (if run-id
+                           (begin
+                             (dboard:data-set-curr-run-id! *data* run-id)
+                             (dashboard:update-run-summary-tab)))
+                       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+                       ))))
+|#
