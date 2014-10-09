@@ -423,7 +423,7 @@
 	    fromdb
 	    full-sel)
 
-	   (debug:print 0 "INFO: found " (length fromdat) " records to sync")
+	   (debug:print-info 2 "found " (length fromdat) " records to sync")
 
 	   ;; read the target table
 	   (sqlite3:for-each-row
@@ -752,8 +752,9 @@
 ;;                          end_time,strftime('%s','now') as now from tests where state in
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
-(define (db:find-and-mark-incomplete db run-id  #!key (ovr-deadtime #f))
-  (let* ((incompleted '())
+(define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
+  (let* ((db          (db:get-db dbstruct run-id))
+	 (incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
 	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
@@ -764,9 +765,6 @@
     (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
     
     ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
-    ;;
-    ;; THIS CANNOT WORK. The run_duration is not updated in the central db due to performance concerns.
-    ;;                   The testdat.db file must be consulted.
     ;;
     ;; HOWEVER: this code in run:test seems to work fine
     ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
@@ -783,9 +781,9 @@
 	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
 	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
      db
-     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 600 AND state IN ('RUNNING','REMOTEHOSTSTART');"
-     run-id)
-    
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     run-id deadtime)
+
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
     ;; (db:delay-if-busy)
@@ -800,17 +798,19 @@
      "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
      run-id)
     
+    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
     ;; (db:delay-if-busy)
-    (let* ((min-incompleted (filter (lambda (x)
-				      (let* ((testpath (cadr x))
-					     (tdatpath (conc testpath "/testdat.db"))
-					     (dbexists (file-exists? tdatpath)))
-					(or (not dbexists) ;; if no file then something wrong - mark as incomplete
-					    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
-				    incompleted))
-	   (min-incompleted-ids (map car min-incompleted))
+    (let* (;; (min-incompleted (filter (lambda (x)
+	   ;;      		      (let* ((testpath (cadr x))
+	   ;;      			     (tdatpath (conc testpath "/testdat.db"))
+	   ;;      			     (dbexists (file-exists? tdatpath)))
+	   ;;      			(or (not dbexists) ;; if no file then something wrong - mark as incomplete
+	   ;;      			    (> (- (current-seconds)(file-modification-time tdatpath)) 600)))) ;; no change in 10 minutes to testdat.db - she's dead Jim
+	   ;;      		    incompleted))
+	   (min-incompleted-ids (map car incompleted)) ;; do 'em all
 	   (all-ids             (append min-incompleted-ids (map car oldlaunched))))
       (if (> (length all-ids) 0)
 	  (begin
@@ -825,9 +825,9 @@
     ;;
     (for-each
      (lambda (toptest)
-       (let ((test-name (list-ref toptest 3))
-	     (run-id    (list-ref toptest 5)))
-	 (cdb:top-test-set-per-pf-counts *runremote* run-id test-name)))
+       (let ((test-name (list-ref toptest 3)))
+;;	     (run-id    (list-ref toptest 5)))
+	  (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name)))) ;; (list run-id test-name))))
      toplevels)))
 		     
 ;; Clean out old junk and vacuum the database

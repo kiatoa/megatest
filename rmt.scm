@@ -85,7 +85,7 @@
 	  (let ((curr-max (rmt:get-max-query-average)))
 	    (if (> (cdr curr-max) max-avg-qry)
 		(begin
-		  (debug:print-info 0 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
+		  (debug:print-info 3 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
 		  (server:kind-run run-id))))
 	  (rmt:open-qry-close-locally cmd run-id params)))))
 
@@ -401,8 +401,8 @@
 (define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
 
-(define (rmt:find-and-mark-incomplete run-id #!key (ovr-deadtime #f))
-  (rmt:send-receive 'find-and-mark-incomplete #f (list run-id ovr-deadtime)))
+(define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
+  (rmt:send-receive 'find-and-mark-incomplete run-id (list run-id ovr-deadtime)))
 
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
@@ -412,7 +412,7 @@
 (define (rmt:find-and-mark-incomplete-all-runs #!key (ovr-deadtime #f))
   (let ((run-ids (rmt:get-all-run-ids)))
     (for-each (lambda (run-id)
-	       (rmt:find-and-mark-incomplete run-id ovr-deadtime: ovr-deadtime))
+	       (rmt:find-and-mark-incomplete run-id ovr-deadtime))
 	     run-ids)))
 
 ;; get the previous record for when this test was run where all keys match but runname

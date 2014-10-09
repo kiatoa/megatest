@@ -377,7 +377,7 @@
 	(if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
 	(set! sync-time  (- (current-milliseconds) start-time))
 	(set! rem-time (quotient (- 4000 sync-time) 1000))
-	(debug:print 0 "SYNC: time= " sync-time ", rem-time=" rem-time)
+	(debug:print 2 "SYNC: time= " sync-time ", rem-time=" rem-time)
 
       ;;
       ;; set_running after our first pass through and start the db
