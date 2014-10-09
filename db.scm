@@ -526,11 +526,13 @@
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
-    (if (member 'old2new options)
+    (if (member 'new2old options)
 	(for-each
 	 (lambda (run-id)
 	   (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
-	     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)))
+	     (if (eq? run-id 0)
+		 (db:sync-tables (db:sync-main-list dbstruct)(db:get-db fromdb run-id) mtdb)
+		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
 	 run-ids))
     
     (db:close-all dbstruct)

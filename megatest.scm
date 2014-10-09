@@ -125,6 +125,7 @@ Misc
   -rebuild-db             : bring the database schema up to date
   -cleanup-db             : remove any orphan records, vacuum the db
   -import-megatest.db     : migrate a database from v1.55 series to v1.60 series
+  -sync-to-megatest.db    : migrate data back to megatest.db
   -update-meta            : update the tests metadata for all tests
   -setvars VAR1=val1,VAR2=val2 : Add environment variables to a run NB// these are
                                  overwritten by values set in config files.
@@ -271,6 +272,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-convert-to-norm"
 			"-convert-to-old"
 			"-import-megatest.db"
+			"-sync-to-megatest.db"
 
 			"-logging"
 			"-v" ;; verbose 2, more than normal (normal is 1)
@@ -1311,6 +1313,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'new2old
        )
       (set! *didsomething* #t)))
+
+(if (args:get-arg "-sync-to-megatest.db")
+    (begin
+      (db:multi-db-sync 
+       #f ;; do all run-ids
+       'new2old
+       )
+      (set! *didsomething* #t)))
+
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
