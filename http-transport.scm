@@ -418,6 +418,8 @@
       ;;
       ;; no_traffic, no running tests, if server 0, no running servers
       ;;
+      ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
+      ;;
       (if (and *server-run*
 	       (or (> (+ last-access server-timeout)
 		      (current-seconds))

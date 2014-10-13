@@ -93,14 +93,14 @@
 	       (rollup-status 0))
 	  (change-directory top-path)
 
-
-
-
-	  ;; ADD here - is test already RUNNING? If so ---- ABORT RUN ATTEMPT
-
-
-
-
+	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
+	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
+	  ;;
+	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
+	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
+		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
+		(debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")))
+	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
@@ -175,8 +175,6 @@
 	  ;; (tests:set-full-meta-info test-id run-id 0 work-area)
 	  (tests:set-full-meta-info #f test-id run-id 0 work-area 10)
 
-	  ;; (tests:test-set-status! test-id "REMOTEHOSTSTART" "n/a" (args:get-arg "-m") #f)
-	  (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 	  (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 	  (if (args:get-arg "-xterm")
@@ -526,7 +524,7 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat)
+(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat #!key (remtries 2))
   (let* ((item-path (item-list->path itemdat))
 	 (runname  (db:get-value-by-header (db:get-rows run-info)
 					   (db:get-header run-info)
@@ -548,9 +546,10 @@
 	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
 		      (if rd rd (conc *toppath* "/runs"))))
 
-	 (lnkbase  (conc linktree "/" target "/" runname))
-	 (lnkpath  (conc lnkbase "/" testname))
-	 (lnkpathf (conc lnkpath (if not-iterated "" "/") item-path)))
+	 (lnkbase   (conc linktree "/" target "/" runname))
+	 (lnkpath   (conc lnkbase "/" testname))
+	 (lnkpathf  (conc lnkpath (if not-iterated "" "/") item-path))
+	 (lnktarget (conc lnkpath "/" item-path)))
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
@@ -633,7 +632,7 @@
     ;; The toptest path has been created, the link to the test in the linktree has
     ;; been created. Now, if this is an iterated test the real test dir must be created
     (if (not not-iterated) ;; this is an iterated test
-	(let ((lnktarget (conc lnkpath "/" item-path)))
+	(begin ;; (let ((lnktarget (conc lnkpath "/" item-path)))
 	  (debug:print 2 "Setting up sub test run area")
 	  (debug:print 2 " - creating run area in " test-path)
 	  (handle-exceptions
@@ -655,6 +654,9 @@
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
 
+    (if (not (directory? test-path))
+	(create-directory test-path #t)) ;; this is a hack, I don't know why out of the blue this path does not exist sometimes
+
     (if (directory? test-path)
 	(begin
 	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
@@ -671,7 +673,12 @@
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
 	  (list lnkpathf lnkpath ))
-	(list #f #f))))
+	(if (> remtries 0)
+	    (begin
+	      (debug:print 0 "ERROR: Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
+	      ;; 
+	      (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat remtries: (- remtries 1)))
+	    (list #f #f)))))
 
 ;; 1. look though disks list for disk with most space
 ;; 2. create run dir on disk, path name is meaningful
@@ -743,6 +750,11 @@
 	(begin
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
+
+    ;; prevent overlapping actions - set to LAUNCHED as early as possible
+    ;;
+    (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
+    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED")
     (set! diskpath (get-best-disk *configdat*))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
@@ -776,11 +788,10 @@
 				      (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 				      (list 'runname   runname)
 				      (list 'mt-bindir-path mt-bindir-path))))))))
+
     ;; clean out step records from previous run if they exist
     ;; (rmt:delete-test-step-records run-id test-id)
     (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
-    (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED")
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

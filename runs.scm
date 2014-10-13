@@ -1072,7 +1072,7 @@
 		(begin
 		  (debug:print-info 0 "Marking stuck tests as INCOMPLETE while waiting for run " run-id ". Running as pid " (current-process-id) " on " (get-host-name))
 		  (set! last-time-incomplete (current-seconds))
-		  (rmt:find-and-mark-incomplete run-id)))
+		  (rmt:find-and-mark-incomplete run-id #f)))
 	    (if (not (eq? num-running prev-num-running))
 		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
 	    (thread-sleep! 15)
@@ -1507,7 +1507,8 @@
 	 (real-dir      (if (file-exists? run-dir)
 			    (resolve-pathname run-dir)
 			    #f)))
-    (if (not remove-data-only)
+    (if remove-data-only
+	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f)
 	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
@@ -1541,7 +1542,8 @@
 		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
-    (if (not remove-data-only)
+    (if remove-data-only
+	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f)
 	(rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test)))))
 
 ;;======================================================================
