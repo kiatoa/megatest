@@ -595,13 +595,16 @@
 			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
 			(exit 1)))))
 	      keys)
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
-    (for-each (lambda (key)
-		(sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
-	      keys)
-    (sqlite3:execute db (conc 
-			 "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
-			 fieldstr (if havekeys "," "") "
+    (sqlite3:with-transaction
+     db
+     (lambda ()
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
+       (for-each (lambda (key)
+		   (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
+		 keys)
+       (sqlite3:execute db (conc 
+			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
+			    fieldstr (if havekeys "," "") "
 			 runname    TEXT DEFAULT 'norun',
 			 state      TEXT DEFAULT '',
 			 status     TEXT DEFAULT '',
@@ -611,7 +614,7 @@
 			 fail_count INTEGER DEFAULT 0,
 			 pass_count INTEGER DEFAULT 0,
 			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
                                      id          INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
                                      author      TEXT DEFAULT '',
@@ -624,23 +627,26 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-    (sqlite3:execute db (conc "CREATE INDEX runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
-    ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
+       (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
+       ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS metadat (id INTEGER PRIMARY KEY, var TEXT, val TEXT,
                                   CONSTRAINT metadat_constraint UNIQUE (var));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
-    ;; Must do this *after* running patch db !! No more. 
-    ;; cannot use db:set-var since it will deadlock, hardwire the code here
-    (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" megatest-version)
-    (debug:print-info 11 "db:initialize END")))
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS access_log (id INTEGER PRIMARY KEY, user TEXT, accessed TIMESTAMP, args TEXT);")
+       ;; Must do this *after* running patch db !! No more. 
+       ;; cannot use db:set-var since it will deadlock, hardwire the code here
+       (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" "MEGATEST_VERSION" megatest-version)
+       (debug:print-info 11 "db:initialize END")))))
 
 ;;======================================================================
 ;; R U N   S P E C I F I C   D B 
 ;;======================================================================
 
 (define (db:initialize-run-id-db db)
-  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
+  (sqlite3:with-transaction 
+   db
+   (lambda ()
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tests 
                     (id INTEGER PRIMARY KEY,
                      run_id       INTEGER   DEFAULT -1,
                      testname     TEXT      DEFAULT 'noname',
@@ -663,8 +669,8 @@
                      pass_count   INTEGER   DEFAULT 0,
                      archived     INTEGER   DEFAULT 0, -- 0=no, 1=in progress, 2=yes
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
-    (sqlite3:execute db "CREATE INDEX tests_index ON tests (run_id, testname, item_path);")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
+     (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
                                stepname TEXT, 
@@ -674,16 +680,16 @@
                                comment TEXT DEFAULT '',
                                logfile TEXT DEFAULT '',
                                CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));")
-;;   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
-;;                               (id          INTEGER PRIMARY KEY,
-;;                                      reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
-;;                                      iterated    TEXT DEFAULT '',
-;;                                      avg_runtime REAL DEFAULT -1,
-;;                                      avg_disk    REAL DEFAULT -1,
-;;                                      tags        TEXT DEFAULT '',
-;;                                      jobgroup    TEXT DEFAULT 'default',
-;;                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
+     ;;   (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data 
+     ;;                               (id          INTEGER PRIMARY KEY,
+     ;;                                      reviewed    TIMESTAMP DEFAULT (strftime('%s','now')),
+     ;;                                      iterated    TEXT DEFAULT '',
+     ;;                                      avg_runtime REAL DEFAULT -1,
+     ;;                                      avg_disk    REAL DEFAULT -1,
+     ;;                                      tags        TEXT DEFAULT '',
+     ;;                                      jobgroup    TEXT DEFAULT 'default',
+     ;;                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_data (id INTEGER PRIMARY KEY,
                                 test_id INTEGER,
                                 category TEXT DEFAULT '',
                                 variable TEXT,
@@ -695,16 +701,16 @@
                                 status TEXT DEFAULT 'n/a',
                                 type TEXT DEFAULT '',
                               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));")
-    ;; Why use FULL here? This data is not that critical
-    ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
-    (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
+     ;; Why use FULL here? This data is not that critical
+     ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_rundat (
                               id           INTEGER PRIMARY KEY,
                               test_id      INTEGER,
                               update_time  TIMESTAMP,
                               cpuload      INTEGER DEFAULT -1,
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
-                              run_duration INTEGER DEFAULT 0);")
+                              run_duration INTEGER DEFAULT 0);")))
   db)
 
 ;;======================================================================
