@@ -492,21 +492,31 @@
 	(for-each 
 	 (lambda (disk-num)
 	   (let* ((dirpath    (cadr (assoc disk-num disks)))
-		  (freespc    (if (and (directory? dirpath)
-				       (file-write-access? dirpath))
-				  (get-df dirpath)
-				  (begin
-				    (debug:print 0 "WARNING: path " dirpath " in [disks] section not valid or writable")
-				    0))))
+		  (freespc    (cond
+			       ((not (directory? dirpath))
+				(if (common:low-noise-print 20 "disks" disk-num)
+				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
+				-1)
+			       ((not (file-write-access? dirpath))
+				(if (common:low-noise-print 20 "disks" disk-num)
+				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
+				-1)
+			       ((not (eq? (string-ref dirpath 0) #\/))
+				(if (common:low-noise-print 20 "disks" disk-num)
+				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
+				-1)
+			       (else
+				(get-df dirpath)))))
 	     (if (> freespc bestsize)
 		 (begin
 		   (set! best     dirpath)
 		   (set! bestsize freespc)))))
 	 (map car disks)))
-    (if best
+    (if (and best (> bestsize 0))
 	best
 	(begin
-	  (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section")
+	  (if (common:low-noise-print 20 "disks" disk-num)
+	      (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
 	  (exit 1)))))
 
 ;; Desired directory structure:

@@ -48,6 +48,7 @@
 (define *passnum*           0) ;; when running track calls to run-tests or similar
 (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
 (define *alt-log-file* #f)  ;; used by -log
+(define *common:denoise*    (make-hash-table)) ;; for low noise printing
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
@@ -121,6 +122,16 @@
 ;;======================================================================
 ;; U S E F U L   S T U F F
 ;;======================================================================
+
+(define (common:low-noise-print waitval . keys)
+  (let* ((key      (string-intersperse (map conc keys) "-" ))
+	 (lasttime (hash-table-ref/default *common:denoise* key 0))
+	 (currtime (current-seconds)))
+    (if (> (- currtime lasttime) waitval)
+	(begin
+	  (hash-table-set! *common:denoise* key currtime)
+	  #t)
+	#f)))
 
 (define (common:get-megatest-exe)
   (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
