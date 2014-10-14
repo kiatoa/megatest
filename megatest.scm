@@ -368,14 +368,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-disks")
-    (begin
+    (let ((toppath (launch:setup-for-run)))
       (print 
        (string-intersperse 
 	(map (lambda (x)
 	       (string-intersperse 
 		x
 		" => "))
-	     (common:get-disks) )
+	     (common:get-disks *configdat*))
 	"\n"))
       (set! *didsomething* #t)))
 

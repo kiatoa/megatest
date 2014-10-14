@@ -251,15 +251,17 @@
       #t))
 
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
-(define (common:get-runconfig-targets)
+(define (common:get-runconfig-targets #!key (configf #f))
   (sort (map car (hash-table->alist
-		  (read-config "runconfigs.config"
-			       #f #t))) string<?))
+		  (or configf
+		      (read-config "runconfigs.config"
+			       #f #t))))
+	string<?))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
-(define (common:get-disks)
+(define (common:get-disks #!key (configf #f))
   (hash-table-ref/default 
-   (read-config "megatest.config" #f #t)
+   (or configf (read-config "megatest.config" #f #t))
    "disks" '("none" "")))
 
 ;;======================================================================
