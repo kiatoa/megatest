@@ -1585,9 +1585,10 @@
   (sqlite3:first-result 
    (db:get-db dbstruct run-id)
    ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
-   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
-   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
-   run-id))
+   ;; AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted')
+   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND NOT (uname = 'n/a' AND item_path = '');"
+   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
+   ))
 
 ;; NEW BEHAVIOR: Count tests running in only one run!
 ;;
@@ -1642,7 +1643,7 @@
 	     (db:get-db dbstruct run-id)
 	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		   (string-intersperse testnames "','")
-		   "') AND NOT (item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
+		   "') AND NOT (uname = 'n/a' AND item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
 	    0))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
