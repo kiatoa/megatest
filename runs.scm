@@ -1288,15 +1288,16 @@
 	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it.")
 	 (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN)) ;; KILLED))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
-	 (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-				       (db:test-get-run_duration testdat)))
-		(or incomplete-timeout
-		    6000)) ;; i.e. no update for more than 6000 seconds
-	     (begin
-	       (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
-	       (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
-	       ;; (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
-	     (debug:print 2 "NOTE: " test-name " is already running")))
+	 (debug:print 2 "NOTE: " test-name " is already running"))
+	;; (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+	;; 			       (db:test-get-run_duration testdat)))
+	;; 	(or incomplete-timeout
+	;; 	    6000)) ;; i.e. no update for more than 6000 seconds
+	;;      (begin
+	;;        (debug:print 0 "WARNING: Test " test-name " appears to be dead. Forcing it to state INCOMPLETE and status STUCK/DEAD")
+	;;        (tests:test-set-status! run-id test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
+	;;        ;; (tests:test-set-status! test-id "INCOMPLETE" "STUCK/DEAD" "" #f))
+	;;      (debug:print 2 "NOTE: " test-name " is already running")))
 	(else      
 	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
 	 (case (string->symbol (test:get-state testdat)) 

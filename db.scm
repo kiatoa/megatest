@@ -1642,7 +1642,7 @@
 	     (db:get-db dbstruct run-id)
 	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		   (string-intersperse testnames "','")
-		   "');"))
+		   "') AND NOT (item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
 	    0))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
