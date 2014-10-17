@@ -515,7 +515,7 @@
     (if (and best (> bestsize 0))
 	best
 	(begin
-	  (if (common:low-noise-print 20 "disks" disk-num)
+	  (if (common:low-noise-print 20 "no valid disks")
 	      (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
 	  (exit 1)))))
 

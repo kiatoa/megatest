@@ -391,13 +391,12 @@
 ;; register a task
 (define (tasks:add mdb action owner target runname testpatt params)
   (sqlite3:execute mdb "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
-                       VALUES (?,?,'new',?,?,?,?,?,strftime('%s','now'),0);" 
+                       VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
 		   action
 		   owner
 		   target
 		   runname
-		   test
-		   item
+		   testpatt
 		   (if params params "")))
 
 (define (keys:key-vals-hash->target keys key-params)
@@ -579,6 +578,71 @@
   (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE id=?;" 
 		   state 
 		   task-id))
+
+;;======================================================================
+;; Access using task key (stored in params; (hash-table->alist flags) hostname pid
+;;======================================================================
+
+(define (tasks:param-key->id mdb task-params)
+  (handle-exceptions
+   exn
+   #f
+   (sqlite3:first-result mdb "SELECT id FROM tasks_queue WHERE params LIKE ?;" task-params)))
+
+(define (tasks:set-state-given-param-key mdb param-key new-state)
+  (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))
+
+(define (tasks:get-records-given-param-key mdb param-key state-patt action-patt test-patt)
+  (handle-exceptions
+   exn
+   '()
+   (sqlite3:first-row mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
+         params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+		      param-key state-patt action-patt test-patt)))
+
+
+;;======================================================================
+;; Rogue items, no place to put these yet
+;;======================================================================
+
+(define (tasks:find-task-queue-records mdb target run-name test-patt state-patt action-patt)
+  ;; (handle-exceptions
+  ;;  exn
+  ;;  '()
+  ;;  (sqlite3:first-row
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! res (cons (cons a b) res)))
+     mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params FROM tasks_queue 
+       WHERE
+         target = ? AND name = ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+     target run-name state-patt action-patt test-patt)
+    res)) ;; )
+
+
+(define (tasks:kill-runner mdb target run-name)
+  (let ((records    (tasks:find-task-queue-records mdb target run-name "%" "running" "run-tests"))
+	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
+    (if (null? records)
+	(debug:print 0 "No run launching processes found for " target " / " run-name)
+	(debug:print 0 "Found " (length records) " run(s) to kill."))
+    (for-each 
+     (lambda (record)
+       (let* ((param-key (list-ref record 8))
+	      (match-dat (string-search hostpid-rx param-key))
+	      (hostname  (cadr match-dat))
+	      (pid       (caddr match-dat)))
+	 (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
+	 (if (equal? (get-host-name) hostname)
+	     (process-signal (string->number pid) signal/int)
+	     ;;  (call-with-environment-variables
+	     (let ((old-targethost (getenv "TARGETHOST")))
+	       (set-environment-variable "TARGETHOST" hostname)
+	       (system (conc "nbfake " kill " " pid))
+	       (if old-targethost (set-environment-variable "TARGETHOST" old-targethost))))))
+     records)))
+
 
 ;;======================================================================
 ;; The routines to process tasks

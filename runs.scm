@@ -197,6 +197,7 @@
 				 (else #f))))
 	  (list (not can-not-run-more) num-running num-running-in-jobgroup max-concurrent-jobs job-group-limit)))))
 
+
 ;;  test-names: Comma separated patterns same as test-patts but used in selection 
 ;;              of tests to run. The item portions are not respected.
 ;;              FIXME: error out if /patt specified
@@ -212,8 +213,21 @@
 	 (all-tests-registry #f)  ;; (tests:get-all)) ;; (tests:get-valid-tests (make-hash-table) test-search-path)) ;; all valid tests to check waiton names
 	 (all-test-names     #f)  ;; (hash-table-keys all-tests-registry))
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
-	 (required-tests     #f)) ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
+	 (required-tests     #f)  ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
+	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
+	 (tasks-db           (tasks:open-db)))
 
+    (set-signal-handler! signal/int
+			 (lambda (signum)
+			   (let ((tdb (tasks:open-db)))
+			     (tasks:set-state-given-param-key tdb task-key "killed")
+			     (sqlite3:finalize! tdb))
+			   (print "Killed by sigint. Exiting")
+			   (exit)))
+
+    ;; register this run in monitor.db
+    (tasks:add tasks-db "run-tests" user target runname test-patts task-key) ;; params)
+    (tasks:set-state-given-param-key tasks-db task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -356,7 +370,8 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    ))
+    (tasks:set-state-given-param-key tasks-db task-key "done")
+    (sqlite3:finalize! tasks-db)))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.
@@ -1355,6 +1370,7 @@
 (define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
+	 (tasks-db     (tasks:open-db))
 	 (keys         (rmt:get-keys))
 	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
@@ -1381,6 +1397,7 @@
 							       (else          'event_time))))))
 	 (let* ((run-id    (db:get-value-by-header run header "id"))
 		(run-state (db:get-value-by-header run header "state"))
+		(run-name  (db:get-value-by-header run header "runname"))
 		(tests     (if (not (equal? run-state "locked"))
 			       (proc-get-tests run-id)
 			       '()))
@@ -1390,6 +1407,10 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
+		    ;; seek and kill in flight -runtests with % as testpatt here
+		    (if (equal? testpatt "%")
+			(tasks:kill-runner tasks-db target run-name)
+			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
@@ -1500,7 +1521,8 @@
 		       ;; 	 (system (conc "rmdir -p " runpath))))
 		       )))))
 	 ))
-     runs))
+     runs)
+    (sqlite3:finalize! tasks-db))
   #t)
 
 (define (runs:remove-test-directory db test remove-data-only)
