@@ -635,7 +635,13 @@
 	      (pid       (caddr match-dat)))
 	 (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
 	 (if (equal? (get-host-name) hostname)
-	     (process-signal (string->number pid) signal/int)
+	     (begin
+	       (process-signal (string->number pid) signal/int)
+	       (thread-sleep! 5)
+	       (handle-exceptions
+		exn
+		#t
+		(process-signal (string->number pid) signal/kill)))
 	     ;;  (call-with-environment-variables
 	     (let ((old-targethost (getenv "TARGETHOST")))
 	       (set-environment-variable "TARGETHOST" hostname)
