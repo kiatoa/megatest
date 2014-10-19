@@ -1,4 +1,12 @@
 
-1. Confirm that branch transaction-for-sequential-writes content was added to trunk/development
-2. Add a host chooser for ssh to launch-tests
-3. Try making static executable
+TODO
+====
+
+Migration to inmem db plus per run db
+-------------------------------------
+
+. Re-work the dbstruct data structure?
+.. Move main.db to global?
+.. [ run-id.db inmemdb last-mod last-read last-sync inuse ]
+. Re-work all queries to use run-id to dereference server
+. Open main.db directly in calls to -runtests etc. No need to talk remote?

@@ -9,14 +9,19 @@
 ;;  PURPOSE.
 ;;======================================================================
 
+;; (use trace)
+
 (define (debug:calc-verbosity vstr)
   (cond
-   (vstr
-    (let ((debugvals (string-split vstr ",")))
-      (if (> (length debugvals) 1)
-	  (map string->number debugvals)
-	  (string->number (car debugvals)))))
-   ((args:get-arg "-v")    2)
+   ((number? vstr) vstr)
+   ((not (string?  vstr))   1)
+   ;; ((string-match  "^\\s*$" vstr) 1)
+   (vstr           (let ((debugvals  (filter number? (map string->number (string-split vstr ",")))))
+		     (cond
+		      ((> (length debugvals) 1) debugvals)
+		      ((> (length debugvals) 0)(car debugvals))
+		      (else 1))))
+   ((args:get-arg "-v")   2)
    ((args:get-arg "-q")    0)
    (else                   1)))
 
@@ -25,7 +30,7 @@
   (if (not (or (number? verbosity)
 	       (list?   verbosity)))
       (begin
-	(print "ERROR: Invalid debug value " vstr)
+	(print "ERROR: Invalid debug value \"" vstr "\"")
 	#f)
       #t))
 
@@ -40,6 +45,8 @@
 		      (getenv "MT_DEBUG_MODE"))))
     (set! *verbosity* (debug:calc-verbosity debugstr))
     (debug:check-verbosity *verbosity* debugstr)
+    ;; if we were handed a bad verbosity rule then we will override it with 1 and continue
+    (if (not *verbosity*)(set! *verbosity* 1))
     (if (or (args:get-arg "-debug")
 	    (not (getenv "MT_DEBUG_MODE")))
 	(setenv "MT_DEBUG_MODE" (if (list? *verbosity*)
@@ -53,6 +60,7 @@
 	(lambda ()
 	  (if *logging*
 	      (db:log-event (apply conc params))
+	      ;; (apply print "pid:" (current-process-id) " " params)
 	      (apply print params)
 	      )))))
 
@@ -63,6 +71,7 @@
 	  (let ((res (format#format #f "INFO: (~2d) ~a" n (apply conc params))))
 	    (if *logging*
 		(db:log-event res)
+		;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
 		(apply print "INFO: (" n ") " params) ;; res)
 		))))))
 

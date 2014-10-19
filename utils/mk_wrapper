@@ -2,15 +2,25 @@
 
 prefix=$1
 cmd=$2
+target=$3
 
-echo "#!/bin/bash"
 if [ "$LD_LIBRARY_PATH" != "" ];then
+  cfgfile="$prefix/bin/.$(lsb_release -sr)/cfg.sh"
   echo "INFO: Using LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >&2
-  echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+( cat << __EOF
+if [ "\$LD_LIBRARY_PATH" != "" ];then
+  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH
+else
+  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+fi
+__EOF
+) > $cfgfile
+  echo 
 else
   echo "INFO: LD_LIBRARY_PATH not set" >&2
 fi
 
-fullcmd="exec $prefix/bin/$cmd"
+echo "#!/bin/bash" > $target
+echo "source $prefix/bin/.\$(lsb_release -sr)/cfg.sh" >> $target
+echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 
-echo "$fullcmd \"\$@\""

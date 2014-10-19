@@ -1,0 +1,4 @@
+(define hostname (get-host-name))
+
+(expect:required in "LogFileBody" > 0 (conc "Hostname matches " hostname) (regexp (conc "^" hostname "$")))
+

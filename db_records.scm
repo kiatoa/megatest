@@ -1,3 +1,66 @@
+;;======================================================================
+;; dbstruct
+;;======================================================================
+
+;;
+;; -path-|-megatest.db
+;;       |-db-|-main.db
+;;            |-monitor.db
+;;            |-sdb.db
+;;            |-fdb.db
+;;            |-1.db
+;;            |-<N>.db
+;;
+;;
+;; Accessors for a dbstruct
+;;
+
+(define-inline (dbr:dbstruct-get-main    vec)    (vector-ref  vec 0))
+(define-inline (dbr:dbstruct-get-strdb   vec)    (vector-ref  vec 1))
+(define-inline (dbr:dbstruct-get-path    vec)    (vector-ref  vec 2))
+(define-inline (dbr:dbstruct-get-local   vec)    (vector-ref  vec 3))
+(define-inline (dbr:dbstruct-get-rundb   vec)    (vector-ref  vec 4))
+(define-inline (dbr:dbstruct-get-inmem   vec)    (vector-ref  vec 5))
+(define-inline (dbr:dbstruct-get-mtime   vec)    (vector-ref  vec 6))
+(define-inline (dbr:dbstruct-get-rtime   vec)    (vector-ref  vec 7))
+(define-inline (dbr:dbstruct-get-stime   vec)    (vector-ref  vec 8))
+(define-inline (dbr:dbstruct-get-inuse   vec)    (vector-ref  vec 9))
+(define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10))
+(define-inline (dbr:dbstruct-get-locdbs  vec)    (vector-ref  vec 11))
+(define-inline (dbr:dbstruct-get-olddb   vec)    (vector-ref  vec 12))
+;; (define-inline (dbr:dbstruct-get-run-id  vec)    (vector-ref  vec 13))
+
+(define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
+(define-inline (dbr:dbstruct-set-strdb!  vec val)(vector-set! vec 1 val))
+(define-inline (dbr:dbstruct-set-path!   vec val)(vector-set! vec 2 val))
+(define-inline (dbr:dbstruct-set-local!  vec val)(vector-set! vec 3 val))
+(define-inline (dbr:dbstruct-set-rundb!  vec val)(vector-set! vec 4 val))
+(define-inline (dbr:dbstruct-set-inmem!  vec val)(vector-set! vec 5 val))
+(define-inline (dbr:dbstruct-set-mtime!  vec val)(vector-set! vec 6 val))
+(define-inline (dbr:dbstruct-set-rtime!  vec val)(vector-set! vec 7 val))
+(define-inline (dbr:dbstruct-set-stime!  vec val)(vector-set! vec 8 val))
+(define-inline (dbr:dbstruct-set-inuse!  vec val)(vector-set! vec 9 val))
+(define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
+(define-inline (dbr:dbstruct-set-locdbs! vec val)(vector-set! vec 11 val))
+(define-inline (dbr:dbstruct-set-olddb!  vec val)(vector-set! vec 12 val))
+; (define-inline (dbr:dbstruct-set-run-id! vec val)(vector-set! vec 13 val))
+
+;; constructor for dbstruct
+;;
+(define (make-dbr:dbstruct #!key (path #f)(local #f))
+  (let ((v (make-vector 14 #f)))
+    (dbr:dbstruct-set-path! v path)
+    (dbr:dbstruct-set-local! v local)
+    (dbr:dbstruct-set-locdbs! v (make-hash-table))
+    v))
+
+(define (dbr:dbstruct-get-localdb v run-id)
+  (hash-table-ref/default (dbr:dbstruct-get-locdbs v) run-id #f))
+
+(define (dbr:dbstruct-set-localdb! v run-id db)
+  (hash-table-set! (dbr:dbstruct-get-locdbs v) run-id db))
+
+
 (define (make-db:test)(make-vector 20))
 (define-inline (db:test-get-id           vec) (vector-ref vec 0))
 (define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
@@ -9,6 +72,7 @@
 (define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
 (define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
 (define-inline (db:test-get-uname        vec) (vector-ref vec 9))
+;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
 (define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
 (define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
 (define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
@@ -30,9 +94,13 @@
 (define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
 (define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
 
-;; get rows and header from 
-(define-inline (db:get-header vec)(vector-ref vec 0))
-(define-inline (db:get-rows   vec)(vector-ref vec 1))
+;; Test record utility functions
+
+;; Is a test a toplevel?
+;;
+(define (db:test-get-is-toplevel vec)
+  (and (equal? (db:test-get-item-path vec) "")      ;; test is not an item
+       (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
 
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
 ;;
@@ -129,9 +197,6 @@
 (define-inline (tdb:step-stable-set-end!       vec val)(vector-set! vec 2 val))
 (define-inline (tdb:step-stable-set-status!    vec val)(vector-set! vec 3 val))
 (define-inline (tdb:step-stable-set-runtime!   vec val)(vector-set! vec 4 val))
-
-;; use this one for db-get-run-info
-(define-inline (db:get-row    vec)(vector-ref vec 1))
 
 ;; The data structure for handing off requests via wire
 (define (make-cdb:packet)(make-vector 6))

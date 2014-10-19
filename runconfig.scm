@@ -13,8 +13,7 @@
 (define (setup-env-defaults fname run-id already-seen keyvals #!key (environ-patt #f)(change-env #t))
   (let* ((keys    (map car keyvals))
 	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) (map cadr keyvals)) "/")
-		      (or (args:get-arg "-reqtarg") 
-			  (args:get-arg "-target")
+		      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")
 			  (begin
 			    (debug:print 0 "ERROR: setup-env-defaults called with no run-id or -target or -reqtarg")
@@ -31,7 +30,7 @@
     (if change-env
 	(for-each ;; NB// This can be simplified with new content of keyvals having all that is needed.
 	 (lambda (keyval)
-	   (setenv (car keyval)(cadr keyval)))
+	   (safe-setenv (car keyval)(cadr keyval)))
 	 keyvals))
 	
     (for-each 
@@ -45,7 +44,7 @@
 		(if (and (string? envvar)
 			 (string? val)
 			 change-env)
-		    (setenv envvar val))
+		    (safe-setenv envvar val))
 		(hash-table-set! finaldat envvar val)))
 	      (map car section-dat)))))
      sections)
@@ -62,8 +61,7 @@
 (define (set-run-config-vars run-id keyvals targ-from-db)
   (push-directory *toppath*) ;; the push/pop doesn't appear to do anything ...
   (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
-	(targ       (or (args:get-arg "-target")
-			(args:get-arg "-reqtarg")
+	(targ       (or (common:args-get-target)
 			targ-from-db
 			(get-environment-variable "MT_TARGET"))))
     (pop-directory)

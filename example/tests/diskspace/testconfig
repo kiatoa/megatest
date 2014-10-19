@@ -1,0 +1,12 @@
+# Add steps here. Format is "stepname script"
+[ezsteps]
+hostname  hostname
+diskspace diskspace.sh
+
+[requirements]
+waiton ping
+mode itemwait
+
+# Iteration for your tests are controlled by the items section
+[items]
+TARGETHOST [system refdb getrownames $CFG_TYPE machines]

@@ -10,7 +10,7 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
+(use srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest directory-utils)
 ;; (use zmq)
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars)
@@ -22,6 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
 (declare (uses http-transport))
+(declare (uses launch))
 ;; (declare (uses zmq-transport))
 (declare (uses daemon))
 
@@ -44,21 +45,11 @@
 ;;
 
 ;; all routes though here end in exit ...
-(define (server:launch transport)
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
-	    (exit))))
-  (debug:print-info 2 "Starting server using " transport " transport")
-  (set! *transport-type* transport)
-  (case transport
-    ((fs)   (exit)) ;; there is no "fs" server transport
-    ((http) (http-transport:launch))
-    ((zmq)  (zmq-transport:launch))
-    (else
-     (debug:print "WARNING: unrecognised transport " transport)
-     (exit))))
+;;
+;; start_server
+;;
+(define (server:launch run-id)
+  (http-transport:launch run-id))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T
@@ -67,27 +58,6 @@
 ;; We don't want to flush the queue if it was just flushed
 (define *server:last-write-flush* (current-milliseconds))
 
-;; Flush the queue every third of a second. Can we assume that setup-for-run 
-;; has already been done?
-;; (define (server:write-queue-handler)
-;;   (if (setup-for-run)
-;;       (let ((db (open-db)))
-;; 	(let loop ()
-;; 	  (let ((last-write-flush-time #f))
-;; 	    (mutex-lock! *incoming-mutex*)
-;; 	    (set! last-write-flush-time *server:last-write-flush*)
-;; 	    (mutex-unlock! *incoming-mutex*)
-;; 	    (if (> (- (current-milliseconds) last-write-flush-time) 10)
-;; 		(begin
-;; 		  (mutex-lock! *db:process-queue-mutex*)
-;; 		  (db:process-cached-writes db)
-;; 		  (mutex-unlock! *db:process-queue-mutex*)
-;; 		  (thread-sleep! 0.005))))
-;; 	  (loop)))
-;;       (begin
-;; 	(debug:print 0 "ERROR: failed to setup for Megatest in server:write-queue-handler")
-;; 	(exit 1))))
-    
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
 ;;======================================================================
@@ -105,43 +75,121 @@
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
 (define (server:reply return-addr query-sig success/fail result)
-  (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
-  ;; (send-message pubsock target send-more: #t)
-  ;; (send-message pubsock 
-  (case *transport-type*
-    ((fs) result)
-    ((http)(db:obj->string (vector success/fail query-sig result)))
-    ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
-       (send-message pub-socket return-addr send-more: #t)
-       (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
-    (else 
-     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
-     result)))
+  (db:obj->string (vector success/fail query-sig result)))
 
-(define (server:ensure-running)
-  (let loop ((servers  (open-run-close tasks:get-best-server tasks:open-db))
-	     (trycount 0))
-    (if (or (not servers)
-	    (null? servers))
+;; Given a run id start a server process    ### NOTE ### > file 2>&1 
+;; if the run-id is zero and the target-host is set 
+;; try running on that host
+;;
+(define  (server:run run-id)
+  (let* ((curr-host   (get-host-name))
+	 (curr-ip     (server:get-best-guess-address curr-host))
+	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (logfile     (conc *toppath* "/logs/" run-id ".log"))
+	 (cmdln (conc (common:get-megatest-exe)
+		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+									      (conc " -daemonize -log " logfile)
+									      "")
+		      " -debug 4 "))) ;; (conc " >> " logfile " 2>&1 &")))))
+    (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
+    (push-directory *toppath*)
+    (if (not (directory-exists? "logs"))(create-directory "logs"))
+    ;; host.domain.tld match host?
+    (if (and target-host 
+	     ;; look at target host, is it host.domain.tld or ip address and does it 
+	     ;; match current ip or hostname
+	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
+	     (not (equal? curr-ip target-host)))
 	(begin
-	  (if (even? trycount) ;; just do the server start every other time through this loop (every 8 seconds)
-	      (let ((cmdln (conc (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest")
-				 " -server - -daemonize")))
-		(debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
-		;; (server:launch (string->symbol (args:get-arg "-transport" "http"))))
-		;; no need to use fork, no need to do the list-servers trick. Just start the damn server, it will exit on it's own
-		;; if there is an existing server
-		(system cmdln)
-		(thread-sleep! 3)
-		;; (process-run (car (argv)) (list "-server" "-" "-daemonize" "-transport" (args:get-arg "-transport" "http")))
-		)
+	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
+	  (setenv "TARGETHOST" target-host)))
+    (setenv "TARGETHOST_LOGF" logfile)
+    (system (conc "nbfake " cmdln))
+    ;; (system cmdln)
+    (pop-directory)))
+
+;; kind start up of servers, wait 40 seconds before allowing another server for a given
+;; run-id to be launched
+(define (server:kind-run run-id)
+  (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
+    (if (or (not last-run-time)
+	    (> (- (current-seconds) last-run-time) 40))
+	(begin
+	  (server:run run-id)
+	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
+
+;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
+;; 
+(define (server:try-running run-id)
+  (if (eq? run-id 0)
+      (server:run run-id)
+      (rmt:start-server run-id)))
+
+(define (server:check-if-running run-id)
+  (let loop ((server (tasks:get-server (tasks:get-db) run-id))
+	     (trycount 0))
+    (if server
+	;; note: client:start will set *runremote*. this needs to be changed
+	;;       also, client:start will login to the server, also need to change that.
+	;;
+	;; client:start returns #t if login was successful.
+	;;
+	(let ((res (server:ping-server run-id 
+				       (tasks:hostinfo-get-interface server)
+				       (tasks:hostinfo-get-port      server))))
+	  ;; if the server didn't respond we must remove the record
+	  (if res
+	      #t
 	      (begin
-		(debug:print-info 0 "Waiting for server to start")
-		(thread-sleep! 4)))
-	  (if (< trycount 10)
-	      (loop (open-run-close tasks:get-best-server tasks:open-db) 
-		    (+ trycount 1))
-	      (debug:print 0 "WARNING: Couldn't start or find a server.")))
-	(debug:print 2 "INFO: Server(s) running " servers)
-	)))
+		(debug:print-info 0 "server at " server " not responding, removing record")
+		(tasks:server-force-clean-running-records-for-run-id (tasks:get-db) run-id 
+				" server:check-if-running")
+		res)))
+	#f)))
+
+;; called in megatest.scm, host-port is string hostname:port
+;;
+(define (server:ping run-id host:port)
+  (let* ((host-port (let ((slst (string-split   host:port ":")))
+		      (if (eq? (length slst) 2)
+			  (list (car slst)(string->number (cadr slst)))
+			  #f)))
+	 (toppath       (launch:setup-for-run))
+	 (server-db-dat (if (not host-port)(tasks:get-server (tasks:get-db) run-id) #f)))
+    (if (not run-id)
+	  (begin
+	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (print "ERROR: No run-id")
+	    (exit 1))
+	  (if (and (not host-port)
+		   (not server-db-dat))
+	      (begin
+		(print "ERROR: bad host:port")
+		(exit 1))
+	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
+		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
+		     (server-dat (http-transport:client-connect iface port))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		(if (and (list? login-res)
+			 (car login-res))
+		    (begin
+		      (print "LOGIN_OK")
+		      (exit 0))
+		    (begin
+		      (print "LOGIN_FAILED")
+		      (exit 1))))))))
+
+;; run ping in separate process, safest way in some cases
+;;
+(define (server:ping-server run-id iface port)
+  (with-input-from-pipe 
+   (conc (common:get-megatest-exe) " -run-id " run-id " -ping " (conc iface ":" port))
+   (lambda ()
+     (let loop ((inl (read-line))
+		(res "NOREPLY"))
+       (if (eof-object? inl)
+	   (case (string->symbol res)
+	     ((NOREPLY)  #f)
+	     ((LOGIN_OK) #t)
+	     (else       #f))
+	   (loop (read-line) inl))))))

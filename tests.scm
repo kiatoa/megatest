@@ -23,6 +23,7 @@
 (declare (uses common))
 (declare (uses items))
 (declare (uses runconfig))
+;; (declare (uses sdb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -32,8 +33,7 @@
 
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all)
-  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
-				   (tests:get-tests-search-path *configdat*))))
+  (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
@@ -69,8 +69,8 @@
     (let* ((notpatt  (equal? (substring-index "~" patt) 0))
 	   (newpatt  (if notpatt (substring patt 1) patt))
 	   (finpatt  (if like
-			(string-substitute (regexp "%") ".*" newpatt)
-			(string-substitute (regexp "\\*") ".*" newpatt)))
+			(string-substitute (regexp "%") ".*" newpatt #f)
+			(string-substitute (regexp "\\*") ".*" newpatt #f)))
 	   (res      #f))
       ;; (print "tests:glob-like-match => notpatt: " notpatt ", newpatt: " newpatt ", finpatt: " finpatt)
       (set! res (string-match (regexp finpatt (if like #t #f)) str))
@@ -135,8 +135,10 @@
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
 	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
-	 (test-rundir (db:test-get-rundir testdat))
-	 (prev-rundir (db:test-get-rundir prev-testdat))
+	 (test-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir testdat)) ;; )
+	 (prev-rundir ;; (sdb:qry 'passstr 
+	  (db:test-get-rundir prev-testdat)) ;; )
 	 (waivers     (configf:section-vars testconfig "waivers"))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
@@ -192,17 +194,16 @@
 	    (pop-directory)
 	    result)))))
 
-(define (tests:test-force-state-status! test-id state status)
-  (rmt:test-set-status-state test-id status state #f)
-  (mt:process-triggers test-id state status))
+(define (tests:test-force-state-status! run-id test-id state status)
+  (rmt:test-set-status-state run-id test-id status state #f)
+  (mt:process-triggers run-id test-id state status))
 
 ;; Do not rpc this one, do the underlying calls!!!
-(define (tests:test-set-status! test-id state status comment dat #!key (work-area #f))
+(define (tests:test-set-status! run-id test-id state status comment dat #!key (work-area #f))
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
-	 (testdat     (rmt:get-test-info-by-id test-id))
-	 (run-id      (db:test-get-run_id testdat))
-	 (test-name   (db:test-get-testname   testdat))
+	 (testdat     (rmt:get-test-info-by-id run-id test-id))
+	 (test-name   (db:test-get-testname  testdat))
 	 (item-path   (db:test-get-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
@@ -237,13 +238,13 @@
     ;; update the primary record IF state AND status are defined
     (if (and state status)
 	(begin
-	  (rmt:test-set-status-state test-id real-status state (if waived waived comment))
-	  (mt:process-triggers test-id state real-status)))
+	  (rmt:test-set-status-state run-id test-id real-status state (if waived waived comment))
+	  (mt:process-triggers run-id test-id state real-status)))
     
     ;; if status is "AUTO" then call rollup (note, this one modifies data in test
     ;; run area, it does remote calls under the hood.
     (if (and test-id state status (equal? status "AUTO")) 
-	(rmt:test-data-rollup test-id status))
+	(rmt:test-data-rollup run-id test-id status))
 
     ;; add metadata (need to do this way to avoid SQL injection issues)
 
@@ -277,8 +278,8 @@
 			   units    ","
 			   dcomment ",," ;; extra comma for status
 			   type     )))
-	    ;; This was run remote, don't think that makes sense.
-	    (db:csv->test-data #f test-id
+	    ;; This was run remote, don't think that makes sense. Perhaps not, but that is the easiest path for the moment.
+	    (rmt:csv->test-data run-id test-id
 				dat))))
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
@@ -289,10 +290,10 @@
 		 (string-match (regexp "\\S+") comment))
 	    waived)
 	(let ((cmt  (if waived waived comment)))
-	  (rmt:general-call 'set-test-comment cmt test-id)))))
+	  (rmt:general-call 'set-test-comment run-id cmt test-id)))))
 
 (define (tests:test-set-toplog! run-id test-name logf) 
-  (rmt:general-call 'tests:test-set-toplog logf run-id test-name))
+  (rmt:general-call 'tests:test-set-toplog run-id logf run-id test-name))
 
 (define (tests:summarize-items run-id test-id test-name force)
   ;; if not force then only update the record if one of these is true:
@@ -310,7 +311,7 @@
 	  (debug:print 4 "Found path: " path)
 	  (change-directory path))
 	;; (set! outputfilename (conc path "/" outputfilename)))
-	(print "No such path: " path))
+	(debug:print 0 "ERROR: summarize-items for run-id=" run-id ", test-name=" test-name ", no such path: " path))
     (debug:print 4 "summarize-items with logf " logf ", outputfilename " outputfilename " and force " force)
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
@@ -351,7 +352,12 @@
 							 "&nbsp;"
 							 comment) "</td>"
 							 "</tr>"))))
-		       testdat)
+		       (if (list? testdat)
+			   testdat
+			   (begin
+			     (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
+			     '())))
+			   
 		      (print "<table><tr><td valign=\"top\">")
 		      ;; Print out stats for status
 		      (set! tot 0)
@@ -385,6 +391,29 @@
 		  (tests:test-set-toplog! run-id test-name outputfilename)
 		  )))))))
 
+;; MUST BE CALLED local!
+;;
+(define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
+  ;; BUG: Move the values derived from args to parameters and push to megatest.scm
+  (let* ((testpatt   (if (args:get-arg "-testpatt")(args:get-arg "-testpatt") "%"))
+	 (statepatt  (if (args:get-arg ":state")   (args:get-arg ":state")    "%"))
+	 (statuspatt (if (args:get-arg ":status")  (args:get-arg ":status")   "%"))
+	 (runname    (if (args:get-arg ":runname") (args:get-arg ":runname")  "%"))
+	 (paths-from-db (rmt:test-get-paths-matching-keynames-target-new keynames target res
+					testpatt
+					statepatt
+					statuspatt
+					runname)))
+    (if fnamepatt
+	(apply append 
+	       (map (lambda (p)
+		      (if (directory-exists? p)
+			  (glob (conc p "/" fnamepatt))
+			  '()))
+		    paths-from-db))
+	paths-from-db)))
+
+			      
 ;;======================================================================
 ;; Gather data from test/task specifications
 ;;======================================================================
@@ -451,7 +480,7 @@
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go
-		     #f))))))))
+		     (string-compare3 a b)))))))))
 
 ;; for each test:
 ;;   
@@ -466,7 +495,7 @@
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
 	      (test-id     (rmt:get-test-id run-id test-name item-path))
-	      (tdat        (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -483,7 +512,7 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
-				      (wtdat          (rmt:get-testinfo-state-status test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
@@ -589,8 +618,8 @@
 
 ;; teststep-set-status! used to be here
 
-(define (test-get-kill-request test-id) ;; run-id test-name itemdat)
-  (let* ((testdat   (rmt:get-test-info-by-id test-id)))
+(define (test-get-kill-request run-id test-id) ;; run-id test-name itemdat)
+  (let* ((testdat   (rmt:get-test-info-by-id run-id test-id)))
     (and testdat
 	 (equal? (test:get-state testdat) "KILLREQ"))))
 
@@ -605,26 +634,65 @@
 	res))
   0)
 
-(define (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)
-  (rmt:general-call 'update-cpuload-diskfree cpuload diskfree test-id)
+(define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
+  (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id)
   (if minutes 
-      (rmt:general-call 'update-run-duration minutes test-id))
+      (rmt:general-call 'update-run-duration run-id minutes test-id))
   (if (and uname hostname)
-      (rmt:general-call 'update-uname-host uname hostname test-id)))
+      (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
-(define (tests:set-full-meta-info test-id run-id minutes work-area)
-  (let* ((num-records 0)
-	 (cpuload  (get-cpu-load))
+;; This one is for running with no db access (i.e. via rmt: internally)
+(define (tests:set-full-meta-info db test-id run-id minutes work-area remtries)
+;; (define (tests:set-full-meta-info test-id run-id minutes work-area)
+;;  (let ((remtries 10))
+  (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-    (tests:update-central-meta-info test-id cpuload diskfree minutes uname hostname)))
-	  
-(define (tests:set-partial-meta-info test-id run-id minutes work-area)
+    ;; (handle-exceptions
+    ;;  exn
+    ;;  (if (> remtries 0)
+    ;;      (begin
+    ;;        (set! remtries (- remtries 1))
+    ;;        (thread-sleep! 10)
+    ;;        (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+    ;;      (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+    ;;        (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
+    ;;        (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+    ;;        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+    ;;        (print "exn=" (condition->list exn))
+    ;;        (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+    ;;        (print-call-chain)))
+    ;;  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
+    ;;         (cpuload  (get-cpu-load))
+    ;;         (diskfree (get-df (current-directory)))
+    ;;         (uname    (get-uname "-srvpio"))
+    ;;         (hostname (get-host-name)))
+    ;;    ;(tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+    ;;    (tests:update-central-meta-info  run-id test-id cpuload diskfree minutes uname hostname)
+    (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
+    
+;; (define (tests:set-partial-meta-info test-id run-id minutes work-area)
+(define (tests:set-partial-meta-info test-id run-id minutes work-area remtries)
   (let* ((cpuload  (get-cpu-load))
-	 (diskfree (get-df (current-directory))))
-    (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)))
+	 (diskfree (get-df (current-directory)))
+	 (remtries 10))
+    (handle-exceptions
+     exn
+     (if (> remtries 0)
+	 (begin
+	   (set! remtries (- remtries 1))
+	   (thread-sleep! 10)
+	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	   (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (print "exn=" (condition->list exn))
+	   (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	   (print-call-chain)))
+     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+  )))
 	 
 ;;======================================================================
 ;; A R C H I V I N G

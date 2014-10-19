@@ -20,6 +20,7 @@
 (declare (uses server))
 (declare (uses runs))
 (declare (uses rmt))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -38,7 +39,7 @@
 ;; get runs by list of criteria
 ;; register a test run with the db
 ;;
-;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-row runinfo))
+;; Use: (db-get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
 (define (mt:get-runs-by-patt keys runnamepatt targpatt)
@@ -83,7 +84,7 @@
 		  limit))
 	  full-list))))
 
-(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+(define (mt:lazy-get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f) )
   (let* ((key    (list run-id waitons ref-item-path mode))
 	 (res    (hash-table-ref/default *pre-reqs-met-cache* key #f))
 	 (useres (let ((last-time (if (vector? res) (vector-ref res 0) #f)))
@@ -94,13 +95,14 @@
 	(let ((result (vector-ref res 1)))
 	  (debug:print 4 "Using lazy value res: " result)
 	  result)
-	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode)))
+	(let ((newres (rmt:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap)))
+;;	(let ((newres (db:get-prereqs-not-met run-id waitons ref-item-path mode: mode itemmap: itemmap)))
 	  (hash-table-set! *pre-reqs-met-cache* key (vector (current-seconds) newres))
 	  newres))))
 
+(define (mt:get-run-stats dbstruct run-id)
 ;;  Get run stats from local access, move this ... but where?
-(define (mt:get-run-stats)
-  (db:get-run-stats #f))
+  (db:get-run-stats dbstruct run-id))
 
 (define (mt:discard-blocked-tests run-id failed-test tests test-records)
   (if (null? tests)
@@ -110,7 +112,8 @@
 	(let loop ((testn (car tests))
 		   (remt  (cdr tests))
 		   (res   '()))
-	  (let ((waitons (vector-ref (hash-table-ref/default test-records testn (vector #f #f '())) 2)))
+	  (let* ((test-dat (hash-table-ref/default test-records testn (vector #f #f '())))
+		 (waitons  (vector-ref test-dat 2)))
 	    ;; (print "mt:discard-blocked-tests run-id: " run-id " failed-test: " failed-test " testn: " testn " with waitons: " waitons)
 	    (if (null? remt)
 		(let ((new-res (reverse res)))
@@ -119,21 +122,25 @@
 		(loop (car remt)
 		      (cdr remt)
 		      (if (member failed-test waitons)
-			  res
+			  (begin
+			    (debug:print 0 "Discarding test " testn "(" test-dat ") due to " failed-test)
+			    res)
 			  (cons testn res)))))))))
 
 ;;======================================================================
 ;;  T R I G G E R S
 ;;======================================================================
 
-(define (mt:process-triggers test-id newstate newstatus)
-  (let* ((test-dat      (rmt:get-test-info-by-id test-id))
-	 (test-rundir   (db:test-get-rundir test-dat))
+(define (mt:process-triggers run-id test-id newstate newstatus)
+  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
+	 (test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
+	  (db:test-get-rundir test-dat)) ;; ) ;; )
 	 (test-name     (db:test-get-testname test-dat))
 	 (tconfig       #f)
 	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
 	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
-    (if (and (file-exists? test-rundir)
+    (if (and test-rundir   ;; #f means no dir set yet
+	     (file-exists? test-rundir)
 	     (directory? test-rundir))
 	(begin
 	  (push-directory test-rundir)
@@ -159,26 +166,22 @@
 ;;======================================================================
 
 ;; speed up for common cases with a little logic
-(define (mt:test-set-state-status-by-id test-id newstate newstatus newcomment)
+(define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
   (cond
    ((and newstate newstatus newcomment)
-    (rmt:general-call 'state-status-msg newstate newstatus newcomment test-id))
+    (rmt:general-call 'state-status-msg run-id newstate newstatus newcomment test-id))
    ((and newstate newstatus)
-    (rmt:general-call 'state-status newstate newstatus test-id))
+    (rmt:general-call 'state-status run-id newstate newstatus test-id))
    (else
-    (if newstate   (rmt:general-call 'set-test-state   newstate test-id))
-    (if newstatus  (rmt:general-call 'set-test-status  newstatus test-id))
-    (if newcomment (rmt:general-call 'set-test-comment newcomment test-id))))
-   (mt:process-triggers test-id newstate newstatus)
+    (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
+    (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
+    (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
+   (mt:process-triggers run-id test-id newstate newstatus)
    #t)
 
-(define (mt:lazy-get-test-info-by-id test-id)
-  (let* ((tdat (hash-table-ref/default *test-info* test-id #f)))
-    (if (and tdat 
-	     (< (current-seconds)(+ (vector-ref tdat 0) 10)))
-	(vector-ref tdat 1)
-	;; no need to update *test-info* as that is done in cdb:get-test-info-by-id
-	(cdb:get-test-info-by-id *runremote* test-id))))
+(define (mt:test-set-state-status-by-testname run-id test-name item-path new-state new-status new-comment)
+  (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
+    (mt:test-set-state-status-by-id test-id new-state new-status new-comment)))
 
 (define (mt:lazy-read-test-config test-name)
   (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))
@@ -187,12 +190,19 @@
 	(let ((test-dirs (tests:get-tests-search-path *configdat*)))
 	  (let loop ((hed (car test-dirs))
 		     (tal (cdr test-dirs)))
+	    ;; Setting MT_LINKTREE here is almost certainly unnecessary. 
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
 	      (if (and (file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
-		  (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
-		    (hash-table-set! *testconfigs* test-name newtcfg)
-		    newtcfg)
+		  (let ((link-tree-path (configf:lookup *configdat* "setup" "linktree"))
+			(old-link-tree  (get-environment-variable "MT_LINKTREE")))
+		    (if link-tree-path (setenv "MT_LINKTREE" link-tree-path))
+		    (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
+		      (hash-table-set! *testconfigs* test-name newtcfg)
+		      (if old-link-tree 
+			  (setenv "MT_LINKTREE" old-link-tree)
+			  (unsetenv "MT_LINKTREE"))
+		      newtcfg))
 		  (if (null? tal)
 		      (begin
 			(debug:print 0 "ERROR: No readable testconfig found for " test-name)

@@ -129,7 +129,7 @@
 ;;  3. Add extraction of filters to synchash calls
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
-(define (run-update keys data runname keypatts testpatt states statuses mode window-id)
+(define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
   (let* (;; count and offset => #f so not used
 	 ;; the synchash calls modify the "data" hash
 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
@@ -141,7 +141,7 @@
 
  	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
-				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data test-ids)
+				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
 				   '()))
 
 	 ;; Now can calculate the run-ids
@@ -231,6 +231,7 @@
 				     (test-path (append run-path (if (equal? itempath "") 
 								     (list testname)
 								     (list testname itempath)))))
+				(print "INFONOTE: run-path: " run-path)
 				(tree:add-node (dboard:data-get-tests-tree *data*) "Runs" 
 					       test-path
 					       userdata: (conc "test-id: " test-id))
@@ -360,28 +361,28 @@
 			 #:alignment1 "ALEFT"
 			 #:expand "YES" ;; "HORIZONTAL"
 			 #:numcol 1
-			 #:numlin 3
+			 #:numlin 2
 			 #:numcol-visible 1
-			 #:numlin-visible 3)))
-    (iup:attribute-set! general-matrix "WIDTH1" "200")
+			 #:numlin-visible 2)))
+    (iup:attribute-set! general-matrix "WIDTH1" "150")
     (iup:attribute-set! general-matrix "0:1" "About this Megatest area") 
     ;; User (this is not always obvious - it is common to run as a different user
     (iup:attribute-set! general-matrix "1:0" "User")
     (iup:attribute-set! general-matrix "1:1" (current-user-name))
     ;; Megatest area
-    (iup:attribute-set! general-matrix "2:0" "Area")
-    (iup:attribute-set! general-matrix "2:1" *toppath*)
+    ;; (iup:attribute-set! general-matrix "2:0" "Area")
+    ;; (iup:attribute-set! general-matrix "2:1" *toppath*)
     ;; Megatest version
-    (iup:attribute-set! general-matrix "3:0" "Version")
-    (iup:attribute-set! general-matrix "3:1" megatest-version)
+    (iup:attribute-set! general-matrix "2:0" "Version")
+    (iup:attribute-set! general-matrix "2:1" (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
 
     general-matrix))
 
-(define (dcommon:run-stats db)
+(define (dcommon:run-stats dbstruct)
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (db:get-run-stats db))
+			 (let* ((run-stats    (db:get-run-stats dbstruct))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))
@@ -447,11 +448,11 @@
 	 (servers-matrix (iup:matrix #:expand "YES"
 				     #:numcol 7
 				     #:numcol-visible 7
-				     #:numlin-visible 3
+				     #:numlin-visible 5
 				     ))
-	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "InPort" "State" "Transport"))
+	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
-			   (let ((servers (open-run-close tasks:get-all-servers tasks:open-db)))
+			   (let ((servers (tasks:get-all-servers (tasks:get-db))))
 			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 			     ;; (set! colnum 0)
 			     ;; (for-each (lambda (colname)
@@ -468,21 +469,23 @@
 						   (vector-ref server 1) ;; Pid
 						   (vector-ref server 2) ;; Hostname
 						   (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
-						   (vector-ref server 5) ;; Pubport
+						   (seconds->hr-min-sec (- (current-seconds)(vector-ref server 6)))
+						   ;; (vector-ref server 5) ;; Pubport
 						   ;; (vector-ref server 10) ;; Last beat
 						   ;; (vector-ref server 6) ;; Start time
 						   ;; (vector-ref server 7) ;; Priority
 						   ;; (vector-ref server 8) ;; State
-						   (if (< (vector-ref server 10) 20) ;; Status (Please redo this properly!)
-						       "alive"
-						       "dead")
-						   (vector-ref server 11)  ;; Transport
+						   (vector-ref server 8) ;; State
+						   (vector-ref server 12)  ;; RunId
 						   )))
 				  (for-each (lambda (val)
-					      ;; (print "rownum: " rownum " colnum: " colnum " val: " val)
-					      (iup:attribute-set! servers-matrix (conc rownum ":" colnum) val)
-					      (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))
-					      (set! colnum (+ 1 colnum)))
+					      (let* ((row-col (conc rownum ":" colnum))
+						     (curr-val (iup:attribute servers-matrix row-col)))
+						(if (not (equal? (conc val) curr-val))
+						    (begin
+						      (iup:attribute-set! servers-matrix row-col val)
+						      (iup:attribute-set! servers-matrix "FITTOTEXT" (conc "C" colnum))))
+						(set! colnum (+ 1 colnum))))
 					    vals)
 				  (set! rownum (+ rownum 1)))
 				 (iup:attribute-set! servers-matrix "REDRAW" "ALL"))
@@ -495,35 +498,37 @@
 	      colnames)
     (set! dashboard:update-servers-table updater) 
     ;; (iup:attribute-set! servers-matrix "WIDTHDEF" "40")
-    (iup:hbox
-     (iup:vbox
-      (iup:button "Start"
-		  ;; #:size "50x"
-		  #:expand "YES"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -server - &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd))))
-      (iup:button "Stop"
-		  #:expand "YES"
-		  ;; #:size "50x"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -stop-server 0 &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd))))
-      (iup:button "Restart"
-		  #:expand "YES"
-		  ;; #:size "50x"
-		  #:action (lambda (obj)
-			     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
-					      "megatest -stop-server 0;megatest -server - &")))
-					      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
-			       (system cmd)))))
-      servers-matrix
-     )))
-  
+   ;;  (iup:hbox
+   ;;   (iup:vbox
+   ;;    (iup:button "Start"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:expand "YES"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -server - &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd))))
+   ;;    (iup:button "Stop"
+   ;;      	  #:expand "YES"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -stop-server 0 &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd))))
+   ;;    (iup:button "Restart"
+   ;;      	  #:expand "YES"
+   ;;      	  ;; #:size "50x"
+   ;;      	  #:action (lambda (obj)
+   ;;      		     (let ((cmd (conc ;; "xterm -geometry 180x20 -e \""
+   ;;      				      "megatest -stop-server 0;megatest -server - &")))
+   ;;      				      ;; ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+   ;;      		       (system cmd)))))
+   ;;    servers-matrix
+   ;;   )))
+    servers-matrix
+    ))
+
 ;; The main menu
 (define (dcommon:main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
@@ -543,4 +548,89 @@
 		       ;;  					     ;; #:y 'mouse
 		       ;;  )					     
 		       ))))
+
+;;======================================================================
+;; CANVAS STUFF FOR TESTS
+;;======================================================================
+
+(define (dcommon:draw-test cnv x y w h name selected)
+  (let* ((llx x)
+	 (lly y)
+	 (urx (+ x w))
+	 (ury (+ y h)))
+    (canvas-text! cnv (+ llx 5)(+ lly 5) name) ;; (conc testname " (" xtorig "," ytorig ")"))
+    (canvas-rectangle! cnv llx urx lly ury)
+    (if selected (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))))
+
+(define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
+      (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
+	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
+	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
+	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
+	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
+	     (boxw   90) ;; default, overriden by length estimate below
+	     (boxh   25)
+	     (gapx   20)
+	     (gapy   30)
+	     (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
+	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
+	(hash-table-set! tests-draw-state 'xtorig xtorig)
+	(hash-table-set! tests-draw-state 'ytorig ytorig)
+	(let ((longest-str   (if (null? sorted-testnames) "         " (car (sort sorted-testnames (lambda (a b)(>= (string-length a)(string-length b))))))))
+	  (let-values (((x-max y-max) (canvas-text-size cnv longest-str)))
+             (if (> x-max boxw)(set! boxw (+ 10 x-max)))))
+	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
+	(if (not (null? sorted-testnames))
+	    (let loop ((hed (car (reverse sorted-testnames)))
+		       (tal (cdr (reverse sorted-testnames)))
+		       (llx xtorig)
+		       (lly ytorig)
+		       (urx (+ xtorig boxw))
+		       (ury (+ ytorig boxh)))
+					; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
+	      (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	      ;; data used by mouse click calc. keep the wacky order for now.
+	      (hash-table-set! tests-hash hed  (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh)) 
+	      ;; (list llx lly boxw boxh)) ;; NB// Swap ury and lly
+	      (if (not (null? tal))
+		  ;; leave a column of space to the right to list items
+		  (let ((have-room 
+			 (if #t ;; put "auto" here where some form of auto rearanging can be done
+			     (> (* 3 (+ boxw gapx)) (- urx xtorig))
+			     (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
+		    (loop (car tal)
+			  (cdr tal)
+			  (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
+			  (if have-room lly (+ lly boxh gapy))
+			  (if have-room (+ urx boxw gapx) (+ xtorig boxw))
+			  (if have-room ury (+ ury boxh gapy)))))))))
+
+(define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
+  (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
+	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
+	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
+	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
+	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
+	 (xdelta (- (hash-table-ref tests-draw-state 'xtorig) xtorig))
+	 (ydelta (- (hash-table-ref tests-draw-state 'ytorig) ytorig))
+	 (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
+	 (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
+    (hash-table-set! tests-draw-state 'xtorig xtorig)
+    (hash-table-set! tests-draw-state 'ytorig ytorig)
+    (if (not (null? sorted-testnames))
+	(let loop ((hed (car (reverse sorted-testnames)))
+		   (tal (cdr (reverse sorted-testnames))))
+	  (let* ((tvals (hash-table-ref tests-hash hed))
+		 (llx   (+ xdelta (list-ref tvals 0)))
+		 (lly   (+ ydelta (list-ref tvals 4)))
+		 (boxw  (list-ref tvals 5))
+		 (boxh  (list-ref tvals 6))
+		 (urx   (+ llx boxw))
+		 (ury   (+ lly boxh)))
+	    (dcommon:draw-test cnv llx lly boxw boxh hed (hash-table-ref/default selected-tests hed #f))
+	    (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly) lly boxw boxh))
+	    (if (not (null? tal))
+		;; leave a column of space to the right to list items
+		(loop (car tal)
+		      (cdr tal))))))))
 

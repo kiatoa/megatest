@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml)
+(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3)
 (require-extension sqlite3 regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -25,6 +25,13 @@
 ;; (include "margs.scm")
 
 (define getenv get-environment-variable)
+(define (safe-setenv key val)
+  (if (and (string? val)(string? key))
+      (handle-exceptions
+       exn
+       (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)
+       (setenv key val))
+      (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" val)))
 
 (define home (getenv "HOME"))
 (define user (getenv "USER"))
@@ -39,14 +46,28 @@
 (define *test-meta-updated* (make-hash-table))
 (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
 (define *passnum*           0) ;; when running track calls to run-tests or similar
+(define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
+(define *alt-log-file* #f)  ;; used by -log
+(define *common:denoise*    (make-hash-table)) ;; for low noise printing
+
+;; DATABASE
+(define *dbstruct-db*  #f)
+(define *db-stats* (make-hash-table)) ;; hash of vectors < count duration-total >
+(define *db-stats-mutex*      (make-mutex))
+(define *db-sync-mutex*       (make-mutex))
+(define *db-multi-sync-mutex* (make-mutex))
+(define *db-local-sync*       (make-hash-table)) ;; used to record last touch of db
+(define *megatest-db*         #f)
+(define *last-db-access*      (current-seconds))  ;; update when db is accessed via server
+(define *db-write-access*     #t)
+(define *inmemdb*             #f)
+(define *task-db*             #f) ;; (vector db path-to-db)
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'fs)
-(define *megatest-db*       #f)
+(define *transport-type*    'http)
 (define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
-(define *runremote*         #f) ;; if set up for server communication this will hold <host port>
-(define *last-db-access*    (current-seconds))  ;; update when db is accessed via server
+(define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
 (define *client-non-blocking-mode* #f)
@@ -56,8 +77,8 @@
 (define *received-response* #f)
 (define *default-numtries*  10)
 (define *server-run*        #t)
-(define *db-write-access*   #t)
-(define *inmemdb*           #f)
+(define *run-id*            #f)
+(define *server-kind-run*   (make-hash-table))
 
 (define *target*            (make-hash-table)) ;; cache the target here; target is keyval1/keyval2/.../keyvalN
 (define *keys*              (make-hash-table)) ;; cache the keys here
@@ -92,6 +113,34 @@
   (set! *run-info-cache*     (make-hash-table))
   (set! *env-vars-by-run-id* (make-hash-table))
   (set! *test-id-cache*      (make-hash-table)))
+
+;; Generic string database (normalization of sorts)
+(define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
+;; Generic path database (normalization of sorts)
+(define *fdb* #f)
+
+;;======================================================================
+;; U S E F U L   S T U F F
+;;======================================================================
+
+(define (common:low-noise-print waitval . keys)
+  (let* ((key      (string-intersperse (map conc keys) "-" ))
+	 (lasttime (hash-table-ref/default *common:denoise* key 0))
+	 (currtime (current-seconds)))
+    (if (> (- currtime lasttime) waitval)
+	(begin
+	  (hash-table-set! *common:denoise* key currtime)
+	  #t)
+	#f)))
+
+(define (common:get-megatest-exe)
+  (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
+
+(define (common:read-encoded-string instr)
+  (handle-exceptions
+   exn
+   (read (open-input-string (base64:base64-decode instr)))
+   (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
@@ -202,16 +251,43 @@
       #t))
 
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
-(define (common:get-runconfig-targets)
+(define (common:get-runconfig-targets #!key (configf #f))
   (sort (map car (hash-table->alist
-		  (read-config "runconfigs.config"
-			       #f #t))) string<?))
+		  (or configf
+		      (read-config "runconfigs.config"
+			       #f #t))))
+	string<?))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
-(define (common:get-disks)
+(define (common:get-disks #!key (configf #f))
   (hash-table-ref/default 
-   (read-config "megatest.config" #f #t)
+   (or configf (read-config "megatest.config" #f #t))
    "disks" '("none" "")))
+
+;;======================================================================
+;; T A R G E T S
+;;======================================================================
+
+(define (common:args-get-target #!key (split #f))
+  (let* ((target  (if (args:get-arg "-reqtarg")
+		      (args:get-arg "-reqtarg")
+		      (if (args:get-arg "-target")
+			  (args:get-arg "-target")
+			  (getenv "MT_TARGET"))))
+	 (tlist   (if target (string-split target "/" #t) '()))
+	 (valid   (if target
+		      (and (not (null? tlist))
+			   (null? (filter string-null? tlist)))
+		      #f)))
+    (if valid
+	(if split
+	    tlist
+	    target)
+	(if target
+	    (begin
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\"")
+	      #f)
+	    #f))))
 
 ;;======================================================================
 ;; M I S C   L I S T S
@@ -319,17 +395,54 @@
     freespc))
   
 (define (get-cpu-load)
-  (let* ((load-res (cmd-run->list "uptime"))
-	 (load-rx  (regexp "load average:\\s+(\\d+)"))
-	 (cpu-load #f))
-    (for-each (lambda (l)
-		(let ((match (string-search load-rx l)))
-		  (if match
-		      (let ((newval (string->number (cadr match))))
-			(if (number? newval)
-			    (set! cpu-load newval))))))
-	      (car load-res))
-    cpu-load))
+  (car (common:get-cpu-load)))
+;;   (let* ((load-res (cmd-run->list "uptime"))
+;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
+;; 	 (cpu-load #f))
+;;     (for-each (lambda (l)
+;; 		(let ((match (string-search load-rx l)))
+;; 		  (if match
+;; 		      (let ((newval (string->number (cadr match))))
+;; 			(if (number? newval)
+;; 			    (set! cpu-load newval))))))
+;; 	      (car load-res))
+;;     cpu-load))
+
+;; get cpu load by reading from /proc/loadavg, return all three values
+;;
+(define (common:get-cpu-load)
+  (with-input-from-file "/proc/loadavg" 
+    (lambda ()(list (read)(read)(read)))))
+
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000))
+  (let* ((loadavg (common:get-cpu-load))
+	 (first   (car loadavg))
+	 (next    (cadr loadavg))
+	 (adjload (* maxload numcpus))
+	 (loadjmp (- first next)))
+    (cond
+     ((and (> first adjload)
+	   (> count 0))
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
+      (thread-sleep! waitdelay)
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
+     ((and (> loadjmp numcpus)
+	   (> count 0))
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
+      (thread-sleep! waitdelay)
+      (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
+
+(define (common:get-num-cpus)
+  (with-input-from-file "/proc/cpuinfo"
+    (lambda ()
+      (let loop ((numcpu 0)
+		 (inl    (read-line)))
+	(if (eof-object? inl)
+	    numcpu
+	    (loop (if (string-match "^processor\\s+:\\s+\\d+$" inl)
+		      (+ numcpu 1)
+		      numcpu)
+		  (read-line)))))))
 
 (define (get-uname . params)
   (let* ((uname-res (cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
@@ -338,24 +451,34 @@
 	"unknown"
 	(caar uname-res))))
 	      
-(define (save-environment-as-files fname #!key (ignorevars (list "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR")))
+(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF")))
   (let ((envvars (get-environment-variables))
-        (whitesp (regexp "[^a-zA-Z0-9_\\-:;,.\\/%$]")))
+        (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
        (lambda ()
-          (for-each (lambda (key)
-		      (if (not (member key ignorevars))
-			  (let* ((val (cdr key))
-				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-			    (print "setenv " (car key) " " sval))))
-		      envvars)))
+          (for-each (lambda (keyval)
+		      (let* ((key   (car keyval))
+			     (val   (cdr keyval))
+			     (delim (if (string-search whitesp val) 
+					"\""
+					"")))
+			(print (if (member key ignorevars)
+				   "# setenv "
+				   "setenv ")
+			       key " " delim val delim)))
+		    envvars)))
      (with-output-to-file (conc fname ".sh")
        (lambda ()
-          (for-each (lambda (key)
-		      (if (not (member key ignorevars))
-			  (let* ((val (cdr key))
-				 (sval (if (string-search whitesp val)(conc "\"" val "\"") val)))
-			    (print "export " (car key) "=" sval))))
+          (for-each (lambda (keyval)
+		      (let* ((key (car keyval))
+			     (val (cdr keyval))
+			     (delim (if (string-search whitesp val) 
+					"\""
+					"")))
+			(print (if (member key ignorevars)
+				   "# export "
+				   "export ")
+			       key "=" delim val delim)))
                     envvars)))))
 
 ;; set some env vars from an alist, return an alist with original values

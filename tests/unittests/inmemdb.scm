@@ -25,7 +25,7 @@
 (test #f #t                       (string? (car *runremote*)))
 (test #f '(#t "successful login") (rmt:login)) ;;  *runremote* *toppath* *my-client-signature*)))
 
-(define inmem (open-in-mem-db))
+(define inmem (db:open-inmem-db))
 
 (define (inmem-test t b)
   (test "inmem sync to"   t (db:sync-to *db* inmem))

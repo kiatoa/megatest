@@ -26,11 +26,27 @@
 (declare (uses common))
 (declare (uses db))
 (declare (uses gutils))
+(declare (uses rmt))
 (declare (uses ezsteps))
+;; (declare (uses sdb))
+;; (declare (uses filedb))
 
 (include "common_records.scm")
 (include "db_records.scm")
 (include "run_records.scm")
+
+;;======================================================================
+;; C O M M O N
+;;======================================================================
+
+(define (dtests:get-pre-command #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
+    (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
+
+(define (dtests:get-post-command #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
+    (or cfg-ovrd default-override ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
+
 
 (define (test-info-panel testdat store-label widgets)
   (iup:frame 
@@ -75,7 +91,14 @@
 			 (iup:label "TestComment                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (db:test-get-comment testdat)))
+			   (let ((newcomment (db:test-get-comment testdat)))
+			     (if *dashboard-comment-share-slot*
+				 (if (not (equal? (iup:attribute *dashboard-comment-share-slot* "VALUE")
+						  newcomment))
+				     (iup:attribute-set! *dashboard-comment-slot*
+							 "VALUE"
+							 newcomment)))
+			     newcomment)))
 	    (store-label "testid"
 			 (iup:label "TestId                             "
 				    #:expand "HORIZONTAL")
@@ -138,7 +161,7 @@
   (let* ((run-id     (db:test-get-run_id testdat))
 	 (rundat     (db:get-run-info db run-id))
 	 (header     (db:get-header rundat))
-	 (event_time (db:get-value-by-header (db:get-row rundat)
+	 (event_time (db:get-value-by-header (db:get-rows rundat)
 					     (db:get-header rundat)
 					     "event_time")))
     (iup:frame 
@@ -182,11 +205,14 @@
 	   (list
 	    ;; NOTE: Yes, the host can change!
 	    (store-label "HostName"
-			 (iup:label (db:test-get-host testdat) #:expand "HORIZONTAL")
+			 (iup:label ;; (sdb:qry 'getstr 
+			  (db:test-get-host testdat) ;; )
+			  #:expand "HORIZONTAL")
 			 (lambda (testdat)(db:test-get-host testdat)))
 	    (store-label "Uname"
 			 (iup:label "                                                   " #:expand "HORIZONTAL")
-			 (lambda (testdat)(db:test-get-uname testdat)))
+			 (lambda (testdat) ;; (sdb:qry 'getstr 
+			   (db:test-get-uname testdat))) ;; )
 	    (store-label "DiskFree"
 			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))
@@ -211,31 +237,37 @@
     ((vector-ref *state-status* 1) status color)))
 
 (define *dashboard-test-db* #t)
+(define *dashboard-comment-share-slot* #f)
 
 ;;======================================================================
 ;; Set fields 
 ;;======================================================================
-(define (set-fields-panel db test-id testdat #!key (db #f))
+(define (set-fields-panel dbstruct run-id test-id testdat #!key (db #f))
   (let ((newcomment #f)
 	(newstatus  #f)
-	(newstate   #f))
+	(newstate   #f)
+	(wtxtbox    #f))
     (iup:frame
      #:title "Set fields"
      (iup:vbox
       (iup:hbox (iup:label "Comment:")
-		(iup:textbox #:action (lambda (val a b)
-					(db:test-set-state-status-by-id db test-id #f #f b)
-					;; IDEA: Just set a variable with the proc to call?
-					(set! newcomment b))
-			     #:value (db:test-get-comment testdat)
-			     #:expand "HORIZONTAL"))
+		(let ((txtbox (iup:textbox #:action (lambda (val a b)
+						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      ;; IDEA: Just set a variable with the proc to call?
+						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
+						      (set! newcomment b))
+					   #:value (db:test-get-comment testdat)
+					   #:expand "HORIZONTAL")))
+		  (set! wtxtbox txtbox)
+		  txtbox))
+		  
       (apply iup:hbox
 	     (iup:label "STATE:" #:size "30x")
 	     (let* ((btns  (map (lambda (state)
 				  (let ((btn (iup:button state
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
-								    (db:test-set-state-status-by-id db test-id state #f #f)
+								    (rmt:test-set-state-status-by-id run-id test-id state #f #f)
 								    (db:test-set-state! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
@@ -257,10 +289,18 @@
 							 #:action (lambda (x)
 								    (let ((t (iup:attribute x "TITLE")))
 								      (if (equal? t "WAIVED")
-									  (iup:show (dashboard-tests:waiver testdat (lambda (c)
-														      (set! newcomment c))))
+									  (iup:show (dashboard-tests:waiver testdat 
+													    (if wtxtbox (iup:attribute wtxtbox "VALUE") #f)
+													    (lambda (c)
+													      (set! newcomment c)
+													      (if wtxtbox 
+														  (begin
+														    (iup:attribute-set! wtxtbox "VALUE" c)
+														    (if (not *dashboard-comment-share-slot*)
+															(set! *dashboard-comment-share-slot* wtxtbox)))
+														  ))))
 									  (begin
-									    (open-run-close db:test-set-state-status-by-id db test-id #f status #f)
+									    (rmt:test-set-state-status-by-id run-id test-id #f status #f)
 									    (db:test-set-status! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
@@ -309,7 +349,7 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver testdat cmtcmd)
+(define (dashboard-tests:waiver testdat ovrdval cmtcmd)
   (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
@@ -319,7 +359,7 @@
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment matches " wpatt))
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment does not match " wpatt))
 						)))
-			     #:value (db:test-get-comment testdat)
+			     #:value (if ovrdval ovrdval (db:test-get-comment testdat))
 			     #:expand "HORIZONTAL"))
 	 (dlog  #f))
     (set! dlog (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
@@ -341,7 +381,7 @@
 					   (if (or (not wpatt)
 						   (string-match wregx comment))
 					       (begin
-						 (open-run-close db:test-set-state-status-by-id #f test-id #f "WAIVED" comment)
+						 (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
 						 (db:test-set-status! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
@@ -413,8 +453,8 @@
 		      (else #f)))))
       res))
 
-(define (dashboard-tests:get-compressed-steps db test-id)
-  (let* ((steps-data  (db:get-steps-for-test db test-id))
+(define (dashboard-tests:get-compressed-steps dbstruct run-id test-id)
+  (let* ((steps-data  (db:get-steps-for-test dbstruct run-id test-id))
 	 (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
@@ -443,11 +483,10 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (conc *toppath* "/megatest.db"))
-	 (db            (open-db))
-	 (tdb           (tdb:open-test-db-by-test-id-local test-id))
-	 (testdat       (db:get-test-info-by-id db test-id))
+(define (examine-test run-id test-id) ;; run-id run-key origtest)
+  (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
+	 (dbstruct      (make-dbr:dbstruct path: (configf:lookup *configdat* "setup" "linktree") local: #t))
+	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
@@ -455,22 +494,25 @@
 	(begin
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
-	(let* ((run-id        (if testdat (db:test-get-run_id testdat) #f))
-	       (keydat        (if testdat (db:get-key-val-pairs db run-id) #f))
-	       (rundat        (if testdat (db:get-run-info db run-id) #f))
-	       (runname       (if testdat (db:get-value-by-header (db:get-row rundat)
+	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
+	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
+	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
+	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
+	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
-	       (rundir        logfile)
+	       (rundir        (if testdat 
+				  (db:test-get-rundir testdat)
+				  logfile))
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps db test-id) '()))
+	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
-				  (let ((tm (db:testmeta-get-record db testname)))
+				  (let ((tm (db:testmeta-get-record dbstruct testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -518,14 +560,15 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
-						     (db:get-test-info-by-id db test-id )))))
+						     (db:get-test-info-by-id dbstruct run-id test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dashboard-tests:get-compressed-steps db test-id))
+				 (set! teststeps    (dashboard-tests:get-compressed-steps dbstruct run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
-				 (set! rundir       (db:test-get-rundir testdat))
+				 (set! rundir       ;; (filedb:get-path *fdb* 
+				       (db:test-get-rundir testdat)) ;; )
 				 (set! testfullname (db:test-get-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
@@ -581,51 +624,55 @@
 	       (store-button store-label)
 	       (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
-									(let ((cmd (iup:attribute command-text-box "VALUE")))
-									  (system (conc cmd "  &"))))))
+									(let* ((cmd     (iup:attribute command-text-box "VALUE"))
+									       (fullcmd (conc (dtests:get-pre-command)
+											      cmd 
+											      (dtests:get-post-command))))
+									  (debug:print-info 02 "Running command: " fullcmd)
+									  (system fullcmd)))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname "  runname 
+			     (conc "megatest -target " keystring " -runname "  runname 
 				   " -set-state-status KILLREQ,n/a -testpatt %/% "
-				   ;; (conc testname "/" (if (equal? item-path "") "%" item-path))
-				   " :state RUNNING ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   " -state RUNNING"))))
 	       (run-test  (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
-			     (conc "xterm -geometry 180x20 -e \"megatest -target " keystring " :runname " runname 
+			     (conc "megatest -target " keystring " -runname " runname 
 				   " -runtests " (conc testname "/" (if (equal? item-path "")
 									"%" 
 									item-path))
-				   " ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				   ))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+			       (conc "megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))))
+				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "xterm -geometry 180x20 -e \""
-						      "megatest -remove-runs -target " keystring " :runname " runname
+				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%"
 											   item-path))
-						      ";megatest -target " keystring " :runname " runname 
+						      ";megatest -target " keystring " -runname " runname 
 						      " -runtests " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
-						      " ;echo Press any key to continue;bash -c 'read -n 1 -s'\"")))
-				       (system (conc cmd " &")))))
+						      )))
+				       (system (conc (dtests:get-pre-command)
+						     cmd 
+						     (dtests:get-post-command))))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
-			       (conc "xterm -geometry 180x20 -e \"megatest -remove-runs -target " keystring " :runname " runname
+			       (conc "megatest -remove-runs -target " keystring " -runname " runname
 				     " -testpatt " (conc testname "/" (if (equal? item-path "")
 									  "%"
 									  item-path))
-				     " -v ;echo Press any key to continue;bash -c 'read -n 1 -s'\""))
+				     " -v"))
 			      )))
 	  (cond
 	   ((not testdat)(begin (print "ERROR: bad test info for " test-id)(exit 1)))
@@ -638,7 +685,7 @@
 			      (iup:vbox ; #:expand "YES"
 			       ;; The run and test info
 			       (iup:hbox  ; #:expand "YES"
-				(run-info-panel db keydat testdat runname)
+				(run-info-panel dbstruct keydat testdat runname)
 				(test-info-panel testdat store-label widgets)
 				(test-meta-panel testmeta store-meta))
 			       (host-info-panel testdat store-label)
@@ -656,7 +703,7 @@
 					   (apply 
 					    iup:hbox
 					    (list command-text-box command-launch-button))))
-			       (set-fields-panel db test-id testdat)
+			       (set-fields-panel dbstruct run-id test-id testdat)
 			       (let ((tabs 
 				      (iup:tabs
 				       ;; Replace here with matrix
@@ -697,7 +744,8 @@
 					 (let ((proc
 						(lambda (testdat)
 						  (let ((max-row 0))
-						  (if (not (null? teststeps))
+						  (if (null? teststeps)
+						      (iup:attribute-set! steps-matrix "CLEARVALUE" "CONTENTS")
 						      (let loop ((hed    (car teststeps))
 								 (tal    (cdr teststeps))
 								 (rownum 1)
@@ -764,7 +812,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (tdb:open-run-close-db-by-test-id-local test-id #f tdb:read-test-data test-id "%")))
+										    (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id #f tdb:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

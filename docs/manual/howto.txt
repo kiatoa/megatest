@@ -8,6 +8,29 @@ Tricks
 This section is a compendium of a various useful tricks for debugging,
 configuring and generally getting the most out of Megatest.
 
+Limiting your running jobs
+--------------------------
+
+The following example will limit a test in the jobgroup "group1" to no more than 10 tests simultaneously.
+
+In your testconfig:
+
+----------------
+[test_meta]
+jobgroup group1
+----------------
+
+In your megatest.config:
+
+---------------
+[jobgroups]
+group1 10
+custdes 4
+---------------
+
+
+
+
 Debugging Tricks
 ----------------
 
@@ -19,7 +42,7 @@ During Config File Processing
 
 Organising Your Tests and Tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/nfs/ch/disks/ch_unienv_disk005/qa_mrwellan/interim/src/megatest/tests/fdktestqa/testqa
+
 ----------------------------
 [tests-paths]
 1 #{get misc parent}/simplerun/tests
@@ -36,13 +59,11 @@ user is responsible for setting STATE and STATUS
 runscript main.csh
 -------------------
 
+Debugging Server Problems
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-ww30.2
-cellname/LVS/cellname.LAYOUT_ERRORS
-
-Error: text open
-
-ww31.3
-cellname/LVS/cellname.LAYOUT_ERRORS
-
-Error: text open
+----------------
+sudo lsof -i
+sudo netstat -lptu
+sudo netstat -tulpn
+----------------

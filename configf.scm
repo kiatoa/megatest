@@ -107,12 +107,13 @@
 	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
-	    (print "ERROR: " cmd " returned bad exit code " status))
+	    (lambda ()
+	      (print "ERROR: " cmd " returned bad exit code " status)))
 	  ""))))
 
 ;; Lookup a value in runconfigs based on -reqtarg or -target
 (define (runconfigs-get config var)
-  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
+  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
 	(or (configf:lookup config targ var)
 	    (configf:lookup config "default" var))
@@ -219,13 +220,7 @@
 									       (config:eval-string-in-environment val)
 									       val)))
 							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
-							     (if envar
-								(if (and envar
-								      (string? realval)
-								      (not (string-search (integer->char 0) realval)))
-								   ;; (debug:print-info 4 "read-config key=" key ", val=" val ", realval=" realval)
-								   (setenv key realval)
-								   (debug:print 0 "ERROR: bad value for setenv, key=" key ", value=" realval)))							     
+							     (if envar (safe-setenv key realval))
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval))
 							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
@@ -277,6 +272,7 @@
       #f))
 
 (define configf:lookup config-lookup)
+(define configf:read-file read-config)
 
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
@@ -347,7 +343,7 @@
 	      (begin
 		(close-input-port inp)
 		(reverse res))
-	      (loop (read-line inp)(cons inl)))))
+	      (loop (read-line inp)(cons inl res)))))
       '()))
 
 ;;======================================================================
@@ -435,3 +431,56 @@
 	   (print line))
 	 (configf:expand-multi-lines fdat))))))
 
+;;======================================================================
+;; refdb
+;;======================================================================
+
+;; reads a refdb into an assoc array of assoc arrays
+;;   returns (list dat msg)
+(define (configf:read-refdb refdb-path)
+  (let ((sheets-file  (conc refdb-path "/sheet-names.cfg")))
+    (if (not (file-exists? sheets-file))
+	(list #f (conc "ERROR: no refdb found at " refdb-path))
+	(if (not (file-read-access? sheets-file))
+	    (list #f (conc "ERROR: refdb file not readable at " refdb-path))
+	    (let* ((sheets (with-input-from-file sheets-file
+			     (lambda ()
+			       (let loop ((inl (read-line))
+					  (res '()))
+				 (if (eof-object? inl)
+				     (reverse res)
+				     (loop (read-line)(cons inl res)))))))
+		   (data   '()))
+	      (for-each 
+	       (lambda (sheet-name)
+		 (let* ((dat-path  (conc refdb-path "/" sheet-name ".dat"))
+			(ref-dat   (configf:read-file dat-path #f #t))
+			(ref-assoc (map (lambda (key)
+					  (list key (hash-table-ref ref-dat key)))
+					(hash-table-keys ref-dat))))
+				   ;; (hash-table->alist ref-dat)))
+		   (set! data (append data (list (list sheet-name ref-assoc))))))
+	       sheets)
+	      (list data "NO ERRORS"))))))
+
+;; map over all pairs in a three level hierarchial alist and apply a function to the keys/val
+;;
+(define (configf:map-all-hier-alist data proc #!key (initproc1 #f)(initproc2 #f)(initproc3 #f))
+  (for-each 
+   (lambda (sheetname)
+     (let* ((sheettmp  (assoc sheetname data))
+	    (sheetdat  (if sheettmp (cadr sheettmp) '())))
+       (if initproc1 (initproc1 sheetname))
+       (for-each 
+	(lambda (sectionname)
+	  (let* ((sectiontmp  (assoc sectionname sheetdat))
+		 (sectiondat  (if sectiontmp (cadr sectiontmp) '())))
+	    (if initproc2 (initproc2 sheetname sectionname))
+	    (for-each
+	     (lambda (varname)
+	       (let* ((valtmp (assoc varname sectiondat))
+		      (val    (if valtmp (cadr valtmp) "")))
+		 (proc sheetname sectionname varname val)))
+	     (map car sectiondat))))
+	(map car sheetdat))))
+   (map car data)))

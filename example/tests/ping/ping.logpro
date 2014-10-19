@@ -1,0 +1,3 @@
+(expect:error in    "LogFileBody" = 0 "Any error"         #/err/i)
+(expect:required in "LogFileBody" = 5 "Successful pings"  #/bytes from.*/)
+

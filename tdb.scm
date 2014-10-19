@@ -13,21 +13,15 @@
 ;; Database access
 ;;======================================================================
 
-(require-extension (srfi 18) extras tcp) ;;  rpc)
-;; (import (prefix rpc rpc:))
-
+(require-extension (srfi 18) extras tcp)
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
-
-;; Note, try to remove this dependency 
-;; (use zmq)
 
 (declare (unit tdb))
 (declare (uses common))
 (declare (uses keys))
 (declare (uses ods))
-(declare (uses fs-transport))
 (declare (uses client))
 (declare (uses mt))
 
@@ -63,7 +57,8 @@
 	 (begin
 	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
-	   (set! db (sqlite3:open-database ":memory:"))) ;; open an in-memory db to allow readonly access 
+	   (set! db (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
+	   (set! dbexists #f)) ;; must force re-creation of tables, more tom-foolery
 	 (set! db (sqlite3:open-database dbpath)))
 	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
@@ -99,18 +94,18 @@
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-test-db-by-test-id-local test-id #!key (work-area #f))
+(define (tdb:open-test-db-by-test-id-local dbstruct run-id test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
-			(open-run-close db:test-get-rundir-from-test-id #f test-id))))
+			(db:test-get-rundir-from-test-id dbstruct run-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
     (open-test-db test-path)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-run-close-db-by-test-id-local test-id work-area proc . params)
+(define (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id work-area proc . params)
   (let* ((test-path (if work-area
 			work-area
-			(open-run-close db:test-get-rundir-from-test-id #f test-id)))
+			(db:test-get-rundir-from-test-id dbstruct run-id test-id)))
 	 (tdb        (open-test-db test-path)))
     (apply proc tdb params)))
 
@@ -189,16 +184,16 @@
 ;; 	'())))
 
 ;; NOTE: Run this local with #f for db !!!
-(define (tdb:load-test-data test-id)
+(define (tdb:load-test-data run-id test-id)
   (let loop ((lin (read-line)))
     (if (not (eof-object? lin))
 	(begin
 	  (debug:print 4 lin)
-	  (rmt:csv->test-data test-id lin)
+	  (rmt:csv->test-data run-id test-id lin)
 	  (loop (read-line)))))
   ;; roll up the current results.
   ;; FIXME: Add the status too 
-  (rmt:test-data-rollup test-id #f))
+  (rmt:test-data-rollup run-id test-id #f))
 
 (define (tdb:get-prev-tol-for-test tdb test-id category variable)
   ;; Finish me?
@@ -359,8 +354,8 @@
 		     (string<? (conc time-a)(conc time-b))))))))
 
 ;; 
-(define (tdb:update-testdat-meta-info test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (tdb:open-test-db-by-test-id-local test-id work-area: work-area)))
+(define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
+  (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

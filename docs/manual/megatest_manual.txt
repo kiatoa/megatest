@@ -51,6 +51,15 @@ include::writing_tests.txt[]
 include::howto.txt[]
 include::reference.txt[]
 
+Megatest Internals
+~~~~~~~~~~~~~~~~~~
+
+["graphviz", "server.png"]
+----------------------------------------------------------------------
+include::server.dot[]
+----------------------------------------------------------------------
+
+
 [appendix]
 Example Appendix
 ================
