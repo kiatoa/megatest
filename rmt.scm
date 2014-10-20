@@ -318,6 +318,12 @@
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
+(define (rmt:test-set-top-process-pid run-id test-id pid)
+  (rmt:send-receive 'test-set-top-process-pid run-id (list run-id test-id pid)))
+
+(define (rmt:test-get-top-process-pid run-id test-id)
+  (rmt:send-receive 'test-get-top-process-pid run-id (list run-id test-id)))
+
 (define (rmt:get-run-ids-matching-target keynames target res runname testpatt statepatt statuspatt)
   (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res runname testpatt statepatt statuspatt)))
 

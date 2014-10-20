@@ -28,6 +28,7 @@
     test-get-logfile-info
     test-get-records-for-index-file
     get-testinfo-state-status
+    test-get-top-process-pid
     test-get-paths-matching-keynames-target-new
     get-prereqs-not-met
     get-count-tests-running-for-run-id
@@ -75,6 +76,8 @@
     ((test-get-logfile-info)           (apply db:test-get-logfile-info dbstruct params))
     ((test-get-records-for-index-file)  (apply db:test-get-records-for-index-file dbstruct params))
     ((get-testinfo-state-status)       (apply db:get-testinfo-state-status dbstruct params))
+    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
+    ((test-get-top-process-pid)        (apply db:test-get-top-process-pid dbstruct params))
     ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new dbstruct params))
     ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
     ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))

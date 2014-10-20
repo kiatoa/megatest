@@ -1665,9 +1665,20 @@
      #f ;; the default
      testname item-path)))
 
+;; overload the unused attemptnum field for the process id of the runscript or 
+;; ezsteps step script in progress
+;;
+(define (db:test-set-top-process-pid dbstruct run-id test-id pid)
+  (sqlite3:execute (db:get-db dbstruct run-id) "UPDATE tests SET attemptnum=? WHERE id=?;"
+		   pid test-id))
+
+(define (db:test-get-top-process-pid dbstruct run-id test-id)
+  (sqlite3:first-result (db:get-db dbstruct run-id) "SELECT attemptnum FROM tests WHERE id=?;"
+			run-id test-id))
+
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
-				"host"         "cpuload"       "diskfree"  "uname"      "rundir"   "item_path"
-                                "run_duration" "final_logf" "comment"   "shortdir"))
+				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
+                                "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"))
 
 ;; fields *must* be a non-empty list
 ;;
@@ -1685,15 +1696,16 @@
 
 (define db:test-record-qry-selector (string-intersperse db:test-record-fields ","))
 
+
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir decoding? Decide, decode here or where used? For the moment decode where used.
 (define (db:get-all-tests-info-by-run-id dbstruct run-id)
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
-       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
+       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
 		       res)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
@@ -1763,10 +1775,10 @@
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
-    (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
-	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)))
+    (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)
+	   ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	 test-id)

@@ -78,8 +78,9 @@
 (define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
 (define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
 (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
-(define-inline (db:test-get-pass_count   vec) (vector-ref vec 15))
-(define-inline (db:test-get-fail_count   vec) (vector-ref vec 16))
+(define-inline (db:test-get-process_id   vec) (vector-ref vec 16))
+;; (define-inline (db:test-get-pass_count   vec) (vector-ref vec 15))
+;; (define-inline (db:test-get-fail_count   vec) (vector-ref vec 16))
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
 

@@ -209,6 +209,7 @@
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
+				       (rmt:test-set-top-process-pid run-id test-id pid)
 				       (let loop ((i 0))
 					 (let-values
 					  (((pid-val exit-status exit-code) (process-wait pid #t)))
@@ -264,6 +265,7 @@
 						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
 						   ;; now launch
 						   (let ((pid (process-run script)))
+						     (rmt:test-set-top-process-pid run-id test-id pid)
 						     (let processloop ((i 0))
 						       (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
 								   (mutex-lock! m)
