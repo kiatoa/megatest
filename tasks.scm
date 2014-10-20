@@ -630,27 +630,28 @@
     (for-each 
      (lambda (record)
        (let* ((param-key (list-ref record 8))
-	      (match-dat (string-search hostpid-rx param-key))
-	      (hostname  (cadr match-dat))
-	      (pid       (caddr match-dat)))
-	 (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
-	 (if (equal? (get-host-name) hostname)
-	     (begin
-	       (handle-exceptions
-		exn
-		(begin
-		  (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
-		  (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-		  #t)
-		(process-signal (string->number pid) signal/int)
-		(thread-sleep! 5)
-		(process-signal (string->number pid) signal/kill)))
-	     ;;  (call-with-environment-variables
-	     (let ((old-targethost (getenv "TARGETHOST")))
-	       (set-environment-variable "TARGETHOST" hostname)
-	       (system (conc "nbfake " kill " " pid))
-	       (if old-targethost (set-environment-variable "TARGETHOST" old-targethost))))))
-     records)))
+	      (match-dat (string-search hostpid-rx param-key)))
+	 (if match-dat
+	     (let (((hostname  (cadr match-dat))
+		    (pid       (caddr match-dat))))
+	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
+	       (if (equal? (get-host-name) hostname)
+		   (begin
+		     (handle-exceptions
+		      exn
+		      (begin
+			(debug:print 0 "Kill of process " pid " on host " hostname " failed.")
+			(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			#t)
+		      (process-signal (string->number pid) signal/int)
+		      (thread-sleep! 5)
+		      (process-signal (string->number pid) signal/kill)))
+		   ;;  (call-with-environment-variables
+		   (let ((old-targethost (getenv "TARGETHOST")))
+		     (set-environment-variable "TARGETHOST" hostname)
+		     (system (conc "nbfake " kill " " pid))
+		     (if old-targethost (set-environment-variable "TARGETHOST" old-targethost))))))
+	 records)))))
 
 
 ;;======================================================================
