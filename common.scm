@@ -186,6 +186,10 @@
   (let ((res (assoc key lst)))
     (if res (cadr res)(if (null? default) #f (car default)))))
 
+(define (common:get-testsuite-name)
+  (or (configf:lookup *configdat* "server" "testsuite" )
+       (pathname-file *toppath*)))
+
 ;;======================================================================
 ;; Misc utils
 ;;======================================================================

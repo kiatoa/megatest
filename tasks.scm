@@ -636,11 +636,14 @@
 	 (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
 	 (if (equal? (get-host-name) hostname)
 	     (begin
-	       (process-signal (string->number pid) signal/int)
-	       (thread-sleep! 5)
 	       (handle-exceptions
 		exn
-		#t
+		(begin
+		  (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
+		  (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+		  #t)
+		(process-signal (string->number pid) signal/int)
+		(thread-sleep! 5)
 		(process-signal (string->number pid) signal/kill)))
 	     ;;  (call-with-environment-variables
 	     (let ((old-targethost (getenv "TARGETHOST")))
