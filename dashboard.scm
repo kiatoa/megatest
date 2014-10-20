@@ -978,7 +978,7 @@ Misc
 ;;
 ;; General info about the run(s) and megatest area
 (define (dashboard:summary db)
-  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
+  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
       #:value 500

@@ -92,8 +92,7 @@
 		    (with-input-from-string fullcmd
 		      (lambda ()
 			(set! result ((eval (read)) ht))))
-		    (set! result cmd))
-		(loop (conc prestr result poststr)))
+		    (set! result (conc "#{(" cmdtype ") "  cmd "}")))		(loop (conc prestr result poststr)))
 	      res))
 	res)))
 
@@ -136,10 +135,14 @@
 					 (string-take inl (- (string-length inl) 1))
 					 inl)
 				     nextl))))
-	  (if (and allow-processing 
-		   (not (eq? allow-processing 'return-string)))
-	      (configf:process-line inl ht allow-processing)
-	      inl)))))
+	  (case allow-processing ;; if (and allow-processing 
+	    ;;	   (not (eq? allow-processing 'return-string)))
+	    ((#t #f)
+	     (configf:process-line inl ht allow-processing))
+	    ((return-string)
+	     inl)
+	    (else
+	     (configf:process-line inl ht allow-processing)))))))
 
 ;; read a config file, returns hash table of alists
 
