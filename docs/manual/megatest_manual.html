@@ -961,6 +961,25 @@ configuring and generally getting the most out of Megatest.</p></div>
 </div>
 </div>
 <div class="sect1">
+<h2 id="_limiting_your_running_jobs">Limiting your running jobs</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>The following example will limit a test in the jobgroup "group1" to no more than 10 tests simultaneously.</p></div>
+<div class="paragraph"><p>In your testconfig:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><tt>[test_meta]
+jobgroup group1</tt></pre>
+</div></div>
+<div class="paragraph"><p>In your megatest.config:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><tt>[jobgroups]
+group1 10
+custdes 4</tt></pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
 <h2 id="_debugging_tricks">Debugging Tricks</h2>
 <div class="sectionbody">
 <div class="sect2">
@@ -987,52 +1006,32 @@ user is responsible for setting STATE and STATUS</p></div>
 </div></div>
 </div>
 </div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_tricks">Tricks</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>This section is a compendium of a various useful tricks for debugging,
-configuring and generally getting the most out of Megatest.</p></div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_debugging_tricks">Debugging Tricks</h2>
-<div class="sectionbody">
 <div class="sect2">
-<h3 id="_examining_the_environment">Examining The Environment</h3>
-<div class="sect3">
-<h4 id="_during_config_file_processing">During Config File Processing</h4>
+<h3 id="_debugging_server_problems">Debugging Server Problems</h3>
+<div class="listingblock">
+<div class="content">
+<pre><tt>sudo lsof -i
+sudo netstat -lptu
+sudo netstat -tulpn</tt></pre>
+</div></div>
 </div>
-<div class="sect3">
-<h4 id="_organising_your_tests_and_tasks">Organising Your Tests and Tasks</h4>
-<div class="paragraph"><p>/nfs/ch/disks/ch_unienv_disk005/qa_mrwellan/interim/src/megatest/tests/fdktestqa/testqa</p></div>
-<div class="listingblock">
-<div class="content">
-<pre><tt>[tests-paths]
-1 #{get misc parent}/simplerun/tests</tt></pre>
-</div></div>
-<div class="listingblock">
-<div class="content">
-<pre><tt>[setup]</tt></pre>
-</div></div>
-<div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
-user is responsible for setting STATE and STATUS</p></div>
-<div class="listingblock">
-<div class="content">
-<pre><tt>runscript main.csh</tt></pre>
-</div></div>
-<div class="paragraph"><p>ww30.2
-cellname/LVS/cellname.LAYOUT_ERRORS</p></div>
-<div class="paragraph"><p>Error: text open</p></div>
-<div class="paragraph"><p>ww31.3
-cellname/LVS/cellname.LAYOUT_ERRORS</p></div>
-<div class="paragraph"><p>Error: text open
-Reference</p></div>
-<div class="exampleblock">
-<div class="content">
+</div>
+</div>
+<h1 id="_reference">Reference</h1>
+<div class="sect1">
+<h2 id="_the_first_chapter_of_the_second_part_2">The First Chapter of the Second Part</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>Chapters grouped into book parts are at level 1 and can contain
 sub-sections.</p></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_the_testconfig_file">The testconfig File</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_setup_section">Setup section</h3>
+<div class="sect3">
+<h4 id="_header">Header</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt>[setup]</tt></pre>
@@ -1043,16 +1042,28 @@ user is responsible for setting STATE and STATUS</p></div>
 <div class="content">
 <pre><tt>runscript main.csh</tt></pre>
 </div></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_requirements_section">Requirements section</h3>
+<div class="sect3">
+<h4 id="_header_2">Header</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt>[requirements]</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_wait_on_other_tests">Wait on Other Tests</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt># A normal waiton waits for the prior tests to be COMPLETED
 # and PASS, CHECK or WAIVED
 waiton test1 test2</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_mode">Mode</h4>
 <div class="paragraph"><p>The default (i.e. if mode is not specified) is normal. All pre-dependent tests
 must be COMPLETED and PASS, CHECK or WAIVED before the test will start</p></div>
 <div class="listingblock">
@@ -1078,14 +1089,26 @@ in the prior test</p></div>
 #
 # waiton #{shell get-valid-tests-to-run.sh}</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_run_time_limit">Run time limit</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_skip">Skip</h4>
+</div>
+<div class="sect3">
+<h4 id="_header_3">Header</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt>[skip]</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_skip_on_still_running_tests">Skip on Still-running Tests</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt># NB// If the prevrunning line exists with *any* value the test will
@@ -1093,10 +1116,16 @@ in the prior test</p></div>
 
 prevrunning x</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_skip_if_a_file_exists">Skip if a File Exists</h4>
 <div class="listingblock">
 <div class="content">
 <pre><tt>fileexists /path/to/a/file # skip if /path/to/a/file exists</tt></pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_controlled_waiver_propagation">Controlled waiver propagation</h4>
 <div class="paragraph"><p>If test is FAIL and previous test in run with same MT_TARGET is WAIVED then apply the following rules from the testconfig:
 If a waiver check is specified in the testconfig apply the check and if it passes then set this FAIL to WAIVED</p></div>
 <div class="paragraph"><p>Waiver check has two parts, 1) a list of waiver, rulename, filepatterns and 2) the rulename script spec (note that "diff" and "logpro" are predefined)</p></div>
@@ -1118,11 +1147,33 @@ waiver_1         logpro        lookittmp.log
 # This builtin rule is applied if a &lt;waivername&gt;.logpro file exists
 # logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html</tt></pre>
 </div></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_ezsteps">Ezsteps</h3>
 <div class="paragraph"><p>To transfer the environment to the next step you can do the following:</p></div>
 <div class="listingblock">
 <div class="content">
 <pre><tt>$MT_MEGATEST -env2file .ezsteps/${stepname}</tt></pre>
 </div></div>
+</div>
+<div class="sect2">
+<h3 id="_triggers">Triggers</h3>
+<div class="paragraph"><p>In your testconfig triggers can be specified</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><tt>[triggers]
+
+# Call script running.sh when test goes to state=RUNNING, status=PASS
+RUNNING/PASS running.sh
+
+# Call script running.sh any time state goes to RUNNING
+RUNNING/ running.sh
+
+# Call script onpass.sh any time status goes to PASS
+PASS/ onpass.sh</tt></pre>
+</div></div>
+</div>
 <div class="sect2">
 <h3 id="_megatest_internals">Megatest Internals</h3>
 <div class="imageblock graphviz">
@@ -1131,7 +1182,14 @@ waiver_1         logpro        lookittmp.log
 </div>
 </div>
 </div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_example_appendix">Appendix A: Example Appendix</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>One or more optional appendixes go here at section level zero.</p></div>
+<div class="sect2">
+<h3 id="_appendix_sub_section">Appendix Sub-section</h3>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
@@ -1142,6 +1200,12 @@ waiver_1         logpro        lookittmp.log
 documents.</td>
 </tr></table>
 </div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_example_bibliography">Example Bibliography</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>The bibliography list is a style of AsciiDoc bulleted list.</p></div>
 <div class="ulist bibliography"><ul>
 <li>
@@ -1158,6 +1222,11 @@ documents.</td>
 </p>
 </li>
 </ul></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_example_glossary">Example Glossary</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>Glossaries are optional. Glossaries entries are an example of a style
 of AsciiDoc labeled lists.</p></div>
 <div class="dlist glossary"><dl>
@@ -1178,10 +1247,17 @@ A second glossary term
 </p>
 </dd>
 </dl></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_example_colophon">Example Colophon</h2>
+<div class="sectionbody">
 <div class="paragraph"><p>Text at the end of a book describing facts about its production.</p></div>
-</div></div>
 </div>
 </div>
+<div class="sect1">
+<h2 id="_example_index">Example Index</h2>
+<div class="sectionbody">
 </div>
 </div>
 </div>
@@ -1189,7 +1265,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2014-02-18 07:24:48 MST
+Last updated 2014-09-12 13:35:39 MST
 </div>
 </div>
 </body>

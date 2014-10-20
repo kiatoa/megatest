@@ -63,7 +63,7 @@
 ;; read a line and process any #{ ... } constructs
 
 (define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
-(define (configf:process-line l ht)
+(define (configf:process-line l ht allow-system)
   (let loop ((res l))
     (if (string? res)
 	(let ((matchdat (string-search configf:var-expand-regex res)))
@@ -87,9 +87,12 @@
 				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(with-input-from-string fullcmd
-		  (lambda ()
-		    (set! result ((eval (read)) ht))))
+		(if (or allow-system
+			(not (member cmdtype '("system" "shell"))))
+		    (with-input-from-string fullcmd
+		      (lambda ()
+			(set! result ((eval (read)) ht))))
+		    (set! result cmd))
 		(loop (conc prestr result poststr)))
 	      res))
 	res)))
@@ -119,7 +122,9 @@
 	    (configf:lookup config "default" var))
 	(configf:lookup config "default" var))))
 
-(define-inline (configf:read-line p ht allow-processing)
+;; this was inline but I'm pretty sure that is a hold over from when it was *very* simple ...
+;;
+(define (configf:read-line p ht allow-processing)
   (let loop ((inl (read-line p)))
     (let ((cont-line (and (string? inl)
 			  (not (string-null? inl))
@@ -133,7 +138,7 @@
 				     nextl))))
 	  (if (and allow-processing 
 		   (not (eq? allow-processing 'return-string)))
-	      (configf:process-line inl ht)
+	      (configf:process-line inl ht allow-processing)
 	      inl)))))
 
 ;; read a config file, returns hash table of alists
