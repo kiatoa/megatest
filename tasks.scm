@@ -632,8 +632,8 @@
        (let* ((param-key (list-ref record 8))
 	      (match-dat (string-search hostpid-rx param-key)))
 	 (if match-dat
-	     (let (((hostname  (cadr match-dat))
-		    (pid       (caddr match-dat))))
+	     (let ((hostname  (cadr match-dat))
+		   (pid       (caddr match-dat)))
 	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
 	       (if (equal? (get-host-name) hostname)
 		   (begin
@@ -650,8 +650,9 @@
 		   (let ((old-targethost (getenv "TARGETHOST")))
 		     (set-environment-variable "TARGETHOST" hostname)
 		     (system (conc "nbfake " kill " " pid))
-		     (if old-targethost (set-environment-variable "TARGETHOST" old-targethost))))))
-	 records)))))
+		     (if old-targethost (set-environment-variable "TARGETHOST" old-targethost)))))
+	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
+     records)))
 
 
 ;;======================================================================
