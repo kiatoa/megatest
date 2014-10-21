@@ -102,14 +102,19 @@
 
 (define (rmt:update-db-stats rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
-  (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
-	 (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
-    (if (not stat-vec)
-	(let ((newvec (vector 0 0)))
-	  (hash-table-set! *db-stats* cmd newvec)
-	  (set! stat-vec newvec)))
-    (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
-    (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration)))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: stats collection failed in update-db-stats")
+     #f) ;; if this fails we don't care, it is just stats
+   (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
+	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+     (if (not stat-vec)
+	 (let ((newvec (vector 0 0)))
+	   (hash-table-set! *db-stats* cmd newvec)
+	   (set! stat-vec newvec)))
+     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
+     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
   (mutex-unlock! *db-stats-mutex*))
 
 
