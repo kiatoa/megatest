@@ -64,7 +64,7 @@
     (for-each 
      (lambda (run-id)
        (let ((connection (hash-table-ref *runremote* run-id)))
-	 (if (> (http-transport:server-dat-get-last-access connection) expire-time)
+	 (if (< (http-transport:server-dat-get-last-access connection) expire-time)
 	     (begin
 	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
 	       (hash-table-delete! *runremote* run-id)))))

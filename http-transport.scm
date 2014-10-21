@@ -330,7 +330,7 @@
   (let* ((api-url      (conc "http://" iface ":" port "/api"))
 	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
 	 (api-req      (make-request method: 'POST uri: api-uri))
-	 (server-dat   (vector iface port api-uri api-url api-req)))
+	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds))))
     server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
