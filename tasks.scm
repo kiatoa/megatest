@@ -648,9 +648,9 @@
 		      (process-signal (string->number pid) signal/kill)))
 		   ;;  (call-with-environment-variables
 		   (let ((old-targethost (getenv "TARGETHOST")))
-		     (set-environment-variable "TARGETHOST" hostname)
+		     (setenv "TARGETHOST" hostname)
 		     (system (conc "nbfake " kill " " pid))
-		     (if old-targethost (set-environment-variable "TARGETHOST" old-targethost)))))
+		     (if old-targethost (setenv "TARGETHOST" old-targethost)))))
 	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
      records)))
 
