@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (require-extension (srfi 18) extras tcp)
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -1994,7 +1994,10 @@
     ((http fs)
      (string-substitute
       (regexp "=") "_"
-      (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+      (base64:base64-encode 
+       (z3:encode-buffer
+	(with-output-to-string
+	  (lambda ()(serialize obj)))))
       #t))
     ((zmq)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
@@ -2005,9 +2008,10 @@
     ((http fs)
      (if (string? msg)
 	 (with-input-from-string 
-	     (base64:base64-decode
-	      (string-substitute 
-	       (regexp "_") "=" msg #t))
+	     (z3:decode-buffer
+	      (base64:base64-decode
+	       (string-substitute 
+		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (vector #f #f #f))) ;; crude reply for when things go awry
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
