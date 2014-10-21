@@ -59,6 +59,16 @@
 ;; vars is a json string encoding the parameters for the call
 ;;
 (define (rmt:send-receive cmd rid params)
+  ;; clean out old connections
+  (let ((expire-time (- (current-seconds) 60)))
+    (for-each 
+     (lambda (run-id)
+       (let ((connection (hash-table-ref *runremote* run-id)))
+	 (if (> (http-transport:server-dat-get-last-access connection) expire-time)
+	     (begin
+	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+	       (hash-table-delete! *runremote* run-id)))))
+     (hash-table-keys *runremote*)))
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
 			    (if cinfo
@@ -74,6 +84,7 @@
 	 (jparams         (db:obj->string params)))
     (if connection-info
 	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	  (http-transport:server-dat-update-last-access connection-info)
 	  (if res
 	      (db:string->obj res)
 	      (let ((new-connection-info (client:setup run-id)))

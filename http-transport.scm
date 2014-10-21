@@ -309,6 +309,7 @@
 (define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
+(define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -318,6 +319,9 @@
 	    ":"
 	    (http-transport:server-dat-get-port  vec))
       #f))
+
+(define (http-transport:server-dat-update-last-access vec)
+  (vector-set! vec 5 (current-seconds)))
 
 ;;
 ;; connect
