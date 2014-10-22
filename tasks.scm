@@ -26,18 +26,21 @@
 ;;
 (define (tasks:wait-on-journal path n #!key (remove #f))
   (let ((fullpath (conc path "-journal")))
-    (let loop ((journal-exists (file-exists? fullpath))
-	       (count          n)) ;; wait ten times ...
-      (if journal-exists
-	  (if (> count 0)
-	      (begin
-		(thread-sleep! 1)
-		(loop (file-exists? fullpath)
-		      (- count 1)))
-	      (begin
-		(if remove (system (conc "rm -rf " path)))
-		#f))
-	  #t))))
+    (handle-exceptions
+     exn
+     #t ;; if stuff goes wrong just allow it to move on
+     (let loop ((journal-exists (file-exists? fullpath))
+		(count          n)) ;; wait ten times ...
+       (if journal-exists
+	   (if (> count 0)
+	       (begin
+		 (thread-sleep! 1)
+		 (loop (file-exists? fullpath)
+		       (- count 1)))
+	       (begin
+		 (if remove (system (conc "rm -rf " path)))
+		 #f))
+	   #t)))))
 
 (define (tasks:get-task-db-path)
   (if *task-db*
