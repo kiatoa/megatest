@@ -345,48 +345,36 @@
 										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 										#t)
 									      #f)))))
-				       ;; open-run-close not needed for test-set-meta-info
-				       ;; (tests:set-partial-meta-info #f test-id run-id minutes work-area)
 				       (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
-				       ;; (tests:set-partial-meta-info #f test-id run-id minutes work-area 10)
-				       ;; (tests:set-partial-meta-info test-id run-id minutes work-area)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
 					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
 					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
 					     ;;       between tries?
-					     (let* ((pid (vector-ref exit-info 0)))
-					       (if (number? pid)
-						   (handle-exceptions
-						    exn
-						    (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
-						    ;;(process-signal pid signal/kill))
-						    (begin
-						      (debug:print 0 "WARNING: Request received to kill job (attempt # " kill-tries ")")
-						      (let ((processes (cmd-run->list (conc "pgrep -l -P " pid))))
-							(for-each 
-							 (lambda (p)
-							   (let* ((parts  (string-split p))
-								  (p-id   (if (> (length parts) 0)
-									      (string->number (car parts))
-									      #f)))
-							     (if p-id
-								 (begin
-								   (debug:print 0 "Killing " (cadr parts) "; kill -9  " p-id)
-								   ;; (process-signal pid signal/kill))))) ;; 
-								   (system (conc "kill -9 " p-id))))))
-							 (car processes)))
-						      (system (conc "kill -9 -" pid))
-						      (tests:test-set-status! test-id "KILLED"  "KILLED" (args:get-arg "-m") #f)))
+					     (let* ((pid1 (vector-ref exit-info 0))
+						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
+						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
+					       (if (not (null? pids))
 						   (begin
-						     (debug:print 0 "WARNING: Request received to kill job but problem with process, attempting to kill manager process")
-						     (tests:test-set-status! test-id "KILLED"  "KILLED" (args:get-arg "-m") #f)
-						     (tests:test-set-status! run-id test-id "KILLED"  "FAIL" (args:get-arg "-m") #f)
-						     (exit 1) ;; IS THIS NECESSARY OR WISE???
+						     (for-each
+						      (lambda (pid)
+							(handle-exceptions
+							 exn
+							 (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
+							 (process-signal pid signal/int)
+							 (thread-sleep! 5)
+							 (process-signal pid signal/kill)))
+						      pids)
+						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
+						   (begin
+						     (debug:print 0 "ERROR: Nothing to kill, pid1=" pid1 ", pid2=" pid2)
+						     (tests:test-set-status! run-id test-id "KILLED"  "FAILED TO KILL" (args:get-arg "-m") #f)
 						     )))
-					     (set! kill-tries (+ 1 kill-tries))
-					     (mutex-unlock! m)))
+					     (mutex-unlock! m)
+					     ;; no point in sticking around. Exit now.
+					     (exit)))
 				       (if keep-going
 					   (begin
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
@@ -399,6 +387,7 @@
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th2)
+	    (debug:print-info 0 "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
 	    (set! keep-going #f)
 	    (thread-join! th1)
 	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.

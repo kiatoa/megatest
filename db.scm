@@ -1674,7 +1674,7 @@
 
 (define (db:test-get-top-process-pid dbstruct run-id test-id)
   (sqlite3:first-result (db:get-db dbstruct run-id) "SELECT attemptnum FROM tests WHERE id=?;"
-			run-id test-id))
+			test-id))
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
