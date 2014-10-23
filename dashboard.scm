@@ -1457,9 +1457,14 @@ Misc
   (sqlite3:finalize! db))
 
 (define (dashboard:get-youngest-run-db-mod-time)
-  (apply max (map (lambda (filen)
-		    (file-modification-time filen))
-		  (glob (conc *dbdir* "/*.db")))))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: error in accessing databases: " ((condition-property-accessor 'exn 'message) exn))
+     (current-seconds)) ;; something went wrong - just print an error and return current-seconds
+   (apply max (map (lambda (filen)
+		     (file-modification-time filen))
+		   (glob (conc *dbdir* "/*.db"))))))
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))
