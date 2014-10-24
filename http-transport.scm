@@ -250,7 +250,10 @@
 	 (begin
 	   (mutex-unlock! *http-mutex*)
 	   (thread-sleep! 1)
-	   (close-all-connections!)
+	   (handle-exceptions
+	    exn
+	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+	    (close-all-connections!))
 	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
 	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
 	 (begin
@@ -270,12 +273,17 @@
 			      (mutex-lock! *http-mutex*)
 			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
 			      ;;					       ((exn http client-error) e (print e)))
-			      (set! res (with-input-from-request ;; was dat
-					 fullurl 
-					 (list (cons 'key "thekey")
-					       (cons 'cmd cmd)
-					       (cons 'params params))
-					 read-string))
+			      (set! res (handle-exceptions
+					 exn
+					 (begin
+					   (debug:print 0 "ERROR: failure in with-input-from-request. Giving up.")
+					   #f)
+					 (with-input-from-request ;; was dat
+					  fullurl 
+					  (list (cons 'key "thekey")
+						(cons 'cmd cmd)
+						(cons 'params params))
+					  read-string)))
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
 			      (mutex-unlock! *http-mutex*)

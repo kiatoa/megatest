@@ -93,6 +93,8 @@
 	       (rollup-status 0))
 	  (change-directory top-path)
 
+	  ;; (set-signal-handler! signal/int (lambda ()
+					    
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;

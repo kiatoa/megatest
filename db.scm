@@ -287,12 +287,18 @@
 	(for-each
 	 (lambda (db)
 	   (if (sqlite3:database? db)
-	       (sqlite3:finalize! db)))
+	       (begin
+		 (sqlite3:interrupt! db)
+		 (sqlite3:finalize! db #t))))
 	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-    (if rundb
-	(if (sqlite3:database? rundb)
-	    (sqlite3:finalize! rundb)
-	    (debug:print 2 "WARNING: attempting to close databases but got " rundb " instead of a database")))))
+    (thread-sleep! 3)
+    (if (and rundb
+	     (sqlite3:database? rundb))
+	(handle-exceptions
+	 exn
+	 (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+	 (sqlite3:interrupt! rundb)
+	 (sqlite3:finalize! rundb #t)))))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
