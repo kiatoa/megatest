@@ -1543,15 +1543,17 @@
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
 ;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
 ;;
+		;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+		;;(debug:print 0 "QRY: " qry)
+		;; (db:delay-if-busy)
+
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
 			       (if currstate  (conc "state='" currstate "' AND ") "")
 			       (if currstatus (conc "status='" currstatus "' AND ") "")
-			       " run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-		;;(debug:print 0 "QRY: " qry)
-		;; (db:delay-if-busy)
-		(sqlite3:execute (db:get-db dbstruct run-id) qry run-id newstate newstatus testname testname)))
+			       " run_id=? AND testname LIKE ?;")))
+		(sqlite3:execute (db:get-db dbstruct run-id) qry newstate newstatus run-id testname)))
 	    testnames))
 
 ;; speed up for common cases with a little logic

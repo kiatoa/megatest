@@ -251,14 +251,21 @@
     ;; -keepgoing is specified
     (if (eq? *passnum* 0)
 	(begin
+	  ;; Is this still necessary? I think not. Unreachable tests are marked as such and 
+	  ;; should not cause problems here.
+	  ;;
 	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
+	  ;;
+	  ;; (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
+	  
+	  ;; Now convert FAIL and anything in allow-auto-rerun to NOT_STARTED
+	  ;;
 	  (for-each (lambda (state)
-		      (rmt:general-call 'delete-tests-in-state run-id state))
-		    (cons "NOT_STARTED" (string-split (or (configf:lookup *configdat* "setup" "allow-auto-rerun") ""))))
-	  (rmt:set-tests-state-status run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state))
+		    (string-split (or (configf:lookup *configdat* "setup" "allow-auto-rerun") "")))))
 
     ;; Ensure all tests are registered in the test_meta table
     (runs:update-all-test_meta #f)
