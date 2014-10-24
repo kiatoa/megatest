@@ -367,14 +367,23 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (let ((th1 (make-thread (lambda ()
-				    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
-				  "runs:run-tests-queue"))
-		(th2 (make-thread (lambda ()				    
-				    (rmt:find-and-mark-incomplete-all-runs)))))
+	  (let* ((keep-going #t)
+		 (th1        (make-thread (lambda ()
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					  "runs:run-tests-queue"))
+		 (th2        (make-thread (lambda ()				    
+					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
+					    (let ((run-ids (rmt:get-all-run-ids)))
+					      (for-each (lambda (run-id)
+							  (if keep-going
+							      (rmt:find-and-mark-incomplete run-id #f))) ;; ovr-deadtime)))
+							run-ids)))
+					  "runs: mark-incompletes")))
 	    (thread-start! th1)
 	    (thread-start! th2)
 	    (thread-join! th1)
+	    (set! keep-going #f)
+	    (thread-join! th2)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
 	    (if (> run-count 0)
 		(begin

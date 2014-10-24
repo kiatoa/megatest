@@ -1171,7 +1171,7 @@
      (lambda (run-id)
        (set! run-ids (cons run-id run-ids)))
      (db:get-db dbstruct #f)
-     "SELECT id FROM runs WHERE state != 'deleted';")
+     "SELECT id FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;")
     (reverse run-ids)))
 
 ;; get some basic run stats
