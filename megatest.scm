@@ -1221,7 +1221,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
-      (open-run-close db:clean-up #f)
+      ;; (open-run-close db:clean-up #f)
+      (db:multi-db-sync 
+       #f ;; do all run-ids
+       'new2old
+       'killservers
+       'dejunk
+       'adj-testids
+       'old2new
+       'new2old
+       )
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")

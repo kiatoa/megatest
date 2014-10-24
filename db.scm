@@ -296,7 +296,7 @@
 	     (sqlite3:database? rundb))
 	(handle-exceptions
 	 exn
-	 (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+	 #t ;; (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
 	 (sqlite3:interrupt! rundb)
 	 (sqlite3:finalize! rundb #t)))))
 
@@ -855,7 +855,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up db)
-  (debug:print 0 "WARNING: db clean up not ported to v1.60, cleanup action will be on megatest.db")
+  (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* (;; (db         (db:get-db dbstruct #f))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
