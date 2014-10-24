@@ -219,10 +219,12 @@
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
+			   (signal-mask! signum)
 			   (let ((tdb (tasks:open-db)))
 			     (tasks:set-state-given-param-key tdb task-key "killed")
+			     ;; (sqlite3:interrupt! tdb) ;; seems silly?
 			     (sqlite3:finalize! tdb))
-			   (print "Killed by sigint. Exiting")
+			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
