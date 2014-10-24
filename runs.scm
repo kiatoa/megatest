@@ -367,8 +367,14 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (begin
-	    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	  (let ((th1 (make-thread (lambda ()
+				    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+				  "runs:run-tests-queue"))
+		(th2 (make-thread (lambda ()				    
+				    (rmt:find-and-mark-incomplete-all-runs)))))
+	    (thread-start! th1)
+	    (thread-start! th2)
+	    (thread-join! th1)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
 	    (if (> run-count 0)
 		(begin
@@ -898,10 +904,13 @@
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+      ;; moving this to a parallel thread and just run it once.
+      ;;
       (if (> (current-seconds)(+ last-time-incomplete 900))
           (begin
             (set! last-time-incomplete (current-seconds))
-            (rmt:find-and-mark-incomplete-all-runs)))
+            ;; (rmt:find-and-mark-incomplete-all-runs)
+	    ))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))
