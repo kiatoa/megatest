@@ -371,7 +371,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-(on-exit std-exit-procedure)
+;; (on-exit std-exit-procedure)
 
 ;;======================================================================
 ;; Misc general calls
