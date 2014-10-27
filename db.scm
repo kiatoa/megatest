@@ -280,6 +280,8 @@
 (define (db:close-all dbstruct)
   ;; finalize main.db
   (db:sync-touched dbstruct 0 force-sync: #t)
+  (common:db-block-further-queries)
+  (mutex-lock! *db-sync-mutex*) ;; with this perhaps it isn't necessary to use the block-further-queries mechanism?
   (sqlite3:finalize! (db:get-db dbstruct #f))
   (let* ((local (dbr:dbstruct-get-local dbstruct))
 	 (rundb (dbr:dbstruct-get-rundb dbstruct)))
@@ -298,7 +300,8 @@
 	 exn
 	 #t ;; (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
 	 (sqlite3:interrupt! rundb)
-	 (sqlite3:finalize! rundb #t)))))
+	 (sqlite3:finalize! rundb #t))))
+  (mutex-unlock! *db-sync-mutex*))
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
