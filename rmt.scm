@@ -90,7 +90,7 @@
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(rmt:send-receive cmd run-id params))))
-	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "800"))))
+	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "-1"))))
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
 	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
 	  (let ((curr-max (rmt:get-max-query-average)))
@@ -170,12 +170,14 @@
 	  (let ((start-time (current-seconds)))
 	    (mutex-lock! *db-multi-sync-mutex*)
 	    (let ((last-sync (hash-table-ref/default *db-local-sync* run-id 0)))
-	      (if (and (> (- start-time last-sync) 5) ;; every five seconds
-		       (common:db-access-allowed?))
+	      (if ;; (and 
+		   (> (- start-time last-sync) 5) ;; every five seconds
+		  ;;      (common:db-access-allowed?))
 		  (begin
 		    ;; MOVE THIS TO A THREAD?
 		    (db:multi-db-sync (list run-id) 'new2old)
-		    (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds")
+		    (if (common:low-noise-print 30 "sync new to old")
+			(debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
 		    (hash-table-set! *db-local-sync* run-id start-time))))
 	    (mutex-unlock! *db-multi-sync-mutex*)))
       res)))

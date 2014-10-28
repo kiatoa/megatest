@@ -21,6 +21,9 @@ vackyvar vackyvar.sh
 # test-path and test-file
 test-path test-path-file.sh
 
+# verify that vars with $ signs get expanded
+varwithdollar eval_vars.sh
+
 [requirements]
 waiton runfirst
 priority 0
