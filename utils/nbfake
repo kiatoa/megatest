@@ -1,5 +1,33 @@
 #!/bin/bash
+###############################################################################
+#
+# nbfake - capture command output in a logfile
+#
+# nbfake behavior can be changed by setting the following env vars:
+#   NBFAKE_HOST       SSH to $NBFAKE_HOST and run command
+#   NBFAKE_LOG        Logfile for nbfake output
+#
+###############################################################################
 
+echo SHELL=$SHELL
+if [[ -z "$@" ]]; then
+  cat <<__EOF
+
+nbfake usage:
+
+nbfake <command to run>
+
+nbfake behavior can be changed by setting the following env vars:
+   NBFAKE_HOST       SSH to \$NBFAKE_HOST and run command
+   NBFAKE_LOG        Logfile for nbfake output
+
+__EOF
+  exit
+fi
+
+#==============================================================================
+# Setup
+#==============================================================================
 
 # Can't always trust $PWD
 CURRWD=$(pwd)
@@ -13,8 +41,12 @@ if [[ -z "$NBFAKE_LOG" && -n "$TARGETHOST_LOGF" ]]; then NBFAKE_LOG=$TARGETHOST_
 # Set default nbfake log
 
 if [[ -z "$NBFAKE_LOG" ]]; then
-    NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
+  NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
 fi
+
+#==============================================================================
+# Run and log
+#==============================================================================
 
 cat <<__EOF >&2
 #======================================================================
@@ -24,7 +56,9 @@ cat <<__EOF >&2
 __EOF
 
 if [[ -z "$NBFAKE_HOST" ]]; then
+  # Run locally
   sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $NBFAKE_LOG 2>&1 &"
 else
+  # run remotely
   ssh -n -f $NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $NBFAKE_LOG 2>&1 &\""
 fi
