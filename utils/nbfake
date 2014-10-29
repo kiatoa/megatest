@@ -33,14 +33,25 @@ CURRWD=$(pwd)
 
 # Make sure nbfake host and logfile are set. Fall back to old-style variable names
 
-if [[ -z "$NBFAKE_HOST" && -n "$TARGETHOST" ]];     then NBFAKE_HOST=$TARGETHOST;     fi
+if [[ -z "$NBFAKE_HOST" && -n "$TARGETHOST" ]]; then 
+  MY_NBFAKE_HOST=$TARGETHOST     
+else
+  MY_NBFAKE_HOST=$NBFAKE_HOST
+  unset NBFAKE_HOST
+fi
 
-if [[ -z "$NBFAKE_LOG" && -n "$TARGETHOST_LOGF" ]]; then NBFAKE_LOG=$TARGETHOST_LOGF; fi
+
+if [[ -z "$NBFAKE_LOG" && -n "$TARGETHOST_LOGF" ]]; then 
+  MY_NBFAKE_LOG=$TARGETHOST_LOGF
+else
+  MY_NBFAKE_LOG=$NBFAKE_LOG
+  unset NBFAKE_LOG
+fi
 
 # Set default nbfake log
 
-if [[ -z "$NBFAKE_LOG" ]]; then
-  NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
+if [[ -z "$MY_NBFAKE_LOG" ]]; then
+  MY_NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
 fi
 
 #==============================================================================
@@ -54,10 +65,10 @@ cat <<__EOF >&2
 #======================================================================
 __EOF
 
-if [[ -z "$NBFAKE_HOST" ]]; then
+if [[ -z "$MY_NBFAKE_HOST" ]]; then
   # Run locally
-  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $NBFAKE_LOG 2>&1 &"
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &"
 else
   # run remotely
-  ssh -n -f $NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $NBFAKE_LOG 2>&1 &\""
+  ssh -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &\""
 fi
