@@ -670,7 +670,7 @@
      ;;
      ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-      (if (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
+      (if #t ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
 	  (begin
 	    (rmt:general-call 'register-test run-id run-id test-name item-path)
 	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
