@@ -35,6 +35,7 @@ CURRWD=$(pwd)
 
 if [[ -z "$NBFAKE_HOST" && -n "$TARGETHOST" ]]; then 
   MY_NBFAKE_HOST=$TARGETHOST     
+  unset TARGETHOST
 else
   MY_NBFAKE_HOST=$NBFAKE_HOST
   unset NBFAKE_HOST
@@ -43,6 +44,7 @@ fi
 
 if [[ -z "$NBFAKE_LOG" && -n "$TARGETHOST_LOGF" ]]; then 
   MY_NBFAKE_LOG=$TARGETHOST_LOGF
+  unset TARGETHOST_LOGF
 else
   MY_NBFAKE_LOG=$NBFAKE_LOG
   unset NBFAKE_LOG

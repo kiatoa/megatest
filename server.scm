@@ -106,6 +106,8 @@
 	  (setenv "TARGETHOST" target-host)))
     (setenv "TARGETHOST_LOGF" logfile)
     (system (conc "nbfake " cmdln))
+    (unsetenv "TARGETHOST_LOGF")
+    (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
     ;; (system cmdln)
     (pop-directory)))
 
