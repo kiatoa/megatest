@@ -1460,7 +1460,7 @@ Misc
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "WARNING: error in accessing databases: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
    (apply max (map (lambda (filen)
 		     (file-modification-time filen))

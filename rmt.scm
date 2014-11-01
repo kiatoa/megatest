@@ -106,6 +106,8 @@
    exn
    (begin
      (debug:print 0 "WARNING: stats collection failed in update-db-stats")
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (print "exn=" (condition->list exn))
      #f) ;; if this fails we don't care, it is just stats
    (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
 	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))

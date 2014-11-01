@@ -652,24 +652,27 @@
 	      (match-dat (string-search hostpid-rx param-key)))
 	 (if match-dat
 	     (let ((hostname  (cadr match-dat))
-		   (pid       (caddr match-dat)))
+		   (pid       (string->number (caddr match-dat))))
 	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
 	       (if (equal? (get-host-name) hostname)
-		   (begin
-		     (handle-exceptions
-		      exn
-		      (begin
-			(debug:print 0 "Kill of process " pid " on host " hostname " failed.")
-			(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-			#t)
-		      (process-signal (string->number pid) signal/int)
-		      (thread-sleep! 5)
-		      (process-signal (string->number pid) signal/kill)))
+		   (if (process:alive? pid)
+		       (begin
+			 (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
+			    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			    #t)
+			  (process-signal pid signal/int)
+			  (thread-sleep! 5)
+			  (if (process:alive? pid)
+			      (process-signal pid signal/kill)))))
 		   ;;  (call-with-environment-variables
 		   (let ((old-targethost (getenv "TARGETHOST")))
 		     (setenv "TARGETHOST" hostname)
 		     (system (conc "nbfake kill " pid))
-		     (if old-targethost (setenv "TARGETHOST" old-targethost)))))
+		     (if old-targethost (setenv "TARGETHOST" old-targethost))
+		     (unsetenv "TARGETHOST"))))
 	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
      records)))
 

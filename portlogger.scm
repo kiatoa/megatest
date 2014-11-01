@@ -33,7 +33,7 @@
     (if (not exists)
 	(sqlite3:execute 
 	 db
-	 "CREATE TABLE ports (
+	 "CREATE TABLE IF NOT EXISTS ports (
             port INTEGER PRIMARY KEY,
             state TEXT DEFAULT 'not-used',
             fail_count INTEGER DEFAULT 0,
@@ -90,12 +90,21 @@
     res))
 
 (define (portlogger:get-prev-used-port db)
-  (sqlite3:fold-row
-   (lambda (var curr)
-     (or curr var curr))
-   #f
-   db
-   "SELECT (port) FROM ports WHERE state='released' LIMIT 1;"))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 "exn=" (condition->list exn))
+     (print-call-chain)
+     (debug:print 0 "Continuing anyway.")
+     #f)
+   (sqlite3:fold-row
+    (lambda (var curr)
+      (or curr var curr))
+    #f
+    db
+    "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
 
 (define (portlogger:find-port db)
   (let* ((lowport (let ((val (configf:lookup *configdat* "server" "lowport")))
@@ -106,7 +115,15 @@
 	 (portnum (or (portlogger:get-prev-used-port db)
 		      (+ lowport ;; top of registered ports is 49152 but lets use ports in the registered range
 			 (random (- 64000 lowport))))))
-    (portlogger:take-port db portnum)
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 "exn=" (condition->list exn))
+       (print-call-chain)
+       (debug:print 0 "Continuing anyway."))
+     (portlogger:take-port db portnum))
     portnum))
 
 ;; set port to "released", "failed" etc.
@@ -124,17 +141,27 @@
 ;;======================================================================
 
 (define (portlogger:main . args)
-  (let* ((db      (portlogger:open-db (conc "/tmp/." (current-user-name) "-portlogger.db")))
+  (let* ((dbfname (conc "/tmp/." (current-user-name) "-portlogger.db"))
+	 (db      (portlogger:open-db dbfname))
 	 (numargs (length args))
-	 (result  (cond
-		   ((> numargs 1) ;; most commands
-		    (case (string->symbol (car args)) ;; commands with two or more params
-		      ((take)(portlogger:take-port db (string->number (cadr args))))
-		      ((set) (portlogger:set-port db 
-						  (string->number (cadr args))
-						  (caddr args))
-		       (caddr args))
-		      ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed))))))
+	 (result  
+	  (handle-exceptions
+	   exn
+	   (begin
+	     (debug:print 0 "EXCEPTION: portlogger database at " dbfname " probably overloaded or unreadable. Try removing it.")
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (print "exn=" (condition->list exn))
+	     (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	     (print-call-chain))
+	   (cond
+	    ((> numargs 1) ;; most commands
+	     (case (string->symbol (car args)) ;; commands with two or more params
+	       ((take)(portlogger:take-port db (string->number (cadr args))))
+	       ((set) (portlogger:set-port db 
+					   (string->number (cadr args))
+					   (caddr args))
+		(caddr args))
+	       ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed)))))))
     (sqlite3:finalize! db)
     result))
      

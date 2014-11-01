@@ -53,6 +53,8 @@
    exn
    (begin
      (print "ERROR:  Failed to run command: " cmd " " (string-intersperse params " "))
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (print "exn=" (condition->list exn))
      #f)
    (let-values (((fh fho pid) (if (null? params)
 				  (process cmd)
@@ -126,7 +128,6 @@
 	   (let ((pid (string->number inl)))
 	     (if proc (proc pid))
 	     (loop (read-line) (cons pid res))))))))
-       
 
 (define (process:alive? pid)
   (handle-exceptions
