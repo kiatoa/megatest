@@ -127,3 +127,13 @@
 	     (if proc (proc pid))
 	     (loop (read-line) (cons pid res))))))))
        
+
+(define (process:alive? pid)
+  (handle-exceptions
+   exn
+   ;; possibly pid is a process not a child, look in /proc to see if it is running still
+   (file-exists? (conc "/proc/" pid))
+   (let-values (((rpid exit-type exit-signal)(process-wait pid #t)))
+       (and (number? rpid)
+	    (equal? rpid pid)))))
+	 

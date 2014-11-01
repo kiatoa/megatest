@@ -158,7 +158,13 @@
 (define (common:read-encoded-string instr)
   (handle-exceptions
    exn
-   (read (open-input-string (base64:base64-decode instr)))
+   (handle-exceptions
+    exn
+    (begin
+      (debug:print 0 "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (print-call-chain)
+      #f)
+    (read (open-input-string (base64:base64-decode instr))))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================

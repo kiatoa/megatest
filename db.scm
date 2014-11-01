@@ -298,7 +298,11 @@
 	     (sqlite3:database? rundb))
 	(handle-exceptions
 	 exn
-	 #t ;; (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+	 (begin 
+	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain)
+	   #f)
 	 (sqlite3:interrupt! rundb)
 	 (sqlite3:finalize! rundb #t))))
   ;; (mutex-unlock! *db-sync-mutex*)
@@ -2439,7 +2443,7 @@
      (if (eq? err-status 'done)
 	 default
 	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
 	   (print-call-chain)
 	   default)))
    (apply sqlite3:first-result db stmt params)))
