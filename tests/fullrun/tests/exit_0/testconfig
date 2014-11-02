@@ -8,3 +8,8 @@ description This test checks that a multi-lineitem test with mix of pass and non
 
 tags first,single
 reviewed 09/10/2011, by Matt
+
+[triggers]
+NOT_STARTED/ xterm -e bash -s -- 
+RUNNING/ xterm -e bash -s -- 
+

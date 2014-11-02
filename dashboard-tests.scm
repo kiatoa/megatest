@@ -130,8 +130,7 @@
 			      "Owner: "
 			      "Reviewed: "
 			      "Tags: "
-			      "Description: "
-			      ))
+			      "Description: "))
 		   (list (iup:label "" #:expand "VERTICAL"))))
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
@@ -199,7 +198,8 @@
 			      "Disk free: "
 			      "CPU Load: "
 			      "Run duration: "
-			      "Logfile: "))
+			      "Logfile: "
+			      "Top process id: "))
 		   (iup:label "" #:expand "VERTICAL")))
     (apply iup:vbox ; #:expand "YES"
 	   (list
@@ -222,9 +222,13 @@
 	    (store-label "RunDuration"
 			 (iup:label (conc (seconds->hr-min-sec (db:test-get-run_duration testdat))) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (seconds->hr-min-sec (db:test-get-run_duration testdat)))))
-	    (store-label "CPULoad"
+	    (store-label "LogFile"
 			 (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-final_logf testdat)))))))))
+			 (lambda (testdat)(conc (db:test-get-final_logf testdat))))
+	    (store-label "ProcessId"
+			 (iup:label (conc (db:test-get-process_id testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-get-process_id testdat))))
+	    )))))
 
 ;; use a global for setting the buttons colors
 ;;                           state status teststeps
@@ -559,7 +563,7 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (debug:print-info 0 "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (db:get-test-info-by-id dbstruct run-id test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond

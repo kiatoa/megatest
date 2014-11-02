@@ -14,7 +14,7 @@
 ;;======================================================================
 
 (require-extension (srfi 18) extras tcp)
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 csv-xml s11n md5 message-digest base64 format dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -280,6 +280,8 @@
 (define (db:close-all dbstruct)
   ;; finalize main.db
   (db:sync-touched dbstruct 0 force-sync: #t)
+  ;;(common:db-block-further-queries)
+  ;; (mutex-lock! *db-sync-mutex*) ;; with this perhaps it isn't necessary to use the block-further-queries mechanism?
   (sqlite3:finalize! (db:get-db dbstruct #f))
   (let* ((local (dbr:dbstruct-get-local dbstruct))
 	 (rundb (dbr:dbstruct-get-rundb dbstruct)))
@@ -287,18 +289,31 @@
 	(for-each
 	 (lambda (db)
 	   (if (sqlite3:database? db)
-	       (sqlite3:finalize! db)))
+	       (begin
+		 (sqlite3:interrupt! db)
+		 (sqlite3:finalize! db #t))))
 	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-    (if rundb
-	(if (sqlite3:database? rundb)
-	    (sqlite3:finalize! rundb)
-	    (debug:print 2 "WARNING: attempting to close databases but got " rundb " instead of a database")))))
+    (thread-sleep! 3)
+    (if (and rundb
+	     (sqlite3:database? rundb))
+	(handle-exceptions
+	 exn
+	 (begin 
+	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 " db: " rundb)
+	   (print-call-chain)
+	   #f)
+	 (sqlite3:interrupt! rundb)
+	 (sqlite3:finalize! rundb #t))))
+  ;; (mutex-unlock! *db-sync-mutex*)
+  )
 
 (define (db:open-inmem-db)
   (let* ((db      (sqlite3:open-database ":memory:"))
 	 (handler (make-busy-timeout 3600)))
-    (db:initialize-run-id-db db)
     (sqlite3:set-busy-handler! db handler)
+    (db:initialize-run-id-db db)
     db))
 
 ;; just tests, test_steps and test_data tables
@@ -849,7 +864,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up db)
-  (debug:print 0 "WARNING: db clean up not ported to v1.60, cleanup action will be on megatest.db")
+  (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* (;; (db         (db:get-db dbstruct #f))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
@@ -1165,7 +1180,7 @@
      (lambda (run-id)
        (set! run-ids (cons run-id run-ids)))
      (db:get-db dbstruct #f)
-     "SELECT id FROM runs WHERE state != 'deleted';")
+     "SELECT id FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;")
     (reverse run-ids)))
 
 ;; get some basic run stats
@@ -1543,15 +1558,17 @@
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
 ;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
 ;;
+		;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+		;;(debug:print 0 "QRY: " qry)
+		;; (db:delay-if-busy)
+
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
 			       (if currstate  (conc "state='" currstate "' AND ") "")
 			       (if currstatus (conc "status='" currstatus "' AND ") "")
-			       " run_id=? AND testname=? AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-		;;(debug:print 0 "QRY: " qry)
-		;; (db:delay-if-busy)
-		(sqlite3:execute (db:get-db dbstruct run-id) qry run-id newstate newstatus testname testname)))
+			       " run_id=? AND testname LIKE ?;")))
+		(sqlite3:execute (db:get-db dbstruct run-id) qry newstate newstatus run-id testname)))
 	    testnames))
 
 ;; speed up for common cases with a little logic
@@ -1665,9 +1682,20 @@
      #f ;; the default
      testname item-path)))
 
+;; overload the unused attemptnum field for the process id of the runscript or 
+;; ezsteps step script in progress
+;;
+(define (db:test-set-top-process-pid dbstruct run-id test-id pid)
+  (sqlite3:execute (db:get-db dbstruct run-id) "UPDATE tests SET attemptnum=? WHERE id=?;"
+		   pid test-id))
+
+(define (db:test-get-top-process-pid dbstruct run-id test-id)
+  (sqlite3:first-result (db:get-db dbstruct run-id) "SELECT attemptnum FROM tests WHERE id=?;"
+			test-id))
+
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
-				"host"         "cpuload"       "diskfree"  "uname"      "rundir"   "item_path"
-                                "run_duration" "final_logf" "comment"   "shortdir"))
+				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
+                                "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"))
 
 ;; fields *must* be a non-empty list
 ;;
@@ -1685,15 +1713,16 @@
 
 (define db:test-record-qry-selector (string-intersperse db:test-record-fields ","))
 
+
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir decoding? Decide, decode here or where used? For the moment decode where used.
 (define (db:get-all-tests-info-by-run-id dbstruct run-id)
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
-       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
+       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
 		       res)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
@@ -1763,10 +1792,10 @@
 (define (db:get-test-info-by-id dbstruct run-id test-id)
   (let ((db (db:get-db dbstruct run-id))
 	(res #f))
-    (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
-	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)))
+    (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)
+	   ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
+       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)))
      (db:get-db dbstruct run-id)
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	 test-id)
@@ -1982,7 +2011,10 @@
     ((http fs)
      (string-substitute
       (regexp "=") "_"
-      (base64:base64-encode (with-output-to-string (lambda ()(serialize obj))))
+      (base64:base64-encode 
+       (z3:encode-buffer
+	(with-output-to-string
+	  (lambda ()(serialize obj)))))
       #t))
     ((zmq)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
@@ -1993,9 +2025,10 @@
     ((http fs)
      (if (string? msg)
 	 (with-input-from-string 
-	     (base64:base64-decode
-	      (string-substitute 
-	       (regexp "_") "=" msg #t))
+	     (z3:decode-buffer
+	      (base64:base64-decode
+	       (string-substitute 
+		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
 	 (vector #f #f #f))) ;; crude reply for when things go awry
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
@@ -2411,7 +2444,7 @@
      (if (eq? err-status 'done)
 	 default
 	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
 	   (print-call-chain)
 	   default)))
    (apply sqlite3:first-result db stmt params)))

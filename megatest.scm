@@ -10,7 +10,9 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils z3) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json 
+     http-client directory-utils z3 srfi-18) ;;  extras)
+
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -281,6 +283,62 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
+;; The watchdog is to keep an eye on things like db sync etc.
+;;
+(define *watchdog*
+  (make-thread 
+   (lambda ()
+     (let loop ()
+       (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
+
+       ;; sync for filesystem local db writes
+       ;;
+       (let ((start-time (current-seconds)))
+	 (mutex-lock! *db-multi-sync-mutex*)
+	 (for-each 
+	  (lambda (run-id)
+	    (let ((last-write (hash-table-ref/default *db-local-sync* run-id 0)))
+	      (if ;; (and 
+	       (> (- start-time last-write) 5) ;; every five seconds
+	       ;;      (common:db-access-allowed?))
+	       (begin
+		 (db:multi-db-sync (list run-id) 'new2old)
+		 (if (common:low-noise-print 30 "sync new to old")
+		     (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
+		 (hash-table-delete! *db-local-sync* run-id)))))
+	  (hash-table-keys *db-local-sync*))
+	 (mutex-unlock! *db-multi-sync-mutex*))
+       
+       ;; keep going unless time to exit
+       ;;
+       (if (not *time-to-exit*)
+	   (loop))))
+   "Watchdog thread"))
+
+(thread-start! *watchdog*)
+
+(define (std-exit-procedure)
+  (rmt:print-db-stats)
+  (let ((run-ids (hash-table-keys *db-local-sync*)))
+    (if (not (null? run-ids))
+	(db:multi-db-sync run-ids 'new2old)))
+  (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if *megatest-db* (begin
+		      (sqlite3:interrupt! *megatest-db*)
+		      (sqlite3:finalize! *megatest-db* #t)))
+  (if *task-db*     (let ((db (vector-ref *task-db* 0)))
+		      (sqlite3:interrupt! db)
+		      (sqlite3:finalize! db #t))))
+
+(define (std-signal-handler signum)
+  (signal-mask! signum)
+  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
+  (std-exit-procedure)
+  (exit))
+
+(set-signal-handler! signal/int std-signal-handler)
+(set-signal-handler! signal/term std-signal-handler)
+
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
@@ -349,14 +407,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-(on-exit (lambda ()
-	   (rmt:print-db-stats)
-	   (let ((run-ids (hash-table-keys *db-local-sync*)))
-	     (if (not (null? run-ids))
-		 (db:multi-db-sync run-ids 'new2old)))
-	   (if *dbstruct-db* (db:close-all *dbstruct-db*))
-	   (if *megatest-db* (sqlite3:finalize! *megatest-db*))
-	   (if *task-db*     (sqlite3:finalize! (vector-ref *task-db* 0)))))
+;; (on-exit std-exit-procedure)
 
 ;;======================================================================
 ;; Misc general calls
@@ -1206,7 +1257,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
       ;; keep this one local
-      (open-run-close db:clean-up #f)
+      ;; (open-run-close db:clean-up #f)
+      (db:multi-db-sync 
+       #f ;; do all run-ids
+       'new2old
+       'killservers
+       'dejunk
+       'adj-testids
+       'old2new
+       'new2old
+       )
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-mark-incompletes")
@@ -1330,6 +1390,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 help))
+
+(set! *time-to-exit* #t)
+(thread-join! *watchdog*)
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))

@@ -52,7 +52,7 @@
 
 ;; DATABASE
 (define *dbstruct-db*  #f)
-(define *db-stats* (make-hash-table)) ;; hash of vectors < count duration-total >
+(define *db-stats*            (make-hash-table)) ;; hash of vectors < count duration-total >
 (define *db-stats-mutex*      (make-mutex))
 (define *db-sync-mutex*       (make-mutex))
 (define *db-multi-sync-mutex* (make-mutex))
@@ -62,6 +62,8 @@
 (define *db-write-access*     #t)
 (define *inmemdb*             #f)
 (define *task-db*             #f) ;; (vector db path-to-db)
+(define *db-access-allowed*   #t) ;; flag to allow access
+(define *db-access-mutex*     (make-mutex))
 
 ;; SERVER
 (define *my-client-signature* #f)
@@ -114,10 +116,27 @@
   (set! *env-vars-by-run-id* (make-hash-table))
   (set! *test-id-cache*      (make-hash-table)))
 
-;; Generic string database (normalization of sorts)
+;; Generic string database
 (define sdb:qry #f) ;; (make-sdb:qry)) ;;  'init #f)
-;; Generic path database (normalization of sorts)
+;; Generic path database
 (define *fdb* #f)
+
+;;======================================================================
+;; L O C K E R S   A N D   B L O C K E R S 
+;;======================================================================
+
+;; block further accesses to databases. Call this before shutting db down
+(define (common:db-block-further-queries)
+  (mutex-lock! *db-access-mutex*)
+  (set! *db-access-allowed* #f)
+  (mutex-unlock! *db-access-mutex*))
+
+(define (common:db-access-allowed?)
+  (let ((val (begin
+	       (mutex-lock! *db-access-mutex*)
+	       *db-access-allowed*
+	       (mutex-unlock! *db-access-mutex*))))
+    val))
 
 ;;======================================================================
 ;; U S E F U L   S T U F F
@@ -139,7 +158,13 @@
 (define (common:read-encoded-string instr)
   (handle-exceptions
    exn
-   (read (open-input-string (base64:base64-decode instr)))
+   (handle-exceptions
+    exn
+    (begin
+      (debug:print 0 "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (print-call-chain)
+      #f)
+    (read (open-input-string (base64:base64-decode instr))))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================
@@ -185,6 +210,10 @@
 (define (assoc/default key lst . default)
   (let ((res (assoc key lst)))
     (if res (cadr res)(if (null? default) #f (car default)))))
+
+(define (common:get-testsuite-name)
+  (or (configf:lookup *configdat* "server" "testsuite" )
+       (pathname-file *toppath*)))
 
 ;;======================================================================
 ;; Misc utils
@@ -529,6 +558,17 @@
 (define (seconds->year-work-week/day-time sec)
   (time->string
    (seconds->local-time sec) "%yww%V.%w %H:%M"))
+
+(define (seconds->quarter sec)
+  (case (string->number
+	 (time->string 
+	  (seconds->local-time sec)
+	  "%m"))
+    ((1 2 3) 1)
+    ((4 5 6) 2)
+    ((7 8 9) 3)
+    ((10 11 12) 4)
+    (else #f)))
 
 ;;======================================================================
 ;; Colors

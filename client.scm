@@ -128,6 +128,7 @@
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
+  (signal-mask! signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")

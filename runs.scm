@@ -219,10 +219,12 @@
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
+			   (signal-mask! signum)
 			   (let ((tdb (tasks:open-db)))
 			     (tasks:set-state-given-param-key tdb task-key "killed")
+			     ;; (sqlite3:interrupt! tdb) ;; seems silly?
 			     (sqlite3:finalize! tdb))
-			   (print "Killed by sigint. Exiting")
+			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
@@ -251,14 +253,21 @@
     ;; -keepgoing is specified
     (if (eq? *passnum* 0)
 	(begin
+	  ;; Is this still necessary? I think not. Unreachable tests are marked as such and 
+	  ;; should not cause problems here.
+	  ;;
 	  ;; have to delete test records where NOT_STARTED since they can cause -keepgoing to 
 	  ;; get stuck due to becoming inaccessible from a failed test. I.e. if test B depends 
 	  ;; on test A but test B reached the point on being registered as NOT_STARTED and test
 	  ;; A failed for some reason then on re-run using -keepgoing the run can never complete.
+	  ;;
+	  ;; (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
+	  
+	  ;; Now convert FAIL and anything in allow-auto-rerun to NOT_STARTED
+	  ;;
 	  (for-each (lambda (state)
-		      (rmt:general-call 'delete-tests-in-state run-id state))
-		    (cons "NOT_STARTED" (string-split (or (configf:lookup *configdat* "setup" "allow-auto-rerun") ""))))
-	  (rmt:set-tests-state-status run-id test-names #f "FAIL" "NOT_STARTED" "FAIL")))
+		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state))
+		    (string-split (or (configf:lookup *configdat* "setup" "allow-auto-rerun") "")))))
 
     ;; Ensure all tests are registered in the test_meta table
     (runs:update-all-test_meta #f)
@@ -358,8 +367,23 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (begin
-	    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	  (let* ((keep-going #t)
+		 (th1        (make-thread (lambda ()
+					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					  "runs:run-tests-queue"))
+		 (th2        (make-thread (lambda ()				    
+					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
+					    (let ((run-ids (rmt:get-all-run-ids)))
+					      (for-each (lambda (run-id)
+							  (if keep-going
+							      (rmt:find-and-mark-incomplete run-id #f))) ;; ovr-deadtime)))
+							run-ids)))
+					  "runs: mark-incompletes")))
+	    (thread-start! th1)
+	    (thread-start! th2)
+	    (thread-join! th1)
+	    (set! keep-going #f)
+	    (thread-join! th2)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
 	    (if (> run-count 0)
 		(begin
@@ -477,7 +501,7 @@
 	      (begin
 		(if (null? items-list)
 		    (let ((test-id (rmt:get-test-id run-id test-name "")))
-		      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites")))
+		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites"))))
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
@@ -515,7 +539,7 @@
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
 	      (let ((test-id (rmt:get-test-id run-id hed "")))
-		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites"))
+		(if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites")))
 	      
 	      (if (and (null? trimmed-tal)
 		       (null? trimmed-reg))
@@ -539,7 +563,7 @@
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
 	    (let ((test-id (rmt:get-test-id run-id hed "")))
-	      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while."))
+	      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while.")))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
 		  (runs:queue-next-reg tal reg reglen regfull)
@@ -553,9 +577,10 @@
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
       (let ((test-id (rmt:get-test-id run-id hed "")))
-	(if (not (null? prereq-fails))
-	    (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
-	    (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites")))
+	(if test-id
+	    (if (not (null? prereq-fails))
+		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
+		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL"      "Failed to run due to failed prerequisites"))))
       (if (or (not (null? reg))(not (null? tal)))
 	  (begin
 	    (hash-table-set! test-registry hed 'CANNOTRUN)
@@ -646,7 +671,7 @@
      ;;
      ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-      (if (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
+      (if #t ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
 	  (begin
 	    (rmt:general-call 'register-test run-id run-id test-name item-path)
 	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
@@ -750,7 +775,7 @@
 		    (debug:print 1 "WARNING: Dropping test " test-name "/" item-path
 				 " from the launch list as it has prerequistes that are FAIL")
 		    (let ((test-id (rmt:get-test-id run-id hed "")))
-		      (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites"))
+		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_FAIL" "Failed to run due to failed prerequisites")))
 		    (runs:shrink-can-run-more-tests-count) ;; DELAY TWEAKER (still needed?)
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
@@ -889,10 +914,13 @@
       (if (not (null? reruns))(debug:print-info 4 "reruns=" reruns))
 
       ;; Here we mark any old defunct tests as incomplete. Do this every fifteen minutes
+      ;; moving this to a parallel thread and just run it once.
+      ;;
       (if (> (current-seconds)(+ last-time-incomplete 900))
           (begin
             (set! last-time-incomplete (current-seconds))
-            (rmt:find-and-mark-incomplete-all-runs)))
+            ;; (rmt:find-and-mark-incomplete-all-runs)
+	    ))
 
       ;; (print "Top of loop, hed=" hed ", tal=" tal " ,reruns=" reruns)
       (let* ((test-record (hash-table-ref test-records hed))

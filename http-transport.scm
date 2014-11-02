@@ -250,11 +250,15 @@
 	 (begin
 	   (mutex-unlock! *http-mutex*)
 	   (thread-sleep! 1)
-	   (close-all-connections!)
+	   (handle-exceptions
+	    exn
+	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+	    (close-all-connections!))
 	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
 	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
 	 (begin
 	   (mutex-unlock! *http-mutex*)
+	   (tasks:kill-server-run-id run-id)
 	   #f))
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
@@ -270,12 +274,18 @@
 			      (mutex-lock! *http-mutex*)
 			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
 			      ;;					       ((exn http client-error) e (print e)))
-			      (set! res (with-input-from-request ;; was dat
-					 fullurl 
-					 (list (cons 'key "thekey")
-					       (cons 'cmd cmd)
-					       (cons 'params params))
-					 read-string))
+			      (set! res (handle-exceptions
+					 exn
+					 (begin
+					   (debug:print 0 "ERROR: failure in with-input-from-request. Giving up.")
+					   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+					   #f)
+					 (with-input-from-request ;; was dat
+					  fullurl 
+					  (list (cons 'key "thekey")
+						(cons 'cmd cmd)
+						(cons 'params params))
+					  read-string)))
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
 			      (mutex-unlock! *http-mutex*)
@@ -309,6 +319,7 @@
 (define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
+(define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -319,6 +330,9 @@
 	    (http-transport:server-dat-get-port  vec))
       #f))
 
+(define (http-transport:server-dat-update-last-access vec)
+  (vector-set! vec 5 (current-seconds)))
+
 ;;
 ;; connect
 ;;
@@ -326,7 +340,7 @@
   (let* ((api-url      (conc "http://" iface ":" port "/api"))
 	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
 	 (api-req      (make-request method: 'POST uri: api-uri))
-	 (server-dat   (vector iface port api-uri api-url api-req)))
+	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds))))
     server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
@@ -526,6 +540,7 @@
 	  (exit)))))
 
 (define (http-transport:server-signal-handler signum)
+  (signal-mask! signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")

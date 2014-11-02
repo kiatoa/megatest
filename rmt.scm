@@ -59,6 +59,19 @@
 ;; vars is a json string encoding the parameters for the call
 ;;
 (define (rmt:send-receive cmd rid params)
+  ;; clean out old connections
+  (mutex-lock! *db-multi-sync-mutex*)
+  (let ((expire-time (- (current-seconds) 60)))
+    (for-each 
+     (lambda (run-id)
+       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+	 (if ;; (and connection 
+		  (< (http-transport:server-dat-get-last-access connection) expire-time) ; )
+	     (begin
+	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+	       (hash-table-delete! *runremote* run-id)))))
+     (hash-table-keys *runremote*)))
+  (mutex-unlock! *db-multi-sync-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
 			    (if cinfo
@@ -74,12 +87,13 @@
 	 (jparams         (db:obj->string params)))
     (if connection-info
 	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	  (http-transport:server-dat-update-last-access connection-info)
 	  (if res
 	      (db:string->obj res)
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(rmt:send-receive cmd run-id params))))
-	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "800"))))
+	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "-1"))))
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
 	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
 	  (let ((curr-max (rmt:get-max-query-average)))
@@ -91,14 +105,21 @@
 
 (define (rmt:update-db-stats rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
-  (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
-	 (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
-    (if (not stat-vec)
-	(let ((newvec (vector 0 0)))
-	  (hash-table-set! *db-stats* cmd newvec)
-	  (set! stat-vec newvec)))
-    (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
-    (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration)))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: stats collection failed in update-db-stats")
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (print "exn=" (condition->list exn))
+     #f) ;; if this fails we don't care, it is just stats
+   (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
+	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+     (if (not stat-vec)
+	 (let ((newvec (vector 0 0)))
+	   (hash-table-set! *db-stats* cmd newvec)
+	   (set! stat-vec newvec)))
+     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
+     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
   (mutex-unlock! *db-stats-mutex*))
 
 
@@ -137,10 +158,10 @@
     res))
 	  
 (define (rmt:open-qry-close-locally cmd run-id params)
-  (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	 (dbstruct-local (if *dbstruct-db*
+  (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let ((db (make-dbr:dbstruct path:  dbdir local: #t)))
+			     (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
 	 (db-file-path   (db:dbfile-path 0)))
@@ -153,12 +174,8 @@
       (if (not (member cmd api:read-only-queries))
 	  (let ((start-time (current-seconds)))
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let ((last-sync (hash-table-ref/default *db-local-sync* run-id 0)))
-	      (if (> (- start-time last-sync) 5) ;; every five seconds
-		  (begin
-		    (db:multi-db-sync (list run-id) 'new2old)
-		    (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds")
-		    (hash-table-set! *db-local-sync* run-id start-time))))
+	    (if (not (hash-table-ref/default *db-local-sync* run-id #f))
+		(hash-table-set! *db-local-sync* run-id start-time)) ;; the oldest "write"
 	    (mutex-unlock! *db-multi-sync-mutex*)))
       res)))
 
@@ -249,7 +266,7 @@
   (if (and (number? run-id)(number? test-id))
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
-	(debug:print 0 "ERROR: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
+	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
 	(print-call-chain)
 	#f)))
 
@@ -317,6 +334,12 @@
 
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
+
+(define (rmt:test-set-top-process-pid run-id test-id pid)
+  (rmt:send-receive 'test-set-top-process-pid run-id (list run-id test-id pid)))
+
+(define (rmt:test-get-top-process-pid run-id test-id)
+  (rmt:send-receive 'test-get-top-process-pid run-id (list run-id test-id)))
 
 (define (rmt:get-run-ids-matching-target keynames target res runname testpatt statepatt statuspatt)
   (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res runname testpatt statepatt statuspatt)))

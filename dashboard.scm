@@ -978,7 +978,7 @@ Misc
 ;;
 ;; General info about the run(s) and megatest area
 (define (dashboard:summary db)
-  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
+  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
       #:value 500
@@ -1457,9 +1457,14 @@ Misc
   (sqlite3:finalize! db))
 
 (define (dashboard:get-youngest-run-db-mod-time)
-  (apply max (map (lambda (filen)
-		    (file-modification-time filen))
-		  (glob (conc *dbdir* "/*.db")))))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
+     (current-seconds)) ;; something went wrong - just print an error and return current-seconds
+   (apply max (map (lambda (filen)
+		     (file-modification-time filen))
+		   (glob (conc *dbdir* "/*.db"))))))
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))
