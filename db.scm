@@ -301,6 +301,7 @@
 	 (begin 
 	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
 	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 " db: " rundb)
 	   (print-call-chain)
 	   #f)
 	 (sqlite3:interrupt! rundb)

@@ -10,7 +10,9 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils z3) ;; (srfi 18) extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json 
+     http-client directory-utils z3 srfi-18) ;;  extras)
+
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 
@@ -280,6 +282,40 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       )
 		 args:arg-hash
 		 0))
+
+;; The watchdog is to keep an eye on things like db sync etc.
+;;
+(define *watchdog*
+  (make-thread 
+   (lambda ()
+     (let loop ()
+       (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
+
+       ;; sync for filesystem local db writes
+       ;;
+       (let ((start-time (current-seconds)))
+	 (mutex-lock! *db-multi-sync-mutex*)
+	 (for-each 
+	  (lambda (run-id)
+	    (let ((last-write (hash-table-ref/default *db-local-sync* run-id 0)))
+	      (if ;; (and 
+	       (> (- start-time last-write) 5) ;; every five seconds
+	       ;;      (common:db-access-allowed?))
+	       (begin
+		 (db:multi-db-sync (list run-id) 'new2old)
+		 (if (common:low-noise-print 30 "sync new to old")
+		     (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
+		 (hash-table-delete! *db-local-sync* run-id)))))
+	  (hash-table-keys *db-local-sync*))
+	 (mutex-unlock! *db-multi-sync-mutex*))
+       
+       ;; keep going unless time to exit
+       ;;
+       (if (not *time-to-exit*)
+	   (loop))))
+   "Watchdog thread"))
+
+(thread-start! *watchdog*)
 
 (define (std-exit-procedure)
   (rmt:print-db-stats)
@@ -1354,6 +1390,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (not *didsomething*)
     (debug:print 0 help))
+
+(set! *time-to-exit* #t)
+(thread-join! *watchdog*)
 
 (if (not (eq? *globalexitstatus* 0))
     (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))

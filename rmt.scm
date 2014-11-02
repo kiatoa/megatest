@@ -155,10 +155,10 @@
     res))
 	  
 (define (rmt:open-qry-close-locally cmd run-id params)
-  (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	 (dbstruct-local (if *dbstruct-db*
+  (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let ((db (make-dbr:dbstruct path:  dbdir local: #t)))
+			     (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
 	 (db-file-path   (db:dbfile-path 0)))
@@ -171,16 +171,8 @@
       (if (not (member cmd api:read-only-queries))
 	  (let ((start-time (current-seconds)))
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (let ((last-sync (hash-table-ref/default *db-local-sync* run-id 0)))
-	      (if ;; (and 
-		   (> (- start-time last-sync) 5) ;; every five seconds
-		  ;;      (common:db-access-allowed?))
-		  (begin
-		    ;; MOVE THIS TO A THREAD?
-		    (db:multi-db-sync (list run-id) 'new2old)
-		    (if (common:low-noise-print 30 "sync new to old")
-			(debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
-		    (hash-table-set! *db-local-sync* run-id start-time))))
+	    (if (not (hash-table-ref/default *db-local-sync* run-id #f))
+		(hash-table-set! *db-local-sync* run-id start-time)) ;; the oldest "write"
 	    (mutex-unlock! *db-multi-sync-mutex*)))
       res)))
 
