@@ -38,21 +38,24 @@
 	     (if (> count 0)
 		 (lock-queue:open-db fname count: (- count 1))
 		 db))
-	   (sqlite3:execute 
+	   (sqlite3:with-transaction
 	    db
-	    "CREATE TABLE IF NOT EXISTS queue (
-  	      id         INTEGER PRIMARY KEY,
-              test_id    INTEGER,
-              start_time INTEGER,
-              state      TEXT,
-              CONSTRAINT queue_constraint UNIQUE (test_id));")
-	   (sqlite3:execute
-	    db
-	    "CREATE TABLE IF NOT EXISTS runlocks (
-              id         INTEGER PRIMARY KEY,
-              test_id    INTEGER,
-              run_lock   TEXT,
-              CONSTRAINT runlock_constraint UNIQUE (run_lock));"))))
+	    (lambda ()
+	      (sqlite3:execute 
+	       db
+	       "CREATE TABLE IF NOT EXISTS queue (
+     	         id         INTEGER PRIMARY KEY,
+                 test_id    INTEGER,
+                 start_time INTEGER,
+                 state      TEXT,
+                 CONSTRAINT queue_constraint UNIQUE (test_id));")
+	      (sqlite3:execute
+	       db
+	       "CREATE TABLE IF NOT EXISTS runlocks (
+                 id         INTEGER PRIMARY KEY,
+                 test_id    INTEGER,
+                 run_lock   TEXT,
+                 CONSTRAINT runlock_constraint UNIQUE (run_lock));"))))))
     (sqlite3:set-busy-handler! db handler)
     db))
 
@@ -62,6 +65,7 @@
    (if (> remtries 0)
        (begin
 	 (debug:print 0 "WARNING: exception on lock-queue:set-state. Trying again in 30 seconds.")
+	 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	 (thread-sleep! 30)
 	 (lock-queue:set-state db test-id newstate remtries: (- remtries 1)))
        (begin
@@ -77,6 +81,7 @@
    (if (> remtries 0)
        (begin
 	 (debug:print 0 "WARNING: exception on lock-queue:any-younger. Trying again in 30 seconds.")
+	 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	 (thread-sleep! 30)
 	 (lock-queue:any-younger? db mystart test-id remtries: (- remtries 1)))
        (begin
@@ -100,6 +105,8 @@
 	   (handle-exceptions
 	    exn
 	    (begin
+	      (debug:print 0 "WARNING: failed to get queue lock. Will try again in a few seconds")
+	      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	      (thread-sleep! 10)
 	      (if (> count 0)
 		  (lock-queue:get-lock db test-id count: (- count 1)))
@@ -127,6 +134,8 @@
     (handle-exceptions
      exn
      (begin
+       (debug:print 0 "WARNING: Failed to release queue lock. Will try again in few seconds")
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (thread-sleep! 10)
        (if (> count 0)
 	   (lock-queue:release-lock fname test-id count: (- count 1))
@@ -138,6 +147,8 @@
   (handle-exceptions
    exn
    (begin
+     (debug:print 0 "WARNING: Failed to steal queue lock. Will try again in few seconds")
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (thread-sleep! 10)
      (if (> count 0)
 	 (lock-queue:steal-lock db test-id count: (- count 1))
@@ -155,6 +166,8 @@
     (handle-exceptions
      exn
      (begin
+       (debug:print 0 "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (thread-sleep! 10)
        (if (> count 0)
 	   (lock-queue:wait-turn fname test-id count: (- count 1))

@@ -158,7 +158,13 @@
 (define (common:read-encoded-string instr)
   (handle-exceptions
    exn
-   (read (open-input-string (base64:base64-decode instr)))
+   (handle-exceptions
+    exn
+    (begin
+      (debug:print 0 "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
+      (print-call-chain)
+      #f)
+    (read (open-input-string (base64:base64-decode instr))))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
 ;;======================================================================
@@ -552,6 +558,17 @@
 (define (seconds->year-work-week/day-time sec)
   (time->string
    (seconds->local-time sec) "%yww%V.%w %H:%M"))
+
+(define (seconds->quarter sec)
+  (case (string->number
+	 (time->string 
+	  (seconds->local-time sec)
+	  "%m"))
+    ((1 2 3) 1)
+    ((4 5 6) 2)
+    ((7 8 9) 3)
+    ((10 11 12) 4)
+    (else #f)))
 
 ;;======================================================================
 ;; Colors

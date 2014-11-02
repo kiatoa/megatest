@@ -167,17 +167,23 @@
 
 ;; speed up for common cases with a little logic
 (define (mt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment)
-  (cond
-   ((and newstate newstatus newcomment)
-    (rmt:general-call 'state-status-msg run-id newstate newstatus newcomment test-id))
-   ((and newstate newstatus)
-    (rmt:general-call 'state-status run-id newstate newstatus test-id))
-   (else
-    (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
-    (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
-    (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
-   (mt:process-triggers run-id test-id newstate newstatus)
-   #t)
+  (if (not (and run-id test-id))
+      (begin
+	(debug:print 0 "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
+	(print-call-chain)
+	#f)
+      (begin
+	(cond
+	 ((and newstate newstatus newcomment)
+	  (rmt:general-call 'state-status-msg run-id newstate newstatus newcomment test-id))
+	 ((and newstate newstatus)
+	  (rmt:general-call 'state-status run-id newstate newstatus test-id))
+	 (else
+	  (if newstate   (rmt:general-call 'set-test-state   run-id newstate   test-id))
+	  (if newstatus  (rmt:general-call 'set-test-status  run-id newstatus  test-id))
+	  (if newcomment (rmt:general-call 'set-test-comment run-id newcomment test-id))))
+	(mt:process-triggers run-id test-id newstate newstatus)
+	#t)))
 
 (define (mt:test-set-state-status-by-testname run-id test-name item-path new-state new-status new-comment)
   (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))

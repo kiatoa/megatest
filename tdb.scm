@@ -72,7 +72,8 @@
 	(handle-exceptions
 	 exn
 	 (begin
-	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
+	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
+			dbpath ".\n  "
 			((condition-property-accessor 'exn 'message) exn))
 	   #f)
 	 ;; Is there a cheaper single line operation that will check for existance of a table

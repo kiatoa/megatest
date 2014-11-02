@@ -258,6 +258,7 @@
 	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
 	 (begin
 	   (mutex-unlock! *http-mutex*)
+	   (tasks:kill-server-run-id run-id)
 	   #f))
      (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
@@ -277,6 +278,7 @@
 					 exn
 					 (begin
 					   (debug:print 0 "ERROR: failure in with-input-from-request. Giving up.")
+					   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					   #f)
 					 (with-input-from-request ;; was dat
 					  fullurl 
@@ -538,6 +540,7 @@
 	  (exit)))))
 
 (define (http-transport:server-signal-handler signum)
+  (signal-mask! signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")

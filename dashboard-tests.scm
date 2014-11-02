@@ -563,7 +563,7 @@
 						    ;; NOTE: BUG HIDER, try to eliminate this exception handler
 						    (handle-exceptions
 						     exn 
-						     (debug:print-info 0 "test db access issue: " ((condition-property-accessor 'exn 'message) exn))
+						     (debug:print-info 0 "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
 						     (db:get-test-info-by-id dbstruct run-id test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond

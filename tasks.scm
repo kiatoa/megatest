@@ -326,8 +326,24 @@
 (define (tasks:kill-server hostname pid)
   (debug:print-info 0 "Attempting to kill server process " pid " on host " hostname)
   (setenv "TARGETHOST" hostname)
-  (system (conc "nbfake kill " pid)))
+  (setenv "TARGETHOST_LOGF" "server-kills.log")
+  (system (conc "nbfake kill " pid))
+  (unsetenv "TARGETHOST_LOGF")
+  (unsetenv "TARGETHOST"))
  
+;; look up a server by run-id and send it a kill, also delete the record for that server
+;;
+(define (tasks:kill-server-run-id run-id)
+  (let* ((tdb  (tasks:open-db))
+	 (sdat (tasks:get-server mdb run-id)))
+    (if sdat
+	(let ((hostname (vector-ref sdat 6))
+	      (pid      (vector-ref sdat 5)))
+	  (debug:print-info 0 "Killing server for run-id " run-id " on host " hostname " with pid " pid)
+	  (tasks:kill-server hostname pid)
+	  (tasks:server-delete-record mdb server-id tag) )
+	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))))
+    
 ;;   (if status ;; #t means alive
 ;;       (begin
 ;; 	(if (equal? hostname (get-host-name))
@@ -636,24 +652,27 @@
 	      (match-dat (string-search hostpid-rx param-key)))
 	 (if match-dat
 	     (let ((hostname  (cadr match-dat))
-		   (pid       (caddr match-dat)))
+		   (pid       (string->number (caddr match-dat))))
 	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
 	       (if (equal? (get-host-name) hostname)
-		   (begin
-		     (handle-exceptions
-		      exn
-		      (begin
-			(debug:print 0 "Kill of process " pid " on host " hostname " failed.")
-			(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-			#t)
-		      (process-signal (string->number pid) signal/int)
-		      (thread-sleep! 5)
-		      (process-signal (string->number pid) signal/kill)))
+		   (if (process:alive? pid)
+		       (begin
+			 (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
+			    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			    #t)
+			  (process-signal pid signal/int)
+			  (thread-sleep! 5)
+			  (if (process:alive? pid)
+			      (process-signal pid signal/kill)))))
 		   ;;  (call-with-environment-variables
 		   (let ((old-targethost (getenv "TARGETHOST")))
 		     (setenv "TARGETHOST" hostname)
 		     (system (conc "nbfake kill " pid))
-		     (if old-targethost (setenv "TARGETHOST" old-targethost)))))
+		     (if old-targethost (setenv "TARGETHOST" old-targethost))
+		     (unsetenv "TARGETHOST"))))
 	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
      records)))
 

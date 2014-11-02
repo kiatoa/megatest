@@ -363,11 +363,16 @@
 						      (lambda (pid)
 							(handle-exceptions
 							 exn
-							 (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+							 (begin
+							   (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
+							   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
 							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-							 (process-signal pid signal/int)
-							 (thread-sleep! 5)
-							 (process-signal pid signal/kill)))
+							 (if (process:alive? pid)
+							     (begin
+							       (process-signal pid signal/int)
+							       (thread-sleep! 5)
+							       (if (process:process-alive? pid)
+								   (process-signal pid signal/kill))))))
 						      pids)
 						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 						   (begin
@@ -454,6 +459,7 @@
 		     exn
 		     (begin
 		       (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
+		       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 		       (exit 1))
 		     (create-directory linktree #t))))
 	      (begin
@@ -463,7 +469,9 @@
 	      (let ((dbdir (conc linktree "/.db")))
 		(handle-exceptions
 		 exn
-		 (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+		 (begin
+		   (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+		   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
 		 (if (not (directory-exists? dbdir))(create-directory dbdir)))
 		(setenv "MT_LINKTREE" linktree))
 	      (begin
