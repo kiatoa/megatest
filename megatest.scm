@@ -288,9 +288,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define *watchdog*
   (make-thread 
    (lambda ()
+     (thread-sleep! 0.5) ;; half second delay for startup
      (let loop ()
-       (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
-
        ;; sync for filesystem local db writes
        ;;
        (let ((start-time (current-seconds)))
@@ -312,7 +311,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        ;; keep going unless time to exit
        ;;
        (if (not *time-to-exit*)
-	   (loop))))
+	   (begin
+	     (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
+	     (loop)))))
    "Watchdog thread"))
 
 (thread-start! *watchdog*)
