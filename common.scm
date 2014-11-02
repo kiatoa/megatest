@@ -559,6 +559,17 @@
   (time->string
    (seconds->local-time sec) "%yww%V.%w %H:%M"))
 
+(define (seconds->quarter sec)
+  (case (string->number
+	 (time->string 
+	  (seconds->local-time sec)
+	  "%m"))
+    ((1 2 3) 1)
+    ((4 5 6) 2)
+    ((7 8 9) 3)
+    ((10 11 12) 4)
+    (else #f)))
+
 ;;======================================================================
 ;; Colors
 ;;======================================================================

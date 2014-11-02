@@ -60,15 +60,18 @@
 ;;
 (define (rmt:send-receive cmd rid params)
   ;; clean out old connections
+  (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) 60)))
     (for-each 
      (lambda (run-id)
-       (let ((connection (hash-table-ref *runremote* run-id)))
-	 (if (< (http-transport:server-dat-get-last-access connection) expire-time)
+       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+	 (if ;; (and connection 
+		  (< (http-transport:server-dat-get-last-access connection) expire-time) ; )
 	     (begin
 	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
 	       (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
+  (mutex-unlock! *db-multi-sync-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
 			    (if cinfo
@@ -263,7 +266,7 @@
   (if (and (number? run-id)(number? test-id))
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
-	(debug:print 0 "ERROR: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
+	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
 	(print-call-chain)
 	#f)))
 
