@@ -1047,7 +1047,7 @@ Misc
 			(let* ((toolpath (car (argv)))
 			       (key      (conc lin ":" col))
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " test-id "&")))
+			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))

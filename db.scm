@@ -1808,10 +1808,9 @@
   (let ((db (db:get-db dbstruct run-id))
 	(res '()))
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
+     (lambda (a . b)
 	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
-			   res)))
+       (set! res (cons (apply vector a b) res)))
      (db:get-db dbstruct run-id) 
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
 	       (string-intersperse (map conc test-ids) ",") ");"))

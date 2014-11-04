@@ -90,6 +90,7 @@
 	(if (not nodenum)
 	    (begin
 	      (iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
+		;; ERROR? ADDING DATA TO PARENT, DONT WE WANT IT ON CREATED NODE?
 	      (if userdata
 		  (iup:attribute-set! obj (conc "USERDATA"   parentnode) userdata))
 	      (if (null? tal)
@@ -114,6 +115,11 @@
 	  newpath
 	  (loop (+ currnode 1)
 		newpath)))))
+
+(define (tree:delete-node obj top node-path) ;; node-path is a list of strings
+  (let ((id  (tree:find-node obj (cons top node-path))))
+    (print "Found node to remove " id " for path " top " " node-path)
+    (iup:attribute-set! obj (conc "DELNODE" id) "SELECTED")))
 	
 #|
 

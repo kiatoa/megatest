@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format)
+(use format numbers)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
@@ -326,9 +326,9 @@ Misc
 			    #:numlin-visible 5))
 	 (steps-matrix     (iup:matrix
 			    #:expand "YES"
-			    #:numcol 5
+			    #:numcol 6
 			    #:numlin 50
-			    #:numcol-visible 5
+			    #:numcol-visible 6
 			    #:numlin-visible 8))
 	 (data-matrix      (iup:matrix
 			    #:expand "YES"
@@ -361,7 +361,8 @@ Misc
     (iup:attribute-set! steps-matrix "WIDTH3" "50")
     (iup:attribute-set! steps-matrix "0:4" "Status")
     (iup:attribute-set! steps-matrix "WIDTH4" "50")
-    (iup:attribute-set! steps-matrix "0:5" "Log File")
+    (iup:attribute-set! steps-matrix "0:5" "Duration")
+    (iup:attribute-set! steps-matrix "0:6" "Log File")
     (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
     ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
     (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
@@ -448,10 +449,14 @@ Misc
   (if testdat
       (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
+	     (run-id       (db:test-get-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
-						   (db:test-get-run_id test-data) '()))
+						   run-id
+						   '()))
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
-	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname)))))
+	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
+	     (steps-dat    (dcommon:get-compressed-steps *dbstruct-local* run-id test-id)))
+				
 	(if test-data
 	    (begin
 	      ;; 
@@ -496,10 +501,11 @@ Misc
 				(db:test-get-cpuload  test-data)
 				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
 			  (make-list 5 "")))
+		))
+	      (dcommon:populate-steps steps-dat steps-matrix))))))
 		;;(list meta-dat-matrix
 		;;      (if test-id
 		;;	  (list (
-		)))))))
 
   
 ;; db:test-get-id           
