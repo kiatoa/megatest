@@ -24,7 +24,7 @@
 
 ;; wait up to aprox n seconds for a journal to go away
 ;;
-(define (tasks:wait-on-journal path n #!key (remove #f))
+(define (tasks:wait-on-journal path n #!key (remove #f)(waiting-msg #f))
   (let ((fullpath (conc path "-journal")))
     (handle-exceptions
      exn
@@ -32,14 +32,18 @@
      (let loop ((journal-exists (file-exists? fullpath))
 		(count          n)) ;; wait ten times ...
        (if journal-exists
-	   (if (> count 0)
-	       (begin
-		 (thread-sleep! 1)
-		 (loop (file-exists? fullpath)
-		       (- count 1)))
-	       (begin
-		 (if remove (system (conc "rm -rf " path)))
-		 #f))
+	   (begin
+	     (if (and waiting-msg
+		      (eq? (modulo n 30) 0))
+		 (debug:print 0 waiting-msg))
+	     (if (> count 0)
+		 (begin
+		   (thread-sleep! 1)
+		   (loop (file-exists? fullpath)
+			 (- count 1)))
+		 (begin
+		   (if remove (system (conc "rm -rf " fullpath)))
+		   #f)))
 	   #t)))))
 
 (define (tasks:get-task-db-path)
