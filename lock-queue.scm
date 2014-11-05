@@ -145,12 +145,20 @@
      (begin
        (debug:print 0 "WARNING: Failed to release queue lock. Will try again in few seconds")
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (thread-sleep! 10)
+       (thread-sleep! (/ count 10))
        (if (> count 0)
 	   (begin
 	     (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat))
 	     (lock-queue:release-lock fname test-id count: (- count 1)))
-	   #f))
+	   (let ((journal (conc fname "-journal")))
+	     ;; If we've tried ten times and failed there is a serious problem
+	     ;; try to remove the lock db and allow it to be recreated
+	     (handle-exceptions
+	      exn
+	      #f
+	      (if (file-exists? journal)(delete-file journal))
+	      (if (file-exists? fname)  (delete-file fname))
+	      #f))))
      (sqlite3:execute (lock-queue:db-dat-get-db dbdat) "DELETE FROM runlocks WHERE test_id=?;" test-id)
      (sqlite3:finalize! (lock-queue:db-dat-get-db dbdat)))))
 

@@ -92,6 +92,7 @@
 	      (db:string->obj res)
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+		(hash-table-delete! *runremote* run-id)
 		(rmt:send-receive cmd run-id params))))
 	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "-1"))))
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
