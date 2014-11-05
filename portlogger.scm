@@ -50,6 +50,7 @@
        (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 "exn=" (condition->list exn))
+       (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
        (print-call-chain))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))

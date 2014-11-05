@@ -12,6 +12,7 @@
 
 (declare (unit lock-queue))
 (declare (uses common))
+(declare (uses tasks))
 
 ;;======================================================================
 ;; attempt to prevent overlapping updates of rollup files by queueing
@@ -104,8 +105,8 @@
       "SELECT test_id FROM queue WHERE start_time > ?;" mystart)
      res)))
 
-(define (lock-queue:get-lock dbdat test-id #!key (count 10))
-  (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 remove: #t waiting-msg "lock-queue:get-lock, waiting on journal")
+(define (lock-queue:get-lock dbdat test-id #!key (count 10)(waiting-msg #f))
+  (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 remove: #t waiting-msg: "lock-queue:get-lock, waiting on journal")
   (let* ((res       #f)
 	 (db        (lock-queue:db-dat-get-db dbdat))
 	 (lckqry    (sqlite3:prepare db "SELECT test_id,run_lock FROM runlocks WHERE run_lock='locked';"))
@@ -181,7 +182,7 @@
 ;; returns #t if ok to proceed with task
 ;; otherwise waits
 ;;
-(define (lock-queue:wait-turn fname test-id #!key (count 10))
+(define (lock-queue:wait-turn fname test-id #!key (count 10)(waiting-msg #f))
   (let* ((dbdat   (lock-queue:open-db fname))
 	 (mystart (current-seconds))
 	 (db      (lock-queue:db-dat-get-db dbdat)))
@@ -190,6 +191,7 @@
      (begin
        (debug:print 0 "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print-call-chain)
        (thread-sleep! 10)
        (if (> count 0)
 	   (begin
