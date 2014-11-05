@@ -112,17 +112,20 @@
 
 (define (tdb:testdb-initialize db)
   (debug:print 11 "db:testdb-initialize START")
-  (for-each
-   (lambda (sqlcmd)
-     (sqlite3:execute db sqlcmd))
-   (list "CREATE TABLE IF NOT EXISTS test_rundat (
+  (sqlite3:with-transaction
+   db
+   (lambda ()
+     (for-each
+      (lambda (sqlcmd)
+	(sqlite3:execute db sqlcmd))
+      (list "CREATE TABLE IF NOT EXISTS test_rundat (
               id INTEGER PRIMARY KEY,
               update_time TIMESTAMP,
               cpuload INTEGER DEFAULT -1,
               diskfree INTEGER DEFAULT -1,
               diskusage INTGER DEFAULT -1,
               run_duration INTEGER DEFAULT 0);"
-	 "CREATE TABLE IF NOT EXISTS test_data (
+	    "CREATE TABLE IF NOT EXISTS test_data (
               id INTEGER PRIMARY KEY,
               test_id INTEGER,
               category TEXT DEFAULT '',
@@ -135,7 +138,7 @@
               status TEXT DEFAULT 'n/a',
               type TEXT DEFAULT '',
               CONSTRAINT test_data_constraint UNIQUE (test_id,category,variable));"
-	 "CREATE TABLE IF NOT EXISTS test_steps (
+	    "CREATE TABLE IF NOT EXISTS test_steps (
               id INTEGER PRIMARY KEY,
               test_id INTEGER, 
               stepname TEXT, 
@@ -145,15 +148,15 @@
               comment TEXT DEFAULT '',
               logfile TEXT DEFAULT '',
               CONSTRAINT test_steps_constraint UNIQUE (test_id,stepname,state));"
-	 ;; test_meta can be used for handing commands to the test
-	 ;; e.g. KILLREQ
-	 ;;      the ackstate is set to 1 once the command has been completed
-	 "CREATE TABLE IF NOT EXISTS test_meta (
+	    ;; test_meta can be used for handing commands to the test
+	    ;; e.g. KILLREQ
+	    ;;      the ackstate is set to 1 once the command has been completed
+	    "CREATE TABLE IF NOT EXISTS test_meta (
               id INTEGER PRIMARY KEY,
               var TEXT,
               val TEXT,
               ackstate INTEGER DEFAULT 0,
-              CONSTRAINT metadat_constraint UNIQUE (var));"))
+              CONSTRAINT metadat_constraint UNIQUE (var));"))))
   (debug:print 11 "db:testdb-initialize END"))
 
 (define (tdb:read-test-data tdb test-id categorypatt)

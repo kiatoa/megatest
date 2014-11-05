@@ -195,7 +195,10 @@
 	   (begin
 	     (sqlite3:finalize! db)
 	     (lock-queue:wait-turn fname test-id count: (- count 1)))
-	   #f))
+	   (begin
+	     (debug:print 0 "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
+	     (print-call-chain)
+	     #f)))
      (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
      (sqlite3:execute
       db

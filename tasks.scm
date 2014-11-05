@@ -292,19 +292,32 @@
      run-id)
     (vector header res)))
 
-(define (tasks:get-server mdb run-id)
+(define (tasks:get-server mdb run-id #!key (retries 10))
   (let ((res  #f)
 	(best #f))
-    (sqlite3:for-each-row
-     (lambda (id interface port pubport transport pid hostname)
-       (set! res (vector id interface port pubport transport pid hostname)))
-     mdb
-     ;; removed:
-     ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
-     "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
+    (handle-exceptions
+     exn
+     (begin 
+       (debug:print 0 "WARNING: tasks:get-server db access error.")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 " for run " run-id)
+	   (print-call-chain)
+	   (if (> retries 0)
+	       (begin
+		 (debug:print 0 " trying call to tasks:get-server again in 10 seconds")
+		 (thread-sleep! 10)
+		 (tasks:get-server mdb run-id retries: (- retries 0)))
+	       (debug:print 0 "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
+     (sqlite3:for-each-row
+      (lambda (id interface port pubport transport pid hostname)
+	(set! res (vector id interface port pubport transport pid hostname)))
+      mdb
+      ;; removed:
+      ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
+      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
           WHERE run_id=? AND state='running'
           ORDER BY start_time DESC LIMIT 1;" run-id) ;; (common:version-signature) run-id)
-    res))
+     res)))
 
 (define (tasks:server-running-or-starting? mdb run-id)
   (let ((res #f))
