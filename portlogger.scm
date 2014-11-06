@@ -28,16 +28,24 @@
 			 (sqlite3:open-database fname))))
 	 (handler  (make-busy-timeout 136000))
 	 (canwrite (file-write-access? fname)))
+	 ;; (db-init  (lambda ()
+	 ;;             (sqlite3:execute 
+	 ;;              db
+	 ;;              "CREATE TABLE IF NOT EXISTS ports (
+         ;;                 port INTEGER PRIMARY KEY,
+         ;;                 state TEXT DEFAULT 'not-used',
+         ;;                 fail_count INTEGER DEFAULT 0,
+         ;;                 update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))))
     (sqlite3:set-busy-handler! db handler)
     (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (if (not exists)
-	(sqlite3:execute 
-	 db
-	 "CREATE TABLE IF NOT EXISTS ports (
+    ;; (if (not exists) ;; needed with IF NOT EXISTS?
+    (sqlite3:execute 
+     db
+     "CREATE TABLE IF NOT EXISTS ports (
             port INTEGER PRIMARY KEY,
             state TEXT DEFAULT 'not-used',
             fail_count INTEGER DEFAULT 0,
-            update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))
+            update_time TIMESTAMP DEFAULT (strftime('%s','now')) );")
     db))
 
 (define (portlogger:open-run-close proc . params)

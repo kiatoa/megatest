@@ -68,6 +68,7 @@
     (setenv "MT_RUN_AREA_HOME" toppath)
     (setenv "MT_RUNNAME" runname)
     (setenv "MT_TARGET"  target)
+    (setenv "MT_TESTSUITENAME" (common:get-testsuite-name))
     (set! envdat (append 
 		  envdat
 		  (list (list "MT_RUN_AREA_HOME" toppath)

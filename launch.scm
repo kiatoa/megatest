@@ -114,6 +114,11 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  (change-directory *toppath*) 
+
+	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
+	  ;;       seems non-ideal but could well break stuff
+	  ;;    BUG? BUG? BUG?
+
 	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
@@ -160,7 +165,9 @@
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
-	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))))
+	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
+	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  ;; Can setup as client for server mode now

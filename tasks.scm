@@ -350,16 +350,18 @@
  
 ;; look up a server by run-id and send it a kill, also delete the record for that server
 ;;
-(define (tasks:kill-server-run-id run-id)
+(define (tasks:kill-server-run-id run-id #!key (tag "default"))
   (let* ((tdb  (tasks:open-db))
-	 (sdat (tasks:get-server mdb run-id)))
+	 (sdat (tasks:get-server tdb run-id)))
     (if sdat
 	(let ((hostname (vector-ref sdat 6))
-	      (pid      (vector-ref sdat 5)))
-	  (debug:print-info 0 "Killing server for run-id " run-id " on host " hostname " with pid " pid)
+	      (pid      (vector-ref sdat 5))
+	      (server-id (vector-ref sdat 0)))
+	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
-	  (tasks:server-delete-record mdb server-id tag) )
-	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))))
+	  (tasks:server-delete-record tdb server-id tag) )
+	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))
+    (sqlite3:finalize! tdb)))
     
 ;;   (if status ;; #t means alive
 ;;       (begin

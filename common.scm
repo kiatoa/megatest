@@ -212,7 +212,7 @@
     (if res (cadr res)(if (null? default) #f (car default)))))
 
 (define (common:get-testsuite-name)
-  (or (configf:lookup *configdat* "server" "testsuite" )
+  (or (configf:lookup *configdat* "setup" "testsuite" )
        (pathname-file *toppath*)))
 
 ;;======================================================================
