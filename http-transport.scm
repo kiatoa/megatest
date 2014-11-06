@@ -357,7 +357,7 @@
 				 (last-sdat  "not this"))
                         (let ((sdat #f))
 			  (thread-sleep! 0.01)
-			  (debug:print-info 0 "Waiting for server alive signal")
+			  (debug:print-info 0 "Waiting for server alive signature")
                           (mutex-lock! *heartbeat-mutex*)
                           (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
@@ -368,9 +368,15 @@
                               (begin
 				(debug:print-info 0 "Still waiting, last-sdat=" last-sdat)
                                 (sleep 4)
-                                (loop start-time
-				      (equal? sdat last-sdat)
-				      sdat))))))
+				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
+				    (let ((tdb  (tasks:open-db)))
+				      (debug:print 0 "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
+				      (tasks:server-delete-record tdb server-id "failed to start, never received server alive signature")
+				      (sqlite3:finalize! tdb)
+				      (exit))
+				    (loop start-time
+					  (equal? sdat last-sdat)
+					  sdat)))))))
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)

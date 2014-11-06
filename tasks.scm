@@ -689,9 +689,11 @@
 		   ;;  (call-with-environment-variables
 		   (let ((old-targethost (getenv "TARGETHOST")))
 		     (setenv "TARGETHOST" hostname)
+		     (setenv "TARGETHOST_LOGF" "server-kills.log")
 		     (system (conc "nbfake kill " pid))
 		     (if old-targethost (setenv "TARGETHOST" old-targethost))
-		     (unsetenv "TARGETHOST"))))
+		     (unsetenv "TARGETHOST")
+		     (unsetenv "TARGETHOST_LOGF"))))
 	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
      records)))
 
