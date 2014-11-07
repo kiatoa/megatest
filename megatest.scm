@@ -300,10 +300,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (if ;; (and 
 	       (> (- start-time last-write) 5) ;; every five seconds
 	       ;;      (common:db-access-allowed?))
-	       (begin
+	       (let ((sync-time (- (current-seconds) start-time)))
 		 (db:multi-db-sync (list run-id) 'new2old)
 		 (if (common:low-noise-print 30 "sync new to old")
-		     (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
+		     (begin
+		       (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+		       (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
+			   (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+			   (server:kind-run run-id))))
 		 (hash-table-delete! *db-local-sync* run-id)))))
 	  (hash-table-keys *db-local-sync*))
 	 (mutex-unlock! *db-multi-sync-mutex*))
@@ -813,7 +817,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 steps)))))
 		      tests)))))
 	     runs)
-	  (db:close-all dbstruct)
+	  ;; (db:close-all dbstruct)
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
