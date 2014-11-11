@@ -157,10 +157,12 @@
 					      (portlogger:open-run-close portlogger:find-port)
 					      server-id))
 	   (begin
+	     (tasks:wait-on-busy-monitor.db)
 	     (tasks:server-force-clean-run-record (tasks:get-db) run-id ipaddrstr portnum " http-transport:try-start-server")
 	     (print "ERROR: Tried and tried but could not start the server"))))
      ;; any error in following steps will result in a retry
      (set! *server-info* (list ipaddrstr portnum))
+     (tasks:wait-on-busy-monitor.db)
      (tasks:server-set-interface-port 
 		     (tasks:get-db)
 		     server-id 
@@ -175,6 +177,7 @@
 						       config-hostname))
 	 (start-server port: portnum))
      ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
+     (tasks:wait-on-busy-monitor.db)
      (tasks:server-force-clean-run-record (tasks:get-db) run-id ipaddrstr portnum " http-transport:try-start-server")
      (debug:print 1 "INFO: server has been stopped"))))
 
@@ -258,6 +261,7 @@
 	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
 	 (begin
 	   (mutex-unlock! *http-mutex*)
+	   (tasks:wait-on-busy-monitor.db)
 	   (tasks:kill-server-run-id run-id)
 	   #f))
      (begin
@@ -371,6 +375,7 @@
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (let ((tdb  (tasks:open-db)))
 				      (debug:print 0 "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
+				      (tasks:wait-on-busy-monitor.db)
 				      (tasks:server-delete-record tdb server-id "failed to start, never received server alive signature")
 				      (sqlite3:finalize! tdb)
 				      (exit))
@@ -406,6 +411,7 @@
       ;;
       (if (eq? server-state 'available)
 	  (begin
+	    (tasks:wait-on-busy-monitor.db)
 	    (tasks:server-set-state! tdb server-id "dbprep")
 	    (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
 	    (set! *inmemdb*  (db:setup run-id))
@@ -465,6 +471,7 @@
 	    (debug:print-info 0 "Starting to shutdown the server.")
 	    ;; need to delete only *my* server entry (future use)
 	    (set! *time-to-exit* #t)
+	    (tasks:wait-on-busy-monitor.db) ;; wait here in addition to just before the shutting-down
 	    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
 	    ;;
 	    ;; start_shutdown
@@ -488,6 +495,7 @@
 				     *number-non-write-queries*))
 			      " ms")
 	    (debug:print-info 0 "Server shutdown complete. Exiting")
+	    (tasks:wait-on-busy-monitor.db)
 	    (tasks:server-delete-record tdb server-id " http-transport:keep-running")
 	    (exit))))))
 
@@ -508,17 +516,20 @@
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
+  (tasks:wait-on-busy-monitor.db)
   (let loop ((server-id (tasks:server-lock-slot (tasks:get-db) run-id))
 	     (remtries  4))
     (if (not server-id)
 	(if (> remtries 0)
 	    (begin
 	      (thread-sleep! 2)
+	      (tasks:wait-on-busy-monitor.db)
 	      (loop (tasks:server-lock-slot (tasks:get-db) run-id)
 		    (- remtries 1)))
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+	      (tasks:wait-on-busy-monitor.db)
 	      (tasks:server-delete-records-for-this-pid (tasks:get-db) " http-transport:launch")
 	      ))
 	(let* ((th2 (make-thread (lambda ()

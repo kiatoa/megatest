@@ -162,9 +162,9 @@
 	#f)))
 
 (define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
-  (thread-sleep! (cond
-		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
-		  (else 0)))
+  ;;(thread-sleep! (cond
+  ;;      	  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
+  ;;      	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
 	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
@@ -1119,7 +1119,7 @@
 		  (rmt:find-and-mark-incomplete run-id #f)))
 	    (if (not (eq? num-running prev-num-running))
 		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
-	    (thread-sleep! 15)
+	    (thread-sleep! 5)
 	    ;; (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
 	    (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
     ;; LET* ((test-record

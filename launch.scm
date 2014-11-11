@@ -502,15 +502,15 @@
 	   (let* ((dirpath    (cadr (assoc disk-num disks)))
 		  (freespc    (cond
 			       ((not (directory? dirpath))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not a dir " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
 				-1)
 			       ((not (file-write-access? dirpath))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not writeable " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
 				-1)
 			       ((not (eq? (string-ref dirpath 0) #\/))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not a proper path " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
 				-1)
 			       (else

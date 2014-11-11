@@ -256,10 +256,12 @@
 		    (not (number? stime))
 		    (> mtime stime)
 		    force-sync)
-		(let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
-		  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-		  num-synced)
-		0)
+		(begin
+		  (db:delay-if-busy)
+		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		    num-synced)
+		  0))
 	    (begin
 	      ;; this can occur when using local access (i.e. not in a server)
 	      ;; need a flag to turn it off.
@@ -271,10 +273,12 @@
 		(not (number? stime))
 		(> mtime stime)
 		force-sync)
-	    (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-	      num-synced)
-	    0))))
+	    (begin
+	      (db:delay-if-busy)
+	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+		(dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		num-synced)
+	      0)))))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
@@ -513,7 +517,9 @@
 	 (mtdb     (if toppath (db:open-megatest-db)))
 	 (run-ids  (if run-ids 
 		       run-ids
-		       (if toppath (db:get-all-run-ids mtdb))))
+		       (if toppath (begin
+				     (db:delay-if-busy)
+				     (db:get-all-run-ids mtdb)))))
 	 (mdb     (tasks:open-db))
 	 (servers (tasks:get-all-servers mdb)))
     
@@ -528,12 +534,16 @@
     ;; clear out junk records
     ;;
     (if (member 'dejunk options)
-	(db:clean-up mtdb))
+	(begin
+	  (db:delay-if-busy)
+	  (db:clean-up mtdb)))
 
     ;; adjust test-ids to fit into proper range
     ;;
     (if (member 'adj-testids options)
-	(db:prep-megatest.db-for-migration mtdb))
+	(begin
+	  (db:delay-if-busy)
+	  (db:prep-megatest.db-for-migration mtdb)))
 
     ;; sync runs, test_meta etc.
     ;;
@@ -542,6 +552,7 @@
 	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 	  (for-each 
 	   (lambda (run-id)
+	     (db:delay-if-busy)
 	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
@@ -553,6 +564,7 @@
     (if (member 'new2old options)
 	(for-each
 	 (lambda (run-id)
+	   (db:delay-if-busy)
 	   (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	     (if (eq? run-id 0)
 		 (db:sync-tables (db:sync-main-list dbstruct)(db:get-db fromdb run-id) mtdb)

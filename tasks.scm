@@ -53,6 +53,9 @@
 	     (dbpath       (conc linktree "/.db/monitor.db")))
 	dbpath)))
 
+(define (tasks:wait-on-busy-monitor.db)
+  (tasks:wait-on-journal (tasks:get-task-db-path) 30))
+
 ;; If file exists AND
 ;;    file readable
 ;;         ==> open it

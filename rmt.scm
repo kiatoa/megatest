@@ -99,10 +99,11 @@
 	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
 	  (let ((curr-max (rmt:get-max-query-average run-id)))
 	    (if (> (cdr curr-max) max-avg-qry)
-		(begin
-		  (debug:print-info 0 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
-		  (server:kind-run run-id))
-		(debug:print-info 3 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") below " max-avg-qry ", not starting server...")))
+		(if (common:low-noise-print 10 "start server due to max average query too long")
+		      (begin
+			(debug:print-info 0 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
+			(server:kind-run run-id)
+			(debug:print-info 3 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") below " max-avg-qry ", not starting server...")))))
 	  (rmt:open-qry-close-locally cmd run-id params)))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
