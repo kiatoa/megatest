@@ -15,19 +15,21 @@
 ;; Accessors for a dbstruct
 ;;
 
-(define-inline (dbr:dbstruct-get-main    vec)    (vector-ref  vec 0))
-(define-inline (dbr:dbstruct-get-strdb   vec)    (vector-ref  vec 1))
-(define-inline (dbr:dbstruct-get-path    vec)    (vector-ref  vec 2))
+(define-inline (dbr:dbstruct-get-main    vec)    (vector-ref  vec 0)) ;; ( db path )
+(define-inline (dbr:dbstruct-get-strdb   vec)    (vector-ref  vec 1)) ;; ( db path )
+(define-inline (dbr:dbstruct-get-path    vec)    (vector-ref  vec 2)) 
 (define-inline (dbr:dbstruct-get-local   vec)    (vector-ref  vec 3))
-(define-inline (dbr:dbstruct-get-rundb   vec)    (vector-ref  vec 4))
-(define-inline (dbr:dbstruct-get-inmem   vec)    (vector-ref  vec 5))
+(define-inline (dbr:dbstruct-get-rundb   vec)    (vector-ref  vec 4)) ;; ( db path )
+(define-inline (dbr:dbstruct-get-inmem   vec)    (vector-ref  vec 5)) ;; ( db #f )
 (define-inline (dbr:dbstruct-get-mtime   vec)    (vector-ref  vec 6))
 (define-inline (dbr:dbstruct-get-rtime   vec)    (vector-ref  vec 7))
 (define-inline (dbr:dbstruct-get-stime   vec)    (vector-ref  vec 8))
 (define-inline (dbr:dbstruct-get-inuse   vec)    (vector-ref  vec 9))
-(define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10))
+(define-inline (dbr:dbstruct-get-refdb   vec)    (vector-ref  vec 10)) ;; ( db path )
 (define-inline (dbr:dbstruct-get-locdbs  vec)    (vector-ref  vec 11))
-(define-inline (dbr:dbstruct-get-olddb   vec)    (vector-ref  vec 12))
+(define-inline (dbr:dbstruct-get-olddb   vec)    (vector-ref  vec 12)) ;; ( db path )
+;; (define-inline (dbr:dbstruct-get-main-path vec)  (vector-ref  vec 13))
+;; (define-inline (dbr:dbstruct-get-rundb-path vec) (vector-ref  vec 14))
 ;; (define-inline (dbr:dbstruct-get-run-id  vec)    (vector-ref  vec 13))
 
 (define-inline (dbr:dbstruct-set-main!   vec val)(vector-set! vec 0 val))
@@ -43,12 +45,15 @@
 (define-inline (dbr:dbstruct-set-refdb!  vec val)(vector-set! vec 10 val))
 (define-inline (dbr:dbstruct-set-locdbs! vec val)(vector-set! vec 11 val))
 (define-inline (dbr:dbstruct-set-olddb!  vec val)(vector-set! vec 12 val))
+(define-inline (dbr:dbstruct-set-main-path! vec val)(vector-set! vec 13 val))
+(define-inline (dbr:dbstruct-set-rundb-path! vec val)(vector-set! vec 14 val))
+
 ; (define-inline (dbr:dbstruct-set-run-id! vec val)(vector-set! vec 13 val))
 
 ;; constructor for dbstruct
 ;;
 (define (make-dbr:dbstruct #!key (path #f)(local #f))
-  (let ((v (make-vector 14 #f)))
+  (let ((v (make-vector 15 #f)))
     (dbr:dbstruct-set-path! v path)
     (dbr:dbstruct-set-local! v local)
     (dbr:dbstruct-set-locdbs! v (make-hash-table))
