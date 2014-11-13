@@ -1700,7 +1700,7 @@
 		 run-id
 		 #t
 		 (lambda (db)
-		   (sqlite3:execute (db:get-db dbstruct run-id) qry newstate newstatus run-id testname)))))
+		   (sqlite3:execute db qry newstate newstatus run-id testname)))))
 	    testnames))
 
 ;; speed up for common cases with a little logic
@@ -2449,7 +2449,13 @@
       (let* ((dbpath (db:dbdat-get-path dbdat))
 	     (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
 	     (dbfj   (conc dbpath "-journal")))
-	(if (file-exists? dbfj)
+	(if (handle-exceptions
+	     exn
+	     (begin
+	       (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
+	       (thread-sleep! 1)
+	       (db:delay-if-busy count (- count 1)))
+	     (file-exists? dbfj))
 	    (case count
 	      ((6)
 	       (thread-sleep! 0.2)
