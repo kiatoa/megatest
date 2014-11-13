@@ -1399,7 +1399,7 @@
 (define (db:delete-run dbstruct run-id)
   ;; First set any related tests to DELETED
   (let* ((rdbdat (db:get-db dbstruct run-id))
-	 (rdb    (db:dbdat-get-db dbdat))
+	 (rdb    (db:dbdat-get-db rdbdat))
 	 (dbdat  (db:get-db dbstruct #f))
 	 (db     (db:dbdat-get-db dbdat)))
     (db:delay-if-busy rdbdat)
