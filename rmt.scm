@@ -58,7 +58,7 @@
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
-(define (rmt:send-receive cmd rid params)
+(define (rmt:send-receive cmd rid params #!key (attemptnum 0))
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) 60)))
@@ -95,7 +95,13 @@
 	      (let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		(rmt:send-receive cmd run-id params))))
+
+		;; no longer killing the server in http-transport:client-api-send-receive
+		;; may kill it here but what are the criteria?
+		;; start with three calls then kill server
+		(if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+
+		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
 	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
 	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
 	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))

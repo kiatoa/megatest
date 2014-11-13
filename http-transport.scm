@@ -278,10 +278,10 @@
 			      (set! res (handle-exceptions
 					 exn
 					 (begin
-					   (debug:print 0 "WARNING: failure in with-input-from-request to " fullrul ". Killing associated server to allow clean retry.")
+					   (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
 					   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					   (hash-table-delete! *runremote* run-id)
-					   (tasks:kill-server-run-id run-id)
+					   ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
 					   #f)
 					 (with-input-from-request ;; was dat
 					  fullurl 

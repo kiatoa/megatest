@@ -142,8 +142,8 @@
       (let* ((parent-dir   (pathname-directory fname))
 	     (dir-writable (file-write-access? parent-dir)))
 	(if dir-writable
-	    (let ((lock    (obtain-dot-lock fname 1 5 10))
-		  (exists  (file-exists? fname))
+	    (let ((exists  (file-exists? fname))
+		  (lock    (obtain-dot-lock fname 1 5 10))
 		  (db      (sqlite3:open-database fname)))
 	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	      (sqlite3:execute db "PRAGMA synchronous = 0;")
@@ -156,7 +156,7 @@
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
-(define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((local  (dbr:dbstruct-get-local dbstruct))
 	 (rdb    (if local
 		     (dbr:dbstruct-get-localdb dbstruct run-id)
@@ -169,13 +169,22 @@
 	       (refdb        (if local #f (db:open-inmem-db)))
 	       (db           (db:lock-create-open dbpath 
 						  (lambda (db)
-						    (db:initialize-run-id-db db)
-						    (sqlite3:execute 
-						     db
-						     "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-						     (* run-id 30000) ;; allow for up to 30k tests per run
-						     run-id)
-						    ))) ;; add strings db to rundb, not in use yet
+						    (handle-exceptions
+						     exn
+						     (begin
+						       (release-dot-lock dbpath)
+						       (if (> attemptnum 2)
+							   (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+							   (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
+						     (db:initialize-run-id-db db)
+						     (sqlite3:execute 
+						      db
+						      "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+						      (* run-id 30000) ;; allow for up to 30k tests per run
+						      run-id)
+						     ;; do a dummy query to test that the table exists and the db is truly readable
+						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+						    )))) ;; add strings db to rundb, not in use yet
 	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (if *megatest-db*
 				 *megatest-db* 
