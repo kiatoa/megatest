@@ -665,7 +665,7 @@
      (lambda ()
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
        (for-each (lambda (key)
-		   (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
+		   (sqlite3:execute db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 		 keys)
        (sqlite3:execute db (conc 
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
