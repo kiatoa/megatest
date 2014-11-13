@@ -2148,7 +2148,7 @@
 
 (define (db:get-run-ids-matching-target dbstruct keynames target res runname testpatt statepatt statuspatt)
   (let* ((dbdat    (db:get-db dbstruct #f))
-	 (db       (db:dbdat-get dbdat))
+	 (db       (db:dbdat-get-db dbdat))
 	 (row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
