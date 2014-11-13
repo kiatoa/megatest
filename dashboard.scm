@@ -1237,7 +1237,9 @@ Misc
 		(set! *hide-not-hide-button* hideit)
 		hideit))
 	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)(if *dbstruct-local* (db:close-all *dbstruct-local*))(exit)))
+	      (iup:button "Quit"      #:action (lambda (obj)
+						 ;; (if *dbstruct-local* (db:close-all *dbstruct-local*))
+						 (exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update)))
 	      (iup:button "Collapse"  #:action (lambda (obj)
