@@ -477,10 +477,10 @@
 	    (for-each 
 	     (lambda (targdb)
 	       (let* ((db     (db:dbdat-get-db targdb))
-		      (stmth  (sqlite3:prepare targdb full-ins)))
-		 (db:delay-if-busy targdb)
+		      (stmth  (sqlite3:prepare db full-ins)))
+		 ;; (db:delay-if-busy targdb) ;; NO WAITING
 		 (sqlite3:with-transaction
-		  targdb
+		  db
 		  (lambda ()
 		    (for-each ;; 
 		     (lambda (fromrow)
@@ -536,14 +536,14 @@
 		       (if toppath (begin
 				     (db:delay-if-busy mtdb)
 				     (db:get-all-run-ids mtdb)))))
-	 (mdb     (tasks:open-db))
-	 (servers (tasks:get-all-servers mdb)))
+	 (tdbdat  (tasks:open-db))
+	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
     
     ;; kill servers
     (if (member 'killservers options)
 	(for-each
 	 (lambda (server)
-	   (tasks:server-delete-record mdb (vector-ref server 0) "dbmigration")
+	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
 	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
 	 servers))
 
@@ -588,8 +588,9 @@
 		 (db:sync-tables (db:sync-main-list dbstruct) fromdb mtdb)
 		 (db:sync-tables db:sync-tests-only fromdb mtdb))))
 	 run-ids))
-    (db:close-all dbstruct)
-    (sqlite3:finalize! mdb)))
+    ;; (db:close-all dbstruct)
+    ;; (sqlite3:finalize! mdb)
+    ))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -1832,8 +1833,9 @@
    dbstruct
    run-id
    #f
-  (sqlite3:first-result db "SELECT attemptnum FROM tests WHERE id=?;"
-			test-id)))
+   (lambda (db)
+     (sqlite3:first-result db "SELECT attemptnum FROM tests WHERE id=?;"
+			   test-id))))
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
@@ -2436,6 +2438,7 @@
 (define (db:delay-if-busy dbdat #!key (count 6))
   (if dbdat
       (let* ((dbpath (db:dbdat-get-path dbdat))
+	     (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
 	     (dbfj   (conc dbpath "-journal")))
 	(if (file-exists? dbfj)
 	    (case count
@@ -2459,7 +2462,9 @@
 	       (db:delay-if-busy count: 0))
 	      (else
 	       (debug:print-info 0 "delaying db access due to high database load.")
-	       (thread-sleep! 12.8)))))))
+	       (thread-sleep! 12.8))))
+	db)
+      "bogus result from db:delay-if-busy"))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))

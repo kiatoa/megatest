@@ -448,7 +448,9 @@
      stats-matrix)))
 
 (define (dcommon:servers-table)
-  (let* ((colnum         0)
+  (let* ((tdbdat         (tasks:open-db))
+	 (tdb            (db:dbdat-get-db tdbdat))
+	 (colnum         0)
 	 (rownum         0)
 	 (servers-matrix (iup:matrix #:expand "YES"
 				     #:numcol 7
@@ -457,7 +459,7 @@
 				     ))
 	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
-			   (let ((servers (tasks:get-all-servers (tasks:get-db))))
+			   (let ((servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
 			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 			     ;; (set! colnum 0)
 			     ;; (for-each (lambda (colname)

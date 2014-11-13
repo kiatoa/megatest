@@ -1455,8 +1455,7 @@ Misc
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
-(let ((db (tasks:open-db)))
-  (sqlite3:finalize! db))
+(tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time)
   (handle-exceptions

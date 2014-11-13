@@ -129,8 +129,9 @@
       (rmt:start-server run-id)))
 
 (define (server:check-if-running run-id)
-  (let loop ((server (tasks:get-server (tasks:get-db) run-id))
-	     (trycount 0))
+  (let ((tdbdat (tasks:open-db)))
+    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+	       (trycount 0))
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
@@ -145,21 +146,22 @@
 	      #t
 	      (begin
 		(debug:print-info 0 "server at " server " not responding, removing record")
-		(tasks:server-force-clean-running-records-for-run-id (tasks:get-db) run-id 
+		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
 				" server:check-if-running")
 		res)))
-	#f)))
+	#f))))
 
 ;; called in megatest.scm, host-port is string hostname:port
 ;;
 (define (server:ping run-id host:port)
-  (let* ((host-port (let ((slst (string-split   host:port ":")))
-		      (if (eq? (length slst) 2)
-			  (list (car slst)(string->number (cadr slst)))
-			  #f)))
-	 (toppath       (launch:setup-for-run))
-	 (server-db-dat (if (not host-port)(tasks:get-server (tasks:get-db) run-id) #f)))
-    (if (not run-id)
+  (let ((tdbdat (tasks:open-db)))
+    (let* ((host-port (let ((slst (string-split   host:port ":")))
+			(if (eq? (length slst) 2)
+			    (list (car slst)(string->number (cadr slst)))
+			    #f)))
+	   (toppath       (launch:setup-for-run))
+	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
+      (if (not run-id)
 	  (begin
 	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
 	    (print "ERROR: No run-id")
@@ -180,7 +182,7 @@
 		      (exit 0))
 		    (begin
 		      (print "LOGIN_FAILED")
-		      (exit 1))))))))
+		      (exit 1)))))))))
 
 ;; run ping in separate process, safest way in some cases
 ;;

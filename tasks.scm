@@ -53,9 +53,6 @@
 	     (dbpath       (conc linktree "/.db/monitor.db")))
 	dbpath)))
 
-(define (tasks:wait-on-busy-monitor.db)
-  (tasks:wait-on-journal (tasks:get-task-db-path) 30))
-
 ;; If file exists AND
 ;;    file readable
 ;;         ==> open it
@@ -66,25 +63,27 @@
 ;;    ==> open in-mem version
 ;;
 (define (tasks:open-db)
-  (let* ((dbpath       (tasks:get-task-db-path))
-	 (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
-	 (exists       (file-exists? dbpath))
-	 (write-access (file-write-access? dbpath))
-	 (mdb          (cond
-			((file-write-access? *toppath*)(sqlite3:open-database dbpath))
-			((file-read-access? dbpath)    (sqlite3:open-database dbpath))
-			(else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
-	 (handler      (make-busy-timeout 36000)))
-    (if (and exists
-	     (not write-access))
-	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-    (sqlite3:set-busy-handler! mdb handler)
-    (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
-    (if (or (and (not exists)
-		 (file-write-access? *toppath*))
-	    (not (file-read-access? dbpath)))
-	(begin
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+  (if *task-db*
+      *task-db*
+      (let* ((dbpath       (tasks:get-task-db-path))
+	     (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
+	     (exists       (file-exists? dbpath))
+	     (write-access (file-write-access? dbpath))
+	     (mdb          (cond
+			    ((file-write-access? *toppath*)(sqlite3:open-database dbpath))
+			    ((file-read-access? dbpath)    (sqlite3:open-database dbpath))
+			    (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
+	     (handler      (make-busy-timeout 36000)))
+	(if (and exists
+		 (not write-access))
+	    (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+	(sqlite3:set-busy-handler! mdb handler)
+	(sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	(if (or (and (not exists)
+		     (file-write-access? *toppath*))
+		(not (file-read-access? dbpath)))
+	    (begin
+	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -95,14 +94,14 @@
                                 params TEXT,
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP);")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -115,8 +114,8 @@
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
                                   run_id INTEGER);")
-;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	      ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
+	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,
@@ -124,18 +123,11 @@
                                   login_time TIMESTAMP,
                                   logout_time TIMESTAMP DEFAULT -1,
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
-                                  
-	  ))
-    mdb))
+	      
+	      ))
+	(set! *task-db* (cons mdb dbpath))
+	*task-db*)))
 
-(define (tasks:get-db)
-  (if *task-db*
-      (vector-ref *task-db* 0)
-      (let ((db  (tasks:open-db))
-	    (pth (tasks:get-task-db-path)))
-	(set! *task-db* (vector db pth))
-	db)))
-  
 ;;======================================================================
 ;; Server and client management
 ;;======================================================================
@@ -354,17 +346,18 @@
 ;; look up a server by run-id and send it a kill, also delete the record for that server
 ;;
 (define (tasks:kill-server-run-id run-id #!key (tag "default"))
-  (let* ((tdb  (tasks:open-db))
-	 (sdat (tasks:get-server tdb run-id)))
+  (let* ((tdbdat  (tasks:open-db))
+	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
     (if sdat
 	(let ((hostname (vector-ref sdat 6))
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
 	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
-	  (tasks:server-delete-record tdb server-id tag) )
+	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
 	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))
-    (sqlite3:finalize! tdb)))
+    ;; (sqlite3:finalize! tdb)
+    ))
     
 ;;   (if status ;; #t means alive
 ;;       (begin

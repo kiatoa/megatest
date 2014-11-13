@@ -549,7 +549,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-stop-server"))
     (let ((tl (launch:setup-for-run)))
       (if tl 
-	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+	  (let* ((tdbdat  (tasks:open-db))
+		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
 		 (killinfo   (args:get-arg "-stop-server"))
@@ -578,9 +579,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; server
 		 (if (equal? state "dead")
 		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
-			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
+			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
-			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
+			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
 		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
 			 (if status "alive" "dead") transport)
 		 (if (or (equal? id sid)

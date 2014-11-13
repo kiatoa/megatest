@@ -216,21 +216,20 @@
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
 	 (required-tests     #f)  ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
-	 (tasks-db           (tasks:open-db)))
+	 (tdbdat             (tasks:open-db)))
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
 			   (signal-mask! signum)
-			   (let ((tdb (tasks:open-db)))
-			     (tasks:set-state-given-param-key tdb task-key "killed")
-			     ;; (sqlite3:interrupt! tdb) ;; seems silly?
-			     (sqlite3:finalize! tdb))
+			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
+			   (let ((tdbdat (tasks:open-db)))
+			     (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
-    (tasks:add tasks-db "run-tests" user target runname test-patts task-key) ;; params)
-    (tasks:set-state-given-param-key tasks-db task-key "running")
+    (tasks:add (db:delay-if-busy tdbdat) "run-tests" user target runname test-patts task-key) ;; params)
+    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -395,8 +394,9 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (tasks:set-state-given-param-key tasks-db task-key "done")
-    (sqlite3:finalize! tasks-db)))
+    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "done")
+    ;; (sqlite3:finalize! tasks-db)
+    ))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.
@@ -1399,7 +1399,7 @@
 (define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (tasks-db     (tasks:open-db))
+	 (tdbdat       (tasks:open-db))
 	 (keys         (rmt:get-keys))
 	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
@@ -1438,7 +1438,7 @@
 		   ((remove-runs)
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
-			(tasks:kill-runner tasks-db target run-name)
+			(tasks:kill-runner (db:delay-if-busy tdbdat) target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
@@ -1551,7 +1551,8 @@
 		       )))))
 	 ))
      runs)
-    (sqlite3:finalize! tasks-db))
+    ;; (sqlite3:finalize! (db:delay-if-busy tdbdat))
+    )
   #t)
 
 (define (runs:remove-test-directory db test remove-data-only)
