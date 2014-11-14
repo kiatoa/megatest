@@ -62,28 +62,37 @@
 ;; If file NOT exists
 ;;    ==> open in-mem version
 ;;
-(define (tasks:open-db)
+(define (tasks:open-db #!key (numretries 4))
   (if *task-db*
       *task-db*
-      (let* ((dbpath       (tasks:get-task-db-path))
-	     (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
-	     (exists       (file-exists? dbpath))
-	     (write-access (file-write-access? dbpath))
-	     (mdb          (cond
-			    ((file-write-access? *toppath*)(sqlite3:open-database dbpath))
-			    ((file-read-access? dbpath)    (sqlite3:open-database dbpath))
-			    (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
-	     (handler      (make-busy-timeout 36000)))
-	(if (and exists
-		 (not write-access))
-	    (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-	(sqlite3:set-busy-handler! mdb handler)
-	(sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
-	(if (or (and (not exists)
-		     (file-write-access? *toppath*))
-		(not (file-read-access? dbpath)))
-	    (begin
-	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+      (handle-exceptions
+       exn
+       (if (> numretries 0)
+	   (begin
+	     (thread-sleep! 1)
+	     (tasks:open-db numretries (- numretries 1)))
+	   (begin
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (print "exn=" (condition->list exn))))
+       (let* ((dbpath       (tasks:get-task-db-path))
+	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
+	      (exists       (file-exists? dbpath))
+	      (write-access (file-write-access? dbpath))
+	      (mdb          (cond
+			     ((file-write-access? *toppath*)(sqlite3:open-database dbpath))
+			     ((file-read-access? dbpath)    (sqlite3:open-database dbpath))
+			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
+	      (handler      (make-busy-timeout 36000)))
+	 (if (and exists
+		  (not write-access))
+	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+	 (sqlite3:set-busy-handler! mdb handler)
+	 (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 (if (or (and (not exists)
+		      (file-write-access? *toppath*))
+		 (not (file-read-access? dbpath)))
+	     (begin
+	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -94,14 +103,14 @@
                                 params TEXT,
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP);")
-	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -114,8 +123,8 @@
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
                                   run_id INTEGER);")
-	      ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	      (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	       ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
+	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,
@@ -123,10 +132,10 @@
                                   login_time TIMESTAMP,
                                   logout_time TIMESTAMP DEFAULT -1,
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
-	      
-	      ))
-	(set! *task-db* (cons mdb dbpath))
-	*task-db*)))
+	       
+	       ))
+	 (set! *task-db* (cons mdb dbpath))
+	 *task-db*))))
 
 ;;======================================================================
 ;; Server and client management
