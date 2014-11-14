@@ -134,6 +134,7 @@
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
 	       
 	       ))
+	 (sqlite3:execute mdb "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
 	 (set! *task-db* (cons mdb dbpath))
 	 *task-db*))))
 
