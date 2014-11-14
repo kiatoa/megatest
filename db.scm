@@ -83,11 +83,13 @@
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((dbdat (db:get-db dbstruct run-id))
+  (let* ((dbdat (if (vector? dbstruct)
+		    (db:get-db dbstruct run-id)
+		    dbstruct)) ;; cheat, allow for passing in a dbdat
 	 (db    (db:dbdat-get-db dbdat)))
     (db:delay-if-busy dbdat)
     (let ((res (apply proc db params)))
-      (db:done-with dbstruct run-id r/w)
+      (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
       res)))
 
 ;;======================================================================
@@ -417,6 +419,8 @@
 	   '("jobgroup"       #f)))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
+;; db's are dbdat's
+;;
 (define (db:sync-tables tbls fromdb todb . slave-dbs)
   (mutex-lock! *db-sync-mutex*)
   (handle-exceptions
@@ -591,11 +595,11 @@
 	 (lambda (run-id)
 	   (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
 		  (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	     (db:delay-if-busy frundb)
-	     (db:delay-if-busy mtdb)
+	     ;; (db:delay-if-busy frundb)
+	     ;; (db:delay-if-busy mtdb)
 	     (if (eq? run-id 0)
-		 (db:sync-tables (db:sync-main-list dbstruct) fromdb mtdb)
-		 (db:sync-tables db:sync-tests-only fromdb mtdb))))
+		 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
 	 run-ids))
     ;; (db:close-all dbstruct)
     ;; (sqlite3:finalize! mdb)

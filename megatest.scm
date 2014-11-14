@@ -1268,11 +1268,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (open-run-close db:clean-up #f)
       (db:multi-db-sync 
        #f ;; do all run-ids
-       'new2old
+       ;; 'new2old
        'killservers
        'dejunk
-       'adj-testids
-       'old2new
+       ;; 'adj-testids
+       ;; 'old2new
        'new2old
        )
       (set! *didsomething* #t)))
