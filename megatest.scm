@@ -288,37 +288,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define *watchdog*
   (make-thread 
    (lambda ()
-     (thread-sleep! 0.5) ;; half second delay for startup
+     (thread-sleep! 0.05) ;; delay for startup
      (let loop ()
        ;; sync for filesystem local db writes
        ;;
        (let ((start-time      (current-seconds))
 	     (servers-started (make-hash-table)))
-	 (mutex-lock! *db-multi-sync-mutex*)
 	 (for-each 
 	  (lambda (run-id)
-	    (let ((last-write (hash-table-ref/default *db-local-sync* run-id 0)))
-	      (if (> (- start-time last-write) 5) ;; every five seconds
-		  (let ((sync-time (- (current-seconds) start-time)))
-		    (db:multi-db-sync (list run-id) 'new2old)
-		    (if (common:low-noise-print 30 "sync new to old")
-			(begin
-			  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-			  (if (and (> sync-time 10) ;; took more than ten seconds, start a server for this run
-				   (hash-table-ref/default servers-started run-id #f))
-			      (begin
-				(debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
-				(server:kind-run run-id)
-				(hash-table-set! servers-started run-id #t)))))
-		    (hash-table-delete! *db-local-sync* run-id)))))
-	  (hash-table-keys *db-local-sync*))
-	 (mutex-unlock! *db-multi-sync-mutex*))
-       
+	    (mutex-lock! *db-multi-sync-mutex*)
+	    (if (hash-table-ref/default *db-local-sync* run-id 0)
+		;; (if (> (- start-time last-write) 5) ;; every five seconds
+		(let ((sync-time (- (current-seconds) start-time)))
+		  (db:multi-db-sync (list run-id) 'new2old)
+		  (if (common:low-noise-print 30 "sync new to old")
+		      (begin
+			(debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+			(if (and (> sync-time 10) ;; took more than ten seconds, start a server for this run
+				 (hash-table-ref/default servers-started run-id #f))
+			    (begin
+			      (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+			      (server:kind-run run-id)
+			      (hash-table-set! servers-started run-id #t)))))
+		  (hash-table-delete! *db-local-sync* run-id)))
+	    (mutex-unlock! *db-multi-sync-mutex*))
+	  (hash-table-keys *db-local-sync*)))
+
        ;; keep going unless time to exit
        ;;
        (if (not *time-to-exit*)
 	   (begin
-	     (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
+	     (thread-sleep! 1) ;; wait one second before syncing again
 	     (loop)))))
    "Watchdog thread"))
 
@@ -1378,7 +1378,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'dejunk
        'adj-testids
        'old2new
-       'new2old
+       ;; 'new2old
        )
       (set! *didsomething* #t)))
 

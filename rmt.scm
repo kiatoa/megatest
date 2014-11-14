@@ -188,8 +188,9 @@
       (if (not (member cmd api:read-only-queries))
 	  (let ((start-time (current-seconds)))
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (if (not (hash-table-ref/default *db-local-sync* run-id #f))
-		(hash-table-set! *db-local-sync* run-id start-time)) ;; the oldest "write"
+	    ;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
+	    ;; just set it every time. Is a write more expensive than a read and does it matter?
+	    (hash-table-set! *db-local-sync* run-id start-time) ;; the oldest "write"
 	    (mutex-unlock! *db-multi-sync-mutex*)))
       res)))
 
