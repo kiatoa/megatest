@@ -65,8 +65,8 @@
     (for-each 
      (lambda (run-id)
        (let ((connection (hash-table-ref/default *runremote* run-id #f)))
-	 (if ;; (and connection 
-		  (< (http-transport:server-dat-get-last-access connection) expire-time) ; )
+	 (if (and connection 
+		  (< (http-transport:server-dat-get-last-access connection) expire-time))
 	     (begin
 	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
 	       (hash-table-delete! *runremote* run-id)))))
@@ -92,7 +92,7 @@
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if res
 	      (db:string->obj res)
-	      (let ((new-connection-info (client:setup run-id)))
+	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
 
