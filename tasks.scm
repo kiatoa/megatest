@@ -87,7 +87,7 @@
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
 	 (sqlite3:set-busy-handler! mdb handler)
-	 (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 (db:set-sync db) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
 	 (if (or (and (not exists)
 		      (file-write-access? *toppath*))
 		 (not (file-read-access? dbpath)))

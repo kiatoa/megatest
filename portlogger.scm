@@ -10,10 +10,11 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking)
+(use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit portlogger))
+(declare (uses db))
 
 ;; lsof -i
 
@@ -37,7 +38,7 @@
          ;;                 fail_count INTEGER DEFAULT 0,
          ;;                 update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))))
     (sqlite3:set-busy-handler! db handler)
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
+    (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
     ;; (if (not exists) ;; needed with IF NOT EXISTS?
     (sqlite3:execute 
      db

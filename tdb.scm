@@ -24,6 +24,7 @@
 (declare (uses ods))
 (declare (uses client))
 (declare (uses mt))
+(declare (uses db))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -63,7 +64,7 @@
 	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
-	      (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
 	      (debug:print-info 11 "Initialized test database " dbpath)
 	      (tdb:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")

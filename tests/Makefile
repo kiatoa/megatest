@@ -179,7 +179,7 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -rf *run/db/* */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* fullrun/tmp/mt_*/.db* fullrun/logs/*.log fullrun/*.log || true
+	rm -rf /tmp/.$(USER)-portlogger.db *run/db/* */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* fullrun/tmp/mt_*/.db* fullrun/logs/*.log fullrun/*.log || true
 	killall -v mtest dboard || true
 
 hardkill : kill

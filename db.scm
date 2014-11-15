@@ -131,6 +131,10 @@
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (conc dbdir fname)))
 	       
+(define (db:set-sync db)
+  (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
+    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";"))))
+
 ;; open an sql database inside a file lock
 ;;
 ;; returns: db existed-prior-to-opening
@@ -139,7 +143,7 @@
   (if (file-exists? fname)
       (let ((db (sqlite3:open-database fname)))
 	(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	(sqlite3:execute db "PRAGMA synchronous = 0;")
+	(db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	db)
       (let* ((parent-dir   (pathname-directory fname))
 	     (dir-writable (file-write-access? parent-dir)))
@@ -148,7 +152,7 @@
 		  (lock    (obtain-dot-lock fname 1 5 10))
 		  (db      (sqlite3:open-database fname)))
 	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (sqlite3:execute db "PRAGMA synchronous = 0;")
+	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	      (if (not exists)(initproc db))
 	      (release-dot-lock fname)
 	      db)
@@ -808,7 +812,8 @@
     (if (not dbexists)
 	(begin
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
-	  (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))))
+	  (db:set-sync db) ;; (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))
+	  ))
     db))
 
 (define (db:log-local-event . loglst)
