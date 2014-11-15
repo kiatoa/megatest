@@ -2,6 +2,7 @@ BINDIR    = $(PWD)/../../../bin
 PATH     := $(BINDIR):$(PATH)
 MEGATEST  = $(BINDIR)/megatest
 DASHBOARD = $(BINDIR)/dashboard
+NEWDASHBOARD = $(BINDIR)/newdashboard
 RUNNAME   = a
 
 
@@ -25,6 +26,9 @@ bigrun3 :
 
 dashboard : 
 	$(DASHBOARD) -rows 20 &
+
+newdashboard :
+	$(NEWDASHBOARD) &
 
 compile :
 	(cd ../../..;make -j && make install)

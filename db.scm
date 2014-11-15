@@ -460,6 +460,9 @@
 		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
 				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
 		 (fromdat    '())
+		 (fromdats   '())
+		 (totrecords 0)
+		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
 		 (todat      (make-hash-table))
 		 (count      0))
 
@@ -473,11 +476,16 @@
 	    ;; read the source table
 	    (sqlite3:for-each-row
 	     (lambda (a . b)
-	       (set! fromdat (cons (apply vector a b) fromdat)))
+	       (set! fromdat (cons (apply vector a b) fromdat))
+	       (if (> (length fromdat) batch-len)
+		   (begin
+		     (set! fromdats (cons fromdat fromdats))
+		     (set! fromdat  '())
+		     (set! totrecords (+ totrecords 1)))))
 	     (db:dbdat-get-db fromdb)
 	     full-sel)
 
-	    (debug:print-info 2 "found " (length fromdat) " records to sync")
+	    (debug:print-info 2 "found " totrecords " records to sync")
 
 	    ;; read the target table
 	    (sqlite3:for-each-row
@@ -492,26 +500,29 @@
 	       (let* ((db     (db:dbdat-get-db targdb))
 		      (stmth  (sqlite3:prepare db full-ins)))
 		 ;; (db:delay-if-busy targdb) ;; NO WAITING
-		 (sqlite3:with-transaction
-		  db
-		  (lambda ()
-		    (for-each ;; 
-		     (lambda (fromrow)
-		       (let* ((a    (vector-ref fromrow 0))
-			      (curr (hash-table-ref/default todat a #f))
-			      (same #t))
-			 (let loop ((i 0))
-			   (if (or (not curr)
-				   (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
-			       (set! same #f))
-			   (if (and same
-				    (< i (- num-fields 1)))
-			       (loop (+ i 1))))
-			 (if (not same)
-			     (begin
-			       (apply sqlite3:execute stmth (vector->list fromrow))
-			       (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
-		     fromdat)))
+		 (for-each
+		  (lambda (fromdat-lst)
+		    (sqlite3:with-transaction
+		     db
+		     (lambda ()
+		       (for-each ;; 
+			(lambda (fromrow)
+			  (let* ((a    (vector-ref fromrow 0))
+				 (curr (hash-table-ref/default todat a #f))
+				 (same #t))
+			    (let loop ((i 0))
+			      (if (or (not curr)
+				      (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
+				  (set! same #f))
+			      (if (and same
+				       (< i (- num-fields 1)))
+				  (loop (+ i 1))))
+			    (if (not same)
+				(begin
+				  (apply sqlite3:execute stmth (vector->list fromrow))
+				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+			fromdat-lst))))
+		  fromdats)
 		 (sqlite3:finalize! stmth)))
 	     (append (list todb) slave-dbs))))
 	tbls)

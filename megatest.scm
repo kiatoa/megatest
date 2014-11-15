@@ -297,7 +297,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (for-each 
 	  (lambda (run-id)
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (if (hash-table-ref/default *db-local-sync* run-id 0)
+	    (if (hash-table-ref/default *db-local-sync* run-id #f)
 		;; (if (> (- start-time last-write) 5) ;; every five seconds
 		(let ((sync-time (- (current-seconds) start-time)))
 		  (db:multi-db-sync (list run-id) 'new2old)
