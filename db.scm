@@ -107,7 +107,7 @@
 ;; ;; Can also be used to save arbitrary strings
 ;; ;;
 ;; (define (db:save-path dbstruct path)
-;;   (let ((fdb (db:get-filedb dbstruct)))
+;;   (let ((fdb (db:get-filedb dbstruct)))b
 ;;     (filedb:register-path fdb path)))
 ;; 
 ;; ;; Use to get a path. To get an arbitrary string see next define

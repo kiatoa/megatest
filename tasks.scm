@@ -69,6 +69,8 @@
        exn
        (if (> numretries 0)
 	   (begin
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (print "exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
@@ -87,12 +89,12 @@
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
 	 (sqlite3:set-busy-handler! mdb handler)
-	 (db:set-sync db) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
-	 (if (or (and (not exists)
-		      (file-write-access? *toppath*))
-		 (not (file-read-access? dbpath)))
-	     (begin
-	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 ;;  (if (or (and (not exists)
+	 ;; 	      (file-write-access? *toppath*))
+	 ;; 	 (not (file-read-access? dbpath)))
+	 ;;      (begin
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -103,14 +105,14 @@
                                 params TEXT,
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP);")
-	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -123,8 +125,8 @@
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
                                   run_id INTEGER);")
-	       ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	       (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	 ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,
@@ -133,7 +135,7 @@
                                   logout_time TIMESTAMP DEFAULT -1,
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
 	       
-	       ))
+	       ;))
 	 (sqlite3:execute mdb "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
 	 (set! *task-db* (cons mdb dbpath))
 	 *task-db*))))
