@@ -1682,10 +1682,11 @@
 ;;
 
 (define (db:delete-test-records dbstruct run-id test-id)
-  (let ((db (db:get-db dbstruct run-id)))
-    (db:general-call db 'delete-test-step-records (list test-id))
+  (let* ((dbdat (db:get-db dbstruct run-id))
+	 (db    (db:dbdat-get-db dbdat)))
+    (db:general-call dbdat 'delete-test-step-records (list test-id))
     ;; (db:delay-if-busy)
-    (db:general-call db 'delete-test-data-records (list test-id))
+    (db:general-call dbdat 'delete-test-data-records (list test-id))
     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
 
 (define (db:delete-old-deleted-test-records dbstruct)
