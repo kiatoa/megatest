@@ -2248,7 +2248,9 @@
 	       (string-substitute 
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
-	 (vector #f #f #f))) ;; crude reply for when things go awry
+	 (begin
+	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
+	   #f))) ;; crude reply for when things go awry
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 

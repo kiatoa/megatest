@@ -75,6 +75,7 @@
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
+	     (print-call-chain)
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (print "exn=" (condition->list exn))))
        (let* ((dbpath       (tasks:get-task-db-path))

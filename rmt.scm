@@ -91,7 +91,10 @@
 	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if res
-	      (db:string->obj res)
+	      (or(db:string->obj res)
+		 (begin
+		   (thread-sleep! 0.5)
+		   (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1))))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
