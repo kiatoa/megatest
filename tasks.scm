@@ -69,6 +69,7 @@
        exn
        (if (> numretries 0)
 	   (begin
+	     (print-call-chain)
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (print "exn=" (condition->list exn))
 	     (thread-sleep! 1)
