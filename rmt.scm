@@ -219,8 +219,8 @@
     (if (and dat (vector-ref dat 0))
 	(db:string->obj (vector-ref dat 1))
 	(begin
-	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " res)
-	  res))))
+	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)
