@@ -674,9 +674,11 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (rmt:general-call 'register-test run-id run-id test-name item-path)
-      (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
-	  (rmt:general-call 'register-test run-id run-id test-name ""))
       (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+      (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
+	  (begin
+	    (rmt:general-call 'register-test run-id run-id test-name "")
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done)))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)

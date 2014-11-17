@@ -304,12 +304,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (if (common:low-noise-print 30 "sync new to old")
 		      (begin
 			(debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-			(if (and (> sync-time 10) ;; took more than ten seconds, start a server for this run
-				 (hash-table-ref/default servers-started run-id #f))
+			(if (> sync-time 10) ;; took more than ten seconds, start a server for this run
 			    (begin
 			      (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
-			      (server:kind-run run-id)
-			      (hash-table-set! servers-started run-id #t)))))
+			      (server:kind-run run-id)))))
 		  (hash-table-delete! *db-local-sync* run-id)))
 	    (mutex-unlock! *db-multi-sync-mutex*))
 	  (hash-table-keys *db-local-sync*)))

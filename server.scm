@@ -116,7 +116,7 @@
 (define (server:kind-run run-id)
   (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
     (if (or (not last-run-time)
-	    (> (- (current-seconds) last-run-time) 40))
+	    (> (- (current-seconds) last-run-time) 30))
 	(begin
 	  (server:run run-id)
 	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
