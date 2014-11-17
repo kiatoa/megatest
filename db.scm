@@ -438,7 +438,8 @@
      (for-each (lambda (dbdat)
 		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
 	       (cons todb slave-dbs))
-     (print-call-chain (current-error-port)))
+     (print-call-chain (current-error-port))
+     (exit 1))
    (cond
     ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
