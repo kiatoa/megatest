@@ -49,7 +49,8 @@
     testmeta-get-record))
 
 ;; These are called by the server on recipt of /api calls
-
+;;    - keep it simple, only return the actual result of the call, i.e. no meta info here
+;;
 (define (api:execute-requests dbstruct cmd params)
   (case (string->symbol cmd)
     ;; SERVERS

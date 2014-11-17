@@ -55,6 +55,16 @@
 	       #t)
 	     #f))))
 
+(define (rmt:get-connection-info run-id)
+  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+    (if cinfo
+	cinfo
+	;; NB// can cache the answer for server running for 10 seconds ...
+	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
+	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
+	    (client:setup run-id)
+	    #f))))
+
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
@@ -73,28 +83,25 @@
      (hash-table-keys *runremote*)))
   (mutex-unlock! *db-multi-sync-mutex*)
   (let* ((run-id          (if rid rid 0))
-	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
-			    (if cinfo
-				cinfo
-				;; NB// can cache the answer for server running for 10 seconds ...
-				;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-				(if (tasks:server-running-or-starting? (db:delay-if-busy
-									(tasks:open-db))
-								       run-id)
-				    (let ((res (client:setup run-id)))
-				      (if res 
-					  (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
-					  #f))
-				    #f))))
+	 (connection-info (rmt:get-connection-info run-id))
 	 (jparams         (db:obj->string params)))
     (if connection-info
-	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	;; use the server if have connection info
+	(let* ((dat     (http-transport:client-api-send-receive run-id connection-info cmd jparams))
+	       (res     (if dat (vector-ref dat 1) #f))
+	       (success (if dat (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
-	  (if res
-	      (or(db:string->obj res)
-		 (begin
-		   (thread-sleep! 0.5)
-		   (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1))))
+	  (if success
+	      (db:string->obj res)
+	      ;; (if (< attemptnum 100)
+	      ;;     (begin
+	      ;;       (hash-table-delete! *runremote* run-id)
+	      ;;       (thread-sleep! 0.5)
+	      ;;       (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1)))
+	      ;;     (begin
+	      ;;       (print-call-chain)
+	      ;;       (debug:print 0 "ERROR: too many attempts to communicate have failed. Giving up. Kill your mtest processes and start over")
+	      ;;       (exit 1)))))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
@@ -124,7 +131,7 @@
 			  (server:kind-run run-id))
 			(debug:print-info 3 "Max average query, " (inexact->exact (round curr-max-val)) "ms (" (car curr-max) ") below " max-avg-qry "ms, not starting server...")))
 		(rmt:open-qry-close-locally cmd run-id params)))))))
-  
+
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
   (handle-exceptions
@@ -207,11 +214,13 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
-    (if res
-	(db:string->obj res)
-	res)))
+	 (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (dat      (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+    (if (and dat (vector-ref dat 0))
+	(db:string->obj (vector-ref dat 1))
+	(begin
+	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " res)
+	  res))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)

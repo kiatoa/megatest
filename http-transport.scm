@@ -244,7 +244,8 @@
 			 (begin
 			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
-	 (res        #f))
+	 (res        #f)
+	 (success    #t))
     (handle-exceptions
      exn
      (if (> numretries 0)
@@ -275,20 +276,23 @@
 			      (mutex-lock! *http-mutex*)
 			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
 			      ;;					       ((exn http client-error) e (print e)))
-			      (set! res (handle-exceptions
-					 exn
-					 (begin
-					   (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
-					   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-					   (hash-table-delete! *runremote* run-id)
-					   ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
-					   #f)
-					 (with-input-from-request ;; was dat
-					  fullurl 
-					  (list (cons 'key "thekey")
-						(cons 'cmd cmd)
-						(cons 'params params))
-					  read-string)))
+			      (set! res (vector
+					 success
+					 (handle-exceptions
+					  exn
+					  (begin
+					    (set! success #f)
+					    (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
+					    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+					    (hash-table-delete! *runremote* run-id)
+					    ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
+					    #f)
+					  (with-input-from-request ;; was dat
+					   fullurl 
+					   (list (cons 'key "thekey")
+						 (cons 'cmd cmd)
+						 (cons 'params params))
+					   read-string))))
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
 			      (mutex-unlock! *http-mutex*)

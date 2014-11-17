@@ -21,7 +21,10 @@ VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
 NEWTARGET  = "$(OS)/$(FS)/$(VER)"
 TARGET     = "ubuntu/nfs/none"
 
-all : test1 test2 test3 test4 test5 test6 test7 test8 test9
+all : unit test1 test2 test3 test4 test5 test6 test7 test8 test9
+
+unit :
+	./rununittest.sh basicserver $(DEBUG)
 
 server :
 	cd ..;make -j;make install

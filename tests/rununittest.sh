@@ -6,10 +6,16 @@
 # Ensure all is made
 (cd ..;make && make install)
 
+# put megatest on path from correct location
+mtbindir=$(readlink -f ../bin)
+
+export PATH="${mtbindir}:$PATH"
+
 # Clean setup
 #
-rm -f simplerun/megatest.db simplerun/monitor.db simplerun/db/monitor.db
-rm -rf simplelinks/ simpleruns/ simplerun/db/
+dbdir=$(cd simplerun;megatest -show-config -section setup -var linktree)/.db
+rm -f simplerun/megatest.db simplerun/monitor.db simplerun/db/monitor.db $dbdir/*.db
+rm -rf simplelinks/ simpleruns/ simplerun/db/ $dbdir
 mkdir -p simplelinks simpleruns
 (cd simplerun;cp ../../*_records.scm .;perl -pi.bak -e 's/define-inline/define/' *_records.scm)
 

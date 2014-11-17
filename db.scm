@@ -2468,41 +2468,43 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if dbdat
-      (let* ((dbpath (db:dbdat-get-path dbdat))
-	     (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
-	     (dbfj   (conc dbpath "-journal")))
-	(if (handle-exceptions
-	     exn
-	     (begin
-	       (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
-	       (thread-sleep! 1)
-	       (db:delay-if-busy count (- count 1)))
-	     (file-exists? dbfj))
-	    (case count
-	      ((6)
-	       (thread-sleep! 0.2)
-	       (db:delay-if-busy count: 5))
-	      ((5)
-	       (thread-sleep! 0.4)
-	       (db:delay-if-busy count: 4))
-	      ((4)
-	       (thread-sleep! 0.8)
-	       (db:delay-if-busy count: 3))
-	      ((3)
-	       (thread-sleep! 1.6)
-	       (db:delay-if-busy count: 2))
-	      ((2)
-	       (thread-sleep! 3.2)
-	       (db:delay-if-busy count: 1))
-	      ((1)
-	       (thread-sleep! 6.4)
-	       (db:delay-if-busy count: 0))
-	      (else
-	       (debug:print-info 0 "delaying db access due to high database load.")
-	       (thread-sleep! 12.8))))
-	db)
-      "bogus result from db:delay-if-busy"))
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy"))
+      (and dbdat (db:dbdat-get-db dbdat))
+      (if dbdat
+	  (let* ((dbpath (db:dbdat-get-path dbdat))
+		 (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
+		 (dbfj   (conc dbpath "-journal")))
+	    (if (handle-exceptions
+		 exn
+		 (begin
+		   (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
+		   (thread-sleep! 1)
+		   (db:delay-if-busy count (- count 1)))
+		 (file-exists? dbfj))
+		(case count
+		  ((6)
+		   (thread-sleep! 0.2)
+		   (db:delay-if-busy count: 5))
+		  ((5)
+		   (thread-sleep! 0.4)
+		   (db:delay-if-busy count: 4))
+		  ((4)
+		   (thread-sleep! 0.8)
+		   (db:delay-if-busy count: 3))
+		  ((3)
+		   (thread-sleep! 1.6)
+		   (db:delay-if-busy count: 2))
+		  ((2)
+		   (thread-sleep! 3.2)
+		   (db:delay-if-busy count: 1))
+		  ((1)
+		   (thread-sleep! 6.4)
+		   (db:delay-if-busy count: 0))
+		  (else
+		   (debug:print-info 0 "delaying db access due to high database load.")
+		   (thread-sleep! 12.8))))
+	    db)
+	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
