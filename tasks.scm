@@ -25,33 +25,35 @@
 ;; wait up to aprox n seconds for a journal to go away
 ;;
 (define (tasks:wait-on-journal path n #!key (remove #f)(waiting-msg #f))
-  (let ((fullpath (conc path "-journal")))
-    (handle-exceptions
-     exn
-     #t ;; if stuff goes wrong just allow it to move on
-     (let loop ((journal-exists (file-exists? fullpath))
-		(count          n)) ;; wait ten times ...
-       (if journal-exists
-	   (begin
-	     (if (and waiting-msg
-		      (eq? (modulo n 30) 0))
-		 (debug:print 0 waiting-msg))
-	     (if (> count 0)
-		 (begin
-		   (thread-sleep! 1)
-		   (loop (file-exists? fullpath)
-			 (- count 1)))
-		 (begin
-		   (if remove (system (conc "rm -rf " fullpath)))
-		   #f)))
-	   #t)))))
+  (if (not (string? path))
+      (debug:print 0 "ERROR: Called tasks:wait-on-journal with path=" path " (not a string)")
+      (let ((fullpath (conc path "-journal")))
+	(handle-exceptions
+	 exn
+	 #t ;; if stuff goes wrong just allow it to move on
+	 (let loop ((journal-exists (file-exists? fullpath))
+		    (count          n)) ;; wait ten times ...
+	   (if journal-exists
+	       (begin
+		 (if (and waiting-msg
+			  (eq? (modulo n 30) 0))
+		     (debug:print 0 waiting-msg))
+		 (if (> count 0)
+		     (begin
+		       (thread-sleep! 1)
+		       (loop (file-exists? fullpath)
+			     (- count 1)))
+		     (begin
+		       (if remove (system (conc "rm -rf " fullpath)))
+		       #f)))
+	       #t))))))
 
 (define (tasks:get-task-db-path)
-  (if *task-db*
-      (vector-ref *task-db* 1)
-      (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
-	     (dbpath       (conc linktree "/.db/monitor.db")))
-	dbpath)))
+  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
+	 (dbpath       (conc linktree "/.db")))
+    dbpath))
+
+
 
 ;; If file exists AND
 ;;    file readable
@@ -69,22 +71,24 @@
        exn
        (if (> numretries 0)
 	   (begin
-	     (print-call-chain)
+	     (print-call-chain (current-error-port))
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (print "exn=" (condition->list exn))
+	     (debug:print 0 " exn=" (condition->list exn))
 	     (thread-sleep! 1)
 	     (tasks:open-db numretries (- numretries 1)))
 	   (begin
-	     (print-call-chain)
+	     (print-call-chain (current-error-port))
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	     (print "exn=" (condition->list exn))))
+	     (debug:print 0 " exn=" (condition->list exn))))
        (let* ((dbpath       (tasks:get-task-db-path))
+	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
-	      (mdb          (cond
-			     ((file-write-access? *toppath*)(sqlite3:open-database dbpath))
-			     ((file-read-access? dbpath)    (sqlite3:open-database dbpath))
+	      (mdb          (cond ;; what the hek is *toppath* doing here?
+			     ((and (string? *toppath*)(file-write-access? *toppath*))
+			      (sqlite3:open-database dbfile))
+			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
 			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
 	      (handler      (make-busy-timeout 36000)))
 	 (if (and exists
@@ -310,7 +314,7 @@
        (debug:print 0 "WARNING: tasks:get-server db access error.")
 	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	   (debug:print 0 " for run " run-id)
-	   (print-call-chain)
+	   (print-call-chain (current-error-port))
 	   (if (> retries 0)
 	       (begin
 		 (debug:print 0 " trying call to tasks:get-server again in 10 seconds")

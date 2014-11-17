@@ -331,7 +331,7 @@
 	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
 	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	   (debug:print 0 " db: " rundb)
-	   (print-call-chain)
+	   (print-call-chain (current-error-port))
 	   #f)
 	 (sqlite3:interrupt! rundb)
 	 (sqlite3:finalize! rundb #t))))
@@ -438,7 +438,7 @@
      (for-each (lambda (dbdat)
 		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
 	       (cons todb slave-dbs))
-     (print-call-chain))
+     (print-call-chain (current-error-port)))
    (cond
     ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
@@ -651,7 +651,7 @@
 	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	(print "exn=" (condition->list exn))
 	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	(thread-sleep! sleep-time)
 	(debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
      (apply open-run-close-exception-handling proc idb params))
@@ -1551,7 +1551,7 @@
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
 	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
-	;; (print-call-chain)
+	;; (print-call-chain (current-error-port))
 	'())
       (let* ((qryvalstr       (case qryvals
 				((shortlist) "id,run_id,testname,item_path,state,status")
@@ -2675,7 +2675,7 @@
 	 default
 	 (begin
 	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
-	   (print-call-chain)
+	   (print-call-chain (current-error-port))
 	   default)))
    (apply sqlite3:first-result db stmt params)))
 

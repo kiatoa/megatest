@@ -662,7 +662,7 @@
     ;;        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
     ;;        (print "exn=" (condition->list exn))
     ;;        (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-    ;;        (print-call-chain)))
+    ;;        (print-call-chain (current-error-port))))
     ;;  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
     ;;         (cpuload  (get-cpu-load))
     ;;         (diskfree (get-df (current-directory)))
@@ -690,7 +690,7 @@
 	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	   (print "exn=" (condition->list exn))
 	   (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-	   (print-call-chain)))
+	   (print-call-chain (current-error-port))))
      (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
   )))
 	 

@@ -99,7 +99,7 @@
 	      ;;       (thread-sleep! 0.5)
 	      ;;       (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1)))
 	      ;;     (begin
-	      ;;       (print-call-chain)
+	      ;;       (print-call-chain (current-error-port))
 	      ;;       (debug:print 0 "ERROR: too many attempts to communicate have failed. Giving up. Kill your mtest processes and start over")
 	      ;;       (exit 1)))))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
@@ -302,7 +302,7 @@
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
 	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	#f)))
 
 (define (rmt:test-get-rundir-from-test-id run-id test-id)
@@ -327,7 +327,7 @@
       (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))
       (begin
 	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	'())))
 
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)

@@ -191,7 +191,7 @@
      (begin
        (debug:print 0 "WARNING: Failed to find out if it is ok to skip the wait queue. Will try again in few seconds")
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print-call-chain)
+       (print-call-chain (current-error-port))
        (thread-sleep! 10)
        (if (> count 0)
 	   (begin
@@ -199,7 +199,7 @@
 	     (lock-queue:wait-turn fname test-id count: (- count 1)))
 	   (begin
 	     (debug:print 0 "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
-	     (print-call-chain)
+	     (print-call-chain (current-error-port))
 	     #f)))
      (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
      (sqlite3:execute
