@@ -140,9 +140,15 @@ fi
 # $CHICKEN_INSTALL $PROX sqlite3
 
 # IUP versions
-CDVER=5.7
-IUPVER=3.8
-IMVER=3.8
+if [[ x$USEOLDIUP == "x" ]];then
+  CDVER=5.7
+  IUPVER=3.8
+  IMVER=3.8
+else
+  CDVER=5.7
+  IUPVER=3.8
+  IMVER=3.8
+fi
 
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
@@ -161,8 +167,8 @@ mkdir -p $PREFIX/iuplib
 for a in `echo $files` ; do
     if ! [[ -e tgz/$a ]] ; then
 	wget http://www.kiatoa.com/matt/iup/$a
+        mv $a tgz/$a
     fi
-    mv $a tgz/$a
     echo Untarring tgz/$a into $BUILDHOME/lib
     (cd $PREFIX/lib;tar xfvz $BUILDHOME/tgz/$a;mv include/* ../include)
     # (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
