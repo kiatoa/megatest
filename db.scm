@@ -34,6 +34,24 @@
 (define *number-of-writes* 0)
 (define *number-non-write-queries* 0)
 
+;;======================================================================
+;; SQLITE3 HELPERS
+;;======================================================================
+
+;; convert to -inline
+(define (db:first-result-default db stmt default . params)
+  (handle-exceptions
+   exn
+   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
+     (if (eq? err-status 'done)
+	 default
+	 (begin
+	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain (current-error-port))
+	   default)))
+   (apply sqlite3:first-result db stmt params)))
+
 ;; Get/open a database
 ;;    if run-id => get run specific db
 ;;    if #f     => get main db
@@ -431,6 +449,7 @@
    exn
    (begin
      (debug:print 0 "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
+     (print-call-chain (current-error-port))
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
      (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
@@ -438,8 +457,9 @@
      (for-each (lambda (dbdat)
 		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
 	       (cons todb slave-dbs))
-     (print-call-chain (current-error-port))
-     (exit 1))
+     (if *server-run* ;; we are inside a server
+	 (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
+	 (exit 1)))
    (cond
     ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
@@ -1865,8 +1885,11 @@
    run-id
    #f
    (lambda (db)
-     (sqlite3:first-result db "SELECT attemptnum FROM tests WHERE id=?;"
-			   test-id))))
+     (db:first-result-default 
+      db
+      "SELECT attemptnum FROM tests WHERE id=?;"
+      #f
+      test-id))))
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
@@ -2661,24 +2684,6 @@
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	 waitons)
 	(delete-duplicates result))))
-
-;;======================================================================
-;; SQLITE3 HELPERS
-;;======================================================================
-
-;; convert to -inline
-(define (db:first-result-default db stmt default . params)
-  (handle-exceptions
-   exn
-   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
-     (if (eq? err-status 'done)
-	 default
-	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
-	   (print-call-chain (current-error-port))
-	   default)))
-   (apply sqlite3:first-result db stmt params)))
 
 ;;======================================================================
 ;; Extract ods file from the db

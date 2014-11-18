@@ -30,7 +30,12 @@
       (let ((fullpath (conc path "-journal")))
 	(handle-exceptions
 	 exn
-	 #t ;; if stuff goes wrong just allow it to move on
+	 (begin
+	   (print-call-chain (current-error-port))
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 " exn=" (condition->list exn))
+	   (debug:print 0 "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
+	   #t) ;; if stuff goes wrong just allow it to move on
 	 (let loop ((journal-exists (file-exists? fullpath))
 		    (count          n)) ;; wait ten times ...
 	   (if journal-exists
@@ -310,17 +315,18 @@
 	(best #f))
     (handle-exceptions
      exn
-     (begin 
+     (begin
+       (print-call-chain (current-error-port))
        (debug:print 0 "WARNING: tasks:get-server db access error.")
-	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 " for run " run-id)
-	   (print-call-chain (current-error-port))
-	   (if (> retries 0)
-	       (begin
-		 (debug:print 0 " trying call to tasks:get-server again in 10 seconds")
-		 (thread-sleep! 10)
-		 (tasks:get-server mdb run-id retries: (- retries 0)))
-	       (debug:print 0 "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 " for run " run-id)
+       (print-call-chain (current-error-port))
+       (if (> retries 0)
+	   (begin
+	     (debug:print 0 " trying call to tasks:get-server again in 10 seconds")
+	     (thread-sleep! 10)
+	     (tasks:get-server mdb run-id retries: (- retries 0)))
+	   (debug:print 0 "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
      (sqlite3:for-each-row
       (lambda (id interface port pubport transport pid hostname)
 	(set! res (vector id interface port pubport transport pid hostname)))
@@ -377,34 +383,6 @@
     ;; (sqlite3:finalize! tdb)
     ))
     
-;;   (if status ;; #t means alive
-;;       (begin
-;; 	(if (equal? hostname (get-host-name))
-;; 	    (handle-exceptions
-;; 	     exn
-;; 	     (debug:print-info 0 "server may or may not be dead, check for megatest -server running as pid " pid "\n"
-;; 			       "  EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-;; 	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
-;; 	     (process-signal pid signal/term)
-;; 	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
-;; 	     ;;(process-signal pid signal/kill)
-;; 	     ) ;; local machine, send sig term
-;; 	    (begin
-;; 	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
-;; 	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-;; 	      (let ((serverdat (list hostname port)))
-;; 		(hash-table-set! *runremote* run-id (http-transport:client-connect hostname port))
-;; 	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
-;;       (begin
-;; 	(if status 
-;; 	    (if (equal? hostname (get-host-name))
-;; 		(begin
-;; 		  (debug:print-info 1 "Sending signal/term to " pid " on " hostname)
-;; 		  (process-signal pid signal/term)  ;; local machine, send sig term
-;; 		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
-;; 		  (process-signal pid signal/kill)) 
-;; 		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
-
 
 ;;======================================================================
 ;; Tasks and Task monitors

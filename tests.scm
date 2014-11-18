@@ -649,27 +649,6 @@
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    ;; (handle-exceptions
-    ;;  exn
-    ;;  (if (> remtries 0)
-    ;;      (begin
-    ;;        (set! remtries (- remtries 1))
-    ;;        (thread-sleep! 10)
-    ;;        (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
-    ;;      (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-    ;;        (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
-    ;;        (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-    ;;        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-    ;;        (print "exn=" (condition->list exn))
-    ;;        (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-    ;;        (print-call-chain (current-error-port))))
-    ;;  (let* ((num-records 0) ;; (test:tdb-get-rundat-count tdb))
-    ;;         (cpuload  (get-cpu-load))
-    ;;         (diskfree (get-df (current-directory)))
-    ;;         (uname    (get-uname "-srvpio"))
-    ;;         (hostname (get-host-name)))
-    ;;    ;(tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
-    ;;    (tests:update-central-meta-info  run-id test-id cpuload diskfree minutes uname hostname)
     (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
     
 ;; (define (tests:set-partial-meta-info test-id run-id minutes work-area)
@@ -681,6 +660,8 @@
      exn
      (if (> remtries 0)
 	 (begin
+	   (print-call-chain (current-error-port))
+	   (debug:print-info 0 "WARNING: failed to set meta info. Will try " remtries " more times")
 	   (set! remtries (- remtries 1))
 	   (thread-sleep! 10)
 	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))

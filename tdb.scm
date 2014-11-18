@@ -56,6 +56,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
+	   (print-call-chain (current-error-port))
 	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
 			((condition-property-accessor 'exn 'message) exn))
 	   (set! db (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
@@ -73,6 +74,7 @@
 	(handle-exceptions
 	 exn
 	 (begin
+	   (print-call-chain (current-error-port))
 	   (debug:print 0 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test or remove the file " 
 			dbpath ".\n  "
 			((condition-property-accessor 'exn 'message) exn))
