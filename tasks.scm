@@ -347,6 +347,21 @@
      "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
 
+;; try to start a server and wait for it to be available
+;;
+(define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
+  (tdbdat             (tasks:open-db))
+  ;; ensure a server is running for this run
+  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+	     (delay-time 0))
+      (if (and (not server-dat)
+	       (< delay-time delay-max-tries))
+	  (begin
+	    (debug:print 0 "Try starting server")
+	    (server:kind-run run-id)
+	    (thread-sleep! (min delay-time 5))
+	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row

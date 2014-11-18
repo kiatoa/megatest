@@ -546,7 +546,8 @@
 				(begin
 				  (apply sqlite3:execute stmth (vector->list fromrow))
 				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
-			fromdat-lst))))
+			fromdat-lst))
+		  ))
 		  fromdats)
 		 (sqlite3:finalize! stmth)))
 	     (append (list todb) slave-dbs))))
