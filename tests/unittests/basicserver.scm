@@ -16,6 +16,7 @@
 
 (test #f #f (db:dbdat-get-path *db*))
 (test #f #f (db:get-run-name-from-id *db* run-id))
+(test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 
 ;; (exit)
 
@@ -50,13 +51,56 @@
 		    (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
 		  res)))))
 
+(define user    (current-user-name))
+(define runname "mytestrun")
+(define keys    (rmt:get-keys))
+(define runinfo #f)
+(define keyvals '(("SYSTEM" "abc")("RELEASE" "def")))
+(define header  (vector "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
+
+;; Setup
+;;
 (test #f #f  (not (client:setup run-id)))
 (test #f #f  (not (hash-table-ref/default *runremote* run-id #f)))
+
+;; Login
+;;
 (test #f '(#t "successful login") (rmt:login-no-auto-client-setup (hash-table-ref/default *runremote* run-id #f) run-id))
 (test #f '(#t "successful login") (rmt:login run-id))
+
+;; Keys
+;;
 (test #f '("SYSTEM" "RELEASE")  (rmt:get-keys))
+
+;; No data in db
+;;
 (test #f '() (rmt:get-all-run-ids))
 (test #f #f  (rmt:get-run-name-from-id run-id))
+(test #f 
+      (let ((runrec (vector #f #f)))
+	(vector-set! runrec header 0)
+	(vector-set! runrec (vector #f       #f        #f   #f) 1)
+	runrec)
+      (rmt:get-run-info run-id))
+
+;; Insert data into db
+;;
+(test #f 1 (rmt:register-run keyvals runname "new" "n/a" user))
+;; (test #f #f (rmt:get-runs-by-patt keys runname))
+(test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
+
+;; With data in db
+;;
+(test #f '(1)    (rmt:get-all-run-ids))
+(test #f runname (rmt:get-run-name-from-id run-id))
+(test #f 
+      runname
+      (let ((run-info (rmt:get-run-info run-id)))
+	(db:get-value-by-header (db:get-rows run-info)
+				(db:get-header run-info)
+				"runname")))
+
+      ;; (vector header (vector "abc" "def" 1 "mytestrun" "new" "n/a" "matt" 1416280640.0))
 
 ;; test killing server
 ;;
