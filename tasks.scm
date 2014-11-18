@@ -350,14 +350,13 @@
 ;; try to start a server and wait for it to be available
 ;;
 (define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
-  (tdbdat             (tasks:open-db))
   ;; ensure a server is running for this run
   (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
 	     (delay-time 0))
       (if (and (not server-dat)
 	       (< delay-time delay-max-tries))
 	  (begin
-	    (debug:print 0 "Try starting server")
+	    (if (common:low-noise-print 60 run-id)(debug:print 0 "Try starting server for run-id " run-id))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 5))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))

@@ -887,7 +887,8 @@
 				     1))) ;; length of the register queue ahead
 	(reglen                (if (number? reglen-in) reglen-in 1))
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
-	(last-time-some-running (current-seconds)))
+	(last-time-some-running (current-seconds))
+	(tdbdat                (tasks:open-db)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -934,6 +935,10 @@
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen))
 	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
+
+	;; every couple minutes verify the server is there for this run
+	(if (common:low-noise-print 60 "try start server"  run-id)
+	    (tasks:start-and-wait-for-server tdbdat run-id 10))
 
       (if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
