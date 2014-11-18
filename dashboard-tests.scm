@@ -39,6 +39,8 @@
 ;; C O M M O N
 ;;======================================================================
 
+(define *dashboard-comment-share-slot* #f)
+
 (define (dtests:get-pre-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
     (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
@@ -293,7 +295,7 @@
 							 #:action (lambda (x)
 								    (let ((t (iup:attribute x "TITLE")))
 								      (if (equal? t "WAIVED")
-									  (iup:show (dashboard-tests:waiver testdat 
+									  (iup:show (dashboard-tests:waiver run-id testdat 
 													    (if wtxtbox (iup:attribute wtxtbox "VALUE") #f)
 													    (lambda (c)
 													      (set! newcomment c)
@@ -353,7 +355,7 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver testdat ovrdval cmtcmd)
+(define (dashboard-tests:waiver run-id testdat ovrdval cmtcmd)
   (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))

@@ -88,8 +88,8 @@
     (if connection-info
 	;; use the server if have connection info
 	(let* ((dat     (http-transport:client-api-send-receive run-id connection-info cmd jparams))
-	       (res     (if dat (vector-ref dat 1) #f))
-	       (success (if dat (vector-ref dat 0) #f)))
+	       (res     (if (vector? dat) (vector-ref dat 1) #f))
+	       (success (if (vector? dat) (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if success
 	      (db:string->obj res)
