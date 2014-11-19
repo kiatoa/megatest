@@ -468,34 +468,35 @@
 	  (http-transport:server-shutdown server-id port)))))
 
 (define (http-transport:server-shutdown server-id port)
-  (debug:print-info 0 "Starting to shutdown the server.")
-  ;; need to delete only *my* server entry (future use)
-  (set! *time-to-exit* #t)
-  (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
-  ;;
-  ;; start_shutdown
-  ;;
-  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
-  (portlogger:open-run-close portlogger:set-port port "released")
-  (thread-sleep! 5)
-  (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
-  (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
-  (debug:print-info 0 "Average cached write time "
-		    (if (eq? *number-of-writes* 0)
-			"n/a (no writes)"
-			(/ *writes-total-delay*
-			   *number-of-writes*))
-		    " ms")
-  (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
-  (debug:print-info 0 "Average non-cached time   "
-		    (if (eq? *number-non-write-queries* 0)
-			"n/a (no queries)"
-			(/ *total-non-write-delay* 
-			   *number-non-write-queries*))
-		    " ms")
-  (debug:print-info 0 "Server shutdown complete. Exiting")
-  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
-  (exit))
+  (let ((tdbdat (tasks:open-db)))
+    (debug:print-info 0 "Starting to shutdown the server.")
+    ;; need to delete only *my* server entry (future use)
+    (set! *time-to-exit* #t)
+    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+    ;;
+    ;; start_shutdown
+    ;;
+    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
+    (portlogger:open-run-close portlogger:set-port port "released")
+    (thread-sleep! 5)
+    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+    (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+    (debug:print-info 0 "Average cached write time "
+		      (if (eq? *number-of-writes* 0)
+			  "n/a (no writes)"
+			  (/ *writes-total-delay*
+			     *number-of-writes*))
+		      " ms")
+    (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+    (debug:print-info 0 "Average non-cached time   "
+		      (if (eq? *number-non-write-queries* 0)
+			  "n/a (no queries)"
+			  (/ *total-non-write-delay* 
+			     *number-non-write-queries*))
+		      " ms")
+    (debug:print-info 0 "Server shutdown complete. Exiting")
+    (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
+    (exit)))
 
 ;; all routes though here end in exit ...
 ;;
