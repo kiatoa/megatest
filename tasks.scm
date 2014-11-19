@@ -356,7 +356,7 @@
       (if (and (not server-dat)
 	       (< delay-time delay-max-tries))
 	  (begin
-	    (if (common:low-noise-print 60 run-id)(debug:print 0 "Try starting server for run-id " run-id))
+	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)(debug:print 0 "Try starting server for run-id " run-id))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 5))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))

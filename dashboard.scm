@@ -1521,8 +1521,7 @@ Misc
     (if runid
 	(begin
 	  (lambda (x)
-	    (on-exit (lambda ()
-		       (if *dbstruct-local* (db:close-all *dbstruct-local*))))
+	    (on-exit std-exit-procedure)
 	    (examine-run *dbstruct-local* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))

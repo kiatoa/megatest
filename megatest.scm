@@ -322,29 +322,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (thread-start! *watchdog*)
 
-(define (std-exit-procedure)
-  (rmt:print-db-stats)
-  (let ((run-ids (hash-table-keys *db-local-sync*)))
-    (if (not (null? run-ids))
-	(db:multi-db-sync run-ids 'new2old)))
-  ;; (if *dbstruct-db* (db:close-all *dbstruct-db*))
-  ;; (if *megatest-db* (begin
-  ;;       	      (sqlite3:interrupt! *megatest-db*)
-  ;;       	      (sqlite3:finalize! *megatest-db* #t)))
-  ;; (if *task-db*     (let ((db (vector-ref *task-db* 0)))
-  ;;       	      (sqlite3:interrupt! db)
-  ;;       	      (sqlite3:finalize! db #t))))
-  )
-
-(define (std-signal-handler signum)
-  (signal-mask! signum)
-  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
-  (std-exit-procedure)
-  (exit))
-
-(set-signal-handler! signal/int std-signal-handler)
-(set-signal-handler! signal/term std-signal-handler)
-
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
       (debug:print-info 0 "Sending log output to " (args:get-arg "-log"))
@@ -413,7 +390,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-;; (on-exit std-exit-procedure)
+(on-exit std-exit-procedure)
 
 ;;======================================================================
 ;; Misc general calls

@@ -216,6 +216,39 @@
        (pathname-file *toppath*)))
 
 ;;======================================================================
+;; E X I T   H A N D L I N G
+;;======================================================================
+
+(define (std-exit-procedure)
+  (debug:print-info 0 "starting exit process, finalizing databases.")
+  (rmt:print-db-stats)
+  (let ((run-ids (hash-table-keys *db-local-sync*)))
+    (if (not (null? run-ids))
+	(db:multi-db-sync run-ids 'new2old)))
+  (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if (and *megatest-db*
+	   (sqlite3:database? *megatest-db*))
+      (begin
+	(sqlite3:interrupt! *megatest-db*)
+	(sqlite3:finalize! *megatest-db* #t)
+	(set! *megatest-db* #f)))
+  (if *task-db*     (let ((db (cdr *task-db*)))
+		      (if (sqlite3:database? db)
+			  (begin
+			    (sqlite3:interrupt! db)
+			    (sqlite3:finalize! db #t)
+			    (vector-set! *task-db* 0 #f))))))
+
+(define (std-signal-handler signum)
+  (signal-mask! signum)
+  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
+  ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
+  (exit))
+
+(set-signal-handler! signal/int std-signal-handler)
+(set-signal-handler! signal/term std-signal-handler)
+
+;;======================================================================
 ;; Misc utils
 ;;======================================================================
 

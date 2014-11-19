@@ -180,12 +180,13 @@
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
-(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((local  (dbr:dbstruct-get-local dbstruct))
 	 (rdb    (if local
 		     (dbr:dbstruct-get-localdb dbstruct run-id)
 		     (dbr:dbstruct-get-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
-    (if rdb
+    (if (or rdb
+	    do-not-open)
 	rdb
 	(let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
@@ -321,39 +322,63 @@
 		num-synced)
 	      0)))))
 
+(define (db:close-main dbstruct)
+  (let ((maindb (dbr:dbstruct-get-main dbstruct)))
+    (if maindb
+	(begin
+	  (sqlite3:finalize! (db:dbdat-get-db maindb))
+	  (dbr:dbstruct-set-main! dbstruct #f)))))
+
+(define (db:close-run-db dbstruct run-id)
+  (let ((rdb (db:open-rundb dbstruct run-id do-not-open: #t)))
+    (if (and rdb
+	     (sqlite3:database? rdb))
+	(begin
+	  (sqlite3:finalize! rdb)
+	  (dbr:dbstruct-set-localdb! dbstruct run-id #f)
+	  (dbr:dbstruct-set-inmem! dbstruct #f)))))
+
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
   ;; finalize main.db
   (db:sync-touched dbstruct 0 force-sync: #t)
   ;;(common:db-block-further-queries)
   ;; (mutex-lock! *db-sync-mutex*) ;; with this perhaps it isn't necessary to use the block-further-queries mechanism?
-  (sqlite3:finalize! (db:dbdat-get-db (db:get-db dbstruct #f)))
-  (let* ((local (dbr:dbstruct-get-local dbstruct))
-	 (rundb (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct))))
-    (if local
-	(for-each
-	 (lambda (dbdat)
-	   (let ((db (db:dbdat-get-db dbdat)))
-	     (if (sqlite3:database? db)
-		 (begin
-		   (sqlite3:interrupt! db)
-		   (sqlite3:finalize! db #t)))))
-	 ;; TODO: Come back to this and rework to delete from hashtable when finalized
-	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-    (thread-sleep! 3)
-    (if (and rundb
-	     (sqlite3:database? rundb))
-	(handle-exceptions
-	 exn
-	 (begin 
-	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
-	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 " db: " rundb)
-	   (print-call-chain (current-error-port))
-	   #f)
-	 (sqlite3:interrupt! rundb)
-	 (sqlite3:finalize! rundb #t))))
-  ;; (mutex-unlock! *db-sync-mutex*)
+
+  (db:close-main dbstruct)
+  
+  (let ((locdbs (dbr:dbstruct-get-locdbs dbstruct)))
+    (if (hash-table? locdbs)
+	(for-each (lambda (run-id)
+		    (db:close-run-db dbstruct run-id))
+		  (hash-table-keys locdbs))))
+
+  ;; (let* ((local (dbr:dbstruct-get-local dbstruct))
+  ;;        (rundb (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct))))
+  ;;   (if local
+  ;;       (for-each
+  ;;        (lambda (dbdat)
+  ;;          (let ((db (db:dbdat-get-db dbdat)))
+  ;;            (if (sqlite3:database? db)
+  ;;       	 (begin
+  ;;       	   (sqlite3:interrupt! db)
+  ;;       	   (sqlite3:finalize! db #t)))))
+  ;;        ;; TODO: Come back to this and rework to delete from hashtable when finalized
+  ;;        (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
+  ;;   (thread-sleep! 3)
+  ;;   (if (and rundb
+  ;;            (sqlite3:database? rundb))
+  ;;       (handle-exceptions
+  ;;        exn
+  ;;        (begin 
+  ;;          (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+  ;;          (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+  ;;          (debug:print 0 " db: " rundb)
+  ;;          (print-call-chain (current-error-port))
+  ;;          #f)
+  ;;        (sqlite3:interrupt! rundb)
+  ;;        (sqlite3:finalize! rundb #t))))
+  ;; ;; (mutex-unlock! *db-sync-mutex*)
   )
 
 (define (db:open-inmem-db)
