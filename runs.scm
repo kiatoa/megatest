@@ -218,7 +218,7 @@
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
 	 (tdbdat             (tasks:open-db)))
 
-    (tasks:start-and-wait-for-server tdbdat run-id 10)
+    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
@@ -937,10 +937,11 @@
 	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
 
 	;; every couple minutes verify the server is there for this run
-	(if (common:low-noise-print 60 "try start server"  run-id)
+	(if (and (common:low-noise-print 60 "try start server"  run-id)
+		 (tasks:need-server run-id))
 	    (tasks:start-and-wait-for-server tdbdat run-id 10))
-
-      (if (> num-running 0)
+	
+	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
       (if (> (current-seconds)(+ last-time-some-running 240))
@@ -1435,14 +1436,14 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
-		    (tasks:start-and-wait-for-server tdbdat run-id 10)
+		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
 			(tasks:kill-runner (db:delay-if-busy tdbdat) target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
-		    (tasks:start-and-wait-for-server tdbdat run-id 10)
+		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((print-run)
 		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)

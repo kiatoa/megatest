@@ -347,6 +347,22 @@
      "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
 
+(define (tasks:need-server run-id)
+  (let ((forced (configf:lookup *configdat* "server" "required"))
+	(maxqry (cdr (rmt:get-max-query-average run-id)))
+	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
+    (cond
+     (forced 
+      (if (common:low-noise-print 60 run-id "server required is set")
+	  (debug:print-info 0 "Server required is set, starting server."))
+      #t)
+     ((> maxqry threshold)
+      (if (common:low-noise-print 60 run-id "Max query time execeeded")
+	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, starting server."))
+      #t)
+     (else
+      #f))))
+
 ;; try to start a server and wait for it to be available
 ;;
 (define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
@@ -356,7 +372,8 @@
       (if (and (not server-dat)
 	       (< delay-time delay-max-tries))
 	  (begin
-	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)(debug:print 0 "Try starting server for run-id " run-id))
+	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
+		(debug:print 0 "Try starting server for run-id " run-id))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 5))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))

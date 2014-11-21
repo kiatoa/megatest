@@ -112,25 +112,12 @@
 		(if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
 
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
-	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
-	  (if (and (< attemptnum 10)
-		   (configf:lookup *configdat* "server" "required"))
-	      (begin
-		(debug:print-info 0 "Server required mode, attempting to start server and retry query in ten seconds")
-		(server:kind-run run-id)
-		(thread-sleep! 10)
-		(rmt:send-receive cmd rid params (+ attemptnum 1)))
-	      ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
-	      (let* ((curr-max     (rmt:get-max-query-average run-id))
-		     (curr-max-val (cdr curr-max)))
-		(debug:print-info 4 "no server and read-only query, bypassing normal channel")
-		(if (> curr-max-val max-avg-qry)
-		    (if (common:low-noise-print 10 "start server due to max average query too long")
-			(begin
-			  (debug:print-info 0 "Max average query, " (inexact->exact (round curr-max-val)) "ms (" (car curr-max) ") exceeds " max-avg-qry "ms, try starting server ...")
-			  (server:kind-run run-id))
-			(debug:print-info 3 "Max average query, " (inexact->exact (round curr-max-val)) "ms (" (car curr-max) ") below " max-avg-qry "ms, not starting server...")))
-		(rmt:open-qry-close-locally cmd run-id params)))))))
+	(if (and (< attemptnum 10)
+		 (tasks:need-server run-id))
+	    (begin
+	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+	      (rmt:send-receive cmd rid params (+ attemptnum 1)))
+	    (rmt:open-qry-close-locally cmd run-id params)))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)

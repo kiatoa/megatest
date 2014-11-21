@@ -289,36 +289,38 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let loop ()
-       ;; sync for filesystem local db writes
-       ;;
-       (let ((start-time      (current-seconds))
-	     (servers-started (make-hash-table)))
-	 (for-each 
-	  (lambda (run-id)
-	    (mutex-lock! *db-multi-sync-mutex*)
-	    (if (hash-table-ref/default *db-local-sync* run-id #f)
-		;; (if (> (- start-time last-write) 5) ;; every five seconds
-		(begin ;; let ((sync-time (- (current-seconds) start-time)))
-		  (db:multi-db-sync (list run-id) 'new2old)
-		  (if (common:low-noise-print 30 "sync new to old")
-		      (let ((sync-time (- (current-seconds) start-time)))
-			(debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
-			(if (> sync-time 10) ;; took more than ten seconds, start a server for this run
-			    (begin
-			      (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
-			      (server:kind-run run-id)))))
-		  (hash-table-delete! *db-local-sync* run-id)))
-	    (mutex-unlock! *db-multi-sync-mutex*))
-	  (hash-table-keys *db-local-sync*)))
+     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db")))
+       (let loop ()
+	 ;; sync for filesystem local db writes
+	 ;;
+	 (let ((start-time      (current-seconds))
+	       (servers-started (make-hash-table)))
+	   (for-each 
+	    (lambda (run-id)
+	      (mutex-lock! *db-multi-sync-mutex*)
+	      (if (and legacy-sync 
+		       (hash-table-ref/default *db-local-sync* run-id #f))
+		  ;; (if (> (- start-time last-write) 5) ;; every five seconds
+		  (begin ;; let ((sync-time (- (current-seconds) start-time)))
+		    (db:multi-db-sync (list run-id) 'new2old)
+		    (if (common:low-noise-print 30 "sync new to old")
+			(let ((sync-time (- (current-seconds) start-time)))
+			  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+		    ;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
+		    ;;     (begin
+		    ;;       (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+		    ;;       (server:kind-run run-id)))))
+		    (hash-table-delete! *db-local-sync* run-id)))
+	      (mutex-unlock! *db-multi-sync-mutex*))
+	    (hash-table-keys *db-local-sync*)))
 
-       ;; keep going unless time to exit
-       ;;
-       (if (not *time-to-exit*)
-	   (begin
-	     (thread-sleep! 1) ;; wait one second before syncing again
-	     (loop)))))
-   "Watchdog thread"))
+	 ;; keep going unless time to exit
+	 ;;
+	 (if (not *time-to-exit*)
+	     (begin
+	       (thread-sleep! 1) ;; wait one second before syncing again
+	       (loop)))))
+     "Watchdog thread")))
 
 (thread-start! *watchdog*)
 
