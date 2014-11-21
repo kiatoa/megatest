@@ -220,10 +220,11 @@
 ;;======================================================================
 
 (define (std-exit-procedure)
-  (debug:print-info 0 "starting exit process, finalizing databases.")
+  (debug:print-info 2 "starting exit process, finalizing databases.")
   (rmt:print-db-stats)
   (let ((run-ids (hash-table-keys *db-local-sync*)))
-    (if (not (null? run-ids))
+    (if (and (not (null? run-ids))
+	     (configf:lookup *configdat* "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
   (if *dbstruct-db* (db:close-all *dbstruct-db*))
   (if (and *megatest-db*
