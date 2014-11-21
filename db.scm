@@ -106,9 +106,14 @@
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
 	 (db    (db:dbdat-get-db dbdat)))
     (db:delay-if-busy dbdat)
-    (let ((res (apply proc db params)))
-      (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
-      res)))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (print-call-chain (current-error-port)))
+     (let ((res (apply proc db params)))
+       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
+       res))))
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
