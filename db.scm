@@ -109,7 +109,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
        (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))

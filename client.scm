@@ -57,8 +57,7 @@
 ;;
 (define (client:setup run-id #!key (remaining-tries 100) (failed-connects 0))
   (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
-  (let* ((tdbdat (tasks:open-db))
-	 (tdb    (db:dbdat-get-db tdbdat)))
+  (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
 	(begin
 	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
@@ -118,7 +117,6 @@
 			(thread-sleep! 2) 
 			(if (< num-available 2)
 			    (begin
-			      ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
 			      (server:try-running run-id)))
 			(thread-sleep! 10) ;; give server a little time to start up
 			(client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))

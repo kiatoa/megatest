@@ -449,7 +449,6 @@
 
 (define (dcommon:servers-table)
   (let* ((tdbdat         (tasks:open-db))
-	 (tdb            (db:dbdat-get-db tdbdat))
 	 (colnum         0)
 	 (rownum         0)
 	 (servers-matrix (iup:matrix #:expand "YES"
