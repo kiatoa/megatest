@@ -123,6 +123,7 @@
 						    (db:general-call db stmtname realparams)))))
     ((sync-inmem->db)               (db:sync-touched dbstruct run-id force-sync: #t))
     ((sdb-qry)                      (apply sdb:qry params))
+    ((ping)                         (current-process-id))
 
     ;; TESTMETA
     ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))

@@ -36,7 +36,7 @@ stopserver :
 
 repl :
 	cd ..;make -j && make install
-	cd fullrun;$(MEGATEST) -repl
+	cd fullrun;$(MEGATEST) -:b -repl
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)

@@ -22,6 +22,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
 (declare (uses http-transport))
+(declare (uses nmsg-transport))
 (declare (uses launch))
 ;; (declare (uses zmq-transport))
 (declare (uses daemon))
@@ -49,7 +50,10 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  (http-transport:launch run-id))
+  (case *transport-type*
+    ((http)(http-transport:launch run-id))
+    ((nm)  (nmsg-transport:launch run-id))
+    (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
 
 ;;======================================================================
 ;; Q U E U E   M A N A G E M E N T

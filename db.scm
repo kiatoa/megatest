@@ -2278,8 +2278,8 @@
 ;;======================================================================
 
 ;; NOTE: Can remove the regex and base64 encoding for zmq
-(define (db:obj->string obj)
-  (case *transport-type*
+(define (db:obj->string obj #!key (transport 'http))
+  (case transport
     ;; ((fs) obj)
     ((http fs)
      (string-substitute
@@ -2289,11 +2289,11 @@
 	(with-output-to-string
 	  (lambda ()(serialize obj)))))
       #t))
-    ((zmq)(with-output-to-string (lambda ()(serialize obj))))
+    ((zmq nm)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
 
-(define (db:string->obj msg)
-  (case *transport-type*
+(define (db:string->obj msg #!key (transport 'http))
+  (case transport
     ;; ((fs) msg)
     ((http fs)
      (if (string? msg)
@@ -2306,7 +2306,7 @@
 	 (begin
 	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
 	   #f))) ;; crude reply for when things go awry
-    ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
+    ((zmq nm)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)

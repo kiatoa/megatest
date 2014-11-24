@@ -6,7 +6,7 @@ SRCFILES = common.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
-	   http-transport.scm filedb.scm \
+	   http-transport.scm nmsg-transport.scm filedb.scm \
            client.scm gutils.scm synchash.scm daemon.scm mt.scm dcommon.scm \
 	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
 	   rmt.scm api.scm tdb.scm portlogger.scm

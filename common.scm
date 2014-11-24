@@ -67,8 +67,7 @@
 
 ;; SERVER
 (define *my-client-signature* #f)
-(define *transport-type*    'http)
-(define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
+(define *transport-type*    'nm)
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))

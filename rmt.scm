@@ -15,6 +15,7 @@
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
+(declare (uses nmsg-transport))
 
 ;;
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
@@ -65,9 +66,6 @@
 	    (client:setup run-id)
 	    #f))))
 
-;; cmd is a symbol
-;; vars is a json string encoding the parameters for the call
-;;
 (define (rmt:send-receive cmd rid params #!key (attemptnum 0))
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
@@ -79,6 +77,7 @@
 		  (< (http-transport:server-dat-get-last-access connection) expire-time))
 	     (begin
 	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+	       ;; SHOULD CLOSE THE CONNECTION HERE
 	       (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   (mutex-unlock! *db-multi-sync-mutex*)
@@ -87,21 +86,15 @@
 	 (jparams         (db:obj->string params)))
     (if connection-info
 	;; use the server if have connection info
-	(let* ((dat     (http-transport:client-api-send-receive run-id connection-info cmd jparams))
+	(let* ((dat     (case *transport-type*
+			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd jparams))
+			  ((nm)  (nm-transport:client-api-send-receive   run-id connection-info cmd jparams))
+			  (else  (exit))))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f))
 	       (success (if (vector? dat) (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if success
 	      (db:string->obj res)
-	      ;; (if (< attemptnum 100)
-	      ;;     (begin
-	      ;;       (hash-table-delete! *runremote* run-id)
-	      ;;       (thread-sleep! 0.5)
-	      ;;       (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1)))
-	      ;;     (begin
-	      ;;       (print-call-chain (current-error-port))
-	      ;;       (debug:print 0 "ERROR: too many attempts to communicate have failed. Giving up. Kill your mtest processes and start over")
-	      ;;       (exit 1)))))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
