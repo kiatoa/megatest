@@ -1,0 +1,10 @@
+;;;; trace.meta -*- Scheme -*-
+
+
+((category tools)
+ (synopsis "tracing and breakpoints")
+ (author "felix winkelmann")
+ (license "public domain")
+ (needs advice				; don't we all?
+	miscmacros)
+ (files "tests/run.scm" "trace.meta" "trace.release-info" "trace.scm" "trace.setup") )
