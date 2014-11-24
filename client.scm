@@ -63,22 +63,26 @@
 	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	  (exit 1))
 	(let ((host-info (hash-table-ref/default *runremote* run-id #f)))
-	  (if host-info
+	  (if host-info ;; this is a bit circular. the host-info *is* the start-res FIXME
 	      (let* ((iface     (http-transport:server-dat-get-iface host-info))
 		     (port      (http-transport:server-dat-get-port  host-info))
-		     (start-res (http-transport:client-connect iface port))
-		     (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+		     (start-res (case *transport-type* 
+				  ((http)(http-transport:client-connect iface port))
+				  ((nmsg) host-info) ;; (http-transport:server-dat-get-socket host-info))
+				  (else #f)))
+		     (ping-res  (case *transport-type*
+				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
+				  ((nmsg)(nmsg-transport:ping iface port timeout: 2 socket: ))
+				  (else #f))))
 		(if ping-res   ;; sucessful login?
 		    (begin
 		      (debug:print-info 2 "client:setup, ping is good using host-info=" host-info ", remaining-tries=" remaining-tries)
-		      ;; Why add the close-connections here?
-		      ;; (http-transport:close-connections run-id)
-		      (hash-table-set! *runremote* run-id start-res)
 		      start-res)  ;; return the server info
 		    ;; have host info but no ping. shutdown the current connection and try again
 		    (begin    ;; login failed
 		      (debug:print-info 1 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
-		      (http-transport:close-connections run-id)
+		      (case *transport-type*
+			((http)(http-transport:close-connections run-id)))
 		      (hash-table-delete! *runremote* run-id)
 		      (if (< remaining-tries 8)
 			  (thread-sleep! 5)
@@ -89,9 +93,14 @@
 		(debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 		(if server-dat
 		    (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+			   (hostname  (tasks:hostinfo-get-hostname  server-dat))
 			   (port      (tasks:hostinfo-get-port      server-dat))
-			   (start-res (http-transport:client-connect iface port))
-			   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+			   (start-res (case *transport-type*
+					((http)(http-transport:client-connect iface port))
+					((nmsg)(nmsg-transport:client-connect hostname port))))
+			   (ping-res  (case *transport-type* 
+					((http)(rmt:login-no-auto-client-setup start-res run-id))
+					((nmsg)(http-transport:server-dat-get-socket start-res))))) ;; socket is the result of a ping
 		      (if (and start-res
 			       ping-res)
 			  (begin
@@ -100,7 +109,8 @@
 			    start-res)
 			  (begin    ;; login failed but have a server record, clean out the record and try again
 			    (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
-			    (http-transport:close-connections run-id)
+			    (case *transport-type* 
+			      ((http)(http-transport:close-connections run-id)))
 			    (hash-table-delete! *runremote* run-id)
 			    (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
 								 run-id 

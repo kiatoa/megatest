@@ -53,7 +53,9 @@
 ;;
 (define (api:execute-requests dbstruct cmd params)
   (let ((res
-	 (case (string->symbol cmd)
+	 (case (if (symbol? cmd) 
+		   cmd
+		   (string->symbol cmd))
 	   ;; SERVERS
 	   ((start-server)                 (apply server:kind-run params))
 	   ((kill-server)                  (set! *server-run* #f))

@@ -187,7 +187,7 @@
    "available"                ;; state
    (common:version-signature) ;; mt_version
    -1                         ;; interface
-   "http"                     ;; transport
+   (conc *transport-type*)    ;; transport
    run-id
    ))
 

@@ -72,7 +72,8 @@
 	 (tdbdat          (tasks:open-db)))
     (thread-start! server-thread)
     (if (nmsg-transport:ping hostn start-port timeout: 2 expected-key: (current-process-id))
-	(begin
+	(let ((interface (if (equal? hostn "-")(get-host-name) hostn)))
+	  (tasks:server-set-interface-port (db:delay-if-busy tdbdat) server-id interface start-port)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
 	  (set! *server-info* (list hostn start-port)) ;; probably not needed anymore? currently used by keep-running
 	  (thread-sleep! 3) ;; give some margin for queries to complete before switching from file based access to server based access
@@ -144,8 +145,9 @@
 		;; since we didn't get the server lock we are going to clean up and bail out
 		(debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
-		)))
-      (nmsg-transport:run dbstruct hostn run-id server-id)
+		))
+	  ;; locked in a server id, try to start up
+	  (nmsg-transport:run dbstruct hostn run-id server-id))
       (set! *didsomething* #t)
       (exit))))
 
@@ -169,9 +171,9 @@
 ;;   expect the key expected-key returned in payload
 ;;   send our-key or #f as payload
 ;;
-(define (nmsg-transport:ping hostn port #!key (timeout 3)(return-socket #t)(expected-key #f)(our-key #f))
+(define (nmsg-transport:ping hostn port #!key (timeout 3)(return-socket #t)(expected-key #f)(our-key #f)(socket #f))
   ;; send a random number along with pid and check that we get it back
-  (let* ((req     (nn-socket 'req))
+  (let* ((req     (or socket (nn-socket 'req)))
 	 (host    (if (or (not hostn)
 			  (equal? hostn "-")) ;; use localhost
 		      (get-host-name)
@@ -205,7 +207,7 @@
 				       (print "timeout waiting for ping")
 				       (thread-terminate! ping))))
 			       "timeout")))
-    (nn-connect req (conc "tcp://" host ":" port))
+    (if (not socket)(nn-connect req (conc "tcp://" host ":" port)))
     (handle-exceptions
      exn
      (begin
@@ -220,25 +222,8 @@
     (if return-socket
 	(if success req #f)
 	(begin
-	  (nn-close req)
+	  (nn-close req) ;; should it be closed if we were handed a socket?
 	  success))))
-
-(define (nmsg-transport:client-connect iface portnum)
-  (let* ((reqsoc      (nmsg-transport:ping iface portnum))
-	 (login-res   #f))
-    (nn-connect reqsoc (conc "tcp://" iface ":" portnum))
-    (debug:print-info 11 "nmsg-transport:client-connect started. Next is login")
-    (set! login-res (client:login serverdat nmsg-sockets))
-    (if (and (not (null? login-res))
-	     (car login-res))
-	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" pullport "/" pubport ".")
-	  (set!  *nm-port* nmsg-sockets)
-	  nmsg-sockets)
-	(begin
-	  (debug:print-info 2 "Failed to login or connect to " conurl)
-	  (set! *runremote* #f)
-	  #f))))
 
 ;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -294,7 +279,26 @@
               ;; (exit)
 	      ))))))
 
+;;======================================================================
+;; C L I E N T S
+;;======================================================================
 
+(define (nmsg-transport:client-connect iface portnum)
+  (let* ((reqsoc      (nmsg-transport:ping iface portnum return-socket: #t)))
+    (vector iface portnum #f #f #f (current-seconds) reqsoc)))
+
+(define (nmsg-transport:client-api-send-receive run-id connection-info cmd param)
+  (let ((packet  (vector cmd param))
+	(reqsoc  (http-transport:server-dat-get-socket connection-info)))
+    (nn-send reqsoc (db:obj->string packet transport: 'nmsg))
+    (db:string->obj (nn-recv reqsoc) transport: 'nmsg)))
+
+;;======================================================================
+;; J U N K 
+;;======================================================================
+
+;; DO NOT USE
+;;
 (define (nmsg-transport:client-signal-handler signum)
   (handle-exceptions
    exn

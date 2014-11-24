@@ -320,13 +320,14 @@
 	#f)))
 
 
-(define (make-http-transport:server-dat)(make-vector 5))
+(define (make-http-transport:server-dat)(make-vector 6))
 (define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
 (define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
 (define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 (define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
+(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)

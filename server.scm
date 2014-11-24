@@ -52,7 +52,7 @@
 (define (server:launch run-id)
   (case *transport-type*
     ((http)(http-transport:launch run-id))
-    ((nm)  (nmsg-transport:launch run-id))
+    ((nmsg)(nmsg-transport:launch run-id))
     (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
 
 ;;======================================================================

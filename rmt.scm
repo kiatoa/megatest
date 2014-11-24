@@ -84,17 +84,20 @@
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id))
 	 (jparams         (db:obj->string params)))
+    ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
 	(let* ((dat     (case *transport-type*
 			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd jparams))
-			  ((nmsg)(nmsg-transport:client-api-send-receive   run-id connection-info cmd jparams))
+			  ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info cmd params))
 			  (else  (exit))))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f))
 	       (success (if (vector? dat) (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if success
-	      (db:string->obj res)
+	      (case *transport-type* 
+		((http)(db:string->obj res))
+		((nmsg) res))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
