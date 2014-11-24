@@ -653,7 +653,7 @@
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
-	       (sqlite3:finalize! (dbr:dbstruct-get-rundb dbstruct))))
+	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct)))))
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
@@ -667,7 +667,7 @@
 	     (if (eq? run-id 0)
 		 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
 		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
-	 run-ids))
+	 (cons 0 run-ids)))
     ;; (db:close-all dbstruct)
     ;; (sqlite3:finalize! mdb)
     ))
@@ -1946,9 +1946,11 @@
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir decoding? Decide, decode here or where used? For the moment decode where used.
 (define (db:get-all-tests-info-by-run-id dbstruct run-id)
-  (let ((dbdat (db:get-db dbstruct run-id))
-	(db    (db:dbdat-get-db dbdat))
-	(res '()))
+  (let* ((dbdat (if (vector? dbstruct)
+		    (db:get-db dbstruct run-id)
+		    dbstruct)) ;; still settling on when to use dbstruct or dbdat
+	 (db    (db:dbdat-get-db dbdat))
+	 (res '()))
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
