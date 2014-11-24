@@ -2289,7 +2289,7 @@
 	(with-output-to-string
 	  (lambda ()(serialize obj)))))
       #t))
-    ((zmq nm)(with-output-to-string (lambda ()(serialize obj))))
+    ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
 
 (define (db:string->obj msg #!key (transport 'http))
@@ -2306,7 +2306,7 @@
 	 (begin
 	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
 	   #f))) ;; crude reply for when things go awry
-    ((zmq nm)(with-input-from-string msg (lambda ()(deserialize))))
+    ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)

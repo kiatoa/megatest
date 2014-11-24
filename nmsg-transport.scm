@@ -71,14 +71,16 @@
 				       "server thread"))
 	 (tdbdat          (tasks:open-db)))
     (thread-start! server-thread)
-    (if (nmsg-transport:ping hostn start-port)
+    (if (nmsg-transport:ping hostn start-port timeout: 2 expected-key: (current-process-id))
 	(begin
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
-	  (set! *server-info* (list hostn start-port)) ;; probably not needed anymore?
+	  (set! *server-info* (list hostn start-port)) ;; probably not needed anymore? currently used by keep-running
 	  (thread-sleep! 3) ;; give some margin for queries to complete before switching from file based access to server based access
 	  (set! *inmemdb*  dbstruct)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
-	  (thread-start! nmsg-transport:keep-running)
+	  (thread-start! (make-thread
+			  (lambda ()(nmsg-transport:keep-running server-id))
+			  "keep running"))
 	  (thread-join! server-thread))
 	(begin
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
@@ -97,72 +99,14 @@
 	(nn-send repsoc (conc (current-process-id)))
 	(loop (nn-recv repsoc)))
        (else
-	(let* ((dat    (db:string->obj msg-in transport: 'nm))
+	(let* ((dat    (db:string->obj msg-in transport: 'nmsg))
 	       (cmd    (vector-ref dat 0))
 	       (params (vector-ref dat 1))
 	       (result (api:execute-requests dbstruct cmd params))
-	       (newdat (db:obj->string result transport: 'nm)))
+	       (newdat (db:obj->string result transport: 'nmsg)))
 	  (nn-send repsoc newdat)
 	  (loop (nn-recv repsoc))))))))
 
-;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
-;; used and to shutdown after sometime if it is not.
-;;
-(define (nmsg-transport:keep-running)
-  ;; if none running or if > 20 seconds since 
-  ;; server last used then start shutdown
-  ;; This thread waits for the server to come alive
-  (let* ((server-info (let loop ()
-			(let ((sdat #f))
-			  (mutex-lock! *heartbeat-mutex*)
-			  (set! sdat *server-info*)
-			  (mutex-unlock! *heartbeat-mutex*)
-			  (if sdat sdat
-			      (begin
-				(debug:print 12 "WARNING: server not started yet, waiting few seconds before trying again")
-				(sleep 4)
-				(loop))))))
-	 (iface       (cadr server-info))
-	 (pullport    (caddr server-info))
-	 (pubport     (cadddr server-info)) ;; id interface pullport pubport)
-	 ;; (nmsg-sockets (nmsg-transport:client-connect iface pullport pubport))
-	 (last-access 0))
-    (debug:print-info 11 "heartbeat started for nmsg server on " iface " " pullport " " pubport)
-    (let loop ((count 0))
-      (thread-sleep! 4) ;; no need to do this very often
-      ;; NB// sync currently does NOT return queue-length
-      ;; GET REAL QUEUE LENGTH FROM THE VARIABLE
-      (let ((queue-len 0)) ;; FOR NOW DO NOT DO THIS (cdb:client-call nmsg-sockets 'sync #t 1)))
-      ;; (print "Server running, count is " count)
-	(if (< count 1) ;; 3x3 = 9 secs aprox
-	    (loop (+ count 1)))
-
-	;; NOTE: Get rid of this mechanism! It really is not needed...
-	;; (open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
-
-	;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-	(mutex-lock! *heartbeat-mutex*)
-	(set! last-access *last-db-access*)
-	(mutex-unlock! *heartbeat-mutex*)
-	(if (> (+ last-access
-		  ;; (* 50 60 60)    ;; 48 hrs
-		  ;; 60              ;; one minute
-		  ;; (* 60 60)       ;; one hour
-		  (* 45 60)          ;; 45 minutes, until the db deletion bug is fixed.
-		  )
-	       (current-seconds))
-	    (begin
-	      (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-	      (loop 0))
-	    (begin
-	      (debug:print-info 0 "Starting to shutdown the server.")
-	      ;; need to delete only *my* server entry (future use)
-	      (set! *time-to-exit* #t)
-	      (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-	      (thread-sleep! 1)
-	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
-	      (debug:print-info 0 "Server shutdown complete. Exiting")
-	      (exit)))))))
 
 ;; all routes though here end in exit ...
 ;;
@@ -225,7 +169,7 @@
 ;;   expect the key expected-key returned in payload
 ;;   send our-key or #f as payload
 ;;
-(define (nmsg-transport:ping hostn port #!key (return-socket #t)(expected-key #f)(our-key #f))
+(define (nmsg-transport:ping hostn port #!key (timeout 3)(return-socket #t)(expected-key #f)(our-key #f))
   ;; send a random number along with pid and check that we get it back
   (let* ((req     (nn-socket 'req))
 	 (host    (if (or (not hostn)
@@ -234,14 +178,14 @@
 		      hostn))
 	 (success #f)
 	 (keepwaiting #t)
-	 (dat     (db:obj->string (vector "ping" our-key) transport: 'nm))
+	 (dat     (db:obj->string (vector "ping" our-key) transport: 'nmsg))
 	 (ping    (make-thread
 		   (lambda ()
 		     (nn-send req dat)
 		     (let* ((result  (nn-recv req))
-			    (key     (vector-ref (db:string->obj result transport: 'nm) 1)))
-		       (if (or (not expect-key) ;; just getting a reply is good enough then
-			       (equal? (conc (current-process-id)) expected-key)) 
+			    (key     (vector-ref (db:string->obj result transport: 'nmsg) 1)))
+		       (if (or (not expected-key) ;; just getting a reply is good enough then
+			       (equal? key expected-key)) 
 			   (begin
 			     ;; (print "ping, success: received \"" result "\"")
 			     (set! success #t))
@@ -254,7 +198,7 @@
 				 (let loop ((count 0))
 				   (thread-sleep! 1)
 				   (print "still waiting after count seconds...")
-				   (if (and keepwaiting (< count 10))
+				   (if (and keepwaiting (< count timeout)) ;; yes, this is very aproximate
 				       (loop (+ count 1))))
 				 (if keepwaiting
 				     (begin
@@ -265,10 +209,10 @@
     (handle-exceptions
      exn
      (begin
-       (print-call-chain)
-       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-       (print "exn=" (condition->list exn))
-       (print "ping failed to connect to " host ":" port))
+       ;; (print-call-chain)
+       ;; (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       ;; (print "exn=" (condition->list exn))
+       (debug:print-info 1 "ping failed to connect to " host ":" port))
      (thread-start! timeout)
      (thread-start! ping)
      (thread-join! ping)
@@ -299,25 +243,27 @@
 ;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (nmsg-transport:keep-running)
+(define (nmsg-transport:keep-running server-id)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
   (let* ((server-info (let loop ()
                         (let ((sdat #f))
                           (mutex-lock! *heartbeat-mutex*)
-                          (set! sdat *runremote*)
+                          (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
-                          (if sdat sdat
+                          (if sdat 
+			      (begin
+				(debug:print-info 0 "keep-running got sdat=" sdat)
+				sdat)
                               (begin
-                                (sleep 4)
+                                (thread-sleep! 0.5)
                                 (loop))))))
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (tdb         (tasks:open-db))
-	 (spid        (tasks:server-get-server-id tdb #f iface port #f)))
-    (print "Keep-running got server pid " spid ", using iface " iface " and port " port)
+	 (tdbdat      (tasks:open-db)))
+    (print "Keep-running got server pid " server-id ", using iface " iface " and port " port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
@@ -326,9 +272,6 @@
         (if (< count 1) ;; 3x3 = 9 secs aprox
             (loop (+ count 1)))
         
-        ;; NOTE: Get rid of this mechanism! It really is not needed...
-        (tasks:server-update-heartbeat tdb spid)
-      
         ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
         (mutex-lock! *heartbeat-mutex*)
         (set! last-access *last-db-access*)
@@ -341,17 +284,15 @@
                   )
                (current-seconds))
             (begin
-              (debug:print-info 2 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
             (begin
               (debug:print-info 0 "Starting to shutdown the server.")
-              ;; need to delete only *my* server entry (future use)
               (set! *time-to-exit* #t)
-              (tasks:server-deregister-self tdb (get-host-name))
-              (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was " *max-cache-size*)
+              (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
               (debug:print-info 0 "Server shutdown complete. Exiting")
-              (exit)))))))
+              ;; (exit)
+	      ))))))
 
 
 (define (nmsg-transport:client-signal-handler signum)

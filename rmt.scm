@@ -88,7 +88,7 @@
 	;; use the server if have connection info
 	(let* ((dat     (case *transport-type*
 			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd jparams))
-			  ((nm)  (nm-transport:client-api-send-receive   run-id connection-info cmd jparams))
+			  ((nmsg)(nmsg-transport:client-api-send-receive   run-id connection-info cmd jparams))
 			  (else  (exit))))
 	       (res     (if (vector? dat) (vector-ref dat 1) #f))
 	       (success (if (vector? dat) (vector-ref dat 0) #f)))
