@@ -247,7 +247,15 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (tdbdat      (tasks:open-db)))
+	 (tdbdat      (tasks:open-db))
+	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+			   (if (and (string? tmo)
+				    (string->number tmo))
+			       (* 60 60 (string->number tmo))
+			       ;; (* 3 24 60 60) ;; default to three days
+			       (* 60 1)         ;; default to one minute
+			       ;; (* 60 60 25)      ;; default to 25 hours
+			       ))))
     (print "Keep-running got server pid " server-id ", using iface " iface " and port " port)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
@@ -261,13 +269,9 @@
         (mutex-lock! *heartbeat-mutex*)
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
-        (if (> (+ last-access
-                  ;; (* 50 60 60)    ;; 48 hrs
-                  ;; 60              ;; one minute
-                  ;; (* 60 60)       ;; one hour
-                  (* 45 60)          ;; 45 minutes, until the db deletion bug is fixed.
-                  )
-               (current-seconds))
+        (if (and *server-run*
+	       (> (+ last-access server-timeout)
+		  (current-seconds)))
             (begin
               (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
               (loop 0))
@@ -276,7 +280,7 @@
               (set! *time-to-exit* #t)
               (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
               (debug:print-info 0 "Server shutdown complete. Exiting")
-              ;; (exit)
+              (exit)
 	      ))))))
 
 ;;======================================================================
@@ -288,10 +292,13 @@
     (vector iface portnum #f #f #f (current-seconds) reqsoc)))
 
 (define (nmsg-transport:client-api-send-receive run-id connection-info cmd param)
+  (mutex-lock! *http-mutex*)
   (let ((packet  (vector cmd param))
 	(reqsoc  (http-transport:server-dat-get-socket connection-info)))
     (nn-send reqsoc (db:obj->string packet transport: 'nmsg))
-    (db:string->obj (nn-recv reqsoc) transport: 'nmsg)))
+    (let ((res (db:string->obj (nn-recv reqsoc) transport: 'nmsg)))
+      (mutex-unlock! *http-mutex*)
+      res)))
 
 ;;======================================================================
 ;; J U N K 

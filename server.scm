@@ -142,9 +142,13 @@
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (server:ping-server run-id 
-				       (tasks:hostinfo-get-interface server)
-				       (tasks:hostinfo-get-port      server))))
+	(let ((res (case *transport-type*
+		     ((http)(server:ping-server run-id 
+						(tasks:hostinfo-get-interface server)
+						(tasks:hostinfo-get-port      server)))
+		     ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+						 (tasks:hostinfo-get-port      server)
+						 timeout: 2)))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      #t

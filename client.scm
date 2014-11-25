@@ -72,7 +72,7 @@
 				  (else #f)))
 		     (ping-res  (case *transport-type*
 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
-				  ((nmsg)(nmsg-transport:ping iface port timeout: 2 socket: ))
+				  ((nmsg)(nmsg-transport:ping iface port timeout: 2 socket: #t))
 				  (else #f))))
 		(if ping-res   ;; sucessful login?
 		    (begin

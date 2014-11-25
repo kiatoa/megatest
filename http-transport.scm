@@ -448,14 +448,8 @@
       ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
       ;;
       (if (and *server-run*
-	       ;; (or
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
-;;		   (and (eq? run-id 0)
-;;			(> (tasks:num-servers-non-zero-running tdb) 0))
-;;		   (and (not (eq? run-id 0)) ;; only makes sense in non-zero run-id servers
-;;			(> (db:get-count-tests-actually-running *inmemdb* run-id) 0))
-;;		   ))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	    ;;
