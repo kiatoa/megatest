@@ -939,7 +939,7 @@
 	;; every couple minutes verify the server is there for this run
 	(if (and (common:low-noise-print 60 "try start server"  run-id)
 		 (tasks:need-server run-id))
-	    (tasks:start-and-wait-for-server tdbdat run-id 10))
+	    (tasks:start-and-wait-for-server tdbdat run-id 10)) ;; NOTE: delay and wait is done under the hood
 	
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))

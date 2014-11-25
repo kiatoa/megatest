@@ -1,5 +1,8 @@
 #!/mfs/pkgs/chicken/4.8.0.5/bin/csi -nbq
 
+;; Usage: plot-code file1.scm,file2.scm *.scm > plot.dot
+;;        dot -Tpdf plot.dot > plot.pdf
+
 (use regex srfi-69 srfi-13)
 
 (define targs #f) 
