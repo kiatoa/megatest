@@ -169,7 +169,7 @@
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
-	(thread-sleep! 2) ;; Try removing this. It may not be needed.
+	;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
@@ -347,6 +347,15 @@
      "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
 
+(define (tasks:server-running? mdb run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     mdb ;; NEEDS dbprep ADDED
+     "SELECT id FROM servers WHERE run_id=? AND state = 'running';" run-id)
+    res))
+
 (define (tasks:need-server run-id)
   (let ((forced (configf:lookup *configdat* "server" "required"))
 	(maxqry (cdr (rmt:get-max-query-average run-id)))
@@ -407,6 +416,7 @@
 	(let ((hostname (vector-ref sdat 6))
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
+	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
 	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
 	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
