@@ -51,6 +51,8 @@
 ;; These are called by the server on recipt of /api calls
 ;;    - keep it simple, only return the actual result of the call, i.e. no meta info here
 ;;
+;;    - returns #( flag result )
+;;
 (define (api:execute-requests dbstruct cmd params)
   (let ((res
 	 (case (if (symbol? cmd) 
@@ -147,7 +149,8 @@
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
 	 (params  (db:string->obj paramsj)) ;; (rmt:json-str->dat paramsj))
-	 (res     (api:execute-requests dbstruct cmd params)))
+	 (resdat  (api:execute-requests dbstruct cmd params)) ;; #( flag result )
+	 (res     (vector-ref resdat 1)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
     ;; (rmt:dat->json-str

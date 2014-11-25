@@ -182,7 +182,8 @@
 	 (db-file-path   (db:dbfile-path 0)))
     ;; (read-only      (not (file-read-access? db-file-path)))
     (let* ((start         (current-milliseconds))
-	   (res           (api:execute-requests dbstruct-local (symbol->string cmd) params))
+	   (resdat        (api:execute-requests dbstruct-local (symbol->string cmd) params))
+	   (res           (vector-ref resdat 1))
 	   (duration      (- (current-milliseconds) start)))
       (rmt:update-db-stats run-id cmd params duration)
       ;; mark this run as dirty if this was a write
