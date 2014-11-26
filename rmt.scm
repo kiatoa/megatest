@@ -91,8 +91,8 @@
 			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd jparams))
 			  ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info cmd params))
 			  (else  (exit))))
-	       (res     (if (vector? dat) (vector-ref dat 1) #f))
-	       (success (if (vector? dat) (vector-ref dat 0) #f)))
+	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f))
+	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if success
 	      (case *transport-type* 
@@ -106,7 +106,7 @@
 		;; may kill it here but what are the criteria?
 		;; start with three calls then kill server
 		(if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-
+		(thread-sleep! 2)
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
 	(if (and (< attemptnum 10)
 		 (tasks:need-server run-id))

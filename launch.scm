@@ -101,7 +101,9 @@
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
 	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-		(debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")))
+		(begin
+		  (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
+		  (exit))))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))

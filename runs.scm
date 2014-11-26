@@ -556,10 +556,12 @@
      ((and (null? fails)
 	   (null? prereq-fails)
 	   (null? non-completed))
-      (if  (runs:can-keep-running? hed 5)
+      (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    ;; getting here likely means the system is way overloaded, kill a full minute before continuing
+	    (thread-sleep! 60)
 	    ;; num-retries code was here
 	    ;; we use this opportunity to move contents of reg to tal
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
@@ -675,9 +677,14 @@
      ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
-      (rmt:general-call 'register-test run-id run-id test-name item-path)
-      (if (rmt:get-test-id run-id test-name item-path)
-	  (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
+      (let register-loop ((numtries 15))
+	(rmt:general-call 'register-test run-id run-id test-name item-path)
+	(thread-sleep! 0.5)
+	(if (rmt:get-test-id run-id test-name item-path)
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+	    (if (> numtries 0)
+		(register-loop (- numtries 1))
+		(debug:print 0 "ERROR: failed to register test " (runs:make-full-test-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
 	  (begin
 	    (rmt:general-call 'register-test run-id run-id test-name "")

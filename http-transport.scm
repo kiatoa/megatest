@@ -490,7 +490,7 @@
 			     *number-non-write-queries*))
 		      " ms")
     (debug:print-info 0 "Server shutdown complete. Exiting")
-    (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
+    (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     (exit)))
 
 ;; all routes though here end in exit ...
@@ -536,15 +536,8 @@
 				     (debug:print-info 0 "Server monitor thread started")
 				     (http-transport:keep-running server-id run-id))
 				   "Keep running")))
-	    ;; Database connection
-
-
-	    ;; don't start the db here
-
-	    ;; (set! *inmemdb*  (db:setup run-id))
-
-
 	    (thread-start! th2)
+	    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
 	    (thread-start! th3)
 	    (set! *didsomething* #t)
 	    (thread-join! th2)
