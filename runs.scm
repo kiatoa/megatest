@@ -560,6 +560,8 @@
 	  (begin
 	    (runs:inc-cant-run-tests hed)
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    ;; getting here likely means the system is way overloaded, kill a full minute before continuing
+	    (thread-sleep! 60)
 	    ;; num-retries code was here
 	    ;; we use this opportunity to move contents of reg to tal
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
