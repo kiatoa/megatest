@@ -358,6 +358,7 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
+  (debug:print-info 0 "Starting the sync-back, keep alive thread in server for run-id=" run-id)
   (let* ((tdbdat      (tasks:open-db))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
