@@ -66,7 +66,7 @@
 	    (client:setup run-id)
 	    #f))))
 
-(define (rmt:send-receive cmd rid params #!key (attemptnum 0))
+(define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
   ;; (let ((expire-time (- (current-seconds) 60)))
@@ -103,7 +103,8 @@
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		(tasks:kill-server-run-id run-id tag: "api-send-receive-failed")
+		(if (eq? (modulo attemptnum 5) 0)
+		    (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
 		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
 		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
 
@@ -114,11 +115,11 @@
 		;; (thread-sleep! 2)
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
 	;; no connection info? try to start a server
-	(if (and (< attemptnum 10)
+	(if (and (< attemptnum 15)
 		 (tasks:need-server run-id))
 	    (begin
-	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 	      (hash-table-delete! *runremote* run-id)
+	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 	      (client:setup run-id)
 	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))

@@ -126,7 +126,8 @@
 					     (db:with-db dbstruct run-id #t ;; these are all for modifying the db
 							 (lambda (db)
 							   (db:general-call db stmtname realparams)))))
-	   ((sync-inmem->db)               (db:sync-touched dbstruct run-id force-sync: #t))
+	   ((sync-inmem->db)               (let ((run-id (car params)))
+					     (db:sync-touched dbstruct run-id force-sync: #t)))
 	   ((sdb-qry)                      (apply sdb:qry params))
 	   ((ping)                         (current-process-id))
 

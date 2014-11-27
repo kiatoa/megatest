@@ -80,7 +80,7 @@
 	  (set! *inmemdb*  dbstruct)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
 	  (thread-start! (make-thread
-			  (lambda ()(nmsg-transport:keep-running server-id))
+			  (lambda ()(nmsg-transport:keep-running server-id run-id))
 			  "keep running"))
 	  (thread-join! server-thread))
 	(if (> retrynum 0)
@@ -243,7 +243,7 @@
 ;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (nmsg-transport:keep-running server-id)
+(define (nmsg-transport:keep-running server-id run-id)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -280,10 +280,10 @@
         (if (< count 1) ;; 3x3 = 9 secs aprox
             (loop (+ count 1)))
         
-        ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
         (mutex-lock! *heartbeat-mutex*)
         (set! last-access *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
+	(db:sync-touched *inmemdb* run-id force-sync: #t)
         (if (and *server-run*
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
