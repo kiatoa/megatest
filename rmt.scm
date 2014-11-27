@@ -69,17 +69,17 @@
 (define (rmt:send-receive cmd rid params #!key (attemptnum 0))
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
-  (let ((expire-time (- (current-seconds) 60)))
-    (for-each 
-     (lambda (run-id)
-       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
-	 (if (and connection 
-		  (< (http-transport:server-dat-get-last-access connection) expire-time))
-	     (begin
-	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
-	       ;; SHOULD CLOSE THE CONNECTION HERE
-	       (hash-table-delete! *runremote* run-id)))))
-     (hash-table-keys *runremote*)))
+  ;; (let ((expire-time (- (current-seconds) 60)))
+  ;;   (for-each 
+  ;;    (lambda (run-id)
+  ;;      (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+  ;;        (if (and connection 
+  ;;       	  (< (http-transport:server-dat-get-last-access connection) expire-time))
+  ;;            (begin
+  ;;              (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+  ;;              ;; SHOULD CLOSE THE CONNECTION HERE
+  ;;              (hash-table-delete! *runremote* run-id)))))
+  ;;    (hash-table-keys *runremote*)))
   (mutex-unlock! *db-multi-sync-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id))
@@ -112,15 +112,21 @@
 		;; start with three calls then kill server
 		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
 		;; (thread-sleep! 2)
-		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1))))))
-    (if (and (< attemptnum 10)
-	     (tasks:need-server run-id))
-	(begin
-	  (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	  (hash-table-delete! *runremote* run-id)
-	  (client:setup run-id)
-	  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-	(rmt:open-qry-close-locally cmd run-id params))))
+		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
+	;; no connection info? try to start a server
+	(if (and (< attemptnum 10)
+		 (tasks:need-server run-id))
+	    (begin
+	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+	      (hash-table-delete! *runremote* run-id)
+	      (client:setup run-id)
+	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+	    (begin
+	      (debug:print 0 "ERROR: Communication failed!")
+	      (exit)
+	      ;; (rmt:open-qry-close-locally cmd run-id params))))
+	      )))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
