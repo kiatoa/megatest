@@ -91,8 +91,8 @@
 			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd jparams))
 			  ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info cmd params))
 			  (else  (exit))))
-	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f))
-	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f)))
+	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f))
+	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
 	  (if success
 	      (case *transport-type* 
@@ -100,20 +100,25 @@
 		((nmsg) res))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+		(case *transport-type*
+		  ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
+		(tasks:kill-server-run-id run-id tag: "api-send-receive-failed")
+		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
 
 		;; no longer killing the server in http-transport:client-api-send-receive
 		;; may kill it here but what are the criteria?
 		;; start with three calls then kill server
-		(if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-		(thread-sleep! 2)
-		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
-	(if (and (< attemptnum 10)
-		 (tasks:need-server run-id))
-	    (begin
-	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	      (rmt:send-receive cmd rid params (+ attemptnum 1)))
-	    (rmt:open-qry-close-locally cmd run-id params)))))
+		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+		;; (thread-sleep! 2)
+		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1))))))
+    (if (and (< attemptnum 10)
+	     (tasks:need-server run-id))
+	(begin
+	  (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+	  (rmt:send-receive cmd rid params (+ attemptnum 1)))
+	(rmt:open-qry-close-locally cmd run-id params))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
