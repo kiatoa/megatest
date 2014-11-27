@@ -97,11 +97,11 @@
 	  (if success
 	      (case *transport-type* 
 		((http)(db:string->obj res))
-		((nmsg) res))
+		((nmsg)(vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-		(case *transport-type*
-		  ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
+		;; (case *transport-type*
+		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
 		(tasks:kill-server-run-id run-id tag: "api-send-receive-failed")
 		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
@@ -117,7 +117,9 @@
 	     (tasks:need-server run-id))
 	(begin
 	  (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	  (rmt:send-receive cmd rid params (+ attemptnum 1)))
+	  (hash-table-delete! *runremote* run-id)
+	  (client:setup run-id)
+	  (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
 	(rmt:open-qry-close-locally cmd run-id params))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
@@ -248,8 +250,10 @@
 ;; This login does no retries under the hood - it acts a bit like a ping.
 ;;
 (define (rmt:login-no-auto-client-setup connection-info run-id)
-  (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-  
+  (case *transport-type*
+    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
+    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))))
+
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
 ;;
