@@ -71,13 +71,14 @@
 				       "server thread"))
 	 (tdbdat          (tasks:open-db)))
     (thread-start! server-thread)
+    (thread-sleep! 0.1)
     (if (nmsg-transport:ping hostn start-port timeout: 2 expected-key: (current-process-id))
 	(let ((interface (if (equal? hostn "-")(get-host-name) hostn)))
 	  (tasks:server-set-interface-port (db:delay-if-busy tdbdat) server-id interface start-port)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
 	  (set! *server-info* (list hostn start-port)) ;; probably not needed anymore? currently used by keep-running
 	  (thread-sleep! 3) ;; give some margin for queries to complete before switching from file based access to server based access
-	  (set! *inmemdb*  dbstruct)
+	  ;; (set! *inmemdb*  dbstruct)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
 	  (thread-start! (make-thread
 			  (lambda ()(nmsg-transport:keep-running server-id run-id))
@@ -97,22 +98,12 @@
   (let ((repsoc (nn-socket 'rep)))
     (nn-bind repsoc (conc "tcp://*:" portnum))
     (let loop ((msg-in (nn-recv repsoc)))
-      (cond
-       ((equal? msg-in "quit")
-	(nn-send repsoc "Ok, quitting"))
-       ((and (>= (string-length msg-in) 4)
-	     (equal? (substring msg-in 0 4) "ping"))
-	(nn-send repsoc (conc (current-process-id)))
-	(loop (nn-recv repsoc)))
-       (else
-	(let* ((dat    (db:string->obj msg-in transport: 'nmsg))
-	       (cmd    (vector-ref dat 0))
-	       (params (vector-ref dat 1))
-	       (result (api:execute-requests dbstruct cmd params))
-	       (newdat (db:obj->string result transport: 'nmsg)))
-	  (nn-send repsoc newdat)
-	  (loop (nn-recv repsoc))))))))
-
+      (let* ((dat    (db:string->obj msg-in transport: 'nmsg)))
+	(debug:print 0 "server, received: " dat)
+	(let ((result (api:execute-requests dbstruct dat)))
+	  (debug:print 0 "server, sending: " result)
+	  (nn-send repsoc (db:obj->string result  transport: 'nmsg)))
+	(loop (nn-recv repsoc))))))
 
 ;; all routes though here end in exit ...
 ;;
@@ -121,6 +112,7 @@
 	 (dbstruct (db:setup run-id))
 	 (hostn    (or (args:get-arg "-server") "-")))
     (set! *run-id*   run-id)
+    (set! *inmemdb* dbstruct)
     ;; with nbfake daemonize isn't really needed
     ;;
     ;; (if (args:get-arg "-daemonize")
@@ -186,11 +178,13 @@
 		      (let ((soc (nn-socket 'req)))
 			(nn-connect soc (conc "tcp://" host ":" port))
 			soc)))
-	 (dat     (db:obj->string (vector "ping" our-key) transport: 'nmsg))
-	 (result  (nmsg-transport:client-api-send-receive-raw req dat timeout: timeout))
-	 (success (vector-ref result 0))
+	 (success #t)
+	 (dat     (vector "ping" our-key))
+	 (result  (condition-case 
+		   (nmsg-transport:client-api-send-receive-raw req dat timeout: timeout)
+		   ((timeout)(set! success #f) #f)))
 	 (key     (if success 
-		      (vector-ref (db:string->obj (vector-ref result 1) transport: 'nmsg) 1)
+		      (vector-ref result 1)
 		      #f)))
     (debug:print 0 "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
     (if (and success
@@ -208,16 +202,19 @@
 ;; send data to server, wait max of timeout seconds for a response.
 ;; return #( success/fail result )
 ;;
-(define (nmsg-transport:client-api-send-receive-raw socreq dat #!key (timeout 5))
+;; for effiency it is easier to do the obj->string and string->obj here.
+;;
+(define (nmsg-transport:client-api-send-receive-raw socreq indat #!key (enable-send #t)(timeout 5))
   (let* ((success     #f)
 	 (result      #f)
 	 (keepwaiting #t)
+	 (dat         (db:obj->string indat transport: 'nmsg))
 	 (send-recv   (make-thread
 		       (lambda ()
 			 (nn-send socreq dat)
 			 (let* ((res (nn-recv socreq)))
 			   (set! success #t)
-			   (set! result res)))
+			   (set! result (db:string->obj res transport: 'nmsg))))
 		       "send-recv"))
 	 (timeout     (make-thread
 		       (lambda ()
@@ -231,6 +228,7 @@
 			       (print "timeout waiting for ping")
 			       (thread-terminate! send-recv))))
 		       "timeout")))
+    ;; replace with condition-case?
     (handle-exceptions
      exn
      (set! result "timeout")
@@ -238,7 +236,20 @@
      (thread-start! send-recv)
      (thread-join! send-recv)
      (if success (thread-terminate! timeout)))
-    (vector success result)))
+    ;; raise timeout error if timed out
+    (if success
+	(if (and (vector? result)
+		 (vector-ref result 0)) ;; did it fail at the server?
+	    result                ;; nope, all good
+	    (begin
+	      (debug:print 0 "ERROR: error occured at server, info=" (vector-ref result 2))
+	      (debug:print 0 " client call chain:")
+	      (print-call-chain (current-error-port))
+	      (debug:print 0 " server call chain:")
+	      (pp (vector-ref result 1) (current-error-port))
+	      (signal (vector-ref result 0))))
+	(signal (make-composite-condition
+		 (make-property-condition 'timeout 'message "nmsg-transport:client-api-send-receive-raw timed out talking to server"))))))
 
 ;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
@@ -293,6 +304,7 @@
             (begin
               (debug:print-info 0 "Starting to shutdown the server.")
               (set! *time-to-exit* #t)
+	      (db:sync-touched *inmemdb* run-id force-sync: #t)
               (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)
@@ -310,13 +322,13 @@
 ;;
 (define (nmsg-transport:client-api-send-receive run-id connection-info cmd param #!key (remtries 5))
   (mutex-lock! *http-mutex*)
-  (let* ((packet  (db:obj->string (vector cmd param) transport: 'nmsg))
+  (let* ((packet  (vector cmd param))
 	 (reqsoc  (http-transport:server-dat-get-socket connection-info))
-	 (rawres  (nmsg-transport:client-api-send-receive-raw reqsoc packet))
-	 (status  (vector-ref rawres 0))
-	 (result  (vector-ref rawres 1)))
+	 (res     (nmsg-transport:client-api-send-receive-raw reqsoc packet)))
+;;	 (status  (vector-ref rawres 0))
+;;	 (result  (vector-ref rawres 1)))
     (mutex-unlock! *http-mutex*)
-    (vector status (if status (db:string->obj result transport: 'nmsg) result))))
+    res)) ;; (vector status (if status (db:string->obj result transport: 'nmsg) result))))
 	
 ;;======================================================================
 ;; J U N K 

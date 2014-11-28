@@ -16,11 +16,12 @@
 
 (test #f #f (db:dbdat-get-path *db*))
 (test #f #f (db:get-run-name-from-id *db* run-id))
-(test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
+;; (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 
 ;; (exit)
 
 ;; Server tests go here 
+(for-each (lambda (run-id)
 (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
 (server:kind-run run-id)
 (test "did server start within 20 seconds?"
@@ -33,7 +34,7 @@
 	    (> running 0)
 	    (if (> remtries 0)
 		(begin
-		  (thread-sleep! 1.1)
+		  (thread-sleep! 1)
 		  (loop (- remtries 1)
 			(tasks:server-running-or-starting? (db:delay-if-busy
 							    (tasks:open-db))
@@ -50,7 +51,8 @@
 		    (thread-sleep! 1.1)
 		    (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
 		  res)))))
-
+)
+(list 0 1))
 (define user    (current-user-name))
 (define runname "mytestrun")
 (define keys    (rmt:get-keys))
@@ -102,12 +104,14 @@
 
       ;; (vector header (vector "abc" "def" 1 "mytestrun" "new" "n/a" "matt" 1416280640.0))
 
+(for-each (lambda (run-id)
 ;; test killing server
 ;;
 (tasks:kill-server-run-id run-id)
 
 (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
-
+)
+(list 0 1))
 ;; (test #f #f (client:setup run-id))
 
 ;; (set! *transport-type* 'http)

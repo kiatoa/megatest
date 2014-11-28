@@ -1,7 +1,11 @@
 #!/mfs/pkgs/chicken/4.8.0.5/bin/csi -nbq
 
+;; Coming soon (right?) Usage: plot-code file1.scm,file2.scm "fun1,fun2,x*" *.scm > plot.dot
 ;; Usage: plot-code file1.scm,file2.scm *.scm > plot.dot
 ;;        dot -Tpdf plot.dot > plot.pdf
+;; first param is comma separated list of files to include in the map, use - to do all
+;; second param is list of regexs for functions to include in the map
+;; third param is list of files to scan
 
 (use regex srfi-69 srfi-13)
 
@@ -20,6 +24,8 @@
 (define all-regexs (make-hash-table))
 
 (define all-fns '())
+
+;; for the se
 
 (define (print-err . data)
   (with-output-to-port (current-error-port)
@@ -86,7 +92,28 @@
 		  res
 		  (loop (car tal)(cdr tal) res)))))
       '()))
-  
+
+;; (define mm-header #<<MMHEADER
+;; <map version="freeplane 1.2.0">
+;; <!--To view this file, download free mind mapping software Freeplane from http://freeplane.sourceforge.net -->
+;; 
+;; MMHEADER
+;; 
+;; (define (add-node text)
+;;   <node TEXT="homenode" ID="ID_1723255651" CREATED="1283093380553" MODIFIED="1417113442955"><hook NAME="MapStyle">
+;; )
+;; 
+;;  minimal mindmap file
+;;  <map version="freeplane 1.2.0">
+;;   <!--To view this file, download free mind mapping software Freeplane from http://freeplane.sourceforge.net -->
+;;   <node TEXT="homenode" ID="ID_1723255651" CREATED="1283093380553" MODIFIED="1417113442955">
+;;   <node TEXT="node1" POSITION="right" ID="ID_1810107939" CREATED="1417113473476" MODIFIED="1417113480425">
+;;   <node TEXT="node2" ID="ID_68133256" CREATED="1417113482134" MODIFIED="1417113484466"/>
+;;   <node TEXT="node3" ID="ID_1572284821" CREATED="1417113487785" MODIFIED="1417113491589"/>
+;;   </node>
+;;   </node>
+;;   </map>
+
 ;; Gather the usages
 (print "digraph G {")
 (define curr-cluster-num 0)

@@ -75,7 +75,7 @@
 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
 				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
  					   (if logininfo
- 					       (vector-ref (vector-ref logininfo 1) 1)
+ 					       (car (vector-ref logininfo 1))
  					       #f))))))
 		(if (and start-res
 			 ping-res)

@@ -226,6 +226,7 @@
 	     (configf:lookup *configdat* "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
   (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if *inmemdb*     (db:close-all *inmemdb*))
   (if (and *megatest-db*
 	   (sqlite3:database? *megatest-db*))
       (begin
