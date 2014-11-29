@@ -109,7 +109,7 @@
 	    ((set-tests-state-status)       (apply db:set-tests-state-status dbstruct params))
 	    ((get-tests-for-run)            (apply db:get-tests-for-run dbstruct params))
 	    ((get-test-id)                  (apply db:get-test-id dbstruct params))
-	    ((get-tests-for-runs-mindata)   (apply db:get-tests-for-runs-mindata dbstruct params))
+	    ((get-tests-for-run-mindata)    (apply db:get-tests-for-run-mindata dbstruct params))
 	    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
 	    ((delete-run)                   (apply db:delete-run dbstruct params))
 	    ((get-runs)                     (apply db:get-runs dbstruct params))

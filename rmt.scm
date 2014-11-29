@@ -334,12 +334,14 @@
 	(print-call-chain (current-error-port))
 	'())))
 
+;; IDEA: Threadify these - they spend a lot of time waiting ...
+;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
   (let ((run-id-list (if run-ids
 			 run-ids
 			 (rmt:get-all-run-ids))))
     (apply append (map (lambda (run-id)
-			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
+			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-id testpatt states status not-in)))
 		       run-id-list))))
 
 (define (rmt:delete-test-records run-id test-id)

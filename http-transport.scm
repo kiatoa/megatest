@@ -247,23 +247,24 @@
 	 (res        #f)
 	 (success    #t)
 	 (sparams    (db:obj->string params transport: 'http)))
-    (handle-exceptions
-     exn
-     (if (> numretries 0)
-	 (begin
-	   (mutex-unlock! *http-mutex*)
-	   (thread-sleep! 1)
-	   (handle-exceptions
-	    exn
-	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
-	    (close-all-connections!))
-	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
-	   (http-transport:client-api-send-receive run-id serverdat cmd sparams numretries: (- numretries 1)))
-	 (begin
-	   (mutex-unlock! *http-mutex*)
-	   (tasks:kill-server-run-id run-id)
-	   #f))
-     (begin
+;;    (condition-case
+;;     handle-exceptions
+;;     exn
+;;     (if (> numretries 0)
+;;	 (begin
+;;	   (mutex-unlock! *http-mutex*)
+;;	   (thread-sleep! 1)
+;;	   (handle-exceptions
+;;	    exn
+;;	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+;;	    (close-all-connections!))
+;;	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
+;;	   (http-transport:client-api-send-receive run-id serverdat cmd sparams numretries: (- numretries 1)))
+;;	 (begin
+;;	   (mutex-unlock! *http-mutex*)
+;;	   (tasks:kill-server-run-id run-id)
+;;	   #f))
+;;     (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
@@ -310,7 +311,20 @@
 	 (thread-join! th1)
 	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
-	 res)))))
+	 (if (vector? res)
+	     (if (vector-ref res 0)
+		 res
+		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
+		   (debug:print 0 "ERROR: error occured at server, info=" (vector-ref result 2))
+		   (debug:print 0 " client call chain:")
+		   (print-call-chain (current-error-port))
+		   (debug:print 0 " server call chain:")
+		   (pp (vector-ref result 1) (current-error-port))
+		   (signal (vector-ref result 0))))
+	     (signal (make-composite-condition
+		      (make-property-condition 
+		       'timeout
+		       'message "nmsg-transport:client-api-send-receive-raw timed out talking to server")))))))
 
 ;; careful closing of connections stored in *runremote*
 ;;
