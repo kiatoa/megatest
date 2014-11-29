@@ -100,7 +100,7 @@
 		((http) res) ;; (db:string->obj res))
 		((nmsg) res)) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
-		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
+		(debug:print 0 "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection

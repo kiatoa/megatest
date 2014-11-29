@@ -1190,25 +1190,76 @@ COMPLETED/ xterm -e bash -s --</code></pre>
 width="70%"
 frame="hsides"
 cellspacing="0" cellpadding="4">
-<caption class="title">Table 2. API Calls</caption>
-<col width="20%" />
-<col width="40%" />
-<col width="40%" />
+<caption class="title">Table 2. API Server Management Calls</caption>
+<col width="14%" />
+<col width="28%" />
+<col width="28%" />
+<col width="28%" />
 <thead>
 <tr>
-<th align="center" valign="top">API Call             </th>
-<th align="left" valign="top">Parameters </th>
-<th align="left" valign="top"> Returns</th>
+<th align="center" valign="top">API Call                  </th>
+<th align="left" valign="top"> Purpose comments   </th>
+<th align="left" valign="top"> Returns                 </th>
+<th align="left" valign="top"> Comments</th>
 </tr>
 </thead>
 <tfoot>
 <tr>
-<td align="center" valign="top"><p class="table">rmt:start-server</p></td>
-<td align="left" valign="top"><p class="table"><code>run-id</code></p></td>
-<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
+<td align="center" valign="top"><p class="table">(rmt:login        run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code>Verify the the version, testsuite area etc. are correct.</code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( #t "successful login" )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
 </tr>
 </tfoot>
 <tbody>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:start-server run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+</tr>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:kill-server  run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
+<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="tableblock">
+<table rules="all"
+width="70%"
+frame="hsides"
+cellspacing="0" cellpadding="4">
+<caption class="title">Table 3. API Keys Related Calls</caption>
+<col width="14%" />
+<col width="28%" />
+<col width="28%" />
+<col width="28%" />
+<thead>
+<tr>
+<th align="center" valign="top">API Call                        </th>
+<th align="left" valign="top"> Purpose comments   </th>
+<th align="left" valign="top"> Returns                 </th>
+<th align="left" valign="top"> Comments</th>
+</tr>
+</thead>
+<tfoot>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:get-key-val-pairs run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#t=success/#f=fail</code></p></td>
+<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+</tr>
+</tfoot>
+<tbody>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:get-keys run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>( key1 key2 &#8230; )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+</tr>
 </tbody>
 </table>
 </div>

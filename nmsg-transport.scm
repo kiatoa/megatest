@@ -204,7 +204,7 @@
 ;;
 ;; for effiency it is easier to do the obj->string and string->obj here.
 ;;
-(define (nmsg-transport:client-api-send-receive-raw socreq indat #!key (enable-send #t)(timeout 5))
+(define (nmsg-transport:client-api-send-receive-raw socreq indat #!key (enable-send #t)(timeout 25))
   (let* ((success     #f)
 	 (result      #f)
 	 (keepwaiting #t)
