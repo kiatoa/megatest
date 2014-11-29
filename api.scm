@@ -57,6 +57,8 @@
   (handle-exceptions
    exn
    (let ((call-chain (get-call-chain)))
+     (print-call-chain (current-error-port))
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (if (not (vector? dat))                    ;; it is an error to not receive a vector
        (vector #f #f "remote must be called with a vector")       
@@ -154,8 +156,8 @@
 (define (api:process-request dbstruct $) ;; the $ is the request vars proc
   (let* ((cmd     ($ 'cmd))
 	 (paramsj ($ 'params))
-	 (params  (db:string->obj paramsj)) ;; (rmt:json-str->dat paramsj))
-	 (resdat  (api:execute-requests dbstruct cmd params)) ;; #( flag result )
+	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat paramsj))
+	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; #( flag result )
 	 (res     (vector-ref resdat 1)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
@@ -166,5 +168,5 @@
     ;;          (boolean? res))
     ;;      res 
     ;;      (list "ERROR, not string, list, number or boolean" 1 cmd params res)))))
-    (db:obj->string res)))
+    (db:obj->string res transport: 'http)))
 

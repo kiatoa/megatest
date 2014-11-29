@@ -318,9 +318,11 @@
   (let* ((reqsoc      (nmsg-transport:ping iface portnum return-socket: #t)))
     (vector iface portnum #f #f #f (current-seconds) reqsoc)))
 
-;; return #( success result )
+;; returns result, there is no sucess/fail flag - handled via excpections
 ;;
 (define (nmsg-transport:client-api-send-receive run-id connection-info cmd param #!key (remtries 5))
+  ;; NB// In the html version of this routine there is a call to 
+  ;;      tasks:kill-server-run-id when there is an exception
   (mutex-lock! *http-mutex*)
   (let* ((packet  (vector cmd param))
 	 (reqsoc  (http-transport:server-dat-get-socket connection-info))

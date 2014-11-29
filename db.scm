@@ -298,7 +298,7 @@
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
     (debug:print-info 4 "Syncing for run-id: " run-id)
-    (mutex-lock! *http-mutex*)
+    ;; (mutex-lock! *http-mutex*)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
 	(if maindb
@@ -329,10 +329,10 @@
 	      (db:delay-if-busy olddb)
 	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		0))))))
 
 (define (db:close-main dbstruct)

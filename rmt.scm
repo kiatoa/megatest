@@ -213,13 +213,15 @@
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (dat      (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
-    (if (and dat (vector-ref dat 0))
-	(db:string->obj (vector-ref dat 1))
-	(begin
-	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
-	  dat))))
+	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (res  	   (http-transport:client-api-send-receive run-id connection-info cmd params)))
+    (if (and res (vector-ref res 0))
+	res
+	#f)))
+;; 	(db:string->obj (vector-ref dat 1))
+;; 	(begin
+;; 	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+;; 	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)
