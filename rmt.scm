@@ -317,13 +317,50 @@
 	(print-call-chain (current-error-port))
 	'())))
 
+;; IDEA: Threadify these - they spend a lot of time waiting ...
+;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (let ((run-id-list (if run-ids
+  (let ((multi-run-mutex (make-mutex))
+	(run-id-list (if run-ids
 			 run-ids
-			 (rmt:get-all-run-ids))))
-    (apply append (map (lambda (run-id)
-			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
-		       run-id-list))))
+			 (rmt:get-all-run-ids)))
+	(result      '()))
+    (if (null? run-id-list)
+	'()
+	(for-each 
+	 (lambda (th)
+
+	   (thread-join! th)) ;; I assume that joining completed threads just moves on
+	 (let loop ((hed     (car run-id-list))
+		    (tal     (cdr run-id-list))
+		    (threads '()))
+	   (let* ((newthread (make-thread
+			      (lambda ()
+				(let ((res (rmt:send-receive 'get-tests-for-run-mindata hed (list hed testpatt states status not-in))))
+				  (if (list? res)
+				      (begin
+					(mutex-lock! multi-run-mutex)
+					(set! result (append result res))
+					(mutex-unlock! multi-run-mutex))
+				      (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+			      (conc "multi-run-thread for run-id " hed)))
+		  (newthreads (cons newthread threads)))
+	     (thread-start! newthread)
+	     (thread-sleep! 0.5) ;; give that thread some time to start
+	     (if (null? tal)
+		 newthreads
+		 (loop (car tal)(cdr tal) newthreads))))))
+    result))
+
+;; ;; IDEA: Threadify these - they spend a lot of time waiting ...
+;; ;;
+;; (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+;;   (let ((run-id-list (if run-ids
+;; 			 run-ids
+;; 			 (rmt:get-all-run-ids))))
+;;     (apply append (map (lambda (run-id)
+;; 			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
+;; 		       run-id-list))))
 
 (define (rmt:delete-test-records run-id test-id)
   (rmt:send-receive 'delete-test-records run-id (list run-id test-id)))
