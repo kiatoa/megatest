@@ -363,7 +363,7 @@
     (cond
      (forced 
       (if (common:low-noise-print 60 run-id "server required is set")
-	  (debug:print-info 0 "Server required is set, starting server."))
+	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
       #t)
      ((> maxqry threshold)
       (if (common:low-noise-print 60 run-id "Max query time execeeded")

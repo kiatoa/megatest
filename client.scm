@@ -55,7 +55,7 @@
 ;;
 ;; lookup_server, need to remove *runremote* stuff
 ;;
-(define (client:setup run-id #!key (remaining-tries 2) (failed-connects 0))
+(define (client:setup run-id #!key (remaining-tries 10) (failed-connects 0))
   (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
@@ -88,6 +88,7 @@
 		      (case *transport-type* 
 			((http)(http-transport:close-connections run-id)))
 		      (hash-table-delete! *runremote* run-id)
+		      (tasks:kill-server-run-id run-id)
 		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
 							   run-id 
 							   (tasks:hostinfo-get-interface server-dat)

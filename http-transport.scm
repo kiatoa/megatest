@@ -285,9 +285,10 @@
 					   exn
 					   (begin
 					     (set! success #f)
-					     (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
+					     (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					     (hash-table-delete! *runremote* run-id)
+					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
 					     #f)
 					   (with-input-from-request ;; was dat
@@ -315,11 +316,11 @@
 	     (if (vector-ref res 0)
 		 res
 		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print 0 "ERROR: error occured at server, info=" (vector-ref result 2))
+		   (debug:print 0 "ERROR: error occured at server, info=" (vector-ref res 2))
 		   (debug:print 0 " client call chain:")
 		   (print-call-chain (current-error-port))
 		   (debug:print 0 " server call chain:")
-		   (pp (vector-ref result 1) (current-error-port))
+		   (pp (vector-ref res 1) (current-error-port))
 		   (signal (vector-ref result 0))))
 	     (signal (make-composite-condition
 		      (make-property-condition 

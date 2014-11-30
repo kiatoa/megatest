@@ -285,11 +285,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
+(define *time-zero* (current-seconds))
 (define *watchdog*
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db")))
+     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+	   (debug-mode  (debug:debug-mode 1))
+	   (last-time   (current-seconds)))
        (let loop ()
 	 ;; sync for filesystem local db writes
 	 ;;
@@ -312,13 +315,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;;       (server:kind-run run-id)))))
 		    (hash-table-delete! *db-local-sync* run-id)))
 	      (mutex-unlock! *db-multi-sync-mutex*))
-	    (hash-table-keys *db-local-sync*)))
-
+	    (hash-table-keys *db-local-sync*))
+	   (if (and debug-mode
+		    (> (- start-time last-time) 14))
+	       (begin
+		 (set! last-time start-time)
+		 (debug:print-info 0 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	 
 	 ;; keep going unless time to exit
 	 ;;
 	 (if (not *time-to-exit*)
 	     (begin
-	       (thread-sleep! 1) ;; wait one second before syncing again
+	       (thread-sleep! 5) ;; wait five seconds before syncing again, we'll also sync on exit
 	       (loop)))))
      "Watchdog thread")))
 
