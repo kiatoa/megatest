@@ -206,3 +206,15 @@
 	     ((LOGIN_OK) #t)
 	     (else       #f))
 	   (loop (read-line) inl))))))
+
+
+(define (server:get-timeout)
+  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+    (if (and (string? tmo)
+	     (string->number tmo))
+	(* 60 60 (string->number tmo))
+	;; (* 3 24 60 60) ;; default to three days
+	(* 60 1)         ;; default to one minute
+	;; (* 60 60 25)      ;; default to 25 hours
+	)))
+

@@ -290,9 +290,9 @@
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
-					     (signal (make-composite-condition
-						      (make-property-condition 'commfail 'message "failed to connect to server")))
-					     #f)
+					     ;; (signal (make-composite-condition
+					     ;;          (make-property-condition 'commfail 'message "failed to connect to server")))
+					     "communications failed")
 					   (with-input-from-request ;; was dat
 					    fullurl 
 					    (list (cons 'key "thekey")
@@ -407,14 +407,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
-			   (if (and (string? tmo)
-				    (string->number tmo))
-			       (* 60 60 (string->number tmo))
-			       ;; (* 3 24 60 60) ;; default to three days
-			       (* 60 1)         ;; default to one minute
-			       ;; (* 60 60 25)      ;; default to 25 hours
-			       ))))
+	 (server-timeout (server:get-timeout)))
     (let loop ((count         0)
 	       (server-state 'available))
       ;; Use this opportunity to sync the inmemdb to db

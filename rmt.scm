@@ -69,19 +69,22 @@
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
-  ;; (mutex-lock! *db-multi-sync-mutex*)
-  ;; (let ((expire-time (- (current-seconds) 60)))
-  ;;   (for-each 
-  ;;    (lambda (run-id)
-  ;;      (let ((connection (hash-table-ref/default *runremote* run-id #f)))
-  ;;        (if (and connection 
-  ;;       	  (< (http-transport:server-dat-get-last-access connection) expire-time))
-  ;;            (begin
-  ;;              (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
-  ;;              ;; SHOULD CLOSE THE CONNECTION HERE
-  ;;              (hash-table-delete! *runremote* run-id)))))
-  ;;    (hash-table-keys *runremote*)))
-  ;; (mutex-unlock! *db-multi-sync-mutex*)
+  (mutex-lock! *db-multi-sync-mutex*)
+  (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
+    (for-each 
+     (lambda (run-id)
+       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+         (if (and connection 
+        	  (< (http-transport:server-dat-get-last-access connection) expire-time))
+             (begin
+               (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+               ;; SHOULD CLOSE THE CONNECTION HERE
+	       (case *transport-type*
+		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
+				   (hash-table-ref *runremote* run-id)))))
+               (hash-table-delete! *runremote* run-id)))))
+     (hash-table-keys *runremote*)))
+  (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))
