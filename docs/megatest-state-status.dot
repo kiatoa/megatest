@@ -1,0 +1,47 @@
+digraph megatest_state_status {
+  ranksep=0.05
+  // rankdir=LR
+
+node [shape=box,style=filled];
+
+// subgraph cluster_notstarted {
+//   label="Not started";
+
+  "NOT_STARTED FAILS" [
+  label = "{ NOT_STARTED/FAILS |{ NO_ITEMS |<here> FAIL_PREREQ |<here> FAIL_TIMEOUT }}";
+  shape= "record";
+  ]
+
+"NOT_STARTED n/a" -> "LAUNCHED n/a" [label=" launch"];
+"NOT_STARTED WAIT" -> "LAUNCHED n/a"
+
+  "NOT_STARTED n/a";
+  "NOT_STARTED WAIT" [
+  label = "{NOT_STARTED WAIT|{ NO_SLOTS | <here> WAIT_PREREQ}}";
+  shape = "record";
+]
+
+// struct3 [shape=record,label="hello\nworld |{ b |{c|<here> d|e}| f}| g | h"];
+
+  "NOT_STARTED n/a" -> "NOT_STARTED FAILS";
+  "NOT_STARTED n/a" -> "NOT_STARTED WAIT";
+
+  "RUNNING" [
+     shape="record";
+     label="{RUNNING|{n/a|<here> PASS |<here> FAIL}}";
+  ]
+
+  "COMPLETED" [
+      shape="record";
+      label = "{COMPLETED|{PASS | <here> FAIL |<here> CHECK|<here> SKIP}}";
+  ]
+
+
+"RUNNING" -> "COMPLETED";
+"RUNNING" -> "INCOMPLETE" [label="test dead for > 24hrs"];
+
+
+"LAUNCHED n/a" -> "REMOTEHOSTSTART n/a" -> "RUNNING";
+
+}
+

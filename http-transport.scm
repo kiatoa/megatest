@@ -27,6 +27,7 @@
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses server))
 (declare (uses daemon))
+(declare (uses portlogger))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -60,32 +61,19 @@
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
 
-(define (http-transport:run hostn)
+(define (http-transport:run hostn run-id server-id)
   (debug:print 2 "Attempting to start the server ...")
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
-	    (exit))))
-  (let* (;; (iface           (if (string=? "-" hostn)
-	 ;;        	      #f ;; (get-host-name) 
-	 ;;        	      hostn))
-	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
+  (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
 					   (server:get-best-guess-address hostname)
 					   #f)))
-			    (if ipstr ipstr hostn))) ;; hostname)))
-	 (start-port    (if (and (args:get-arg "-port")
-				 (string->number (args:get-arg "-port")))
-			    (string->number (args:get-arg "-port"))
-			    (if (and (config-lookup  *configdat* "server" "port")
-				     (string->number (config-lookup  *configdat* "server" "port")))
-				(string->number (config-lookup  *configdat* "server" "port"))
-				(+ 5000 (random 1001)))))
-	 (link-tree-path (config-lookup *configdat* "setup" "linktree")))
-    (set! *cache-on* #t)
+			    (if ipstr ipstr hostn))) ;; hostname))) 
+	 (start-port      (portlogger:open-run-close portlogger:find-port))
+	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
+    ;; (set! db *inmemdb*)
+    (debug:print-info 0 "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
@@ -95,32 +83,39 @@
     ;;
     (vhost-map `(((* any) . ,(lambda (continue)
 			       ;; open the db on the first call 
-			       (if (not db)(set! db (open-db)))
+				 ;; This is were we set up the database connections
 			       (let* (($   (request-vars source: 'both))
 				      (dat ($ 'dat))
 				      (res #f))
 				 (cond
+				  ((equal? (uri-path (request-uri (current-request)))
+					   '(/ "api"))
+				   (send-response body:    (api:process-request *inmemdb* $) ;; the $ is the request vars proc
+						  headers: '((content-type text/plain)))
+				   (mutex-lock! *heartbeat-mutex*)
+				   (set! *last-db-access* (current-seconds))
+				   (mutex-unlock! *heartbeat-mutex*))
 				  ;; This is the /ctrl path where data is handed to the server and
 				  ;; responses 
-				  ((equal? (uri-path (request-uri (current-request)))
-					   '(/ "ctrl"))
-				   (let* ((packet (db:string->obj dat))
-					  (qtype  (cdb:packet-get-qtype packet)))
-				     (debug:print-info 12 "server=> received packet=" packet)
-				     (if (not (member qtype '(sync ping)))
-					 (begin
-					   (mutex-lock! *heartbeat-mutex*)
-					   (set! *last-db-access* (current-seconds))
-					   (mutex-unlock! *heartbeat-mutex*)))
-				     ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
-				     ;; (set! res (open-run-close db:process-queue-item open-db packet))
-				     (set! res (db:process-queue-item db packet))
-				     ;; (mutex-unlock! *db:process-queue-mutex*)
-				     (debug:print-info 11 "Return value from db:process-queue-item is " res)
-				     (send-response body: (conc "<head>ctrl data</head>\n<body>"
-								res
-								"</body>")
-						    headers: '((content-type text/plain)))))
+				  ;; ((equal? (uri-path (request-uri (current-request)))
+				  ;;          '(/ "ctrl"))
+				  ;;  (let* ((packet (db:string->obj dat))
+				  ;;         (qtype  (cdb:packet-get-qtype packet)))
+				  ;;    (debug:print-info 12 "server=> received packet=" packet)
+				  ;;    (if (not (member qtype '(sync ping)))
+				  ;;        (begin
+				  ;;          (mutex-lock! *heartbeat-mutex*)
+				  ;;          (set! *last-db-access* (current-seconds))
+				  ;;          (mutex-unlock! *heartbeat-mutex*)))
+				  ;;    ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
+				  ;;    ;; (set! res (open-run-close db:process-queue-item open-db packet))
+				  ;;    (set! res (db:process-queue-item db packet))
+				  ;;    ;; (mutex-unlock! *db:process-queue-mutex*)
+				  ;;    (debug:print-info 11 "Return value from db:process-queue-item is " res)
+				  ;;    (send-response body: (conc "<head>ctrl data</head>\n<body>"
+				  ;;       			res
+				  ;;       			"</body>")
+				  ;;       	    headers: '((content-type text/plain)))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
 				   (send-response body: (http-transport:main-page)))
@@ -136,36 +131,53 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
-    (http-transport:try-start-server ipaddrstr start-port)))
+    (http-transport:try-start-server run-id ipaddrstr start-port server-id)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
-(define (http-transport:try-start-server ipaddrstr portnum)
-  (handle-exceptions
-   exn
-   (begin
-     (print-error-message exn)
-     (if (< portnum 9000)
-	 (begin 
-	   (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
-	   (thread-sleep! 0.1)
-	   ;; (open-run-close tasks:remove-server-records tasks:open-db)
-	   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
-	   (http-transport:try-start-server ipaddrstr (+ portnum 1)))
-	 (print "ERROR: Tried and tried but could not start the server")))
-   ;; any error in following steps will result in a retry
-   (set! *runremote* (list ipaddrstr portnum))
-   ;; (open-run-close tasks:remove-server-records tasks:open-db)
-   (open-run-close tasks:server-register 
-		   tasks:open-db 
-		   (current-process-id)
-		   ipaddrstr portnum 0 'startup 'http)
-   (debug:print 1 "INFO: Trying to start server on " ipaddrstr ":" portnum)
-   ;; This starts the spiffy server
-   ;; NEED WAY TO SET IP TO #f TO BIND ALL
-   (start-server bind-address: ipaddrstr port: portnum)
-   (open-run-close tasks:server-delete tasks:open-db ipaddrstr portnum)
-   (debug:print 1 "INFO: server has been stopped")))
+(define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
+  (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
+	(tdbdat          (tasks:open-db)))
+    (debug:print-info 0 "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
+    (handle-exceptions
+     exn
+     (begin
+       (print-error-message exn)
+       (if (< portnum 64000)
+	   (begin 
+	     (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 "exn=" (condition->list exn))
+	     (portlogger:open-run-close portlogger:set-failed portnum)
+	     (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
+	     (thread-sleep! 0.1)
+
+	     ;; get_next_port goes here
+	     (http-transport:try-start-server run-id
+					      ipaddrstr
+					      (portlogger:open-run-close portlogger:find-port)
+					      server-id))
+	   (begin
+	     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
+	     (print "ERROR: Tried and tried but could not start the server"))))
+     ;; any error in following steps will result in a retry
+     (set! *server-info* (list ipaddrstr portnum))
+     (tasks:server-set-interface-port 
+		     (db:delay-if-busy tdbdat)
+		     server-id 
+		     ipaddrstr portnum)
+     (debug:print 0 "INFO: Trying to start server on " ipaddrstr ":" portnum)
+     ;; This starts the spiffy server
+     ;; NEED WAY TO SET IP TO #f TO BIND ALL
+     ;; (start-server bind-address: ipaddrstr port: portnum)
+     (if config-hostname ;; this is a hint to bind directly
+	 (start-server port: portnum bind-address: (if (equal? config-hostname "-")
+						       ipaddrstr
+						       config-hostname))
+	 (start-server port: portnum))
+     ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
+     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
+     (debug:print 1 "INFO: server has been stopped"))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -177,58 +189,117 @@
 
 (define *http-mutex* (make-mutex))
 
-;; (system "megatest -list-servers | grep alive || megatest -server - -daemonize && sleep 4")
+;; NOTE: Large block of code from 32436b426188080f72fceb6894af541fbad9921e removed here
+;;       I'm pretty sure it is defunct.
 
-;; <html>
-;; <head></head>
-;; <body>1 Hello, world! Goodbye Dolly</body></html>
-;; Send msg to serverdat and receive result
-(define (http-transport:client-send-receive serverdat msg #!key (numretries 30))
-  (let* (;; (url        (http-transport:make-server-url serverdat))
-	 (fullurl    (if (list? serverdat)
-			 (caddr serverdat)
+;; This next block all imported en-mass from the api branch
+(define *http-requests-in-progress* 0)
+(define *http-connections-next-cleanup* (current-seconds))
+
+(define (http-transport:get-time-to-cleanup)
+  (let ((res #f))
+    (mutex-lock! *http-mutex*)
+    (set! res (> (current-seconds) *http-connections-next-cleanup*))
+    (mutex-unlock! *http-mutex*)
+    res))
+
+(define (http-transport:inc-requests-count)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*))
+  ;; Use this opportunity to slow things down iff there are too many requests in flight
+  (if (> *http-requests-in-progress* 5)
+      (begin
+	(debug:print-info 0 "Whoa there buddy, ease up...")
+	(thread-sleep! 1)))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count proc) 
+  (mutex-lock! *http-mutex*)
+  (proc)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:dec-requests-count-and-close-all-connections)
+  (set! *http-requests-in-progress* (- *http-requests-in-progress* 1))
+  (let loop ((etime (+ (current-seconds) 5))) ;; give up in five seconds
+    (if (> *http-requests-in-progress* 0)
+	(if (> etime (current-seconds))
+	    (begin
+	      (thread-sleep! 0.05)
+	      (loop etime))
+	    (debug:print 0 "ERROR: requests still in progress after 5 seconds of waiting. I'm going to pass on cleaning up http connections"))
+	(close-all-connections!)))
+  (set! *http-connections-next-cleanup* (+ (current-seconds) 10))
+  (mutex-unlock! *http-mutex*))
+
+(define (http-transport:inc-requests-and-prep-to-close-all-connections)
+  (mutex-lock! *http-mutex*)
+  (set! *http-requests-in-progress* (+ 1 *http-requests-in-progress*)))
+
+;; Send "cmd" with json payload "params" to serverdat and receive result
+;;
+(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
+  (let* ((fullurl    (if (vector? serverdat)
+			 (http-transport:server-dat-get-api-req serverdat)
 			 (begin
-			   (debug:print 0 "FATAL ERROR: http-transport:client-send-receive called with no server info")
-			   (exit 1)))) ;; (conc url "/ctrl")) ;; (conc url "/?dat=" msg)))
-	 (res        #f))
+			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
+			   (exit 1))))
+	 (res        #f)
+	 (success    #t))
     (handle-exceptions
      exn
+     (if (> numretries 0)
+	 (begin
+	   (mutex-unlock! *http-mutex*)
+	   (thread-sleep! 1)
+	   (handle-exceptions
+	    exn
+	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+	    (close-all-connections!))
+	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
+	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
+	 (begin
+	   (mutex-unlock! *http-mutex*)
+	   (tasks:kill-server-run-id run-id)
+	   #f))
      (begin
-       (print "ERROR IN http-transport:client-send-receive " ((condition-property-accessor 'exn 'message) exn))
-       (thread-sleep! 2)
-       (if (> numretries 0)
-	   (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))))
-     (begin
-       (debug:print-info 11 "fullurl=" fullurl "\n")
+       (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
-       (max-retry-attempts 5)
+       (max-retry-attempts 1)
        ;; consider all requests indempotent
        (retry-request? (lambda (request)
-			 #t))   ;;  		 (thread-sleep! (/ (if (> numretries 100) 100 numretries) 10))
-       ;; (set! numretries (- numretries 1))
-       ;;  		 #t))
+			 #f))
        ;; send the data and get the response
        ;; extract the needed info from the http data and 
        ;; process and return it.
        (let* ((send-recieve (lambda ()
 			      (mutex-lock! *http-mutex*)
-			      (set! res (with-input-from-request 
-					 fullurl 
-					 (list (cons 'dat msg)) 
-					 read-string))
-			      (close-all-connections!) 
-			      (mutex-unlock! *http-mutex*)))
+			      ;; (condition-case (with-input-from-request "http://localhost"; #f read-lines)
+			      ;;					       ((exn http client-error) e (print e)))
+			      (set! res (vector
+					 success
+					 (handle-exceptions
+					  exn
+					  (begin
+					    (set! success #f)
+					    (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
+					    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+					    (hash-table-delete! *runremote* run-id)
+					    ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
+					    #f)
+					  (with-input-from-request ;; was dat
+					   fullurl 
+					   (list (cons 'key "thekey")
+						 (cons 'cmd cmd)
+						 (cons 'params params))
+					   read-string))))
+			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
+			      (close-all-connections!)
+			      (mutex-unlock! *http-mutex*)
+			      ))
 	      (time-out     (lambda ()
 			      (thread-sleep! 45)
-			      (if (not res)
-				  (begin
-				    (debug:print 0 "WARNING: communication with the server timed out.")
-				    (mutex-unlock! *http-mutex*)
-				    (http-transport:client-send-receive serverdat msg numretries: (- numretries 1))
-				    (if (< numretries 3) ;; on last try just exit
-					(begin
-					  (debug:print 0 "ERROR: communication with the server timed out. Giving up.")
-					  (exit 1)))))))
+			      #f))
 	      (th1 (make-thread send-recieve "with-input-from-request"))
 	      (th2 (make-thread time-out     "time out")))
 	 (thread-start! th1)
@@ -236,177 +307,254 @@
 	 (thread-join! th1)
 	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
-	 (let ((match (string-search (regexp "<body>(.*)<.body>") res)))
-	   (debug:print-info 11 "match=" match)
-	   (let ((final (cadr match)))
-	     (debug:print-info 11 "final=" final)
-	     final)))))))
+	 res)))))
 
+;; careful closing of connections stored in *runremote*
+;;
+(define (http-transport:close-connections run-id)
+  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+    (if (vector? server-dat)
+	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
+	  (close-connection! api-dat)
+	  #t)
+	#f)))
+
+
+(define (make-http-transport:server-dat)(make-vector 5))
+(define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
+(define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
+(define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
+(define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
+(define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
+(define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
+
+(define (http-transport:server-dat-make-url vec)
+  (if (and (http-transport:server-dat-get-iface vec)
+	   (http-transport:server-dat-get-port  vec))
+      (conc "http://" 
+	    (http-transport:server-dat-get-iface vec)
+	    ":"
+	    (http-transport:server-dat-get-port  vec))
+      #f))
+
+(define (http-transport:server-dat-update-last-access vec)
+  (vector-set! vec 5 (current-seconds)))
+
+;;
+;; connect
+;;
 (define (http-transport:client-connect iface port)
-  (let* ((login-res   #f)
-	 (uri-dat     (make-request method: 'POST uri: (uri-reference (conc "http://" iface ":" port "/ctrl"))))
-	 (serverdat   (list iface port uri-dat)))
-    (set! login-res (client:login serverdat))
-    (if (and (not (null? login-res))
-	     (car login-res))
-	(begin
-	  (debug:print-info 2 "Logged in and connected to " iface ":" port)
-	  (set! *runremote* serverdat)
-	  serverdat)
-	(begin
-	  (debug:print-info 0 "ERROR: Failed to login or connect to " iface ":" port)
-	  (exit 1)))))
-;; 	  (set! *runremote* #f)
-;; 	  (set! *transport-type* 'fs)
-;; 	  #f))))
-
+  (let* ((api-url      (conc "http://" iface ":" port "/api"))
+	 (api-uri      (uri-reference (conc "http://" iface ":" port "/api")))
+	 (api-req      (make-request method: 'POST uri: api-uri))
+	 (server-dat   (vector iface port api-uri api-url api-req (current-seconds))))
+    server-dat))
 
 ;; run http-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (http-transport:keep-running)
+(define (http-transport:keep-running server-id run-id)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
-  (let* ((server-info (let loop ()
+  (let* ((tdbdat      (tasks:open-db))
+	 (server-info (let loop ((start-time (current-seconds))
+				 (changed    #t)
+				 (last-sdat  "not this"))
                         (let ((sdat #f))
+			  (thread-sleep! 0.01)
+			  (debug:print-info 0 "Waiting for server alive signature")
                           (mutex-lock! *heartbeat-mutex*)
-                          (set! sdat *runremote*)
+                          (set! sdat *server-info*)
                           (mutex-unlock! *heartbeat-mutex*)
-                          (if sdat
+                          (if (and sdat
+				   (not changed)
+				   (> (- (current-seconds) start-time) 2))
 			      sdat
                               (begin
+				(debug:print-info 0 "Still waiting, last-sdat=" last-sdat)
                                 (sleep 4)
-                                (loop))))))
+				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
+				    (begin
+				      (debug:print 0 "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
+				      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
+				      (exit))
+				    (loop start-time
+					  (equal? sdat last-sdat)
+					  sdat)))))))
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (tdb         (tasks:open-db))
-	 (spid        ;;(open-run-close tasks:server-get-server-id tasks:open-db #f iface port #f))
-	   (tasks:server-get-server-id tdb #f iface port #f))
-	 (server-timeout (let ((tmo (config-lookup  *configdat* "server" "timeout")))
+	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))
-			       ;; default to three days
-			       (* 3 24 60 60)))))
-    (debug:print-info 2 "server-timeout: " server-timeout ", server pid: " spid " on " iface ":" port)
-    (let loop ((count 0))
-      (thread-sleep! 4) ;; no need to do this very often
-      ;; NB// sync currently does NOT return queue-length
-      (let () ;; (queue-len (cdb:client-call server-info 'sync #t 1)))
-      ;; (print "Server running, count is " count)
-        (if (< count 1) ;; 3x3 = 9 secs aprox
-            (loop (+ count 1)))
-        
-	;; Check that iface and port have not changed (can happen if server port collides)
-	(mutex-lock! *heartbeat-mutex*)
-	(set! sdat *runremote*)
-	(mutex-unlock! *heartbeat-mutex*)
+			       ;; (* 3 24 60 60) ;; default to three days
+			       (* 60 1)         ;; default to one minute
+			       ;; (* 60 60 25)      ;; default to 25 hours
+			       ))))
+    (let loop ((count         0)
+	       (server-state 'available))
+      ;; Use this opportunity to sync the inmemdb to db
+      (let ((start-time (current-milliseconds))
+	    (sync-time  #f)
+	    (rem-time   #f))
+	;; inmemdb is a dbstruct
+	(if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+	(set! sync-time  (- (current-milliseconds) start-time))
+	(set! rem-time (quotient (- 4000 sync-time) 1000))
+	(debug:print 2 "SYNC: time= " sync-time ", rem-time=" rem-time)
 
-	(if (or (not (equal? sdat (list iface port)))
-		(not spid))
-	    (begin 
-	      (debug:print-info 0 "interface changed, refreshing iface and port info")
-	      (set! iface (car sdat))
-	      (set! port  (cadr sdat))
-	      (set! spid  (tasks:server-get-server-id tdb #f iface port #f))))
-
-        ;; NOTE: Get rid of this mechanism! It really is not needed...
-        ;; (open-run-close tasks:server-update-heartbeat tasks:open-db spid)
-        (tasks:server-update-heartbeat tdb spid)
-      
-        ;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
-        (mutex-lock! *heartbeat-mutex*)
-        (set! last-access *last-db-access*)
-        (mutex-unlock! *heartbeat-mutex*)
-	;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
-        (if (and *server-run*
-		 (> (+ last-access server-timeout)
-		    (current-seconds)))
-            (begin
-              (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-              (loop 0))
-            (begin
-              (debug:print-info 0 "Starting to shutdown the server.")
-              ;; need to delete only *my* server entry (future use)
-              (set! *time-to-exit* #t)
-              (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
-              (thread-sleep! 1)
-              (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
-	      (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
-	      (debug:print-info 0 "Average cached write time "
-				(if (eq? *number-of-writes* 0)
-				    "n/a (no writes)"
-				    (/ *writes-total-delay*
-				       *number-of-writes*))
-				" ms")
-	      (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
-	      (debug:print-info 0 "Average non-cached time   "
-				(if (eq? *number-non-write-queries* 0)
-				    "n/a (no queries)"
-				    (/ *total-non-write-delay* 
-				       *number-non-write-queries*))
-				" ms")
-              (debug:print-info 0 "Server shutdown complete. Exiting")
-              (exit)))))))
-
-;; all routes though here end in exit ...
-(define (http-transport:launch)
-  (if (not *toppath*)
-      (if (not (setup-for-run))
+      ;;
+      ;; set_running after our first pass through and start the db
+      ;;
+      (if (eq? server-state 'available)
 	  (begin
-	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
-	    (exit))))
-  (debug:print-info 2 "Starting the standalone server")
-  (if (args:get-arg "-daemonize")
-      (daemon:ize))
-  (let ((hostinfo (open-run-close tasks:get-best-server tasks:open-db)))
-    (debug:print 11 "http-transport:launch hostinfo=" hostinfo)
-    ;; #(1 "143.182.207.24" 5736 -1 "http" 22771 "hostname")
-    (if hostinfo
-	(debug:print-info 2 "NOT starting new server, one is already running on " (vector-ref hostinfo 1) ":" (vector-ref hostinfo 2))
-	(if *toppath* 
-	    (let* ((th2 (make-thread (lambda ()
-				       (http-transport:run 
-					(if (args:get-arg "-server")
-					    (args:get-arg "-server")
-					    "-"))) "Server run"))
-		   (th3 (make-thread http-transport:keep-running "Keep running"))
-		   (th1 (make-thread server:write-queue-handler  "write queue")))
-	      (thread-start! th2)
-	      (thread-start! th3)
-	      (thread-start! th1)
-	      (set! *didsomething* #t)
-	      (thread-join! th2))
-	    (debug:print 0 "ERROR: Failed to setup for megatest")))
+	    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+	    (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
+	    (set! *inmemdb*  (db:setup run-id))
+	    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")))
+
+      (if (and (<= rem-time 4)
+	       (> rem-time 0))
+	  (thread-sleep! rem-time)
+	  (thread-sleep! 4))) ;; fallback for if the math is changed ...
+      
+      (if (< count 1) ;; 3x3 = 9 secs aprox
+	  (loop (+ count 1) 'running))
+      
+      ;; Check that iface and port have not changed (can happen if server port collides)
+      (mutex-lock! *heartbeat-mutex*)
+      (set! sdat *server-info*)
+      (mutex-unlock! *heartbeat-mutex*)
+      
+      (if (or (not (equal? sdat (list iface port)))
+	      (not server-id))
+	  (begin 
+	    (debug:print-info 0 "interface changed, refreshing iface and port info")
+	    (set! iface (car sdat))
+	    (set! port  (cadr sdat))))
+      
+      ;; Transfer *last-db-access* to last-access to use in checking that we are still alive
+      (mutex-lock! *heartbeat-mutex*)
+      (set! last-access *last-db-access*)
+      (mutex-unlock! *heartbeat-mutex*)
+
+      ;; (debug:print 11 "last-access=" last-access ", server-timeout=" server-timeout)
+      ;;
+      ;; no_traffic, no running tests, if server 0, no running servers
+      ;;
+      ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
+      ;;
+      (if (and *server-run*
+	       ;; (or
+	       (> (+ last-access server-timeout)
+		  (current-seconds)))
+;;		   (and (eq? run-id 0)
+;;			(> (tasks:num-servers-non-zero-running tdb) 0))
+;;		   (and (not (eq? run-id 0)) ;; only makes sense in non-zero run-id servers
+;;			(> (db:get-count-tests-actually-running *inmemdb* run-id) 0))
+;;		   ))
+	  (begin
+	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
+	    ;;
+	    ;; Consider implementing some smarts here to re-insert the record or kill self is
+	    ;; the db indicates so
+	    ;;
+	    ;; (if (tasks:server-am-i-the-server? tdb run-id)
+	    ;;     (tasks:server-set-state! tdb server-id "running"))
+	    ;;
+	    (loop 0 server-state))
+	  (http-transport:server-shutdown server-id port)))))
+
+(define (http-transport:server-shutdown server-id port)
+  (let ((tdbdat (tasks:open-db)))
+    (debug:print-info 0 "Starting to shutdown the server.")
+    ;; need to delete only *my* server entry (future use)
+    (set! *time-to-exit* #t)
+    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+    ;;
+    ;; start_shutdown
+    ;;
+    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
+    (portlogger:open-run-close portlogger:set-port port "released")
+    (thread-sleep! 5)
+    (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
+    (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
+    (debug:print-info 0 "Average cached write time "
+		      (if (eq? *number-of-writes* 0)
+			  "n/a (no writes)"
+			  (/ *writes-total-delay*
+			     *number-of-writes*))
+		      " ms")
+    (debug:print-info 0 "Number non-cached queries "  *number-non-write-queries*)
+    (debug:print-info 0 "Average non-cached time   "
+		      (if (eq? *number-non-write-queries* 0)
+			  "n/a (no queries)"
+			  (/ *total-non-write-delay* 
+			     *number-non-write-queries*))
+		      " ms")
+    (debug:print-info 0 "Server shutdown complete. Exiting")
+    (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
     (exit)))
 
-;; (use trace)
-;; (trace http-transport:keep-running 
-;;        tasks:server-update-heartbeat
-;;        tasks:server-get-server-id)
-;;        tasks:get-best-server
-;;        http-transport:run
-;;        http-transport:launch
-;;        http-transport:try-start-server
-;;        http-transport:client-send-receive
-;;        http-transport:make-server-url
-;;        tasks:server-register
-;;        tasks:server-delete
-;;        start-server
-;;        hostname->ip
-;;        with-input-from-request
-;;        tasks:server-deregister-self)
+;; all routes though here end in exit ...
+;;
+;; start_server? 
+;;
+(define (http-transport:launch run-id)
+  (let* ((tdbdat (tasks:open-db)))
+    (set! *run-id*   run-id)
+    (if (args:get-arg "-daemonize")
+	(begin
+	  (daemon:ize)
+	  (if *alt-log-file* ;; we should re-connect to this port, I think daemon:ize disrupts it
+	      (begin
+		(current-error-port *alt-log-file*)
+		(current-output-port *alt-log-file*)))))
+    (if (server:check-if-running run-id)
+	(begin
+	  (debug:print 0 "INFO: Server for run-id " run-id " already running")
+	  (exit 0)))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+	       (remtries  4))
+      (if (not server-id)
+	  (if (> remtries 0)
+	      (begin
+		(thread-sleep! 2)
+		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+		      (- remtries 1)))
+	      (begin
+		;; since we didn't get the server lock we are going to clean up and bail out
+		(debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
+		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
+		))
+	  (let* ((th2 (make-thread (lambda ()
+				     (debug:print-info 0 "Server run thread started")
+				     (http-transport:run 
+				      (if (args:get-arg "-server")
+					  (args:get-arg "-server")
+					  "-")
+				      run-id
+				      server-id)) "Server run"))
+		 (th3 (make-thread (lambda ()
+				     (debug:print-info 0 "Server monitor thread started")
+				     (http-transport:keep-running server-id run-id))
+				   "Keep running")))
+	    (thread-start! th2)
+	    (thread-sleep! 0.25) ;; give the server time to settle before starting the keep-running monitor.
+	    (thread-start! th3)
+	    (set! *didsomething* #t)
+	    (thread-join! th2)
+	    (exit))))))
 
 (define (http-transport:server-signal-handler signum)
+  (signal-mask! signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (thread-sleep! 1))
-			     ;; (if (not *received-response*)
-			     ;;	 (receive-message* *runremote*))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")

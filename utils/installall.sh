@@ -2,7 +2,7 @@
 
 # set -x
 
-# Copyright 2007-2010, Matthew Welland.
+# Copyright 2007-2014, Matthew Welland.
 # 
 #  This program is made available under the GNU GPL version 2.0 or
 #  greater. See the accompanying file COPYING for details.
@@ -16,6 +16,7 @@ echo sudo apt-get install libreadline-dev
 echo sudo apt-get install libwebkitgtk-dev 
 echo sudo apt-get install libmotif3 -OR- set KTYPE=26g4
 echo KTYPE can be 26, 26g4, or 32
+echo  
 echo KTYPE=$KTYPE
 echo You are using PREFIX=$PREFIX
 echo You are using proxy="$proxy"
@@ -60,9 +61,16 @@ else
   echo Using KTYPE=$KTYPE
 fi
 
-export CHICKEN_VERSION=4.8.0
-if ! [[ -e chicken-${CHICKEN_VERSION}.tar.gz ]]; then 
-    wget http://code.call-cc.org/releases/${CHICKEN_VERSION}/chicken-${CHICKEN_VERSION}.tar.gz
+# Put all the downloaded tar files in tgz
+mkdir -p tgz
+
+# http://code.call-cc.org/releases/4.8.0/chicken-4.8.0.5.tar.gz
+export CHICKEN_VERSION=4.8.0.5
+export CHICKEN_BASEVER=4.8.0
+chicken_targz=chicken-${CHICKEN_VERSION}.tar.gz
+if ! [[ -e tgz/$chicken_targz ]]; then 
+    wget http://code.call-cc.org/releases/${CHICKEN_BASEVER}/${chicken_targz}
+    mv $chicken_targz tgz
 fi 
 
 BUILDHOME=$PWD
@@ -83,7 +91,7 @@ echo PATH=$PATH
 echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 if ! [[ -e $PREFIX/bin/csi ]]; then
-    tar xfvz chicken-${CHICKEN_VERSION}.tar.gz
+    tar xfvz tgz/$chicken_targz
     cd chicken-${CHICKEN_VERSION}
     # make PLATFORM=linux PREFIX=$PREFIX spotless
     make PLATFORM=linux PREFIX=$PREFIX
@@ -114,13 +122,15 @@ export LD_LIBRARY_PATH=$LIBPATH
 
 export SQLITE3_VERSION=3071401
 echo Install sqlite3
-if ! [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
-    wget http://www.sqlite.org/sqlite-autoconf-$SQLITE3_VERSION.tar.gz
+sqlite3_tgz=sqlite-autoconf-$SQLITE3_VERSION.tar.gz
+if ! [[ -e tgz/$sqlite3_tgz ]]; then
+    wget http://www.sqlite.org/$sqlite3_tgz
+    mv $sqlite3_tgz tgz
 fi
 
 if ! [[ -e $PREFIX/bin/sqlite3 ]] ; then
-    if [[ -e sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
-	tar xfz sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
+    if [[ -e tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz ]]; then
+	tar xfz tgz/sqlite-autoconf-$SQLITE3_VERSION.tar.gz 
 	(cd sqlite-autoconf-$SQLITE3_VERSION;./configure --prefix=$PREFIX;make;make install)
 	# CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL -prefix $DEPLOYTARG -deploy $PROX sqlite3
 	CSC_OPTIONS="-I$PREFIX/include -L$PREFIX/lib" $CHICKEN_INSTALL $PROX sqlite3
@@ -129,6 +139,11 @@ fi
 
 # $CHICKEN_INSTALL $PROX sqlite3
 
+# IUP versions
+CDVER=5.7
+IUPVER=3.8
+IMVER=3.8
+
 if [[ `uname -a | grep x86_64` == "" ]]; then 
     export ARCHSIZE=''
 else
@@ -136,7 +151,7 @@ else
 fi
     # export files="cd-5.4.1_Linux${KTYPE}_lib.tar.gz im-3.6.3_Linux${KTYPE}_lib.tar.gz iup-3.5_Linux${KTYPE}_lib.tar.gz"
 if [[ x$USEOLDIUP == "x" ]];then
-   export files="cd-5.5.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.8_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.6_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
+   export files="cd-${CDVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-${IMVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-${IUPVER}_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
 else
    echo WARNING: Using old IUP libraries
    export files="cd-5.4.1_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz im-3.6.3_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz iup-3.5_Linux${KTYPE}_${ARCHSIZE}lib.tar.gz"
@@ -144,22 +159,24 @@ fi
 
 mkdir -p $PREFIX/iuplib
 for a in `echo $files` ; do
-    if ! [[ -e $a ]] ; then
+    if ! [[ -e tgz/$a ]] ; then
 	wget http://www.kiatoa.com/matt/iup/$a
     fi
-    echo Untarring $a into $BUILDHOME/lib
-    (cd $PREFIX/lib;tar xfvz $BUILDHOME/$a;mv include/* ../include)
+    mv $a tgz/$a
+    echo Untarring tgz/$a into $BUILDHOME/lib
+    (cd $PREFIX/lib;tar xfvz $BUILDHOME/tgz/$a;mv include/* ../include)
     # (cd $DEPLOYTARG;tar xfvz $BUILDHOME/$a)
 done
 
 # ffcall obtained from:
 # cvs -z3 -d:pserver:anonymous@cvs.savannah.gnu.org:/sources/libffcall co ffcall 
 
-if ! [[ -e ffcall.tar.gz ]] ; then
+if ! [[ -e tgz/ffcall.tar.gz ]] ; then
     wget http://www.kiatoa.com/matt/iup/ffcall.tar.gz 
+    mv ffcall.tar.gz tgz
 fi
 
-tar xfvz ffcall.tar.gz
+tar xfvz tgz/ffcall.tar.gz
 
 cd ffcall
 ./configure --prefix=$PREFIX --enable-shared
@@ -175,134 +192,15 @@ CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-
 CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks canvas-draw
 # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -D no-library-checks -deploy -prefix $DEPLOYTARG canvas-draw
 
-# disabled zmq # #======================================================================
-# disabled zmq # # Note uuid needed only for zmq 2.x series
-# disabled zmq # #======================================================================
-# disabled zmq # 
-# disabled zmq # # http://download.zeromq.org/zeromq-3.2.1-rc2.tar.gz
-# disabled zmq # # zpatchlev=-rc2
-# disabled zmq # # http://download.zeromq.org/zeromq-2.2.0.tar.gz
-# disabled zmq # 
-# disabled zmq # if [[ -e /usr/lib/libzmq.so ]]; then
-# disabled zmq #   echo "Using system installed zmq library"
-# disabled zmq #   $CHICKEN_INSTALL zmq
-# disabled zmq # else
-# disabled zmq # ZEROMQ=zeromq-2.2.0
-# disabled zmq # # ZEROMQ=zeromq-3.2.2
-# disabled zmq # 
-# disabled zmq # # wget http://www.kernel.org/pub/linux/utils/util-linux/v2.22/util-linux-2.22.tar.gz
-# disabled zmq # UTIL_LINUX=2.21
-# disabled zmq # # UTIL_LINUX=2.20.1
-# disabled zmq # if ! [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-# disabled zmq #     # wget http://www.kiatoa.com/matt/util-linux-2.20.1.tar.gz
-# disabled zmq #     wget http://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX}/util-linux-${UTIL_LINUX}.tar.gz
-# disabled zmq # fi
-# disabled zmq # 
-# disabled zmq # if [[ -e util-linux-${UTIL_LINUX}.tar.gz ]] ; then
-# disabled zmq #     tar xfz util-linux-${UTIL_LINUX}.tar.gz
-# disabled zmq #     cd util-linux-${UTIL_LINUX}
-# disabled zmq #     mkdir -p build
-# disabled zmq #     cd build
-# disabled zmq #     if [[ $UTIL_LINUX = "2.22" ]] ; then
-# disabled zmq #     ../configure --prefix=$PREFIX \
-# disabled zmq # --enable-shared                   \
-# disabled zmq # --disable-use-tty-group		  \
-# disabled zmq # --disable-makeinstall-chown       \
-# disabled zmq # --disable-makeinstall-setuid      \
-# disabled zmq # --disable-libtool-lock		  \
-# disabled zmq # --disable-login			  \
-# disabled zmq # --disable-sulogin		  \
-# disabled zmq # --disable-su			  \
-# disabled zmq # --disable-schedutils		  \
-# disabled zmq # --disable-libmount		  \
-# disabled zmq # --disable-mount			  \
-# disabled zmq # --disable-losetup		  \
-# disabled zmq # --disable-fsck			  \
-# disabled zmq # --disable-partx			  \
-# disabled zmq # --disable-mountpoint		  \
-# disabled zmq # --disable-fallocate		  \
-# disabled zmq # --disable-unshare		  \
-# disabled zmq # --disable-eject			  \
-# disabled zmq # --disable-agetty		  \
-# disabled zmq # --disable-cramfs		  \
-# disabled zmq # --disable-switch_root		  \
-# disabled zmq # --disable-pivot_root		  \
-# disabled zmq # --disable-kill			  \
-# disabled zmq # --disable-libblkid		  \
-# disabled zmq # --disable-utmpdump		  \
-# disabled zmq # --disable-rename		  \
-# disabled zmq # --disable-chsh-only-listed	  \
-# disabled zmq # --disable-wall			  \
-# disabled zmq # --disable-pg-bell		  \
-# disabled zmq # --disable-require-password	  \
-# disabled zmq # --disable-libtool-lock		  \
-# disabled zmq # --disable-nls			  \
-# disabled zmq # --disable-dmesg                   \
-# disabled zmq # --without-ncurses                 
-# disabled zmq #     else
-# disabled zmq #       ../configure --prefix=$PREFIX \
-# disabled zmq #   --enable-shared         \
-# disabled zmq #   --disable-mount         \
-# disabled zmq #   --disable-fsck          \
-# disabled zmq #   --disable-partx         \
-# disabled zmq #   --disable-largefile     \
-# disabled zmq #   --disable-tls           \
-# disabled zmq #   --disable-libmount      \
-# disabled zmq #   --disable-mountpoint    \
-# disabled zmq #   --disable-nls           \
-# disabled zmq #   --disable-rpath         \
-# disabled zmq #   --disable-agetty        \
-# disabled zmq #   --disable-cramfs        \
-# disabled zmq #   --disable-switch_root   \
-# disabled zmq #   --disable-pivot_root    \
-# disabled zmq #   --disable-fallocate     \
-# disabled zmq #   --disable-unshare       \
-# disabled zmq #   --disable-rename        \
-# disabled zmq #   --disable-schedutils    \
-# disabled zmq #   --disable-libblkid      \
-# disabled zmq #   --disable-wall CFLAGS='-fPIC'
-# disabled zmq # 
-# disabled zmq # #  --disable-makeinstall-chown \
-# disabled zmq # #  --disable-makeinstall-setuid \
-# disabled zmq # 
-# disabled zmq # #   --disable-chsh-only-listed
-# disabled zmq # #   --disable-pg-bell       let pg not ring the bell on invalid keys
-# disabled zmq # #   --disable-require-password
-# disabled zmq # #   --disable-use-tty-group do not install wall and write setgid tty
-# disabled zmq # #   --disable-makeinstall-chown
-# disabled zmq # #   --disable-makeinstall-setuid
-# disabled zmq #     fi
-# disabled zmq #     
-# disabled zmq #     (cd libuuid;make install)
-# disabled zmq #     # make
-# disabled zmq #     # make install
-# disabled zmq #     cp $PREFIX/include/uuid/uuid.h $PREFIX/include/uuid.h
-# disabled zmq # fi
-# disabled zmq # 
-# disabled zmq # 
-# disabled zmq # cd $BUILDHOME
-# disabled zmq # 
-# disabled zmq # if ! [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
-# disabled zmq #     wget http://download.zeromq.org/${ZEROMQ}${zpatchlev}.tar.gz
-# disabled zmq # fi
-# disabled zmq # 
-# disabled zmq # if [[ -e ${ZEROMQ}${zpatchlev}.tar.gz ]] ; then
-# disabled zmq #     tar xfz ${ZEROMQ}.tar.gz
-# disabled zmq #     cd ${ZEROMQ}
-# disabled zmq #     ln -s $PREFIX/include/uuid src
-# disabled zmq #     # LDFLAGS=-L$PREFIX/lib ./configure --prefix=$PREFIX 
-# disabled zmq #     
-# disabled zmq #     ./configure --enable-static --prefix=$PREFIX --with-uuid=$PREFIX LDFLAGS="-L$PREFIX/lib" CPPFLAGS="-fPIC -I$PREFIX/include" LIBS="-lgcc"
-# disabled zmq #     # --disable-shared CPPFLAGS="-fPIC 
-# disabled zmq #     # LDFLAGS="-L/usr/lib64 -L$PREFIX/lib" ./configure --enable-static --prefix=$PREFIX 
-# disabled zmq #     make
-# disabled zmq #     make install
-# disabled zmq #     CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX zmq
-# disabled zmq #     # CSC_OPTIONS="-I$PREFIX/include -L$CSCLIBS" $CHICKEN_INSTALL $PROX -deploy -prefix $DEPLOYTARG zmq
-# disabled zmq # fi
-# disabled zmq # fi # if zmq is in /usr/lib
-# disabled zmq # 
+# NB// Removed bunch of zmq compiling tricks. Look at older versions of this file if you need to recreate...
+
 cd $BUILDHOME  
+
+git clone https://bitbucket.org/DerGuteMoritz/zmq/commits/branch/3.2 zmq-3.2
+cd zmq-3.2
+chicken-install
+
+cd $BUILDHOME
 
 ## WEBKIT=WebKit-r131972
 ## if  ! [[ -e ${WEBKIT}.tar.bz2 ]] ; then

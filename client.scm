@@ -37,10 +37,6 @@
 	(set! *my-client-signature* sig)
 	*my-client-signature*)))
 
-;; client:login serverdat
-(define (client:login serverdat)
-  (cdb:login serverdat *toppath* (client:get-signature)))
-
 ;; Not currently used! But, I think it *should* be used!!!
 (define (client:logout serverdat)
   (let ((ok (and (socket? serverdat)
@@ -56,37 +52,83 @@
 ;;      *transport-type* and *runremote* from the monitor.db
 ;;
 ;; client:setup
-(define (client:setup #!key (numtries 3))
-  (if (not *toppath*)
-      (if (not (setup-for-run))
-	  (begin
-	    (debug:print 0 "ERROR: failed to find megatest.config, exiting")
-	    (exit))))
-  (push-directory *toppath*) ;; This is probably NOT needed 
-  (debug:print-info 11 "*transport-type* is " *transport-type* ", *runremote* is " *runremote*)
-  (let* ((hostinfo  (open-run-close tasks:get-best-server tasks:open-db)))
-    (debug:print-info 11 "CLIENT SETUP, hostinfo=" hostinfo)
-    (set! *transport-type* (if hostinfo 
-    			       (string->symbol (tasks:hostinfo-get-transport hostinfo))
-			       'fs))
-    (debug:print-info 11 "Using transport type of " *transport-type* (if hostinfo (conc " to connect to " hostinfo) ""))
-    (case *transport-type* 
-      ((fs)(if (not *megatest-db*)(set! *megatest-db* (open-db))))
-      ((http)
-       (http-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				      (tasks:hostinfo-get-port hostinfo)))
-      ((zmq)
-       (zmq-transport:client-connect (tasks:hostinfo-get-interface hostinfo)
-				     (tasks:hostinfo-get-port      hostinfo)
-				     (tasks:hostinfo-get-pubport   hostinfo)))
-      (else  ;; default to fs
-       (debug:print 0 "ERROR: unrecognised transport type " *transport-type* " attempting to continue with fs")
-       (set! *transport-type* 'fs)
-       (set! *megatest-db*    (open-db))))
-    (pop-directory)))
+;;
+;; lookup_server, need to remove *runremote* stuff
+;;
+(define (client:setup run-id #!key (remaining-tries 100) (failed-connects 0))
+  (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
+  (let* ((tdbdat (tasks:open-db)))
+    (if (<= remaining-tries 0)
+	(begin
+	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+	  (exit 1))
+	(let ((host-info (hash-table-ref/default *runremote* run-id #f)))
+	  (if host-info
+	      (let* ((iface     (http-transport:server-dat-get-iface host-info))
+		     (port      (http-transport:server-dat-get-port  host-info))
+		     (start-res (http-transport:client-connect iface port))
+		     (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+		(if ping-res   ;; sucessful login?
+		    (begin
+		      (debug:print-info 2 "client:setup, ping is good using host-info=" host-info ", remaining-tries=" remaining-tries)
+		      ;; Why add the close-connections here?
+		      ;; (http-transport:close-connections run-id)
+		      (hash-table-set! *runremote* run-id start-res)
+		      start-res)  ;; return the server info
+		    ;; have host info but no ping. shutdown the current connection and try again
+		    (begin    ;; login failed
+		      (debug:print-info 1 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
+		      (http-transport:close-connections run-id)
+		      (hash-table-delete! *runremote* run-id)
+		      (if (< remaining-tries 8)
+			  (thread-sleep! 5)
+			  (thread-sleep! 1))
+		      (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+	      ;; YUK: rename server-dat here
+	      (let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+		(debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+		(if server-dat
+		    (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+			   (port      (tasks:hostinfo-get-port      server-dat))
+			   (start-res (http-transport:client-connect iface port))
+			   (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
+		      (if (and start-res
+			       ping-res)
+			  (begin
+			    (hash-table-set! *runremote* run-id start-res)
+			    (debug:print-info 2 "connected to " (http-transport:server-dat-make-url start-res))
+			    start-res)
+			  (begin    ;; login failed but have a server record, clean out the record and try again
+			    (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+			    (http-transport:close-connections run-id)
+			    (hash-table-delete! *runremote* run-id)
+			    (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
+								 run-id 
+								 (tasks:hostinfo-get-interface server-dat)
+								 (tasks:hostinfo-get-port      server-dat)
+								 " client:setup (server-dat = #t)")
+			    (thread-sleep! 2)
+			    (server:try-running run-id)
+			    (thread-sleep! 10) ;; give server a little time to start up
+			    (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		    (begin    ;; no server registered
+		      (let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
+			(debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
+			(thread-sleep! 2) 
+			(if (< num-available 2)
+			    (begin
+			      (server:try-running run-id)))
+			(thread-sleep! 10) ;; give server a little time to start up
+			(client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))
+
+;; keep this as a function to ease future 
+(define (client:start run-id server-info)
+  (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
+				 (tasks:hostinfo-get-port server-info)))
 
 ;; client:signal-handler
 (define (client:signal-handler signum)
+  (signal-mask! signum)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")
@@ -104,11 +146,14 @@
      (thread-join! th2))))
 
 ;; client:launch
-(define (client:launch)
+;; Need to set the signal handler somewhere other than here as this
+;; routine will go away.
+;;
+(define (client:launch run-id)
   (set-signal-handler! signal/int client:signal-handler)
-   (if (client:setup)
-       (debug:print-info 2 "connected as client")
-       (begin
-	 (debug:print 0 "ERROR: Failed to connect as client")
-	 (exit))))
+  (if (client:setup run-id)
+      (debug:print-info 2 "connected as client")
+      (begin
+	(debug:print 0 "ERROR: Failed to connect as client")
+	(exit))))
 

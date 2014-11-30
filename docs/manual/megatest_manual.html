@@ -3,7 +3,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
 <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
-<meta name="generator" content="AsciiDoc 8.6.7" />
+<meta name="generator" content="AsciiDoc 8.6.9" />
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -87,9 +87,15 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-pre {
+.monospaced, code, pre {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
   padding: 0;
   margin: 0;
+}
+pre {
+  white-space: pre-wrap;
 }
 
 #author {
@@ -219,7 +225,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; }
+span.image img { border-style: none; vertical-align: text-bottom; }
 a.image:visited { color: white; }
 
 dl {
@@ -415,12 +421,6 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
-tt {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
-
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -453,12 +453,6 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
-
-.monospaced {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
-}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -539,6 +533,8 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
+
+
 </style>
 <script type="text/javascript">
 /*<![CDATA[*/
@@ -739,7 +735,7 @@ asciidoc.install();
 <div id="header">
 <h1>The Megatest Users Manual</h1>
 <span id="author">Matt Welland</span><br />
-<span id="email"><tt>&lt;<a href="mailto:matt@kiatoa.com">matt@kiatoa.com</a>&gt;</tt></span><br />
+<span id="email"><code>&lt;<a href="mailto:matt@kiatoa.com">matt@kiatoa.com</a>&gt;</code></span><br />
 <span id="revnumber">version 1.0,</span>
 <span id="revdate">April 2012</span>
 </div>
@@ -783,318 +779,76 @@ sqlite3 database.</p></div>
 </div>
 </div>
 <h1 id="_road_map">Road Map</h1>
-<div class="paragraph"><p>Note: This road-map is tentative and subject to change without notice.</p></div>
+<div class="paragraph"><p>Note 1: This road-map is tentative and subject to change without notice.</p></div>
+<div class="paragraph"><p>Note 2: Starting over. Old plan is commented out.</p></div>
+<div class="sect1">
+<h2 id="_current_items">Current Items</h2>
+<div class="sectionbody">
 <div class="sect2">
-<h3 id="_ww32">ww32</h3>
+<h3 id="_ww05_migrate_to_inmem_db">ww05 - migrate to inmem-db</h3>
+<div class="paragraph"><p>Keep as much the same as possible. Add internal reference to almost
+eliminate contention on db(s).</p></div>
 <div class="olist arabic"><ol class="arabic">
 <li>
 <p>
-Rerun step and or subsequent steps from gui
+Add internal reference db
 </p>
 </li>
 <li>
 <p>
-Refresh test area files from gui
-</p>
-</li>
-<li>
-<p>
-Clean and re-run button
-</p>
-</li>
-<li>
-<p>
-Clean up STATE and STATUS handling.
+Verify that actions are accessing correct db
 </p>
 <div class="olist loweralpha"><ol class="loweralpha">
 <li>
 <p>
-Dashboard and Test control panel are reverse order - choose and fix
+-runtests  - inmem
 </p>
 </li>
 <li>
 <p>
-Move seldom used states and status to drop down selector
+-list-runs - local (but not megatest.db)
+</p>
+</li>
+<li>
+<p>
+dashboard  - local (but not megatest.db)
 </p>
 </li>
 </ol></div>
 </li>
 <li>
 <p>
-Access test control panel when clicking on Run Summary tests
+Mirror db to /var/tmp&#8230;
 </p>
 </li>
 <li>
 <p>
-Feature: -generate-index-tree
+Dashboard read db from per-run db.
 </p>
 </li>
 <li>
 <p>
-Change specifing of state and status to use STATE1/STATUS1,STATE2/STATUS2
+Dashboard read db from /var/tmp
+</p>
+</li>
+<li>
+<p>
+Runs register in tasks table in monitor.db
+</p>
+</li>
+<li>
+<p>
+Server polls tasks table for next action (in addition?)
+</p>
+</li>
+<li>
+<p>
+Change run loop to execute in server, triggered by call to polling of tasks table
 </p>
 </li>
 </ol></div>
 </div>
-<div class="sect2">
-<h3 id="_ww33">ww33</h3>
-<div class="olist arabic"><ol class="arabic">
-<li>
-<p>
-http api available for use with Perl, Ruby etc. scripts
-</p>
-</li>
-<li>
-<p>
-megatest.config setup entries for:
-</p>
-<div class="olist loweralpha"><ol class="loweralpha">
-<li>
-<p>
-run launching (e.g. /bin/sh %CMD% &gt; /dev/null)
-</p>
-</li>
-<li>
-<p>
-browser "konqueror %FNAME%
-</p>
-</li>
-</ol></div>
-</li>
-</ol></div>
 </div>
-<div class="sect2">
-<h3 id="_ww34">ww34</h3>
-<div class="olist arabic"><ol class="arabic">
-<li>
-<p>
-Mark dependent tests for clean/rerun -rerun-downstream
-</p>
-</li>
-<li>
-<p>
-On run start check for defunct tests in RUNNING, LAUNCHED or REMOTEHOSTSTART and correct or notify
-</p>
-</li>
-<li>
-<p>
-Fix: refresh of gui sometimes fails on last item (race condition?)
-</p>
-</li>
-</ol></div>
-</div>
-<div class="sect2">
-<h3 id="_ww35">ww35</h3>
-<div class="olist arabic"><ol class="arabic">
-<li>
-<p>
-refdb: Add export of csv, json and sexp
-</p>
-</li>
-<li>
-<p>
-Convert to using call-with-environment-variables where possible. Should allow handling of parallel runs in same process.
-</p>
-</li>
-<li>
-<p>
-Re-work text interface wizards. Several bugs on record. Possibly convert to gui based.
-</p>
-</li>
-<li>
-<p>
-Add to testconfig requirements section; launchlimiter scriptname, calls scriptname to check if ok to launch test
-</p>
-</li>
-<li>
-<p>
-Refactor Run Summary view, currently very clumsy
-</p>
-</li>
-<li>
-<p>
-Add option to show steps in Run Summary view
-</p>
-</li>
-</ol></div>
-</div>
-<div class="sect2">
-<h3 id="_ww36">ww36</h3>
-<div class="olist arabic"><ol class="arabic">
-<li>
-<p>
-Refactor guis for resizeablity
-</p>
-</li>
-<li>
-<p>
-Add filters to Run Summary view and Run Control view
-</p>
-</li>
-<li>
-<p>
-Add to megatest.config or testconfig; rerunok STATE/STATUS,STATE/STATUS&#8230;
-</p>
-</li>
-<li>
-<p>
-Launch gates for diskspace; /path/one&gt;1G,/path/two&gt;200M,/tmp&gt;5G,#{scheme <strong>toppath</strong>}&gt;1G
-</p>
-</li>
-</ol></div>
-</div>
-<div class="sect2">
-<h3 id="_bin_list">Bin List</h3>
-<div class="olist arabic"><ol class="arabic">
-<li>
-<p>
-Quality improvements
-</p>
-<div class="olist loweralpha"><ol class="loweralpha">
-<li>
-<p>
-Server stutters occasionally
-</p>
-</li>
-<li>
-<p>
-Large number of items or tests still has some issues.
-</p>
-</li>
-<li>
-<p>
-Code refactoring
-</p>
-</li>
-<li>
-<p>
-Replace remote process with true API using json (supports Web app also)
-</p>
-</li>
-</ol></div>
-</li>
-<li>
-<p>
-Streamline the gui
-</p>
-<div class="olist loweralpha"><ol class="loweralpha">
-<li>
-<p>
-Everything resizable
-</p>
-</li>
-<li>
-<p>
-Less clutter
-</p>
-</li>
-<li>
-<p>
-Tool tips
-</p>
-</li>
-<li>
-<p>
-Filters on Run Summary, Summary and Run Control panel
-</p>
-</li>
-<li>
-<p>
-Built in log viewer (partially implemented)
-</p>
-</li>
-<li>
-<p>
-Refactor the test control panel
-</p>
-</li>
-</ol></div>
-</li>
-<li>
-<p>
-Help and documentation
-</p>
-<div class="olist loweralpha"><ol class="loweralpha">
-<li>
-<p>
-Complete the user manual (I’ve been working on this lately).
-</p>
-</li>
-<li>
-<p>
-Online help in the gui
-</p>
-</li>
-</ol></div>
-</li>
-<li>
-<p>
-Streamlined install
-</p>
-<div class="olist loweralpha"><ol class="loweralpha">
-<li>
-<p>
-Deployed version (download a location independent ready to run binary bundle)
-</p>
-</li>
-<li>
-<p>
-Install Makefile (in progress, needed for Mike to install on VMs)
-</p>
-</li>
-<li>
-<p>
-Added option to compile IUP (needed for VMs)
-</p>
-</li>
-</ol></div>
-</li>
-<li>
-<p>
-Server side run launching
-</p>
-</li>
-<li>
-<p>
-Support for re-running, cleaning etc. of individual steps (ezsteps makes this very easy to implement).
-</p>
-</li>
-<li>
-<p>
-Launch process needs built in daemonizing (easy to do, just need to test it thoroughly).
-</p>
-</li>
-<li>
-<p>
-Wizards for creating tests, regression areas (current ones are text only and limited).
-</p>
-</li>
-<li>
-<p>
-Fully functional built in web service (currently you can browse runs but it is very simplistic).
-</p>
-</li>
-<li>
-<p>
-Wildcards in runconfigs: e.g. [p1271/9/%/%]
-</p>
-</li>
-<li>
-<p>
-Gui panels for editing megatest.config and runconfigs.config
-</p>
-</li>
-<li>
-<p>
-Fully isolated tests (no use of NFS to see regression area files)
-</p>
-</li>
-<li>
-<p>
-Windows version
-</p>
-</li>
-</ol></div>
 </div>
 <h1 id="_getting_started">Getting Started</h1>
 <div class="openblock">
@@ -1194,6 +948,71 @@ AsciiDoc configuration.
 sub-sections.</p></div>
 </div>
 </div>
+<h1 id="_how_to_do_things">How To Do Things</h1>
+<div class="sect1">
+<h2 id="_tricks">Tricks</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>This section is a compendium of a various useful tricks for debugging,
+configuring and generally getting the most out of Megatest.</p></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_limiting_your_running_jobs">Limiting your running jobs</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>The following example will limit a test in the jobgroup "group1" to no more than 10 tests simultaneously.</p></div>
+<div class="paragraph"><p>In your testconfig:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>[test_meta]
+jobgroup group1</code></pre>
+</div></div>
+<div class="paragraph"><p>In your megatest.config:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>[jobgroups]
+group1 10
+custdes 4</code></pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_debugging_tricks">Debugging Tricks</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_examining_the_environment">Examining The Environment</h3>
+<div class="sect3">
+<h4 id="_during_config_file_processing">During Config File Processing</h4>
+</div>
+<div class="sect3">
+<h4 id="_organising_your_tests_and_tasks">Organising Your Tests and Tasks</h4>
+<div class="listingblock">
+<div class="content">
+<pre><code>[tests-paths]
+1 #{get misc parent}/simplerun/tests</code></pre>
+</div></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>[setup]</code></pre>
+</div></div>
+<div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
+user is responsible for setting STATE and STATUS</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>runscript main.csh</code></pre>
+</div></div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_debugging_server_problems">Debugging Server Problems</h3>
+<div class="listingblock">
+<div class="content">
+<pre><code>sudo lsof -i
+sudo netstat -lptu
+sudo netstat -tulpn</code></pre>
+</div></div>
+</div>
+</div>
+</div>
 <h1 id="_reference">Reference</h1>
 <div class="sect1">
 <h2 id="_the_first_chapter_of_the_second_part_2">The First Chapter of the Second Part</h2>
@@ -1211,13 +1030,13 @@ sub-sections.</p></div>
 <h4 id="_header">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt>[setup]</tt></pre>
+<pre><code>[setup]</code></pre>
 </div></div>
 <div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
 user is responsible for setting STATE and STATUS</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>runscript main.csh</tt></pre>
+<pre><code>runscript main.csh</code></pre>
 </div></div>
 </div>
 </div>
@@ -1227,16 +1046,16 @@ user is responsible for setting STATE and STATUS</p></div>
 <h4 id="_header_2">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt>[requirements]</tt></pre>
+<pre><code>[requirements]</code></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_wait_on_other_tests">Wait on Other Tests</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt># A normal waiton waits for the prior tests to be COMPLETED
+<pre><code># A normal waiton waits for the prior tests to be COMPLETED
 # and PASS, CHECK or WAIVED
-waiton test1 test2</tt></pre>
+waiton test1 test2</code></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1245,33 +1064,33 @@ waiton test1 test2</tt></pre>
 must be COMPLETED and PASS, CHECK or WAIVED before the test will start</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>mode   normal</tt></pre>
+<pre><code>mode   normal</code></pre>
 </div></div>
 <div class="paragraph"><p>The toplevel mode requires only that the prior tests are COMPLETED.</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>mode toplevel</tt></pre>
+<pre><code>mode toplevel</code></pre>
 </div></div>
 <div class="paragraph"><p>A item based waiton will start items in a test when the
 same-named item is COMPLETED and PASS, CHECK or WAIVED
 in the prior test</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>mode itemmatch</tt></pre>
+<pre><code>mode itemmatch</code></pre>
 </div></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt># With a toplevel test you may wish to generate your list
+<pre><code># With a toplevel test you may wish to generate your list
 # of tests to run dynamically
 #
-# waiton #{shell get-valid-tests-to-run.sh}</tt></pre>
+# waiton #{shell get-valid-tests-to-run.sh}</code></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_run_time_limit">Run time limit</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</tt></pre>
+<pre><code>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</code></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1281,24 +1100,24 @@ in the prior test</p></div>
 <h4 id="_header_3">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt>[skip]</tt></pre>
+<pre><code>[skip]</code></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_skip_on_still_running_tests">Skip on Still-running Tests</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt># NB// If the prevrunning line exists with *any* value the test will
+<pre><code># NB// If the prevrunning line exists with *any* value the test will
 # automatically SKIP if the same-named test is currently RUNNING
 
-prevrunning x</tt></pre>
+prevrunning x</code></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_skip_if_a_file_exists">Skip if a File Exists</h4>
 <div class="listingblock">
 <div class="content">
-<pre><tt>fileexists /path/to/a/file # skip if /path/to/a/file exists</tt></pre>
+<pre><code>fileexists /path/to/a/file # skip if /path/to/a/file exists</code></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1308,7 +1127,7 @@ If a waiver check is specified in the testconfig apply the check and if it passe
 <div class="paragraph"><p>Waiver check has two parts, 1) a list of waiver, rulename, filepatterns and 2) the rulename script spec (note that "diff" and "logpro" are predefined)</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>###### EXAMPLE FROM testconfig #########
+<pre><code>###### EXAMPLE FROM testconfig #########
 # matching file(s) will be diff'd with previous run and logpro applied
 # if PASS or WARN result from logpro then WAIVER state is set
 #
@@ -1322,7 +1141,7 @@ waiver_1         logpro        lookittmp.log
 # diff   diff %file1% %file2%
 
 # This builtin rule is applied if a &lt;waivername&gt;.logpro file exists
-# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html</tt></pre>
+# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html</code></pre>
 </div></div>
 </div>
 </div>
@@ -1331,8 +1150,49 @@ waiver_1         logpro        lookittmp.log
 <div class="paragraph"><p>To transfer the environment to the next step you can do the following:</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><tt>$MT_MEGATEST -env2file .ezsteps/${stepname}</tt></pre>
+<pre><code>$MT_MEGATEST -env2file .ezsteps/${stepname}</code></pre>
 </div></div>
+</div>
+<div class="sect2">
+<h3 id="_triggers">Triggers</h3>
+<div class="paragraph"><p>In your testconfig triggers can be specified</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>[triggers]
+
+# Call script running.sh when test goes to state=RUNNING, status=PASS
+RUNNING/PASS running.sh
+
+# Call script running.sh any time state goes to RUNNING
+RUNNING/ running.sh
+
+# Call script onpass.sh any time status goes to PASS
+PASS/ onpass.sh</code></pre>
+</div></div>
+<div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger, added to the commandline.</p></div>
+<div class="paragraph"><p>HINT</p></div>
+<div class="paragraph"><p>To start an xterm (useful for debugging), use a command line like the following:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>[triggers]
+COMPLETED/ xterm -e bash -s --</code></pre>
+</div></div>
+<div class="admonitionblock">
+<table><tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">There is a trailing space after the --</td>
+</tr></table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_megatest_internals">Megatest Internals</h3>
+<div class="imageblock graphviz">
+<div class="content">
+<img src="server.png" alt="server.png" />
+</div>
+</div>
 </div>
 </div>
 </div>
@@ -1417,7 +1277,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2013-08-01 22:59:08 MST
+Last updated 2014-10-08 23:02:21 MST
 </div>
 </div>
 </body>

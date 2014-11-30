@@ -1,0 +1,133 @@
+;; (c) 2006,2007,2008,2009 Matthew Welland matt@kiatoa.com
+;;  
+;;   License GPL.
+
+(define logbody "LogFileBody")
+
+(define pass-specs '( ;; testname num-expected max-runtime
+		     ("exit_0"		        1  20)
+		     ("ezlog_fail_then_pass"    1  20)
+		     ("ezlog_pass"	        1  20)
+		     ("ez_pass"		        1  20)
+		     ("lineitem_pass"	        1  20)
+		     ("priority_1"	        1  20)
+		     ("priority_10"	        1  20)
+		     ("priority_10_waiton_1"    1  20)
+		     ("priority_3"	        1  20)
+		     ("priority_4"	        1  20)
+		     ("priority_5"	        1  20)
+		     ("priority_6"	        1  20)
+		     ("priority_7"	        1  20)
+		     ("priority_8"	        1  20)
+		     ("priority_9"	        1  20)
+		     ("runfirst"	        7  20)
+		     ("singletest"	        1  20)
+		     ("singletest2"	        1  20)
+		     ("special"		        1  20)
+		     ("sqlitespeed"	       10  20)
+		     ("test1"		        1  20)
+		     ("test2"		        6  20)
+		     ("test_mt_vars"	        6  20)
+		     ))
+
+(define fail-specs '( ;; testname num-expected max-runtime
+		     ("exit_1"		        1  20)
+		     ("ez_exit2_fail"           1  20)
+		     ("ez_fail"		        1  20)
+		     ("ez_fail_quick"	        1  20)
+		     ("ezlog_fail"	        1  20)
+		     ("lineitem_fail"	        1  20)
+		     ("logpro_required_fail"    1  20)
+		     ("manual_example"	        1  20)
+		     ("neverrun"	        1  20)))
+		     
+(define warn-specs   '(("ezlog_warn"	        1  20)))
+(define nost-specs   '(("wait_no_items1"        1  20)
+		       ("wait_no_items2"        1  20)
+		       ("wait_no_items3"        1  20)
+		       ("wait_no_items4"        1  20)
+		       ("no_items"              1  20)))
+
+(define (check-one-test estate estatus testname count runtime)
+   (let* ((rxe      (regexp (conc "^\\s+Test: " testname "(\\(.*|\\s+)\\s+State: " estate "\\s+Status: " estatus "\\s+Runtime:\\s+(\\d+)s")))
+	  (msg1     (conc testname " expecting count of " count))
+	  (msg2     (conc testname " expecting runtime less than " runtime)))
+     (expect:required in logbody = count msg1 rxe)
+     ;;(expect:value    in logbody count < msg2 rxe)
+     ))
+
+;; Special cases
+;;
+(expect:ignore   in logbody >= 0  "all_toplevel may not yet be done" #/Test: all_toplevel/)
+(expect:error    in logbody =  0  "tests left in RUNNING state"      #/State: RUNNING/)
+(expect:required in logbody =  1  "priority_2 is KILLED"             #/Test: priority_2\s+State: KILLED\s+Status: FAIL/)
+(expect:required in logbody =  1  "testxz has 1 NOT_STARTED test"    #/Test: testxz\s+State: NOT_STARTED/)
+(expect:required in logbody = 29  "blocktestxz has 29 tests"         #/Test: blocktestxz/)
+
+;; General cases
+;;
+(for-each 
+ (lambda (testdat)
+   (apply check-one-test "COMPLETED" "PASS" testdat))
+ pass-specs)
+
+(for-each 
+ (lambda (testdat)
+   (apply check-one-test "COMPLETED" "FAIL" testdat))
+ fail-specs)
+
+(for-each 
+ (lambda (testdat)
+   (apply check-one-test "COMPLETED" "WARN" testdat))
+ warn-specs)
+
+(for-each 
+ (lambda (testdat)
+   (apply check-one-test "NOT_STARTED" "n/a" testdat))
+ nost-specs)
+
+;; Catch all.
+;;
+(expect:error    in logbody = 0   "Tests not accounted for"     #/Test: /)
+
+
+;; ;; define your hooks
+;; (hook:first-error   "echo \"Error hook activated: #{escaped errmsg}\"")
+;; (hook:first-warning "echo \"Got warning: #{escaped warnmsg}\"")
+;; (hook:value "echo \"Value hook activated: expected=#{expected}, measured=#{measured}, tolerance=#{tolerance}, message=#{message}\"")
+;; 
+;; ;; first ensure your run at least started
+;; ;;
+;; (trigger "Init"     #/This is a header/)
+;; (trigger "InitEnd"  #/^\s*$/)
+;; (section "Init" "Init" "InitEnd")
+;; 
+;; (trigger "Body"     #/^.*$/) ;; anything starts the body
+;; ;; (trigger "EndBody"  #/This had better never match/)
+;; 
+;; (section "Body"     "Body" "EndBody")
+;; 
+;; (trigger "Blah2"    #/^begin Blah2/)
+;; (trigger "Blah2End" #/^end Blah2/)
+;; (section "Blah2"    "Blah2" "Blah2End")
+;; 
+;; (expect:required in "Init"  = 1 "Header"      #/This is a header/)
+;; (expect:required in "LogFileBody" > 0 "Something required but not found" #/This is required but not found/)
+;; (expect:value    in "LogFileBody" 1.9 0.1 "Output voltage" #/Measured voltage output:\s*([\d\.\+\-e]+)v/)
+;; (expect:value    in "LogFileBody" 0.5 0.1 "Output current" #/Measured output current:\s*([\d\.\+\-e]+)mA/)
+;; (expect:value    in "LogFileBody" 110e9 2e9 "A big number (first)" #/Freq:\s*([\d\.\+\-e]+)\s+Hz/)
+;; (expect:value    in "LogFileBody" 110e9 1e9 "A big number (second), hook not called" #/Freq:\s*([\d\.\+\-e]+)Hz/)
+;; (expect:value    in "LogFileBody" 110e9 1e9 "A big number (never activated)" #/Freq:\s*([\d\.\+\-e]+)zH/)
+;; 
+;; ;; Using match number
+;; (expect:value    in "LogFileBody" 1.9 0.1 "Time Voltage" #/out: (\d+)\s+(\d+)/ match: 2)
+;; 
+;; ;; Comparison instead of tolerance
+;; (expect:value    in "LogFileBody" 1.9 >   "Time voltage" #/out: (\d+)\s+(\d+)/ match: 2)
+;; 
+;; (expect:ignore   in "Blah2" < 99 "FALSE ERROR" #/ERROR/)
+;; (expect:ignore   in "Body"  < 99 "Ignore the word error in comments" #/^\/\/.*error/)
+;; (expect:warning  in "Body"  = 0 "Any warning" #/WARNING/)
+;; (expect:error    in "Body"  = 0 "ERROR BLAH"  (list #/ERROR/ #/error/)) ;; but disallow any other errors
+;; 
+;; ;(expect in "Init"  < 1 "Junk"        #/This is bogus/)

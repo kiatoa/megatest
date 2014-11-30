@@ -1,3 +1,77 @@
+======================================================================
+Try writing to in-memory db and every 2-5 seconds syncing to megatest.db
+======================================================================
+
+First, how much time will it take to write back the changes:
+
+1. Get the run table
+
+(define (get-all db)(let ((res '()))(for-each-row (lambda (a . b)(set! res (cons (apply vector a b) res))) db "SELECT * FROM tests;") res))
+(define tdata (let ((start (current-milliseconds))(res (get-all *db*)))(print (- (current-milliseconds) start))res))
+
+Result ranges from 34ms to 89ms but mostly around 40ms for 623 records on moosefs
+
+Projecting to 15000 records:
+
+  Slow   2 seconds to read all
+  Median 1 second to read all
+
+This seems like it would work with an update period of 2-5 seconds
+
+TODO
+----
+
+1. open-db opens in-memory db and megatest.db, put handles in *memdb* and *db*, *memdb* is < run-id dbh >
+2. Server is part of runtests 
+   a. server start cycle - adapt to per run-id
+      i. states; starting, started, stopping, stopped
+   b. turn off write coalesing
+3. Calls to -runtests, -remove-runs etc. 
+   a. Might talk to running server if run specific
+   b. Can talk to megatest.db but not a generally good idea
+   c. Can start a runserver 
+4. Dashboard is fine except for writes?
+
+======================================================================
+Routines to convert for runs.scm
+
+cdb:remote-run db:register-run
+
+cdb:delete-tests-in-state *runremote*
+cdb:get-test-info-by-id *runremote*
+cdb:remote-run db:delete-old-deleted-test-records
+cdb:remote-run db:delete-run
+cdb:remote-run db:delete-test-records
+cdb:remote-run db:delete-tests-for-run
+cdb:remote-run db:find-and-mark-incomplete
+cdb:remote-run db:get-count-tests-running
+cdb:remote-run db:get-count-tests-running-in-jobgroup
+cdb:remote-run db:get-keys
+cdb:remote-run db:get-run-info
+cdb:remote-run db:get-run-key-val
+cdb:remote-run db:get-run-name-from-id
+cdb:remote-run db:get-steps-for-test
+cdb:remote-run db:get-test-id-cached
+cdb:remote-run db:get-tests-for-runs-mindata
+cdb:remote-run db:lock/unlock-run
+cdb:remote-run db:set-sync
+cdb:remote-run db:set-tests-state-status
+cdb:remote-run db:set-var
+cdb:remote-run db:testmeta-add-record
+cdb:remote-run db:testmeta-get-record
+cdb:remote-run db:testmeta-update-field
+cdb:remote-run db:update-run-event_time
+cdb:remote-run instead
+cdb:remote-run server:start
+cdb:remote-run test:get-matching-previous-test-run-records
+cdb:tests-register-test *runremote*
+(define (runs:shrink-can-run-more-tests-count) ;; the db is a dummy var so we can use cdb:remote-run
+
+======================================================================
+
+[87cbe68f31] 
+[be405e8e2e]
+
 # FROM andyjpg on #chicken
 
 (let ((original-exit (exit-handler)))

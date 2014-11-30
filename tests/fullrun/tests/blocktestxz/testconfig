@@ -18,3 +18,5 @@ description This test will fail causing the dependent test "testxz"\
 
 tags first,single
 reviewed 1/1/1965
+
+jobgroup blockz

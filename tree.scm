@@ -67,10 +67,11 @@
 
 ;; top is the top node name zeroeth node VALUE=0
 (define (tree:add-node obj top nodelst #!key (userdata #f))
-  (if (not (iup:attribute obj "TITLE0"))
+  (if (or (not (string? (iup:attribute obj "TITLE0")))
+	  (string-null? (iup:attribute obj "TITLE0")))
       (iup:attribute-set! obj "ADDBRANCH0" top))
   (cond
-   ((not (string=? top (iup:attribute obj "TITLE0")))
+   ((not (equal? top (iup:attribute obj "TITLE0")))
     (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
    ((null? nodelst))
    (else
@@ -89,6 +90,7 @@
 	(if (not nodenum)
 	    (begin
 	      (iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
+		;; ERROR? ADDING DATA TO PARENT, DONT WE WANT IT ON CREATED NODE?
 	      (if userdata
 		  (iup:attribute-set! obj (conc "USERDATA"   parentnode) userdata))
 	      (if (null? tal)
@@ -113,4 +115,28 @@
 	  newpath
 	  (loop (+ currnode 1)
 		newpath)))))
+
+(define (tree:delete-node obj top node-path) ;; node-path is a list of strings
+  (let ((id  (tree:find-node obj (cons top node-path))))
+    (print "Found node to remove " id " for path " top " " node-path)
+    (iup:attribute-set! obj (conc "DELNODE" id) "SELECTED")))
 	
+#|
+
+  (let* ((tb      (iup:treebox
+                   #:value 0
+                   #:name "Runs"
+                   #:expand "YES"
+                   #:addexpanded "NO"
+                   #:selection-cb
+                   (lambda (obj id state)
+                     ;; (print "obj: " obj ", id: " id ", state: " state)
+                     (let* ((run-path (tree:node->path obj id))
+                            (run-id   (tree-path->run-id (cdr run-path))))
+                       (if run-id
+                           (begin
+                             (dboard:data-set-curr-run-id! *data* run-id)
+                             (dashboard:update-run-summary-tab)))
+                       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
+                       ))))
+|#
