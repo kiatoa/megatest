@@ -89,7 +89,9 @@
     (if connection-info
 	;; use the server if have connection info
 	(let* ((dat     (case *transport-type*
-			  ((http)(http-transport:client-api-send-receive run-id connection-info cmd params))
+			  ((http)(condition-case
+				  (http-transport:client-api-send-receive run-id connection-info cmd params)
+				  ((commfail)(vector #f "communications fail"))))
 			  ((nmsg)(condition-case
 				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((timeout)(vector #f "timeout talking to server"))))

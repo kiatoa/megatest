@@ -94,15 +94,19 @@
 							   (tasks:hostinfo-get-interface server-dat)
 							   (tasks:hostinfo-get-port      server-dat)
 							   " client:setup (server-dat = #t)")
+		      (if (> remaining-tries 8)
+			  (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little
+			  (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
 		      (server:try-running run-id)
-		      (thread-sleep! 5) ;; give server a little time to start up
-		      (client:setup run-id remaining-tries: (- remaining-tries 1)))))
+		      (thread-sleep! 5)   ;; give server a little time to start up
+		      (client:setup run-id remaining-tries: (- remaining-tries 1))
+		      )))
 	      (begin    ;; no server registered
 		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
 		  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
 		  (if (< num-available 2)
 		      (server:try-running run-id))
-		  (thread-sleep! 5) ;; give server a little time to start up
+		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
 		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
 ;; 	(let ((host-info (hash-table-ref/default *runremote* run-id #f)))
