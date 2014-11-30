@@ -22,20 +22,90 @@
 ;; Tasks db
 ;;======================================================================
 
-(define (tasks:open-db)
-  (let* ((dbpath       (conc *toppath* "/db/monitor.db"))
-	 (exists       (file-exists? dbpath))
-	 (write-access (file-write-access? dbpath))
-	 (mdb          (sqlite3:open-database dbpath)) ;; (never-give-up-open-db dbpath))
-	 (handler      (make-busy-timeout 36000)))
-    (if (and exists
-	     (not write-access))
-	(set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
-    (sqlite3:set-busy-handler! mdb handler)
-    (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
-    (if (not exists)
-	(begin
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+;; wait up to aprox n seconds for a journal to go away
+;;
+(define (tasks:wait-on-journal path n #!key (remove #f)(waiting-msg #f))
+  (if (not (string? path))
+      (debug:print 0 "ERROR: Called tasks:wait-on-journal with path=" path " (not a string)")
+      (let ((fullpath (conc path "-journal")))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (print-call-chain (current-error-port))
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 " exn=" (condition->list exn))
+	   (debug:print 0 "tasks:wait-on-journal failed. Continuing on, you can ignore this call-chain")
+	   #t) ;; if stuff goes wrong just allow it to move on
+	 (let loop ((journal-exists (file-exists? fullpath))
+		    (count          n)) ;; wait ten times ...
+	   (if journal-exists
+	       (begin
+		 (if (and waiting-msg
+			  (eq? (modulo n 30) 0))
+		     (debug:print 0 waiting-msg))
+		 (if (> count 0)
+		     (begin
+		       (thread-sleep! 1)
+		       (loop (file-exists? fullpath)
+			     (- count 1)))
+		     (begin
+		       (if remove (system (conc "rm -rf " fullpath)))
+		       #f)))
+	       #t))))))
+
+(define (tasks:get-task-db-path)
+  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
+	 (dbpath       (conc linktree "/.db")))
+    dbpath))
+
+
+
+;; If file exists AND
+;;    file readable
+;;         ==> open it
+;; If file exists AND
+;;    file NOT readable
+;;         ==> open in-mem version
+;; If file NOT exists
+;;    ==> open in-mem version
+;;
+(define (tasks:open-db #!key (numretries 4))
+  (if *task-db*
+      *task-db*
+      (handle-exceptions
+       exn
+       (if (> numretries 0)
+	   (begin
+	     (print-call-chain (current-error-port))
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 " exn=" (condition->list exn))
+	     (thread-sleep! 1)
+	     (tasks:open-db numretries (- numretries 1)))
+	   (begin
+	     (print-call-chain (current-error-port))
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (debug:print 0 " exn=" (condition->list exn))))
+       (let* ((dbpath       (tasks:get-task-db-path))
+	      (dbfile       (conc dbpath "/monitor.db"))
+	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
+	      (exists       (file-exists? dbpath))
+	      (write-access (file-write-access? dbpath))
+	      (mdb          (cond ;; what the hek is *toppath* doing here?
+			     ((and (string? *toppath*)(file-write-access? *toppath*))
+			      (sqlite3:open-database dbfile))
+			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
+			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
+	      (handler      (make-busy-timeout 36000)))
+	 (if (and exists
+		  (not write-access))
+	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
+	 (sqlite3:set-busy-handler! mdb handler)
+	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 ;;  (if (or (and (not exists)
+	 ;; 	      (file-write-access? *toppath*))
+	 ;; 	 (not (file-read-access? dbpath)))
+	 ;;      (begin
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
                                 action TEXT DEFAULT '',
                                 owner TEXT,
                                 state TEXT DEFAULT 'new',
@@ -46,14 +116,14 @@
                                 params TEXT,
                                 creation_time TIMESTAMP,
                                 execution_time TIMESTAMP);")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
                                 last_update TIMESTAMP,
                                 hostname TEXT,
                                 username TEXT,
                                CONSTRAINT monitors_constraint UNIQUE (pid,hostname));")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY,
                                   pid INTEGER,
                                   interface TEXT,
                                   hostname TEXT,
@@ -66,8 +136,8 @@
                                   heartbeat TIMESTAMP,
                                   transport TEXT,
                                   run_id INTEGER);")
-;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
-	  (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
+	 ;;                               CONSTRAINT servers_constraint UNIQUE (pid,hostname,port));")
+	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY,
                                   server_id INTEGER,
                                   pid INTEGER,
                                   hostname TEXT,
@@ -75,10 +145,12 @@
                                   login_time TIMESTAMP,
                                   logout_time TIMESTAMP DEFAULT -1,
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
-                                  
-	  ))
-    mdb))
-    
+	       
+	       ;))
+	 (sqlite3:execute mdb "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
+	 (set! *task-db* (cons mdb dbpath))
+	 *task-db*))))
+
 ;;======================================================================
 ;; Server and client management
 ;;======================================================================
@@ -97,7 +169,7 @@
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
-	(thread-sleep! 2) ;; Try removing this. It may not be needed.
+	;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
@@ -115,7 +187,8 @@
    "available"                   ;; state
    (common:version-signature)    ;; mt_version
    -1                            ;; interface
-   (conc (server:get-transport)) ;; transport
+   ;; (conc (server:get-transport)) ;; transport
+   (conc *transport-type*)    ;; transport
    run-id
    ))
 
@@ -125,12 +198,21 @@
      (lambda (num-in-queue)
        (set! res num-in-queue))
      mdb
-     "SELECT count(id) FROM servers WHERE run_id=? AND state = 'available';"
+     "SELECT count(id) FROM servers WHERE run_id=? AND state = 'available' AND (strftime('%s','now') - start_time) < 30 ;"
      run-id)
     res))
 
+(define (tasks:num-servers-non-zero-running mdb)
+  (let ((res 0))
+    (sqlite3:for-each-row
+     (lambda (num-running)
+       (set! res num-running))
+     mdb
+     "SELECT count(id) FROM servers WHERE run_id != 0 AND state = 'running';")
+    res))
+
 (define (tasks:server-clean-out-old-records-for-run-id mdb run-id tag)
-  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
+  (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE state in ('available','dbprep','shutting-down') AND (strftime('%s','now') - start_time) > 50 AND run_id=?;"
 		   (conc "defunct" tag) run-id))
 
 (define (tasks:server-force-clean-running-records-for-run-id mdb run-id tag)
@@ -149,7 +231,7 @@
   (sqlite3:execute mdb "UPDATE servers SET state=?,heartbeat=strftime('%s','now') WHERE id=?;"
 		   (conc "defunct" tag) server-id)
   ;; use this opportuntity to clean out records over one month old or over 10 minutes old with port = -1 (i.e. a never used placeholder)
-  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down') AND (strftime('%s','now') - start_time) > 2628000;")
+  (sqlite3:execute mdb "DELETE FROM servers WHERE state not in ('running','shutting-down','dbprep') AND (strftime('%s','now') - start_time) > 2628000;")
   (sqlite3:execute mdb "DELETE FROM servers WHERE state like 'defunct%' AND port=-1 AND (strftime('%s','now') - start_time) > 600;")
   )
 
@@ -225,66 +307,124 @@
      (lambda (a . b)
        (set! res (cons (apply vector a b) res)))
      mdb
-     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running') ORDER BY start_time DESC;")
+     (conc "SELECT " selstr " FROM servers WHERE run_id=? AND state in ('available','running','dbprep') ORDER BY start_time DESC;")
      run-id)
     (vector header res)))
 
-(define (tasks:get-server mdb run-id)
+(define (tasks:get-server mdb run-id #!key (retries 10))
   (let ((res  #f)
 	(best #f))
-    (sqlite3:for-each-row
-     (lambda (id interface port pubport transport pid hostname)
-       (set! res (vector id interface port pubport transport pid hostname)))
-     mdb
-     ;; removed:
-     ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
-     "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain (current-error-port))
+       (debug:print 0 "WARNING: tasks:get-server db access error.")
+       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 " for run " run-id)
+       (print-call-chain (current-error-port))
+       (if (> retries 0)
+	   (begin
+	     (debug:print 0 " trying call to tasks:get-server again in 10 seconds")
+	     (thread-sleep! 10)
+	     (tasks:get-server mdb run-id retries: (- retries 0)))
+	   (debug:print 0 "10 tries of tasks:get-server all crashed and burned. Giving up and returning \"no server found\"")))
+     (sqlite3:for-each-row
+      (lambda (id interface port pubport transport pid hostname)
+	(set! res (vector id interface port pubport transport pid hostname)))
+      mdb
+      ;; removed:
+      ;; strftime('%s','now')-heartbeat < 10 AND mt_version = ?
+      "SELECT id,interface,port,pubport,transport,pid,hostname FROM servers
           WHERE run_id=? AND state='running'
           ORDER BY start_time DESC LIMIT 1;" run-id) ;; (common:version-signature) run-id)
+     res)))
+
+(define (tasks:server-running-or-starting? mdb run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     mdb ;; NEEDS dbprep ADDED
+     "SELECT id FROM servers WHERE run_id=? AND (state = 'running' OR (state = 'dbprep' AND  (strftime('%s','now') - start_time) < 60));" run-id)
     res))
+
+(define (tasks:server-running? mdb run-id)
+  (let ((res #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     mdb ;; NEEDS dbprep ADDED
+     "SELECT id FROM servers WHERE run_id=? AND state = 'running';" run-id)
+    res))
+
+(define (tasks:need-server run-id)
+  (let ((forced (configf:lookup *configdat* "server" "required"))
+	(maxqry (cdr (rmt:get-max-query-average run-id)))
+	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
+    (cond
+     (forced 
+      (if (common:low-noise-print 60 run-id "server required is set")
+	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
+      #t)
+     ((> maxqry threshold)
+      (if (common:low-noise-print 60 run-id "Max query time execeeded")
+	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, starting server."))
+      #t)
+     (else
+      #f))))
+
+;; try to start a server and wait for it to be available
+;;
+(define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
+  ;; ensure a server is running for this run
+  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+	     (delay-time 0))
+      (if (and (not server-dat)
+	       (< delay-time delay-max-tries))
+	  (begin
+	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
+		(debug:print 0 "Try starting server for run-id " run-id))
+	    (server:kind-run run-id)
+	    (thread-sleep! (min delay-time 5))
+	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
     (sqlite3:for-each-row
      (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
-       ;;                       0   1        2         3    4       5          6        7     8          9          10        11     12
+       ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
      mdb
      "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
 
-(define (tasks:kill-server status hostname port pid)
-  (debug:print-info 1 "Removing defunct server record for " hostname ":" port)
-  (if port
-      (open-run-close tasks:server-deregister tasks:open-db hostname port: port)
-      (open-run-close tasks:server-deregister tasks:open-db hostname pid:  pid))
-  (if status ;; #t means alive
-      (begin
-	(if (equal? hostname (get-host-name))
-	    (handle-exceptions
-	     exn
-	     (debug:print-info 0 "server may or may not be dead, check for megatest -server running as pid " pid "\n"
-			       "  EXCEPTION: " ((condition-property-accessor 'exn 'message) exn))
-	     (debug:print 1 "Sending signal/term to " pid " on " hostname)
-	     (process-signal pid signal/term)
-	     (thread-sleep! 5) ;; give it five seconds to die peacefully then do a brutal kill
-	     ;;(process-signal pid signal/kill)
-	     ) ;; local machine, send sig term
-	    (begin
-	      ;;(debug:print-info 1 "Stopping remote servers not yet supported."))))
-	      (debug:print-info 1 "Telling alive server on " hostname ":" port " to commit servercide")
-	      (let ((serverdat (list hostname port)))
-		(hash-table-set! *runremote* run-id (http-transport:client-connect hostname port))
-	      	(cdb:kill-server serverdat pid)))))    ;; remote machine, try telling server to commit suicide
-      (begin
-	(if status 
-	    (if (equal? hostname (get-host-name))
-		(begin
-		  (debug:print-info 1 "Sending signal/term to " pid " on " hostname)
-		  (process-signal pid signal/term)  ;; local machine, send sig term
-		  (thread-sleep! 5)                 ;; give it five seconds to die peacefully then do a brutal kill
-		  (process-signal pid signal/kill)) 
-		(debug:print 0 "WARNING: Can't kill frozen server on remote host " hostname))))))
+;; no elegance here ...
+;;
+(define (tasks:kill-server hostname pid)
+  (debug:print-info 0 "Attempting to kill server process " pid " on host " hostname)
+  (setenv "TARGETHOST" hostname)
+  (setenv "TARGETHOST_LOGF" "server-kills.log")
+  (system (conc "nbfake kill " pid))
+  (unsetenv "TARGETHOST_LOGF")
+  (unsetenv "TARGETHOST"))
+ 
+;; look up a server by run-id and send it a kill, also delete the record for that server
+;;
+(define (tasks:kill-server-run-id run-id #!key (tag "default"))
+  (let* ((tdbdat  (tasks:open-db))
+	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+    (if sdat
+	(let ((hostname (vector-ref sdat 6))
+	      (pid      (vector-ref sdat 5))
+	      (server-id (vector-ref sdat 0)))
+	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
+	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
+	  (tasks:kill-server hostname pid)
+	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
+	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))
+    ;; (sqlite3:finalize! tdb)
+    ))
+    
 
 ;;======================================================================
 ;; Tasks and Task monitors
@@ -323,13 +463,12 @@
 ;; register a task
 (define (tasks:add mdb action owner target runname testpatt params)
   (sqlite3:execute mdb "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
-                       VALUES (?,?,'new',?,?,?,?,?,strftime('%s','now'),0);" 
+                       VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
 		   action
 		   owner
 		   target
 		   runname
-		   test
-		   item
+		   testpatt
 		   (if params params "")))
 
 (define (keys:key-vals-hash->target keys key-params)
@@ -413,7 +552,7 @@
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
       (debug:print-info 1 "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc *toppath* "/db/monitor.db"))
+	     (monitordbf     (conc (configf:lookup *configdat* "setup" "linktree") "/.db/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
 	(task:register-monitor mdb)
 	(let loop ((count      0)
@@ -511,6 +650,87 @@
   (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE id=?;" 
 		   state 
 		   task-id))
+
+;;======================================================================
+;; Access using task key (stored in params; (hash-table->alist flags) hostname pid
+;;======================================================================
+
+(define (tasks:param-key->id mdb task-params)
+  (handle-exceptions
+   exn
+   #f
+   (sqlite3:first-result mdb "SELECT id FROM tasks_queue WHERE params LIKE ?;" task-params)))
+
+(define (tasks:set-state-given-param-key mdb param-key new-state)
+  (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))
+
+(define (tasks:get-records-given-param-key mdb param-key state-patt action-patt test-patt)
+  (handle-exceptions
+   exn
+   '()
+   (sqlite3:first-row mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
+         params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+		      param-key state-patt action-patt test-patt)))
+
+
+;;======================================================================
+;; Rogue items, no place to put these yet
+;;======================================================================
+
+(define (tasks:find-task-queue-records mdb target run-name test-patt state-patt action-patt)
+  ;; (handle-exceptions
+  ;;  exn
+  ;;  '()
+  ;;  (sqlite3:first-row
+  (let ((res '()))
+    (sqlite3:for-each-row 
+     (lambda (a . b)
+       (set! res (cons (cons a b) res)))
+     mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params FROM tasks_queue 
+       WHERE
+         target = ? AND name = ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+     target run-name state-patt action-patt test-patt)
+    res)) ;; )
+
+
+(define (tasks:kill-runner mdb target run-name)
+  (let ((records    (tasks:find-task-queue-records mdb target run-name "%" "running" "run-tests"))
+	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
+    (if (null? records)
+	(debug:print 0 "No run launching processes found for " target " / " run-name)
+	(debug:print 0 "Found " (length records) " run(s) to kill."))
+    (for-each 
+     (lambda (record)
+       (let* ((param-key (list-ref record 8))
+	      (match-dat (string-search hostpid-rx param-key)))
+	 (if match-dat
+	     (let ((hostname  (cadr match-dat))
+		   (pid       (string->number (caddr match-dat))))
+	       (debug:print 0 "Sending SIGINT to process " pid " on host " hostname)
+	       (if (equal? (get-host-name) hostname)
+		   (if (process:alive? pid)
+		       (begin
+			 (handle-exceptions
+			  exn
+			  (begin
+			    (debug:print 0 "Kill of process " pid " on host " hostname " failed.")
+			    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			    #t)
+			  (process-signal pid signal/int)
+			  (thread-sleep! 5)
+			  (if (process:alive? pid)
+			      (process-signal pid signal/kill)))))
+		   ;;  (call-with-environment-variables
+		   (let ((old-targethost (getenv "TARGETHOST")))
+		     (setenv "TARGETHOST" hostname)
+		     (setenv "TARGETHOST_LOGF" "server-kills.log")
+		     (system (conc "nbfake kill " pid))
+		     (if old-targethost (setenv "TARGETHOST" old-targethost))
+		     (unsetenv "TARGETHOST")
+		     (unsetenv "TARGETHOST_LOGF"))))
+	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
+     records)))
+
 
 ;;======================================================================
 ;; The routines to process tasks

@@ -9,12 +9,13 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use json)
+(use json format)
 
 (declare (unit rmt))
 (declare (uses api))
 (declare (uses tdb))
 (declare (uses http-transport))
+(declare (uses nmsg-transport))
 
 ;;
 ;; THESE ARE ALL CALLED ON THE CLIENT SIDE!!!
@@ -42,41 +43,204 @@
     ((zmq)  (zmq-transport:client-api-send-receive run-id connection-info cmd jparams))
     (else   ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))))
 
-;; cmd is a symbol
-;; vars is a json string encoding the parameters for the call
 ;;
-(define (rmt:send-receive cmd rid params)
-  (let* ((run-id  (if rid rid 0))
-	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
-			    (if cinfo
-				cinfo
-				(let loop ((numtries 100))
-				  (let ((res (client:setup run-id)))
-				    (if res 
-					(hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
-					(if (> numtries 0)
-					    (begin
-					      (thread-sleep! 10)
-					      (loop (- numtries 1)))
-					    (begin
-					      (debug:print 0 "ERROR: 100 tries and no server, giving up")
-					      (exit 1)))))))))
-	 (jparams         (db:obj->string params))
-	 (res             (rmt:call-transport connection-info cmd jparams)))
-    (if res
-	(db:string->obj res) ;; (rmt:json-str->dat res)
-	(let ((new-connection-info (client:setup run-id)))
-	  (debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-	  (rmt:send-receive cmd run-id params)))))
+(define (rmt:write-frequency-over-limit? cmd run-id)
+  (and (not (member cmd api:read-only-queries))
+       (let* ((tmprec (hash-table-ref/default *write-frequency* run-id #f))
+	      (record (if tmprec tmprec 
+			  (let ((v (vector (current-seconds) 0)))
+			    (hash-table-set! *write-frequency* run-id v)
+			    v)))
+	      (count  (+ 1 (vector-ref record 1)))
+	      (start  (vector-ref record 0))
+	      (queries-per-second (/ (* count 1.0)
+				     (max (- (current-seconds) start) 1))))
+	 (vector-set! record 1 count)
+	 (if (and (> count 10)
+		  (> queries-per-second 10))
+	     (begin
+	       (debug:print-info 1 "db write rate too high, starting a server, count=" count " start=" start " run-id=" run-id " queries-per-second=" queries-per-second)
+	       #t)
+	     #f))))
+
+(define (rmt:get-connection-info run-id)
+  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+    (if cinfo
+	cinfo
+	;; NB// can cache the answer for server running for 10 seconds ...
+	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
+	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
+	    (client:setup run-id)
+	    #f))))
+
+(define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
+(define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
+  ;; clean out old connections
+  (mutex-lock! *db-multi-sync-mutex*)
+  (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
+    (for-each 
+     (lambda (run-id)
+       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+         (if (and connection 
+        	  (< (http-transport:server-dat-get-last-access connection) expire-time))
+             (begin
+               (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
+               ;; SHOULD CLOSE THE CONNECTION HERE
+	       (case *transport-type*
+		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
+				   (hash-table-ref *runremote* run-id)))))
+               (hash-table-delete! *runremote* run-id)))))
+     (hash-table-keys *runremote*)))
+  (mutex-unlock! *db-multi-sync-mutex*)
+  ;; (mutex-lock! *send-receive-mutex*)
+  (let* ((run-id          (if rid rid 0))
+	 (connection-info (rmt:get-connection-info run-id)))
+    ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
+    (if connection-info
+	;; use the server if have connection info
+	(let* ((dat     (case *transport-type*
+			  ((http)(condition-case
+				  (http-transport:client-api-send-receive run-id connection-info cmd params)
+				  ((commfail)(vector #f "communications fail"))))
+			  ((nmsg)(condition-case
+				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
+				  ((timeout)(vector #f "timeout talking to server"))))
+			  (else  (exit))))
+	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f))
+	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f)))
+	  (http-transport:server-dat-update-last-access connection-info)
+	  (if success
+	      (begin
+		;; (mutex-unlock! *send-receive-mutex*)
+		(case *transport-type* 
+		  ((http) res) ;; (db:string->obj res))
+		  ((nmsg) res))) ;; (vector-ref res 1)))
+	      (begin ;; let ((new-connection-info (client:setup run-id)))
+		(debug:print 0 "WARNING: Communication failed, trying call to rmt:send-receive again.")
+		;; (case *transport-type*
+		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
+		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
+		(if (eq? (modulo attemptnum 5) 0)
+		    (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
+		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
+		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
+
+		;; no longer killing the server in http-transport:client-api-send-receive
+		;; may kill it here but what are the criteria?
+		;; start with three calls then kill server
+		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+		;; (thread-sleep! 2)
+		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
+	;; no connection info? try to start a server
+	(if (and (< attemptnum 15)
+		 (tasks:need-server run-id))
+	    (begin
+	      (hash-table-delete! *runremote* run-id)
+	      ;; (mutex-unlock! *send-receive-mutex*)
+	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+	      (client:setup run-id)
+	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+	    (begin
+	      (debug:print 0 "ERROR: Communication failed!")
+	      ;; (mutex-unlock! *send-receive-mutex*)
+	      (exit)
+	      ;; (rmt:open-qry-close-locally cmd run-id params))))
+	      )))))
+
+(define (rmt:update-db-stats run-id rawcmd params duration)
+  (mutex-lock! *db-stats-mutex*)
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: stats collection failed in update-db-stats")
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (print "exn=" (condition->list exn))
+     #f) ;; if this fails we don't care, it is just stats
+   (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
+	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
+     (if (not stat-vec)
+	 (let ((newvec (vector 0 0)))
+	   (hash-table-set! *db-stats* cmd newvec)
+	   (set! stat-vec newvec)))
+     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
+     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
+  (mutex-unlock! *db-stats-mutex*))
+
+
+(define (rmt:print-db-stats)
+  (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
+    (debug:print 18 "DB Stats\n========")
+    (debug:print 18 (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
+    (for-each (lambda (cmd)
+		(let ((cmd-dat (hash-table-ref *db-stats* cmd)))
+		  (debug:print 18 (format #f fmtstr cmd (vector-ref cmd-dat 0) (vector-ref cmd-dat 1) (/ (vector-ref cmd-dat 1)(vector-ref cmd-dat 0))))))
+	      (sort (hash-table-keys *db-stats*)
+		    (lambda (a b)
+		      (> (vector-ref (hash-table-ref *db-stats* a) 0)
+			 (vector-ref (hash-table-ref *db-stats* b) 0)))))))
+
+(define (rmt:get-max-query-average run-id)
+  (mutex-lock! *db-stats-mutex*)
+  (let* ((runkey (conc "run-id=" run-id " "))
+	 (cmds   (filter (lambda (x)
+			   (substring-index runkey x))
+			 (hash-table-keys *db-stats*)))
+	 (res    (if (null? cmds)
+		     (cons 'none 0)
+		     (let loop ((cmd (car cmds))
+				(tal (cdr cmds))
+				(max-cmd (car cmds))
+				(res 0))
+		       (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
+			      (tot     (vector-ref cmd-dat 0))
+			      (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction
+			      (currmax (max res curravg))
+			      (newmax-cmd (if (> curravg res) cmd max-cmd)))
+			 (if (null? tal)
+			     (if (> tot 10)
+				 (cons newmax-cmd currmax)
+				 (cons 'none 0))
+			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
+    (mutex-unlock! *db-stats-mutex*)
+    res))
+	  
+(define (rmt:open-qry-close-locally cmd run-id params)
+  (let* ((dbstruct-local (if *dbstruct-db*
+			     *dbstruct-db*
+			     (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
+			       (set! *dbstruct-db* db)
+			       db)))
+	 (db-file-path   (db:dbfile-path 0)))
+    ;; (read-only      (not (file-read-access? db-file-path)))
+    (let* ((start         (current-milliseconds))
+	   (resdat        (api:execute-requests dbstruct-local (symbol->string cmd) params))
+	   (res           (vector-ref resdat 1))
+	   (duration      (- (current-milliseconds) start)))
+      (rmt:update-db-stats run-id cmd params duration)
+      ;; mark this run as dirty if this was a write
+      (if (not (member cmd api:read-only-queries))
+	  (let ((start-time (current-seconds)))
+	    (mutex-lock! *db-multi-sync-mutex*)
+	    ;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
+	    ;; just set it every time. Is a write more expensive than a read and does it matter?
+	    (hash-table-set! *db-local-sync* (or run-id 0) start-time) ;; the oldest "write"
+	    (mutex-unlock! *db-multi-sync-mutex*)))
+      res)))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams numretries: 3)))
-    (if res
-	(db:string->obj res) ;; (rmt:json-str->dat res)
-	;; this one does NOT keep trying
-	res)))
+	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (res  	   (http-transport:client-api-send-receive run-id connection-info cmd params)))
+    (if (and res (vector-ref res 0))
+	res
+	#f)))
+;; 	(db:string->obj (vector-ref dat 1))
+;; 	(begin
+;; 	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+;; 	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)
@@ -113,10 +277,13 @@
   (rmt:send-receive 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
 
 ;; This login does no retries under the hood - it acts a bit like a ping.
+;; Deprecated for nmsg-transport.
 ;;
 (define (rmt:login-no-auto-client-setup connection-info run-id)
-  (rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
-  
+  (case *transport-type*
+    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*)))
+    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*)))))
+
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 
 ;;
@@ -157,8 +324,8 @@
   (if (and (number? run-id)(number? test-id))
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
-	(debug:print 0 "ERROR: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
-	(print-call-chain)
+	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
+	(print-call-chain (current-error-port))
 	#f)))
 
 (define (rmt:test-get-rundir-from-test-id run-id test-id)
@@ -183,22 +350,56 @@
       (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))
       (begin
 	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	'())))
 
+;; IDEA: Threadify these - they spend a lot of time waiting ...
+;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (let ((run-id-list (if run-ids
+  (let ((multi-run-mutex (make-mutex))
+	(run-id-list (if run-ids
 			 run-ids
-			 (rmt:get-all-run-ids))))
-    (apply append (map (lambda (run-id)
-			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
-		       run-id-list))))
+			 (rmt:get-all-run-ids)))
+	(result      '()))
+    (if (null? run-id-list)
+	'()
+	(for-each 
+	 (lambda (th)
+	   (thread-join! th)) ;; I assume that joining completed threads just moves on
+	 (let loop ((hed     (car run-id-list))
+		    (tal     (cdr run-id-list))
+		    (threads '()))
+	   (let* ((newthread (make-thread
+			      (lambda ()
+				(let ((res (rmt:send-receive 'get-tests-for-run-mindata hed (list hed testpatt states status not-in))))
+				  (if (list? res)
+				      (begin
+					(mutex-lock! multi-run-mutex)
+					(set! result (append result res))
+					(mutex-unlock! multi-run-mutex))
+				      (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+			      (conc "multi-run-thread for run-id " hed)))
+		  (newthreads (cons newthread threads)))
+	     (thread-start! newthread)
+	     (thread-sleep! 0.5) ;; give that thread some time to start
+	     (if (null? tal)
+		 newthreads
+		 (loop (car tal)(cdr tal) newthreads))))))
+    result))
 
 (define (rmt:delete-test-records run-id test-id)
   (rmt:send-receive 'delete-test-records run-id (list run-id test-id)))
 
+;; This is not needed as test steps are deleted on test delete call
+;;
+;; (define (rmt:delete-test-step-records run-id test-id)
+;;   (rmt:send-receive 'delete-test-step-records run-id (list run-id test-id)))
+
 (define (rmt:test-set-status-state run-id test-id status state msg)
   (rmt:send-receive 'test-set-status-state run-id (list run-id test-id status state msg)))
+
+(define (rmt:test-toplevel-num-items run-id test-name)
+  (rmt:send-receive 'test-toplevel-num-items run-id (list run-id test-name)))
 
 ;; (define (rmt:get-previous-test-run-record run-id test-name item-path)
 ;;   (rmt:send-receive 'get-previous-test-run-record run-id (list run-id test-name item-path)))
@@ -218,6 +419,12 @@
 (define (rmt:test-set-log! run-id test-id logf)
   (if (string? logf)(rmt:general-call 'test-set-log run-id logf test-id)))
 
+(define (rmt:test-set-top-process-pid run-id test-id pid)
+  (rmt:send-receive 'test-set-top-process-pid run-id (list run-id test-id pid)))
+
+(define (rmt:test-get-top-process-pid run-id test-id)
+  (rmt:send-receive 'test-get-top-process-pid run-id (list run-id test-id)))
+
 (define (rmt:get-run-ids-matching-target keynames target res runname testpatt statepatt statuspatt)
   (rmt:send-receive 'get-run-ids-matching-target #f (list keynames target res runname testpatt statepatt statuspatt)))
 
@@ -233,7 +440,7 @@
 (define (rmt:get-run-ids-matching keynames target res)
   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
 
-(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode 'normal))
+(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
   (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode)))
 
 (define (rmt:get-count-tests-running-for-run-id run-id)
@@ -288,15 +495,32 @@
 (define (rmt:lock/unlock-run run-id lock unlock user)
   (rmt:send-receive 'lock/unlock-run #f (list run-id lock unlock user)))
 
+;; set/get status
+(define (rmt:get-run-status run-id)
+  (rmt:send-receive 'get-run-status #f (list run-id)))
+
+(define (rmt:set-run-status run-id run-status #!key (msg #f))
+  (rmt:send-receive 'set-run-status #f (list run-id run-status msg)))
+
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
 
 (define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
 
+(define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
+  (rmt:send-receive 'find-and-mark-incomplete run-id (list run-id ovr-deadtime)))
+
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
 ;;======================================================================
+
+;; Need to move this to multi-run section and make associated changes
+(define (rmt:find-and-mark-incomplete-all-runs #!key (ovr-deadtime #f))
+  (let ((run-ids (rmt:get-all-run-ids)))
+    (for-each (lambda (run-id)
+	       (rmt:find-and-mark-incomplete run-id ovr-deadtime))
+	     run-ids)))
 
 ;; get the previous record for when this test was run where all keys match but runname
 ;; returns #f if no such test found, returns a single test record if found

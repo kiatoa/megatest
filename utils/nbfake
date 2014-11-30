@@ -1,12 +1,76 @@
 #!/bin/bash
+###############################################################################
+#
+# nbfake - capture command output in a logfile
+#
+# nbfake behavior can be changed by setting the following env vars:
+#   NBFAKE_HOST       SSH to $NBFAKE_HOST and run command
+#   NBFAKE_LOG        Logfile for nbfake output
+#
+###############################################################################
 
-# ssh localhost "nohup $* > nbfake.log 2> nbfake.err < /dev/null"
+if [[ -z "$@" ]]; then
+  cat <<__EOF
+
+nbfake usage:
+
+nbfake <command to run>
+
+nbfake behavior can be changed by setting the following env vars:
+   NBFAKE_HOST       SSH to \$NBFAKE_HOST and run command
+   NBFAKE_LOG        Logfile for nbfake output
+
+__EOF
+  exit
+fi
+
+#==============================================================================
+# Setup
+#==============================================================================
 
 # Can't always trust $PWD
-CURRWD=`pwd`
+CURRWD=$(pwd)
 
-if [[ $TARGETHOST == ""  ]]; then
-  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &"
+# Make sure nbfake host and logfile are set. Fall back to old-style variable names
+
+if [[ -z "$NBFAKE_HOST" && -n "$TARGETHOST" ]]; then 
+  MY_NBFAKE_HOST=$TARGETHOST     
+  unset TARGETHOST
 else
-  ssh -n -f $TARGETHOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* > NBFAKE-`date +%GWW%V.%u_%T` 2>&1 &\""
+  MY_NBFAKE_HOST=$NBFAKE_HOST
+  unset NBFAKE_HOST
+fi
+
+
+if [[ -z "$NBFAKE_LOG" && -n "$TARGETHOST_LOGF" ]]; then 
+  MY_NBFAKE_LOG=$TARGETHOST_LOGF
+  unset TARGETHOST_LOGF
+else
+  MY_NBFAKE_LOG=$NBFAKE_LOG
+  unset NBFAKE_LOG
+fi
+
+# Set default nbfake log
+
+if [[ -z "$MY_NBFAKE_LOG" ]]; then
+  MY_NBFAKE_LOG=NBFAKE-$(date +%GWW%V.%u_%T)
+fi
+
+#==============================================================================
+# Run and log
+#==============================================================================
+
+cat <<__EOF >&2
+#======================================================================
+# NBFAKE logging command to: $MY_NBFAKE_LOG
+#     $*
+#======================================================================
+__EOF
+
+if [[ -z "$MY_NBFAKE_HOST" ]]; then
+  # Run locally
+  sh -c "cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &"
+else
+  # run remotely
+  ssh -n -f $MY_NBFAKE_HOST "sh -c \"cd $CURRWD;export DISPLAY=$DISPLAY; export PATH=$PATH; nohup $* >> $MY_NBFAKE_LOG 2>&1 &\""
 fi

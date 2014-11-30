@@ -18,7 +18,6 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69)
 (import (prefix sqlite3 sqlite3:))
-(use trace)
 
 (declare (uses common))
 (declare (uses margs))
@@ -83,23 +82,23 @@ Misc
       (print help)
       (exit)))
 
-(if (not (setup-for-run))
+(if (not (launch:setup-for-run))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *dbstruct-local*  (make-dbr:dbstruct path: *toppath* local: #t))
+(define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
+					     local: #t))
+(define *db-file-path* (db:dbfile-path 0))
 
 ;; HACK ALERT: this is a hack, please fix.
-(define *read-only* (not (file-read-access? (conc *toppath* "db/main.db"))))
-;; (client:setup *dbstruct-local*)
+(define *read-only* (not (file-read-access? *db-file-path*)))
 
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
 (define *keys*   (db:get-keys *dbstruct-local*))
-;; (define *keys*   (cdb:remote-run db:get-keys #f))
-;; (define *keys*   (db:get-keys   *dbstruct-local*))
 
 (define *dbkeys*  (append *keys* (list "runname")))
 
@@ -133,14 +132,20 @@ Misc
 (define *status-ignore-hash* (make-hash-table))
 (define *state-ignore-hash*  (make-hash-table))
 
-(define *db-file-path* (conc *toppath* "/db/main.db"))
-
 (define *tests-sort-options* (vector (vector "Sort +a" 'testname   "ASC")
 				     (vector "Sort -a" 'testname   "DESC")
 				     (vector "Sort +t" 'event_time "ASC")
 				     (vector "Sort -t" 'event_time "DESC")
 				     (vector "Sort +s" 'statestatus "ASC")
-				     (vector "Sort -s" 'statestatus "DESC")))
+				     (vector "Sort -s" 'statestatus "DESC")
+				     (vector "Sort +a" 'testname   "ASC")))
+
+(define *tests-sort-type-index* '(("+testname" 0)
+				  ("-testname" 1)
+				  ("+event_time" 2)
+				  ("-event_time" 3)
+				  ("+statestatus" 4)
+				  ("-statestatus" 5)))
 
 ;; Don't forget to adjust the >= below if you add to the sort-options above
 (define (next-sort-option)
@@ -149,10 +154,15 @@ Misc
       (set! *tests-sort-reverse* (+ *tests-sort-reverse* 1)))
   *tests-sort-reverse*)
 
+(define *tests-sort-reverse* 
+  (let ((t-sort (assoc (configf:lookup *configdat* "dashboard" "testsort") *tests-sort-type-index*)))
+    (if t-sort
+	(cadr t-sort)
+	3)))
+
 (define (get-curr-sort)
   (vector-ref *tests-sort-options* *tests-sort-reverse*))
 
-(define *tests-sort-reverse* 3)
 (define *hide-empty-runs* #f)
 (define *hide-not-hide* #t) ;; toggle for hide/not hide
 (define *hide-not-hide-button* #f)
@@ -169,6 +179,8 @@ Misc
 (define-inline (dboard:uidat-get-lftcol  vec)(vector-ref vec 1))
 (define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
 (define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
+
+(if (get-environment-variable "MT_RUN_AREA_HOME")(change-directory (get-environment-variable "MT_RUN_AREA_HOME")))
 
 (define (message-window msg)
   (iup:show
@@ -338,9 +350,12 @@ Misc
 		(let ((tname (vector-ref tdat 0))  ;; (db:test-get-testname tdat))
 		      (ipath (vector-ref tdat 1))) ;; (db:test-get-item-path tdat)))
 		  (if (not (equal? ipath ""))
-		      (if (not (member tname tnames))
+		      (if (and (list? tnames)
+			       (string? tname)
+			       (not (member tname tnames)))
 			  (set! tnames (append tnames (list tname)))))))
-	      test-dats)))
+	      test-dats)
+    tnames))
 
 ;; Bubble up the top tests to above the items, collect the items underneath
 ;; all while preserving the sort order from the SQL query as best as possible.
@@ -460,8 +475,14 @@ Misc
 			   (teststatus (db:test-get-status   test))
 			   (teststate  (db:test-get-state    test))
 			   ;;(teststart  (db:test-get-event_time test))
-			   (runtime    (db:test-get-run_duration test))
-			   (buttontxt  (if (equal? teststate "COMPLETED") teststatus teststate))
+			   ;;(runtime    (db:test-get-run_duration test))
+			   (buttontxt  (cond
+					((equal? teststate "COMPLETED") teststatus)
+					((and (equal? teststate "NOT_STARTED")
+					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "TIMED_OUT" "KEEP_TRYING" "TEN_STRIKES")))
+					 teststatus)
+					(else
+					 teststate)))
 			   (button     (vector-ref columndat rown))
 			   (color      (car (gutils:get-color-for-state-status teststate teststatus)))
 			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
@@ -646,12 +667,12 @@ Misc
 			    test-patt
 			    " -target "
 			    target
-			    " :runname "
+			    " -runname "
 			    run-name
 			    )))
       ((remove-runs)
        (set! full-cmd (conc full-cmd
-			    " -remove-runs :runname "
+			    " -remove-runs -runname "
 			    run-name
 			    " -target " 
 			    target
@@ -680,43 +701,10 @@ Misc
 	    (hash-table-set! tests-draw-state 'selected-tests (make-hash-table))
 	    ;; set these 
 	    (hash-table-set! tests-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
-	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20))) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
-      (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
-	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
-	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	     (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
-	     (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
-	     (boxw   90)
-	     (boxh   25)
-	     (gapx   20)
-	     (gapy   30)
-	     (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
-	     (selected-tests (hash-table-ref tests-draw-state 'selected-tests )))
-	;; (print "sizex: " sizex " sizey: " sizey " font: " (canvas-font cnv) " originx: " originx " originy: " originy " xtorig: " xtorig " ytorig: " ytorig " xadj: " xadj " yadj: " yadj)
-	(let loop ((hed (car (reverse sorted-testnames)))
-		   (tal (cdr (reverse sorted-testnames)))
-		   (llx xtorig)
-		   (lly ytorig)
-		   (urx (+ xtorig boxw))
-		   (ury (+ ytorig boxh)))
-	  ; (print "hed " hed " llx " llx " lly " lly " urx " urx " ury " ury)
-	  (canvas-text! cnv (+ llx 5)(+ lly 5) hed) ;; (conc testname " (" xtorig "," ytorig ")"))
-	  (canvas-rectangle! cnv llx urx lly ury)
-	  (if (hash-table-ref/default selected-tests hed #f)
-	      (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))
-	  (hash-table-set! tests-hash hed (list llx urx (- sizey ury)(- sizey lly))) ;; NB// Swap ury and lly
-	  (if (not (null? tal))
-	      ;; leave a column of space to the right to list items
-	      (let ((have-room 
-		     (if #t ;; put "auto" here where some form of auto rearanging can be done
-			 (> (* 3 (+ boxw gapx)) (- urx xtorig))
-			 (< urx (- sizex boxw gapx boxw)))))  ;; is there room for another column?
-		(loop (car tal)
-		      (cdr tal)
-		      (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
-		      (if have-room lly (+ lly boxh gapy))
-		      (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-		      (if have-room ury (+ ury boxh gapy)))))))))
+	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
+	    (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
+	  (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
+      ))
 
 ;;======================================================================
 ;; R U N   C O N T R O L S
@@ -803,7 +791,7 @@ Misc
 
 	(iup:frame
 	 #:title "Runname"
-	 (let* ((default-run-name (conc "ww" (seconds->work-week/day (current-seconds))))
+	 (let* ((default-run-name (seconds->work-week/day (current-seconds)))
 		(tb (iup:textbox #:expand "HORIZONTAL"
 				 #:action (lambda (obj val txt)
 					    ;; (print "obj: " obj " val: " val " unk: " unk)
@@ -885,61 +873,72 @@ Misc
 	(let* ((updater #f)
 	       (last-xadj 0)
 	       (last-yadj 0)
-	       (canvas-obj   
-	(iup:canvas #:action (make-canvas-action
-			      (lambda (cnv xadj yadj)
-				(if (not updater)
-				    (set! updater (lambda (xadj yadj)
-						    ;; (print "cnv: " cnv " x: " x " y: " y)
-						    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames))))
-				(updater xadj yadj)
-				(set! last-xadj xadj)
-				(set! last-yadj yadj)))
-		    ;; Following doesn't work 
-		    ;; #:wheel-cb (make-canvas-action
-		    ;;           (lambda (cnv xadj yadj)
-		    ;;    	 ;; (print "cnv: " cnv " x: " x " y: " y)
-		    ;;    	 (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)))
-		    ;; #:size "50x50"
-		    #:expand "YES"
-		    #:scrollbar "YES"
-		    #:posx "0.5"
-		    #:posy "0.5"
-		    #:button-cb (lambda (obj btn pressed x y status)
-				  ;; (print "obj: " obj)
-				  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
-					(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
-				    ;; (print "x\ty\tllx\tlly\turx\tury")
-				    (for-each (lambda (test-name)
-						(let* ((rec-coords (hash-table-ref tests-info test-name))
-						       (llx        (list-ref rec-coords 0))
-						       (urx        (list-ref rec-coords 1))
-						       (lly        (list-ref rec-coords 2))
-						       (ury        (list-ref rec-coords 3)))
-						  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
-						  (if (and (eq? pressed 1)
-							   (> x llx)
-							   (> y lly)
-							   (< x urx)
-							   (< y ury))
-						      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
-							(let* ((selected     (not (member test-name patterns)))
-							       (newpatt-list (if selected
-										 (cons test-name patterns)
-										 (delete test-name patterns)))
-							       (newpatt      (string-intersperse newpatt-list "\n")))
-							  ;; (if cnv-obj
-							  ;;    (dashboard:draw-tests cnv-obj 0 0 tests-draw-state sorted-testnames))
-							  (iup:attribute-set! obj "REDRAW" "ALL")
-							  (hash-table-set! selected-tests test-name selected)
-							  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
-							  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
-							  (dashboard:update-run-command)
-							  (if updater (updater last-xadj last-yadj)))))))
-					      (hash-table-keys tests-info)))))))
+	       (the-cnv   #f)
+	       (canvas-obj 
+                (iup:canvas #:action (make-canvas-action
+				      (lambda (cnv xadj yadj)
+					(if (not updater)
+					    (set! updater (lambda (xadj yadj)
+							    ;; (print "cnv: " cnv " xadj: " xadj " yadj: " yadj)
+							    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)
+							    (set! last-xadj xadj)
+							    (set! last-yadj yadj))))
+					(updater xadj yadj)
+					(set! the-cnv cnv)
+					))
+			    ;; Following doesn't work 
+			    #:wheel-cb (lambda (obj step x y dir) ;; dir is 4 for up and 5 for down. I think.
+					 (let ((xadj last-xadj)
+					       (yadj (+ last-yadj (if (> step 0)
+								      -0.01
+								      0.01))))
+					   ;; (print "step: " step " x: " x " y: " y " dir: \"" dir "\"")
+					   ;; (print "the-cnv: " the-cnv " obj: " obj " xadj: " xadj " yadj: " yadj " dir: " dir)
+					   (if the-cnv
+					       (dashboard:draw-tests the-cnv xadj yadj tests-draw-state sorted-testnames))
+					   (set! last-xadj xadj)
+					   (set! last-yadj yadj)
+					   ))
+			    ;; #:size "50x50"
+			    #:expand "YES"
+			    #:scrollbar "YES"
+			    #:posx "0.5"
+			    #:posy "0.5"
+			    #:button-cb (lambda (obj btn pressed x y status)
+					  ;; (print "obj: " obj)
+					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
+						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
+					    ;; (print "x\ty\tllx\tlly\turx\tury")
+					    (for-each (lambda (test-name)
+							(let* ((rec-coords (hash-table-ref tests-info test-name))
+							       (llx        (list-ref rec-coords 0))
+							       (urx        (list-ref rec-coords 1))
+							       (lly        (list-ref rec-coords 2))
+							       (ury        (list-ref rec-coords 3)))
+							  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
+							  (if (and (eq? pressed 1)
+								   (> x llx)
+								   (> y lly)
+								   (< x urx)
+								   (< y ury))
+							      (let ((patterns (string-split (iup:attribute test-patterns-textbox "VALUE"))))
+								(let* ((selected     (not (member test-name patterns)))
+								       (newpatt-list (if selected
+											 (cons test-name patterns)
+											 (delete test-name patterns)))
+								       (newpatt      (string-intersperse newpatt-list "\n")))
+								  ;; (if cnv-obj
+								  ;;    (dashboard:draw-tests cnv-obj 0 0 tests-draw-state sorted-testnames))
+								  (iup:attribute-set! obj "REDRAW" "ALL")
+								  (hash-table-set! selected-tests test-name selected)
+								  (iup:attribute-set! test-patterns-textbox "VALUE" newpatt)
+								  (dboard:data-set-test-patts! *data* (dboard:lines->test-patt newpatt))
+								  (dashboard:update-run-command)
+								  (if updater (updater last-xadj last-yadj)))))))
+						      (hash-table-keys tests-info)))))))
 	  canvas-obj)))
       ;; (print "obj: " obj " btn: " btn " pressed: " pressed " x: " x " y: " y " status: " status))
-      
+       
       (iup:frame
        #:title "Logs" ;; To be replaced with tabs
        (let ((logs-tb (iup:textbox #:expand "YES"
@@ -979,7 +978,7 @@ Misc
 ;;
 ;; General info about the run(s) and megatest area
 (define (dashboard:summary db)
-  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string)))
+  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
       #:value 500
@@ -1040,8 +1039,16 @@ Misc
 			     (dashboard:update-run-summary-tab)))
 		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
 		       ))))
+	 (cell-lookup (make-hash-table))
 	 (run-matrix (iup:matrix
-		      #:expand "YES"))
+		      #:expand "YES"
+		      #:click-cb
+		      (lambda (obj lin col status)
+			(let* ((toolpath (car (argv)))
+			       (key      (conc lin ":" col))
+			       (test-id  (hash-table-ref/default cell-lookup key -1))
+			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
+			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
@@ -1109,8 +1116,9 @@ Misc
 					   ;; (set! colnum (+ colnum 1))
 					   ))))
 				 run-ids)
-		       (iup:attribute-set! run-matrix "CLEARVALUE" "CONTENTS")
+		       (iup:attribute-set! run-matrix "CLEARVALUE" "ALL") ;; NOTE: Was CONTENTS
 		       (iup:attribute-set! run-matrix "CLEARATTRIB" "CONTENTS")
+		       (iup:attribute-set! run-matrix "RESIZEMATRIX" "YES")
 		       (iup:attribute-set! run-matrix "NUMCOL" max-col )
 		       (iup:attribute-set! run-matrix "NUMLIN" (if (< max-row max-visible) max-visible max-row)) ;; min of 20
 		       ;; (iup:attribute-set! run-matrix "NUMCOL_VISIBLE" max-col)
@@ -1127,18 +1135,6 @@ Misc
 					   (iup:attribute-set! run-matrix key name)))))
 				 row-indices)
 		       
-		       ;; Col labels
-		       (for-each (lambda (ind)
-				   (let* ((name (car ind))
-					  (num  (cadr ind))
-					  (key  (conc "0:" num)))
-				     (if (not (equal? (iup:attribute run-matrix key) name))
-					 (begin
-					   (set! changed #t)
-					   (iup:attribute-set! run-matrix key name)
-					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
-				 col-indices)
-		       
 		       ;; Cell contents
 		       (for-each (lambda (entry)
 				   (let* ((row-name  (cadr entry))
@@ -1153,13 +1149,28 @@ Misc
 					  (row-num   (cadr (assoc row-name row-indices)))
 					  (col-num   (cadr (assoc col-name col-indices)))
 					  (key       (conc row-num ":" col-num)))
+				     (hash-table-set! cell-lookup key test-id)
 				     (if (not (equal? (iup:attribute run-matrix key) (cadr value)))
 					 (begin
 					   (set! changed #t)
 					   (iup:attribute-set! run-matrix key (cadr value))
 					   (iup:attribute-set! run-matrix (conc "BGCOLOR" key) (car value))))))
 				 tests-mindat)
+		       
+		       ;; Col labels - do after setting Cell contents so they are accounted for in the size calc.
+
+		       (for-each (lambda (ind)
+				   (let* ((name (car ind))
+					  (num  (cadr ind))
+					  (key  (conc "0:" num)))
+				     (if (not (equal? (iup:attribute run-matrix key) name))
+					 (begin
+					   (set! changed #t)
+					   (iup:attribute-set! run-matrix key name)
+					   (iup:attribute-set! run-matrix "FITTOTEXT" (conc "C" num))))))
+				 col-indices)
 		       (if changed (iup:attribute-set! run-matrix "REDRAW" "ALL"))))))
+    
     (set! dashboard:update-run-summary-tab updater)
     (dboard:data-set-runs-tree! *data* tb)
     (iup:split
@@ -1200,10 +1211,21 @@ Misc
 	      ))
 	    (iup:vbox
 	     (iup:hbox
-	      (iup:button "Sort -t"   #:action (lambda (obj)
-						 (next-sort-option)
-						 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
-						 (mark-for-update)))
+	      (let* ((cmds-list '("+testname" "-testname" "+event_time" "-event_time" "+statestatus" "-statestatus"))
+		     (lb         (iup:listbox #:expand "HORIZONTAL"
+					      #:dropdown "YES"
+					      #:action (lambda (obj val index lbstate)
+							 (set! *tests-sort-reverse* index)
+							 (mark-for-update))))
+		     (default-cmd (car (list-ref *tests-sort-type-index* *tests-sort-reverse*))))
+		(iuplistbox-fill-list lb cmds-list selected-item: default-cmd)
+		(mark-for-update)
+		;; (set! *tests-sort-reverse* *tests-sort-reverse*0)
+		lb)
+	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
+	      ;;   				 (next-sort-option)
+	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	      ;;   				 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
 						 (iup:attribute-set! obj "TITLE" (if *hide-empty-runs* "+HideE" "-HideE"))
@@ -1215,7 +1237,9 @@ Misc
 		(set! *hide-not-hide-button* hideit)
 		hideit))
 	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)(if *dbstruct-local* (db:close-all *dbstruct-local*))(exit)))
+	      (iup:button "Quit"      #:action (lambda (obj)
+						 ;; (if *dbstruct-local* (db:close-all *dbstruct-local*))
+						 (exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update)))
 	      (iup:button "Collapse"  #:action (lambda (obj)
@@ -1412,14 +1436,14 @@ Misc
 
 ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
-(define *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db")))
+(define *last-db-update-time* (file-modification-time *db-file-path*)) ;; (conc *toppath* "/db/main.db")))
 (define *last-recalc-ended-time* 0)
 
 (define (dashboard:been-changed)
-  (> (file-modification-time (conc *toppath* "/db/main.db")) *last-db-update-time*))
+  (> (file-modification-time *db-file-path*) *last-db-update-time*))
 
 (define (dashboard:set-db-update-time)
-  (set! *last-db-update-time* (file-modification-time (conc *toppath* "/db/main.db"))))
+  (set! *last-db-update-time* (file-modification-time *db-file-path*)))
 
 (define (dashboard:recalc modtime please-update-buttons last-db-update-time)
   (or please-update-buttons
@@ -1427,21 +1451,27 @@ Misc
 	   (> modtime last-db-update-time)
 	   (> (current-seconds)(+ last-db-update-time 1)))))
 
-(define *monitor-db-path* (conc *toppath* "/db/monitor.db"))
+(define *monitor-db-path* (conc *dbdir* "/monitor.db"))
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
-(let ((db (tasks:open-db)))
-  (sqlite3:finalize! db))
+(tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time)
-  (apply max (map (lambda (filen)
-		    (file-modification-time filen))
-		  (glob (conc *toppath* "/db/*.db")))))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
+     (current-seconds)) ;; something went wrong - just print an error and return current-seconds
+   (apply max (map (lambda (filen)
+		     (file-modification-time filen))
+		   (glob (conc *dbdir* "/*.db"))))))
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))
-	 (monitor-modtime (file-modification-time *monitor-db-path*))
+	 (monitor-modtime (if (file-exists? *monitor-db-path*)
+			      (file-modification-time *monitor-db-path*)
+			      -1))
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
     (if (and (eq? *current-tab-number* 0)
@@ -1491,8 +1521,7 @@ Misc
     (if runid
 	(begin
 	  (lambda (x)
-	    (on-exit (lambda ()
-		       (if *dbstruct-local* (db:close-all *dbstruct-local*))))
+	    (on-exit std-exit-procedure)
 	    (examine-run *dbstruct-local* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
@@ -1529,5 +1558,25 @@ Misc
 			     (mutex-unlock! *update-mutex*))))
 		       1))))
 
-(iup:main-loop)
-(db:close-all *dbstruct-local*)
+(let ((th1 (make-thread (lambda ()
+			  (thread-sleep! 1)
+			  (set! *please-update-buttons* #t)
+			  (dashboard:run-update 1)) "update buttons once"))
+			  ;; need to wait for first *update-is-running* #t
+			  ;; (let loop ()
+			  ;;   (mutex-lock! *update-mutex*)
+			  ;;   (if *update-is-running*
+			  ;;       (begin
+			  ;;         (set! *please-update-buttons* #t)
+			  ;;         (mark-for-update)
+			  ;;         (print "Did redraw trigger")) "First update after startup")
+			  ;;   (mutex-unlock! *update-mutex*)
+			  ;;   (thread-sleep! 1)
+			  ;;   (if (not *please-update-buttons*)
+			  ;;       (loop))))))
+      (th2 (make-thread iup:main-loop "Main loop")))
+  (thread-start! th1)
+  (thread-start! th2)
+  (thread-join! th2))
+
+;; (iup:main-loop)(db:close-all *dbstruct-local*)

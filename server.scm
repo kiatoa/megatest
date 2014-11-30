@@ -23,6 +23,8 @@
 (declare (uses synchash))
 (declare (uses http-transport))
 (declare (uses rpc-transport))
+(declare (uses nmsg-transport))
+(declare (uses launch))
 (declare (uses daemon))
 
 (include "common_records.scm")
@@ -48,12 +50,13 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  (let ((transport (server:get-transport)))
-    (case transport
-      ((http) (http-transport:launch run-id))
-      ((rpc)  (rpc-transport:launch run-id))
-      (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
-	      (rpc-transport:launch run-id)))))
+  (case *transport-type*
+    ((http)(http-transport:launch run-id))
+    ((nmsg)(nmsg-transport:launch run-id))
+    ((rpc)  (rpc-transport:launch run-id))
+    (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
+;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
+;; 	      (rpc-transport:launch run-id)))))
 
 ;;======================================================================
 ;; S E R V E R   U T I L I T I E S 
@@ -102,16 +105,33 @@
 ;; try running on that host
 ;;
 (define  (server:run run-id)
-  (let* ((target-host (configf:lookup *configdat* "server" "homehost" ))
+  (let* ((curr-host   (get-host-name))
+	 (curr-ip     (server:get-best-guess-address curr-host))
+	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (testsuite   (common:get-testsuite-name))
+	 (logfile     (conc *toppath* "/logs/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server - -run-id " run-id " >> " *toppath* "/db/" run-id ".log 2>&1 &")))
+		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+									      (conc " -daemonize -log " logfile)
+									      "")
+		      " -debug 4 testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
-    (if target-host
+    (if (not (directory-exists? "logs"))(create-directory "logs"))
+    ;; host.domain.tld match host?
+    (if (and target-host 
+	     ;; look at target host, is it host.domain.tld or ip address and does it 
+	     ;; match current ip or hostname
+	     (not (string-match (conc "("curr-host "|" curr-host"\\..*)") target-host))
+	     (not (equal? curr-ip target-host)))
 	(begin
-	  (set-environment-variable "TARGETHOST" target-host)
-	  (system (conc "nbfake " cmdln)))
-	(system cmdln))
+	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
+	  (setenv "TARGETHOST" target-host)))
+    (setenv "TARGETHOST_LOGF" logfile)
+    (system (conc "nbfake " cmdln))
+    (unsetenv "TARGETHOST_LOGF")
+    (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
+    ;; (system cmdln)
     (pop-directory)))
 
 (define (server:get-client-signature)
@@ -125,7 +145,7 @@
 (define (server:kind-run run-id)
   (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
     (if (or (not last-run-time)
-	    (> (- (current-seconds) last-run-time) 40))
+	    (> (- (current-seconds) last-run-time) 30))
 	(begin
 	  (server:run run-id)
 	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
@@ -138,24 +158,67 @@
       (rmt:start-server run-id)))
 
 (define (server:check-if-running run-id)
-  (let loop ((server (open-run-close tasks:get-server tasks:open-db run-id))
-	     (trycount 0))
+  (let ((tdbdat (tasks:open-db)))
+    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+	       (trycount 0))
     (if server
 	;; note: client:start will set *runremote*. this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (server:ping-server run-id (vector-ref server 1)(vector-ref server 0))))
+	(let ((res (case *transport-type*
+		     ((http)(server:ping-server run-id 
+						(tasks:hostinfo-get-interface server)
+						(tasks:hostinfo-get-port      server)))
+		     ((nmsg)(nmsg-transport:ping (tasks:hostinfo-get-interface server)
+						 (tasks:hostinfo-get-port      server)
+						 timeout: 2)))))
 	  ;; if the server didn't respond we must remove the record
 	  (if res
 	      #t
 	      (begin
-		(open-run-close tasks:server-force-clean-running-records-for-run-id tasks:open-db run-id 
+		(debug:print-info 0 "server at " server " not responding, removing record")
+		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
 				" server:check-if-running")
 		res)))
-	#f)))
+	#f))))
 
+;; called in megatest.scm, host-port is string hostname:port
+;;
+(define (server:ping run-id host:port)
+  (let ((tdbdat (tasks:open-db)))
+    (let* ((host-port (let ((slst (string-split   host:port ":")))
+			(if (eq? (length slst) 2)
+			    (list (car slst)(string->number (cadr slst)))
+			    #f)))
+	   (toppath       (launch:setup-for-run))
+	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
+      (if (not run-id)
+	  (begin
+	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")
+	    (print "ERROR: No run-id")
+	    (exit 1))
+	  (if (and (not host-port)
+		   (not server-db-dat))
+	      (begin
+		(print "ERROR: bad host:port")
+		(exit 1))
+	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
+		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
+		     (server-dat (http-transport:client-connect iface port))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		(if (and (list? login-res)
+			 (car login-res))
+		    (begin
+		      (print "LOGIN_OK")
+		      (exit 0))
+		    (begin
+		      (print "LOGIN_FAILED")
+		      (exit 1)))))))))
+
+;; run ping in separate process, safest way in some cases
+;;
 (define (server:ping-server run-id iface port)
   (with-input-from-pipe 
    (conc (common:get-megatest-exe) " -run-id " run-id " -ping " (conc iface ":" port))
@@ -179,3 +242,14 @@
 	(begin
 	  ;; (debug:print-info 2 "login failed")
 	  #f))))
+
+(define (server:get-timeout)
+  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+    (if (and (string? tmo)
+	     (string->number tmo))
+	(* 60 60 (string->number tmo))
+	;; (* 3 24 60 60) ;; default to three days
+	(* 60 1)         ;; default to one minute
+	;; (* 60 60 25)      ;; default to 25 hours
+	)))
+

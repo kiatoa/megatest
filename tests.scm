@@ -33,8 +33,7 @@
 
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all)
-  (let* ((test-search-path   (cons (conc *toppath* "/tests") ;; the default
-				   (tests:get-tests-search-path *configdat*))))
+  (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat)
@@ -70,8 +69,8 @@
     (let* ((notpatt  (equal? (substring-index "~" patt) 0))
 	   (newpatt  (if notpatt (substring patt 1) patt))
 	   (finpatt  (if like
-			(string-substitute (regexp "%") ".*" newpatt)
-			(string-substitute (regexp "\\*") ".*" newpatt)))
+			(string-substitute (regexp "%") ".*" newpatt #f)
+			(string-substitute (regexp "\\*") ".*" newpatt #f)))
 	   (res      #f))
       ;; (print "tests:glob-like-match => notpatt: " notpatt ", newpatt: " newpatt ", finpatt: " finpatt)
       (set! res (string-match (regexp finpatt (if like #t #f)) str))
@@ -353,7 +352,12 @@
 							 "&nbsp;"
 							 comment) "</td>"
 							 "</tr>"))))
-		       testdat)
+		       (if (list? testdat)
+			   testdat
+			   (begin
+			     (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
+			     '())))
+			   
 		      (print "<table><tr><td valign=\"top\">")
 		      ;; Print out stats for status
 		      (set! tot 0)
@@ -476,7 +480,7 @@
 		 #t ;; this is the correct order, b is waiting on a and b is before a
 		 (if (> a-priority b-priority)
 		     #t ;; if a is a higher priority than b then we are good to go
-		     #f))))))))
+		     (string-compare3 a b)))))))))
 
 ;; for each test:
 ;;   
@@ -638,19 +642,38 @@
       (rmt:general-call 'update-uname-host run-id uname hostname test-id)))
   
 ;; This one is for running with no db access (i.e. via rmt: internally)
-(define (tests:set-full-meta-info test-id run-id minutes work-area)
-  (let* ((num-records 0)
-	 (cpuload  (get-cpu-load))
+(define (tests:set-full-meta-info db test-id run-id minutes work-area remtries)
+;; (define (tests:set-full-meta-info test-id run-id minutes work-area)
+;;  (let ((remtries 10))
+  (let* ((cpuload  (get-cpu-load))
 	 (diskfree (get-df (current-directory)))
 	 (uname    (get-uname "-srvpio"))
 	 (hostname (get-host-name)))
-    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
     (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)))
-	  
-(define (tests:set-partial-meta-info test-id run-id minutes work-area)
+    
+;; (define (tests:set-partial-meta-info test-id run-id minutes work-area)
+(define (tests:set-partial-meta-info test-id run-id minutes work-area remtries)
   (let* ((cpuload  (get-cpu-load))
-	 (diskfree (get-df (current-directory))))
-    (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)))
+	 (diskfree (get-df (current-directory)))
+	 (remtries 10))
+    (handle-exceptions
+     exn
+     (if (> remtries 0)
+	 (begin
+	   (print-call-chain (current-error-port))
+	   (debug:print-info 0 "WARNING: failed to set meta info. Will try " remtries " more times")
+	   (set! remtries (- remtries 1))
+	   (thread-sleep! 10)
+	   (tests:set-full-meta-info db test-id run-id minutes work-area (- remtries 1)))
+	 (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+	   (debug:print 0 "ERROR: tried for over a minute to update meta info and failed. Giving up")
+	   (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
+	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	   (print "exn=" (condition->list exn))
+	   (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+	   (print-call-chain (current-error-port))))
+     (tests:update-testdat-meta-info db test-id work-area cpuload diskfree minutes)
+  )))
 	 
 ;;======================================================================
 ;; A R C H I V I N G

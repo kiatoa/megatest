@@ -1,6 +1,9 @@
 # Add additional steps here. Format is "stepname script"
+[vars]
+step1var step1.sh
+
 [ezsteps]
-step1 step1.sh
+step1 #{get vars step1var}
 
 # Test requirements are specified here
 [requirements]

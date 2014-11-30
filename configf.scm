@@ -63,7 +63,7 @@
 ;; read a line and process any #{ ... } constructs
 
 (define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
-(define (configf:process-line l ht)
+(define (configf:process-line l ht allow-system)
   (let loop ((res l))
     (if (string? res)
 	(let ((matchdat (string-search configf:var-expand-regex res)))
@@ -87,10 +87,12 @@
 				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(with-input-from-string fullcmd
-		  (lambda ()
-		    (set! result ((eval (read)) ht))))
-		(loop (conc prestr result poststr)))
+		(if (or allow-system
+			(not (member cmdtype '("system" "shell"))))
+		    (with-input-from-string fullcmd
+		      (lambda ()
+			(set! result ((eval (read)) ht))))
+		    (set! result (conc "#{(" cmdtype ") "  cmd "}")))		(loop (conc prestr result poststr)))
 	      res))
 	res)))
 
@@ -107,18 +109,21 @@
 	  outres)
 	(begin
 	  (with-output-to-port (current-error-port)
-	    (print "ERROR: " cmd " returned bad exit code " status))
+	    (lambda ()
+	      (print "ERROR: " cmd " returned bad exit code " status)))
 	  ""))))
 
 ;; Lookup a value in runconfigs based on -reqtarg or -target
 (define (runconfigs-get config var)
-  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
+  (let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
     (if targ
 	(or (configf:lookup config targ var)
 	    (configf:lookup config "default" var))
 	(configf:lookup config "default" var))))
 
-(define-inline (configf:read-line p ht allow-processing)
+;; this was inline but I'm pretty sure that is a hold over from when it was *very* simple ...
+;;
+(define (configf:read-line p ht allow-processing)
   (let loop ((inl (read-line p)))
     (let ((cont-line (and (string? inl)
 			  (not (string-null? inl))
@@ -130,10 +135,14 @@
 					 (string-take inl (- (string-length inl) 1))
 					 inl)
 				     nextl))))
-	  (if (and allow-processing 
-		   (not (eq? allow-processing 'return-string)))
-	      (configf:process-line inl ht)
-	      inl)))))
+	  (case allow-processing ;; if (and allow-processing 
+	    ;;	   (not (eq? allow-processing 'return-string)))
+	    ((#t #f)
+	     (configf:process-line inl ht allow-processing))
+	    ((return-string)
+	     inl)
+	    (else
+	     (configf:process-line inl ht allow-processing)))))))
 
 ;; read a config file, returns hash table of alists
 
@@ -271,6 +280,7 @@
       #f))
 
 (define configf:lookup config-lookup)
+(define configf:read-file read-config)
 
 (define (configf:section-vars cfgdat section)
   (let ((sectdat (hash-table-ref/default cfgdat section '())))
@@ -341,7 +351,7 @@
 	      (begin
 		(close-input-port inp)
 		(reverse res))
-	      (loop (read-line inp)(cons inl)))))
+	      (loop (read-line inp)(cons inl res)))))
       '()))
 
 ;;======================================================================
@@ -429,3 +439,56 @@
 	   (print line))
 	 (configf:expand-multi-lines fdat))))))
 
+;;======================================================================
+;; refdb
+;;======================================================================
+
+;; reads a refdb into an assoc array of assoc arrays
+;;   returns (list dat msg)
+(define (configf:read-refdb refdb-path)
+  (let ((sheets-file  (conc refdb-path "/sheet-names.cfg")))
+    (if (not (file-exists? sheets-file))
+	(list #f (conc "ERROR: no refdb found at " refdb-path))
+	(if (not (file-read-access? sheets-file))
+	    (list #f (conc "ERROR: refdb file not readable at " refdb-path))
+	    (let* ((sheets (with-input-from-file sheets-file
+			     (lambda ()
+			       (let loop ((inl (read-line))
+					  (res '()))
+				 (if (eof-object? inl)
+				     (reverse res)
+				     (loop (read-line)(cons inl res)))))))
+		   (data   '()))
+	      (for-each 
+	       (lambda (sheet-name)
+		 (let* ((dat-path  (conc refdb-path "/" sheet-name ".dat"))
+			(ref-dat   (configf:read-file dat-path #f #t))
+			(ref-assoc (map (lambda (key)
+					  (list key (hash-table-ref ref-dat key)))
+					(hash-table-keys ref-dat))))
+				   ;; (hash-table->alist ref-dat)))
+		   (set! data (append data (list (list sheet-name ref-assoc))))))
+	       sheets)
+	      (list data "NO ERRORS"))))))
+
+;; map over all pairs in a three level hierarchial alist and apply a function to the keys/val
+;;
+(define (configf:map-all-hier-alist data proc #!key (initproc1 #f)(initproc2 #f)(initproc3 #f))
+  (for-each 
+   (lambda (sheetname)
+     (let* ((sheettmp  (assoc sheetname data))
+	    (sheetdat  (if sheettmp (cadr sheettmp) '())))
+       (if initproc1 (initproc1 sheetname))
+       (for-each 
+	(lambda (sectionname)
+	  (let* ((sectiontmp  (assoc sectionname sheetdat))
+		 (sectiondat  (if sectiontmp (cadr sectiontmp) '())))
+	    (if initproc2 (initproc2 sheetname sectionname))
+	    (for-each
+	     (lambda (varname)
+	       (let* ((valtmp (assoc varname sectiondat))
+		      (val    (if valtmp (cadr valtmp) "")))
+		 (proc sheetname sectionname varname val)))
+	     (map car sectiondat))))
+	(map car sheetdat))))
+   (map car data)))

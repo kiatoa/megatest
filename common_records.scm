@@ -9,7 +9,26 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use trace)
+;; (use trace)
+
+;; Some of these routines use:
+;;
+;;     http://www.cs.toronto.edu/~gfb/scheme/simple-macros.html
+;;
+;; Syntax for defining macros in a simple style similar to function definiton,
+;;  when there is a single pattern for the argument list and there are no keywords.
+;;
+;; (define-simple-syntax (name arg ...) body ...)
+;;
+
+(define-syntax define-simple-syntax
+  (syntax-rules ()
+    ((_ (name arg ...) body ...)
+     (define-syntax name (syntax-rules () ((name arg ...) (begin body ...)))))))
+
+(define-syntax common:handle-exceptions
+  (syntax-rules ()
+    ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
 
 (define (debug:calc-verbosity vstr)
   (cond
