@@ -1722,9 +1722,19 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
+;; 
 (define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
-  (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+  (debug:print 0 "ERROR: BROKN!")
+  ;; (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+)
 
+;; get a useful subset of the tests data (used in dashboard
+;;
+(define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
+  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path"))
+
+;; do not use.
+;;
 (define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses #!key (not-in #f)(qryvals #f))
   ;; (db:delay-if-busy)
   (let ((res '()))
