@@ -327,8 +327,8 @@
 	    (begin
 	      (db:delay-if-busy rundb)
 	      (db:delay-if-busy olddb)
+	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-		(dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 		(mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
