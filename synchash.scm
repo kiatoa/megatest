@@ -119,7 +119,7 @@
 		     ;; (debug:print-info 2 "Non-get runs call")
 		     (map make-indexed newdat))))
     ;; (debug:print-info 2 "postdat: " postdat)
-    (if (not indb)(sqlite3:finalize! db))
+    ;; (if (not indb)(sqlite3:finalize! db))
     (if (not synchash)
 	(begin
 	  (set! synchash (make-hash-table))

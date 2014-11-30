@@ -288,56 +288,41 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (define *watchdog*
   (make-thread 
    (lambda ()
-     (let loop ()
-       (thread-sleep! 5) ;; five second resolution is only a minor burden and should be tolerable 
+     (thread-sleep! 0.05) ;; delay for startup
+     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db")))
+       (let loop ()
+	 ;; sync for filesystem local db writes
+	 ;;
+	 (let ((start-time      (current-seconds))
+	       (servers-started (make-hash-table)))
+	   (for-each 
+	    (lambda (run-id)
+	      (mutex-lock! *db-multi-sync-mutex*)
+	      (if (and legacy-sync 
+		       (hash-table-ref/default *db-local-sync* run-id #f))
+		  ;; (if (> (- start-time last-write) 5) ;; every five seconds
+		  (begin ;; let ((sync-time (- (current-seconds) start-time)))
+		    (db:multi-db-sync (list run-id) 'new2old)
+		    (if (common:low-noise-print 30 "sync new to old")
+			(let ((sync-time (- (current-seconds) start-time)))
+			  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+		    ;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
+		    ;;     (begin
+		    ;;       (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+		    ;;       (server:kind-run run-id)))))
+		    (hash-table-delete! *db-local-sync* run-id)))
+	      (mutex-unlock! *db-multi-sync-mutex*))
+	    (hash-table-keys *db-local-sync*)))
 
-       ;; sync for filesystem local db writes
-       ;;
-       (let ((start-time (current-seconds)))
-	 (mutex-lock! *db-multi-sync-mutex*)
-	 (for-each 
-	  (lambda (run-id)
-	    (let ((last-write (hash-table-ref/default *db-local-sync* run-id 0)))
-	      (if ;; (and 
-	       (> (- start-time last-write) 5) ;; every five seconds
-	       ;;      (common:db-access-allowed?))
-	       (begin
-		 (db:multi-db-sync (list run-id) 'new2old)
-		 (if (common:low-noise-print 30 "sync new to old")
-		     (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " (- (current-seconds) start-time) " seconds"))
-		 (hash-table-delete! *db-local-sync* run-id)))))
-	  (hash-table-keys *db-local-sync*))
-	 (mutex-unlock! *db-multi-sync-mutex*))
-       
-       ;; keep going unless time to exit
-       ;;
-       (if (not *time-to-exit*)
-	   (loop))))
-   "Watchdog thread"))
+	 ;; keep going unless time to exit
+	 ;;
+	 (if (not *time-to-exit*)
+	     (begin
+	       (thread-sleep! 1) ;; wait one second before syncing again
+	       (loop)))))
+     "Watchdog thread")))
 
 (thread-start! *watchdog*)
-
-(define (std-exit-procedure)
-  (rmt:print-db-stats)
-  (let ((run-ids (hash-table-keys *db-local-sync*)))
-    (if (not (null? run-ids))
-	(db:multi-db-sync run-ids 'new2old)))
-  (if *dbstruct-db* (db:close-all *dbstruct-db*))
-  (if *megatest-db* (begin
-		      (sqlite3:interrupt! *megatest-db*)
-		      (sqlite3:finalize! *megatest-db* #t)))
-  (if *task-db*     (let ((db (vector-ref *task-db* 0)))
-		      (sqlite3:interrupt! db)
-		      (sqlite3:finalize! db #t))))
-
-(define (std-signal-handler signum)
-  (signal-mask! signum)
-  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
-  (std-exit-procedure)
-  (exit))
-
-(set-signal-handler! signal/int std-signal-handler)
-(set-signal-handler! signal/term std-signal-handler)
 
 (if (args:get-arg "-log")
     (let ((oup (open-output-file (args:get-arg "-log"))))
@@ -407,7 +392,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-;; (on-exit std-exit-procedure)
+(on-exit std-exit-procedure)
 
 ;;======================================================================
 ;; Misc general calls
@@ -542,7 +527,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-stop-server"))
     (let ((tl (launch:setup-for-run)))
       (if tl 
-	  (let* ((servers (open-run-close tasks:get-all-servers tasks:open-db))
+	  (let* ((tdbdat  (tasks:open-db))
+		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
 		 (killinfo   (args:get-arg "-stop-server"))
@@ -571,9 +557,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 ;; server
 		 (if (equal? state "dead")
 		     (if (> last-update (* 25 60 60)) ;; keep records around for slighly over a day.
-			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid action: 'delete))
+			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid action: 'delete))
 		     (if (> last-update 20)        ;; Mark as dead if not updated in last 20 seconds
-			 (open-run-close tasks:server-deregister tasks:open-db hostname pullport: pullport pid: pid)))
+			 (tasks:server-deregister (db:delay-if-busy tdbdat) hostname pullport: pullport pid: pid)))
 		 (format #t fmtstr id mt-ver pid hostname (conc interface ":" pullport) pubport last-update
 			 (if status "alive" "dead") transport)
 		 (if (or (equal? id sid)
@@ -812,7 +798,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				 steps)))))
 		      tests)))))
 	     runs)
-	  (db:close-all dbstruct)
+	  ;; (db:close-all dbstruct)
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -1260,11 +1246,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (open-run-close db:clean-up #f)
       (db:multi-db-sync 
        #f ;; do all run-ids
-       'new2old
+       ;; 'new2old
        'killservers
        'dejunk
-       'adj-testids
-       'old2new
+       ;; 'adj-testids
+       ;; 'old2new
        'new2old
        )
       (set! *didsomething* #t)))
@@ -1273,7 +1259,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (if (not (launch:setup-for-run))
 	  (begin
-	    (debug:print 0 "Failed to setup, exiting") 
+	    (debug:print 0 "Failed to setup, exiting") b
 	    (exit 1)))
       (open-run-close db:find-and-mark-incomplete #f)
       (set! *didsomething* #t)))
@@ -1370,7 +1356,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'dejunk
        'adj-testids
        'old2new
-       'new2old
+       ;; 'new2old
        )
       (set! *didsomething* #t)))
 

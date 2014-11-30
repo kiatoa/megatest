@@ -39,6 +39,8 @@
 ;; C O M M O N
 ;;======================================================================
 
+(define *dashboard-comment-share-slot* #f)
+
 (define (dtests:get-pre-command #!key (default-override #f))
   (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
     (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
@@ -293,7 +295,7 @@
 							 #:action (lambda (x)
 								    (let ((t (iup:attribute x "TITLE")))
 								      (if (equal? t "WAIVED")
-									  (iup:show (dashboard-tests:waiver testdat 
+									  (iup:show (dashboard-tests:waiver run-id testdat 
 													    (if wtxtbox (iup:attribute wtxtbox "VALUE") #f)
 													    (lambda (c)
 													      (set! newcomment c)
@@ -353,7 +355,7 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver testdat ovrdval cmtcmd)
+(define (dashboard-tests:waiver run-id testdat ovrdval cmtcmd)
   (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
@@ -395,94 +397,6 @@
 					 (iup:destroy! dlog)))))))
     dlog))
 
-;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
-;;
-;; get a pretty table to summarize steps
-;;
-(define (dashboard-tests:process-steps-table steps);; db test-id #!key (work-area #f))
-;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))
-	   (case (string->symbol (tdb:step-get-state step))
-	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(tdb:step-get-status step)))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (tdb:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (tdb:step-get-state step))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (tdb:step-get-event_time step))))
-	   (hash-table-set! res (tdb:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (tdb:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (tdb:step-get-event_time a)(tdb:step-get-event_time b)) #t)
-		      ((eq? (tdb:step-get-event_time a)(tdb:step-get-event_time b)) 
-		       (<   (tdb:step-get-id a)        (tdb:step-get-id b)))
-		      (else #f)))))
-      res))
-
-(define (dashboard-tests:get-compressed-steps dbstruct run-id test-id)
-  (let* ((steps-data  (db:get-steps-for-test dbstruct run-id test-id))
-	 (comprsteps  (dashboard-tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
-    (map (lambda (x)
-	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
-	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
-	 (sort (hash-table-values comprsteps)
-	       (lambda (a b)
-		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
-		   (if (and (number? time-a)(number? time-b))
-		       (if (< time-a time-b)
-			   #t
-			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
-			       #f))
-		       (string<? (conc time-a)(conc time-b)))))))))
 
 ;;======================================================================
 ;;
@@ -512,7 +426,7 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dashboard-tests:get-compressed-steps dbstruct run-id test-id) '()))
+	       (teststeps     (if testdat (dcommon:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
@@ -569,7 +483,7 @@
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dashboard-tests:get-compressed-steps dbstruct run-id test-id))
+				 (set! teststeps    (dcommon:get-compressed-steps dbstruct run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
@@ -747,42 +661,7 @@
 					 (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
 					 (let ((proc
 						(lambda (testdat)
-						  (let ((max-row 0))
-						  (if (null? teststeps)
-						      (iup:attribute-set! steps-matrix "CLEARVALUE" "CONTENTS")
-						      (let loop ((hed    (car teststeps))
-								 (tal    (cdr teststeps))
-								 (rownum 1)
-								 (colnum 1))
-							  (if (> rownum max-row)(set! max-row rownum))
-							(let ((val     (vector-ref hed (- colnum 1)))
-							      (mtrx-rc (conc rownum ":" colnum)))
-							  (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
-							  (if (< colnum 6)
-							      (loop hed tal rownum (+ colnum 1))
-							      (if (not (null? tal))
-								    (loop (car tal)(cdr tal)(+ rownum 1) 1))))))
-						    (if (> max-row 0)
-							(begin
-							  ;; we are going to speculatively clear rows until we find a row that is already cleared
-							  (let loop ((rownum  (+ max-row 1))
-								     (colnum  0)
-								     (deleted #f))
-							    ;; (debug:print-info 0 "cleaning " rownum ":" colnum)
-							    (let* ((next-row (if (eq? colnum 6) (+ rownum 1) rownum))
-								   (next-col (if (eq? colnum 6) 1 (+ colnum 1)))
-								   (mtrx-rc  (conc rownum ":" colnum))
-								   (curr-val (iup:attribute steps-matrix mtrx-rc)))
-							      ;; (debug:print-info 0 "cleaning " rownum ":" colnum " currval= " curr-val)
-							      (if (and (string? curr-val)
-								       (not (equal? curr-val "")))
-								  (begin
-								    (iup:attribute-set! steps-matrix mtrx-rc "")
-								    (loop next-row next-col #t))
-								  (if (eq? colnum 6) ;; not done, didn't get a full blank row
-								      (if deleted (loop next-row next-col #f)) ;; exit on this not met
-								      (loop next-row next-col deleted)))))
-							  (iup:attribute-set! steps-matrix "REDRAW" "ALL")))))))
+						  (dcommon:populate-steps teststeps steps-matrix))))
 					   (hash-table-set! widgets "StepsMatrix" proc)
 					   (proc testdat))
 					 steps-matrix)

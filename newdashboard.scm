@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format)
+(use format numbers)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
@@ -277,10 +277,13 @@ Misc
 			     (system (conc "cd " rundir 
 					   ";xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
 			   (message-window  (conc "Directory " rundir " not found")))))
-	 (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
-	 (command-launch-button (iup:button "Execute!" #:action (lambda (x)
-								  (let ((cmd (iup:attribute command-text-box "VALUE")))
-								    (system (conc cmd "  &"))))))
+	 (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -12"))
+	 (command-launch-button (iup:button "Execute!" 
+					    ;; #:expand "HORIZONTAL"
+					    #:size "50x"
+					    #:action (lambda (x)
+						       (let ((cmd (iup:attribute command-text-box "VALUE")))
+							 (system (conc cmd "  &"))))))
 	 (run-test  (lambda (x)
 		      (iup:attribute-set! 
 		       command-text-box "VALUE"
@@ -326,9 +329,9 @@ Misc
 			    #:numlin-visible 5))
 	 (steps-matrix     (iup:matrix
 			    #:expand "YES"
-			    #:numcol 5
+			    #:numcol 6
 			    #:numlin 50
-			    #:numcol-visible 5
+			    #:numcol-visible 6
 			    #:numlin-visible 8))
 	 (data-matrix      (iup:matrix
 			    #:expand "YES"
@@ -357,11 +360,14 @@ Misc
     ;; Steps matrix
     (iup:attribute-set! steps-matrix "0:1" "Step Name")
     (iup:attribute-set! steps-matrix "0:2" "Start")
+    (iup:attribute-set! steps-matrix "WIDTH2" "40")
     (iup:attribute-set! steps-matrix "0:3" "End")
-    (iup:attribute-set! steps-matrix "WIDTH3" "50")
+    (iup:attribute-set! steps-matrix "WIDTH3" "40")
     (iup:attribute-set! steps-matrix "0:4" "Status")
-    (iup:attribute-set! steps-matrix "WIDTH4" "50")
-    (iup:attribute-set! steps-matrix "0:5" "Log File")
+    (iup:attribute-set! steps-matrix "WIDTH4" "40")
+    (iup:attribute-set! steps-matrix "0:5" "Duration")
+    (iup:attribute-set! steps-matrix "WIDTH5" "40")
+    (iup:attribute-set! steps-matrix "0:6" "Log File")
     (iup:attribute-set! steps-matrix "ALIGNMENT1" "ALEFT")
     ;; (iup:attribute-set! steps-matrix "FIXTOTEXT" "C1")
     (iup:attribute-set! steps-matrix "RESIZEMATRIX" "YES")
@@ -396,34 +402,42 @@ Misc
       (list test-run-matrix  '("Hostname" "Host info" "Disk Free" "CPU Load" "Run Duration"))
       (list meta-dat-matrix  '("Author"   "Owner"     "Last Reviewed" "Tags" "Description"))))
 	    
-    (iup:vbox
-     (iup:hbox
-      run-info-matrix
-      test-info-matrix)
-     (iup:hbox
-      test-run-matrix
-      meta-dat-matrix)
-     (iup:vbox
+    (iup:split
+      #:orientation "HORIZONTAL"
       (iup:vbox
-       (iup:hbox 
-	(iup:button "View Log"    #:action viewlog     #:size "80x")
-	(iup:button "Start Xterm" #:action xterm       #:size "80x")
-	(iup:button "Run Test"    #:action run-test    #:size "80x")
-	(iup:button "Clean Test"  #:action remove-test #:size "80x"))
-       (apply 
-	iup:hbox
-	(list command-text-box command-launch-button))))
-     (iup:vbox
-      (let ((tabs (iup:tabs
-		   steps-matrix
-		   data-matrix)))
-	(iup:attribute-set! tabs "TABTITLE0" "Test Steps")
-	(iup:attribute-set! tabs "TABTITLE1" "Test Data")
-	tabs)))))
+       (iup:hbox
+	(iup:vbox
+	 run-info-matrix
+	 test-info-matrix)
+       ;; test-info-matrix)
+	(iup:vbox
+	 test-run-matrix
+	 meta-dat-matrix))
+       (iup:vbox
+	(iup:vbox
+	 (iup:hbox 
+	  (iup:button "View Log"    #:action viewlog      #:size "60x" )   ;; #:size "30x" 
+	  (iup:button "Start Xterm" #:action xterm        #:size "60x" ))	 ;; #:size "30x" 
+	 (iup:hbox
+	   (iup:button "Run Test"    #:action run-test    #:size "60x" )	 ;; #:size "30x" 
+	   (iup:button "Clean Test"  #:action remove-test #:size "60x" )))	 ;; #:size "30x" 
+	(iup:hbox
+	 ;; hiup:split ;; hbox
+	 ;; #:orientation "HORIZONTAL"
+	 ;; #:value 300
+	 command-text-box
+	 command-launch-button)))
+      (iup:vbox
+       (let ((tabs (iup:tabs
+		    steps-matrix
+		    data-matrix)))
+	 (iup:attribute-set! tabs "TABTITLE0" "Test Steps")
+	 (iup:attribute-set! tabs "TABTITLE1" "Test Data")
+	 tabs)))))
        
 ;; Test browser
 (define (tests window-id)
-  (iup:hbox 
+  (iup:split
    (let* ((tb      (iup:treebox
 		    #:selection-cb
 		    (lambda (obj id state)
@@ -448,10 +462,14 @@ Misc
   (if testdat
       (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
+	     (run-id       (db:test-get-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
-						   (db:test-get-run_id test-data) '()))
+						   run-id
+						   '()))
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
-	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname)))))
+	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
+	     (steps-dat    (dcommon:get-compressed-steps *dbstruct-local* run-id test-id)))
+				
 	(if test-data
 	    (begin
 	      ;; 
@@ -496,10 +514,11 @@ Misc
 				(db:test-get-cpuload  test-data)
 				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
 			  (make-list 5 "")))
+		))
+	      (dcommon:populate-steps steps-dat steps-matrix))))))
 		;;(list meta-dat-matrix
 		;;      (if test-id
 		;;	  (list (
-		)))))))
 
   
 ;; db:test-get-id           
@@ -562,6 +581,7 @@ Misc
   (iup:dialog
    #:title "Megatest Control Panel"
    #:menu (dcommon:main-menu)
+   #:shrink "YES"
    (let ((tabtop (iup:tabs 
 		  (runs window-id)
 		  (tests window-id)

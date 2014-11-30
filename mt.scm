@@ -170,7 +170,7 @@
   (if (not (and run-id test-id))
       (begin
 	(debug:print 0 "ERROR: bad data handed to mt:test-set-state-status-by-id, run-id=" run-id ", test-id=" test-id ", newstate=" newstate)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	#f)
       (begin
 	(cond

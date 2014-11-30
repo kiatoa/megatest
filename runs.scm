@@ -68,6 +68,7 @@
     (setenv "MT_RUN_AREA_HOME" toppath)
     (setenv "MT_RUNNAME" runname)
     (setenv "MT_TARGET"  target)
+    (setenv "MT_TESTSUITENAME" (common:get-testsuite-name))
     (set! envdat (append 
 		  envdat
 		  (list (list "MT_RUN_AREA_HOME" toppath)
@@ -161,9 +162,9 @@
 	#f)))
 
 (define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
-  (thread-sleep! (cond
-		  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
-		  (else 0)))
+  ;;(thread-sleep! (cond
+  ;;      	  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
+  ;;      	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
 	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
@@ -215,21 +216,22 @@
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
 	 (required-tests     #f)  ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
-	 (tasks-db           (tasks:open-db)))
+	 (tdbdat             (tasks:open-db)))
+
+    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
 			   (signal-mask! signum)
-			   (let ((tdb (tasks:open-db)))
-			     (tasks:set-state-given-param-key tdb task-key "killed")
-			     ;; (sqlite3:interrupt! tdb) ;; seems silly?
-			     (sqlite3:finalize! tdb))
+			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
+			   (let ((tdbdat (tasks:open-db)))
+			     (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
-    (tasks:add tasks-db "run-tests" user target runname test-patts task-key) ;; params)
-    (tasks:set-state-given-param-key tasks-db task-key "running")
+    (tasks:add (db:delay-if-busy tdbdat) "run-tests" user target runname test-patts task-key) ;; params)
+    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -394,8 +396,9 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (tasks:set-state-given-param-key tasks-db task-key "done")
-    (sqlite3:finalize! tasks-db)))
+    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "done")
+    ;; (sqlite3:finalize! tasks-db)
+    ))
 
 
 ;; loop logic. These are used in runs:run-tests-queue to make it a bit more readable.
@@ -553,10 +556,12 @@
      ((and (null? fails)
 	   (null? prereq-fails)
 	   (null? non-completed))
-      (if  (runs:can-keep-running? hed 5)
+      (if  (runs:can-keep-running? hed 20)
 	  (begin
 	    (runs:inc-cant-run-tests hed)
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but also none running, keeping " hed " for now. Try count: " (hash-table-ref/default *seen-cant-run-tests* hed 0))
+	    ;; getting here likely means the system is way overloaded, kill a full minute before continuing
+	    (thread-sleep! 60)
 	    ;; num-retries code was here
 	    ;; we use this opportunity to move contents of reg to tal
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
@@ -671,23 +676,20 @@
      ;;
      ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
-      (if #t ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
+      ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
+      (let register-loop ((numtries 15))
+	(rmt:general-call 'register-test run-id run-id test-name item-path)
+	(thread-sleep! 0.5)
+	(if (rmt:get-test-id run-id test-name item-path)
+	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+	    (if (> numtries 0)
+		(register-loop (- numtries 1))
+		(debug:print 0 "ERROR: failed to register test " (runs:make-full-test-name test-name item-path)))))
+      (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
 	  (begin
-	    (rmt:general-call 'register-test run-id run-id test-name item-path)
-	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done))
-	  (let ((th (make-thread (lambda ()
-				   (mutex-lock! registry-mutex)
-				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'start)
-				   (mutex-unlock! registry-mutex)
-				   ;; If haven't done it before register a top level test if this is an itemized test
-				   (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
-				       (rmt:general-call 'register-test run-id run-id test-name ""))
-				   (rmt:general-call 'register-test run-id run-id test-name item-path)
-				   (mutex-lock! registry-mutex)
-				   (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
-				   (mutex-unlock! registry-mutex))
-				 (conc test-name "/" item-path))))
-	    (thread-start! th)))
+	    (rmt:general-call 'register-test run-id run-id test-name "")
+	    (if (rmt:get-test-id run-id test-name "")
+		(hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done))))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)
@@ -892,7 +894,8 @@
 				     1))) ;; length of the register queue ahead
 	(reglen                (if (number? reglen-in) reglen-in 1))
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
-	(last-time-some-running (current-seconds)))
+	(last-time-some-running (current-seconds))
+	(tdbdat                (tasks:open-db)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -940,7 +943,12 @@
 	     (regfull     (>= (length reg) reglen))
 	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
 
-      (if (> num-running 0)
+	;; every couple minutes verify the server is there for this run
+	(if (and (common:low-noise-print 60 "try start server"  run-id)
+		 (tasks:need-server run-id))
+	    (tasks:start-and-wait-for-server tdbdat run-id 10))
+	
+	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
       (if (> (current-seconds)(+ last-time-some-running 240))
@@ -1118,7 +1126,7 @@
 		  (rmt:find-and-mark-incomplete run-id #f)))
 	    (if (not (eq? num-running prev-num-running))
 		(debug:print-info 0 "run-wait specified, waiting on " num-running " tests in RUNNING, REMOTEHOSTSTART or LAUNCHED state at " (time->string (seconds->local-time (current-seconds)))))
-	    (thread-sleep! 15)
+	    (thread-sleep! 5)
 	    ;; (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
 	    (wait-loop (rmt:get-count-tests-running-for-run-id run-id) num-running))))
     ;; LET* ((test-record
@@ -1398,7 +1406,7 @@
 (define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (tasks-db     (tasks:open-db))
+	 (tdbdat       (tasks:open-db))
 	 (keys         (rmt:get-keys))
 	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))
@@ -1435,12 +1443,14 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
+		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
-			(tasks:kill-runner tasks-db target run-name)
+			(tasks:kill-runner (db:delay-if-busy tdbdat) target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
+		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((print-run)
 		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
@@ -1550,7 +1560,8 @@
 		       )))))
 	 ))
      runs)
-    (sqlite3:finalize! tasks-db))
+    ;; (sqlite3:finalize! (db:delay-if-busy tdbdat))
+    )
   #t)
 
 (define (runs:remove-test-directory db test remove-data-only)

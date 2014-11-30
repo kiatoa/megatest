@@ -66,7 +66,7 @@
 	       (ezsteps   (assoc/default 'ezsteps   cmdinfo))
 	       ;; (runremote (assoc/default 'runremote cmdinfo))
 	       (transport (assoc/default 'transport cmdinfo))
-	       (serverinf (assoc/default 'serverinf cmdinfo))
+	       ;; (serverinf (assoc/default 'serverinf cmdinfo))
 	       (port      (assoc/default 'port      cmdinfo))
 	       (run-id    (assoc/default 'run-id    cmdinfo))
 	       (test-id   (assoc/default 'test-id   cmdinfo))
@@ -101,7 +101,9 @@
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
 	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-		(debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")))
+		(begin
+		  (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
+		  (exit))))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
@@ -114,6 +116,11 @@
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
 	  (change-directory *toppath*) 
+
+	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
+	  ;;       seems non-ideal but could well break stuff
+	  ;;    BUG? BUG? BUG?
+
 	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
@@ -160,7 +167,9 @@
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
-	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))))
+	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
+	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
+
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
 	  ;; (change-directory top-path)
 	  ;; Can setup as client for server mode now
@@ -495,15 +504,15 @@
 	   (let* ((dirpath    (cadr (assoc disk-num disks)))
 		  (freespc    (cond
 			       ((not (directory? dirpath))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not a dir " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
 				-1)
 			       ((not (file-write-access? dirpath))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not writeable " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
 				-1)
 			       ((not (eq? (string-ref dirpath 0) #\/))
-				(if (common:low-noise-print 20 "disks" disk-num)
+				(if (common:low-noise-print 50 "disks not a proper path " disk-num)
 				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
 				-1)
 			       (else
@@ -660,7 +669,7 @@
 	  (handle-exceptions
 	   exn
 	   (begin
-	     (debug:print 0 "ERROR:  Failed to re-create link " linktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
+	     (debug:print 0 "ERROR:  Failed to re-create link " lnktarget ((condition-property-accessor 'exn 'message) exn) ", exiting")
 	     (exit))
 	   (if (symbolic-link? lnktarget)     (delete-file lnktarget))
 	   (if (not (file-exists? lnktarget)) (create-symbolic-link test-path lnktarget)))))
@@ -782,7 +791,7 @@
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
 				      (list 'transport (conc *transport-type*))
-				      (list 'serverinf *server-info*)
+				      ;; (list 'serverinf *server-info*)
 				      (list 'toppath   *toppath*)
 				      (list 'work-area work-area)
 				      (list 'test-name test-name) 

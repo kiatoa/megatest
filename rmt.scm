@@ -55,55 +55,71 @@
 	       #t)
 	     #f))))
 
+(define (rmt:get-connection-info run-id)
+  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+    (if cinfo
+	cinfo
+	;; NB// can cache the answer for server running for 10 seconds ...
+	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
+	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
+	    (client:setup run-id)
+	    #f))))
+
 ;; cmd is a symbol
 ;; vars is a json string encoding the parameters for the call
 ;;
-(define (rmt:send-receive cmd rid params)
+(define (rmt:send-receive cmd rid params #!key (attemptnum 0))
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) 60)))
     (for-each 
      (lambda (run-id)
        (let ((connection (hash-table-ref/default *runremote* run-id #f)))
-	 (if ;; (and connection 
-		  (< (http-transport:server-dat-get-last-access connection) expire-time) ; )
+	 (if (and connection 
+		  (< (http-transport:server-dat-get-last-access connection) expire-time))
 	     (begin
 	       (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
 	       (hash-table-delete! *runremote* run-id)))))
      (hash-table-keys *runremote*)))
   (mutex-unlock! *db-multi-sync-mutex*)
   (let* ((run-id          (if rid rid 0))
-	 (connection-info (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
-			    (if cinfo
-				cinfo
-				;; NB// can cache the answer for server running for 10 seconds ...
-				;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-				(if (tasks:server-running-or-starting? (tasks:get-db) run-id)
-				    (let ((res (client:setup run-id)))
-				      (if res 
-					  (hash-table-ref/default *runremote* run-id #f) ;; client:setup filled this in (hopefully)
-					  #f))
-				    #f))))
+	 (connection-info (rmt:get-connection-info run-id))
 	 (jparams         (db:obj->string params)))
     (if connection-info
-	(let ((res             (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+	;; use the server if have connection info
+	(let* ((dat     (http-transport:client-api-send-receive run-id connection-info cmd jparams))
+	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f))
+	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f)))
 	  (http-transport:server-dat-update-last-access connection-info)
-	  (if res
+	  (if success
 	      (db:string->obj res)
-	      (let ((new-connection-info (client:setup run-id)))
+	      ;; (if (< attemptnum 100)
+	      ;;     (begin
+	      ;;       (hash-table-delete! *runremote* run-id)
+	      ;;       (thread-sleep! 0.5)
+	      ;;       (rmt:send-receive cmd rid params attempnum: (+ attemptnum 1)))
+	      ;;     (begin
+	      ;;       (print-call-chain (current-error-port))
+	      ;;       (debug:print 0 "ERROR: too many attempts to communicate have failed. Giving up. Kill your mtest processes and start over")
+	      ;;       (exit 1)))))
+	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to http-transport:client-api-send-receive again.")
-		(rmt:send-receive cmd run-id params))))
-	(let ((max-avg-qry (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "-1"))))
-	  (debug:print-info 4 "no server and read-only query, bypassing normal channel")
-	  ;; (if (rmt:write-frequency-over-limit? cmd run-id)(server:kind-run run-id))
-	  (let ((curr-max (rmt:get-max-query-average)))
-	    (if (> (cdr curr-max) max-avg-qry)
-		(begin
-		  (debug:print-info 3 "Max average query, " (inexact->exact (round (cdr curr-max))) "ms (" (car curr-max) ") exceeds " max-avg-qry ", try starting server ...")
-		  (server:kind-run run-id))))
-	  (rmt:open-qry-close-locally cmd run-id params)))))
+		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
 
-(define (rmt:update-db-stats rawcmd params duration)
+		;; no longer killing the server in http-transport:client-api-send-receive
+		;; may kill it here but what are the criteria?
+		;; start with three calls then kill server
+		(if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
+		(thread-sleep! 2)
+		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
+	(if (and (< attemptnum 10)
+		 (tasks:need-server run-id))
+	    (begin
+	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+	      (rmt:send-receive cmd rid params (+ attemptnum 1)))
+	    (rmt:open-qry-close-locally cmd run-id params)))))
+
+(define (rmt:update-db-stats run-id rawcmd params duration)
   (mutex-lock! *db-stats-mutex*)
   (handle-exceptions
    exn
@@ -112,7 +128,7 @@
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (print "exn=" (condition->list exn))
      #f) ;; if this fails we don't care, it is just stats
-   (let* ((cmd      (if (eq? rawcmd 'general-call) (car params) rawcmd))
+   (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
 	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
      (if (not stat-vec)
 	 (let ((newvec (vector 0 0)))
@@ -135,25 +151,28 @@
 		      (> (vector-ref (hash-table-ref *db-stats* a) 0)
 			 (vector-ref (hash-table-ref *db-stats* b) 0)))))))
 
-(define (rmt:get-max-query-average)
+(define (rmt:get-max-query-average run-id)
   (mutex-lock! *db-stats-mutex*)
-  (let* ((cmds (hash-table-keys *db-stats*))
-	 (res  (if (null? cmds)
-		   (cons 'none 0)
-		   (let loop ((cmd (car cmds))
-			      (tal (cdr cmds))
-			      (max-cmd (car cmds))
-			      (res 0))
-		     (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
-			    (tot     (vector-ref cmd-dat 0))
-			    (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction
-			    (currmax (max res curravg))
-			    (newmax-cmd (if (> curravg res) cmd max-cmd)))
-		       (if (null? tal)
-			   (if (> tot 10)
-			       (cons newmax-cmd currmax)
-			       (cons 'none 0))
-			   (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
+  (let* ((runkey (conc "run-id=" run-id " "))
+	 (cmds   (filter (lambda (x)
+			   (substring-index runkey x))
+			 (hash-table-keys *db-stats*)))
+	 (res    (if (null? cmds)
+		     (cons 'none 0)
+		     (let loop ((cmd (car cmds))
+				(tal (cdr cmds))
+				(max-cmd (car cmds))
+				(res 0))
+		       (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
+			      (tot     (vector-ref cmd-dat 0))
+			      (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction
+			      (currmax (max res curravg))
+			      (newmax-cmd (if (> curravg res) cmd max-cmd)))
+			 (if (null? tal)
+			     (if (> tot 10)
+				 (cons newmax-cmd currmax)
+				 (cons 'none 0))
+			     (loop (car tal)(cdr tal) newmax-cmd currmax)))))))
     (mutex-unlock! *db-stats-mutex*)
     res))
 	  
@@ -169,23 +188,26 @@
     (let* ((start         (current-milliseconds))
 	   (res           (api:execute-requests dbstruct-local (symbol->string cmd) params))
 	   (duration      (- (current-milliseconds) start)))
-      (rmt:update-db-stats cmd params duration)
+      (rmt:update-db-stats run-id cmd params duration)
       ;; mark this run as dirty if this was a write
       (if (not (member cmd api:read-only-queries))
 	  (let ((start-time (current-seconds)))
 	    (mutex-lock! *db-multi-sync-mutex*)
-	    (if (not (hash-table-ref/default *db-local-sync* run-id #f))
-		(hash-table-set! *db-local-sync* run-id start-time)) ;; the oldest "write"
+	    ;; (if (not (hash-table-ref/default *db-local-sync* run-id #f))
+	    ;; just set it every time. Is a write more expensive than a read and does it matter?
+	    (hash-table-set! *db-local-sync* (or run-id 0) start-time) ;; the oldest "write"
 	    (mutex-unlock! *db-multi-sync-mutex*)))
       res)))
 
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
-	 (jparams         (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
-    (if res
-	(db:string->obj res)
-	res)))
+	 (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
+	 (dat      (http-transport:client-api-send-receive run-id connection-info cmd jparams)))
+    (if (and dat (vector-ref dat 0))
+	(db:string->obj (vector-ref dat 1))
+	(begin
+	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
+	  dat))))
 
 ;; Wrap json library for strings (why the ports crap in the first place?)
 (define (rmt:dat->json-str dat)
@@ -267,7 +289,7 @@
       (rmt:send-receive 'get-test-info-by-id run-id (list run-id test-id))
       (begin
 	(debug:print 0 "WARNING: Bad data handed to rmt:get-test-info-by-id run-id=" run-id ", test-id=" test-id)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	#f)))
 
 (define (rmt:test-get-rundir-from-test-id run-id test-id)
@@ -292,16 +314,53 @@
       (rmt:send-receive 'get-tests-for-run run-id (list run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals))
       (begin
 	(debug:print "ERROR: rmt:get-tests-for-run called with bad run-id=" run-id)
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	'())))
 
+;; IDEA: Threadify these - they spend a lot of time waiting ...
+;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-  (let ((run-id-list (if run-ids
+  (let ((multi-run-mutex (make-mutex))
+	(run-id-list (if run-ids
 			 run-ids
-			 (rmt:get-all-run-ids))))
-    (apply append (map (lambda (run-id)
-			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
-		       run-id-list))))
+			 (rmt:get-all-run-ids)))
+	(result      '()))
+    (if (null? run-id-list)
+	'()
+	(for-each 
+	 (lambda (th)
+
+	   (thread-join! th)) ;; I assume that joining completed threads just moves on
+	 (let loop ((hed     (car run-id-list))
+		    (tal     (cdr run-id-list))
+		    (threads '()))
+	   (let* ((newthread (make-thread
+			      (lambda ()
+				(let ((res (rmt:send-receive 'get-tests-for-run-mindata hed (list hed testpatt states status not-in))))
+				  (if (list? res)
+				      (begin
+					(mutex-lock! multi-run-mutex)
+					(set! result (append result res))
+					(mutex-unlock! multi-run-mutex))
+				      (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+			      (conc "multi-run-thread for run-id " hed)))
+		  (newthreads (cons newthread threads)))
+	     (thread-start! newthread)
+	     (thread-sleep! 0.5) ;; give that thread some time to start
+	     (if (null? tal)
+		 newthreads
+		 (loop (car tal)(cdr tal) newthreads))))))
+    result))
+
+;; ;; IDEA: Threadify these - they spend a lot of time waiting ...
+;; ;;
+;; (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+;;   (let ((run-id-list (if run-ids
+;; 			 run-ids
+;; 			 (rmt:get-all-run-ids))))
+;;     (apply append (map (lambda (run-id)
+;; 			 (rmt:send-receive 'get-tests-for-run-mindata run-id (list run-ids testpatt states status not-in)))
+;; 		       run-id-list))))
 
 (define (rmt:delete-test-records run-id test-id)
   (rmt:send-receive 'delete-test-records run-id (list run-id test-id)))

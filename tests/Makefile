@@ -21,7 +21,10 @@ VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
 NEWTARGET  = "$(OS)/$(FS)/$(VER)"
 TARGET     = "ubuntu/nfs/none"
 
-all : test1 test2 test3 test4 test5 test6 test7 test8 test9
+all : unit test1 test2 test3 test4 test5 test6 test7 test8 test9
+
+unit :
+	./rununittest.sh basicserver $(DEBUG)
 
 server :
 	cd ..;make -j;make install
@@ -168,6 +171,9 @@ fullprep : cleanprep
 dashboard : cleanprep
 	cd fullrun && $(BINPATH)/dashboard -rows $(ROWS) &
 
+newdashboard : cleanprep
+	cd fullrun && $(BINPATH)/newdashboard &
+
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 
@@ -176,7 +182,7 @@ clean  :
 
 kill :
 	killall -v mtest main.sh dboard || true
-	rm -rf *run/db/* */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* fullrun/tmp/mt_*/.db* fullrun/logs/*.log fullrun/*.log || true
+	rm -rf /tmp/.$(USER)-portlogger.db *run/db/* */megatest.db */logging.db */monitor.db fullrun/tmp/mt_*/* fullrun/tmp/mt_*/.db* fullrun/logs/*.log fullrun/*.log || true
 	killall -v mtest dboard || true
 
 hardkill : kill

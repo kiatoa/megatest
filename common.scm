@@ -162,7 +162,7 @@
     exn
     (begin
       (debug:print 0 "ERROR: received bad encoded string \"" instr "\", message: " ((condition-property-accessor 'exn 'message) exn))
-      (print-call-chain)
+      (print-call-chain (current-error-port))
       #f)
     (read (open-input-string (base64:base64-decode instr))))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
@@ -190,11 +190,12 @@
     (5 "WAIVED")
     (6 "SKIP")
     (7 "DELETED")
-    (8 "STUCK/DEAD")))
+    (8 "STUCK/DEAD")
+    (9 "ABORT")))
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT))
 
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
@@ -212,8 +213,42 @@
     (if res (cadr res)(if (null? default) #f (car default)))))
 
 (define (common:get-testsuite-name)
-  (or (configf:lookup *configdat* "server" "testsuite" )
+  (or (configf:lookup *configdat* "setup" "testsuite" )
        (pathname-file *toppath*)))
+
+;;======================================================================
+;; E X I T   H A N D L I N G
+;;======================================================================
+
+(define (std-exit-procedure)
+  (debug:print-info 2 "starting exit process, finalizing databases.")
+  (rmt:print-db-stats)
+  (let ((run-ids (hash-table-keys *db-local-sync*)))
+    (if (and (not (null? run-ids))
+	     (configf:lookup *configdat* "setup" "megatest-db"))
+	(db:multi-db-sync run-ids 'new2old)))
+  (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if (and *megatest-db*
+	   (sqlite3:database? *megatest-db*))
+      (begin
+	(sqlite3:interrupt! *megatest-db*)
+	(sqlite3:finalize! *megatest-db* #t)
+	(set! *megatest-db* #f)))
+  (if *task-db*     (let ((db (cdr *task-db*)))
+		      (if (sqlite3:database? db)
+			  (begin
+			    (sqlite3:interrupt! db)
+			    (sqlite3:finalize! db #t)
+			    (vector-set! *task-db* 0 #f))))))
+
+(define (std-signal-handler signum)
+  (signal-mask! signum)
+  (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
+  ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
+  (exit))
+
+(set-signal-handler! signal/int std-signal-handler)
+(set-signal-handler! signal/term std-signal-handler)
 
 ;;======================================================================
 ;; Misc utils
@@ -606,4 +641,5 @@
    ((equal? status "KILLED")  "orange")
    ((equal? status "KILLREQ") "purple")
    ((equal? status "RUNNING") "blue")
+   ((equal? status "ABORT")   "brown")
    (else "black")))

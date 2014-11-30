@@ -257,7 +257,7 @@ Version: " megatest-fossil-hash)) ;; "
         (print " message: " ((condition-property-accessor 'exn 'message) exn))
         (print "exn=" (condition->list exn))
         (print " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-        (print-call-chain)
+        (print-call-chain (current-error-port))
         (thread-sleep! sleep-time)
         (print "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
      (apply open-run-close-exception-handling proc idb params))

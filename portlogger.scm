@@ -10,10 +10,11 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking)
+(use sqlite3 srfi-1 posix srfi-69 hostinfo dot-locking z3)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit portlogger))
+(declare (uses db))
 
 ;; lsof -i
 
@@ -28,16 +29,24 @@
 			 (sqlite3:open-database fname))))
 	 (handler  (make-busy-timeout 136000))
 	 (canwrite (file-write-access? fname)))
+	 ;; (db-init  (lambda ()
+	 ;;             (sqlite3:execute 
+	 ;;              db
+	 ;;              "CREATE TABLE IF NOT EXISTS ports (
+         ;;                 port INTEGER PRIMARY KEY,
+         ;;                 state TEXT DEFAULT 'not-used',
+         ;;                 fail_count INTEGER DEFAULT 0,
+         ;;                 update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))))
     (sqlite3:set-busy-handler! db handler)
-    (sqlite3:execute db "PRAGMA synchronous = 0;")
-    (if (not exists)
-	(sqlite3:execute 
-	 db
-	 "CREATE TABLE IF NOT EXISTS ports (
+    (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+    ;; (if (not exists) ;; needed with IF NOT EXISTS?
+    (sqlite3:execute 
+     db
+     "CREATE TABLE IF NOT EXISTS ports (
             port INTEGER PRIMARY KEY,
             state TEXT DEFAULT 'not-used',
             fail_count INTEGER DEFAULT 0,
-            update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))
+            update_time TIMESTAMP DEFAULT (strftime('%s','now')) );")
     db))
 
 (define (portlogger:open-run-close proc . params)
@@ -50,7 +59,8 @@
        (debug:print 0 "ERROR: portlogger:open-run-close failed. " proc " " params)
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 "exn=" (condition->list exn))
-       (print-call-chain))
+       (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
+       (print-call-chain (current-error-port)))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
 	    (db     (portlogger:open-db fname))
 	    (res    (apply proc db params)))
@@ -96,7 +106,7 @@
      (debug:print 0 "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (debug:print 0 "exn=" (condition->list exn))
-     (print-call-chain)
+     (print-call-chain (current-error-port))
      (debug:print 0 "Continuing anyway.")
      #f)
    (sqlite3:fold-row
@@ -121,7 +131,7 @@
        (debug:print 0 "EXCEPTION: portlogger database probably overloaded or unreadable. If you see this message again remove /tmp/.$USER-portlogger.db")
        (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
        (debug:print 0 "exn=" (condition->list exn))
-       (print-call-chain)
+       (print-call-chain (current-error-port))
        (debug:print 0 "Continuing anyway."))
      (portlogger:take-port db portnum))
     portnum))
@@ -152,7 +162,7 @@
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (print "exn=" (condition->list exn))
 	     (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-	     (print-call-chain))
+	     (print-call-chain (current-error-port)))
 	   (cond
 	    ((> numargs 1) ;; most commands
 	     (case (string->symbol (car args)) ;; commands with two or more params

@@ -1047,7 +1047,7 @@ Misc
 			(let* ((toolpath (car (argv)))
 			       (key      (conc lin ":" col))
 			       (test-id  (hash-table-ref/default cell-lookup key -1))
-			       (cmd      (conc toolpath " -test " test-id "&")))
+			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
@@ -1237,7 +1237,9 @@ Misc
 		(set! *hide-not-hide-button* hideit)
 		hideit))
 	     (iup:hbox
-	      (iup:button "Quit"      #:action (lambda (obj)(if *dbstruct-local* (db:close-all *dbstruct-local*))(exit)))
+	      (iup:button "Quit"      #:action (lambda (obj)
+						 ;; (if *dbstruct-local* (db:close-all *dbstruct-local*))
+						 (exit)))
 	      (iup:button "Refresh"   #:action (lambda (obj)
 						 (mark-for-update)))
 	      (iup:button "Collapse"  #:action (lambda (obj)
@@ -1453,8 +1455,7 @@ Misc
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
-(let ((db (tasks:open-db)))
-  (sqlite3:finalize! db))
+(tasks:open-db)
 
 (define (dashboard:get-youngest-run-db-mod-time)
   (handle-exceptions
@@ -1520,8 +1521,7 @@ Misc
     (if runid
 	(begin
 	  (lambda (x)
-	    (on-exit (lambda ()
-		       (if *dbstruct-local* (db:close-all *dbstruct-local*))))
+	    (on-exit std-exit-procedure)
 	    (examine-run *dbstruct-local* runid)))
 	(begin
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))

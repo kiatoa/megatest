@@ -34,6 +34,24 @@
 (define *number-of-writes* 0)
 (define *number-non-write-queries* 0)
 
+;;======================================================================
+;; SQLITE3 HELPERS
+;;======================================================================
+
+;; convert to -inline
+(define (db:first-result-default db stmt default . params)
+  (handle-exceptions
+   exn
+   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
+     (if (eq? err-status 'done)
+	 default
+	 (begin
+	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+	   (print-call-chain (current-error-port))
+	   default)))
+   (apply sqlite3:first-result db stmt params)))
+
 ;; Get/open a database
 ;;    if run-id => get run specific db
 ;;    if #f     => get main db
@@ -46,14 +64,24 @@
       dbstruct
       (begin
 	(mutex-lock! *rundb-mutex*)
-	(let ((db (if (or (not run-id)
-			  (eq? run-id 0))
-		      (db:open-main dbstruct)
-		      (db:open-rundb dbstruct run-id)
-		      )))
+	(let ((dbdat (if (or (not run-id)
+			     (eq? run-id 0))
+			 (db:open-main dbstruct)
+			 (db:open-rundb dbstruct run-id)
+			 )))
 	  ;; db prunning would go here
 	  (mutex-unlock! *rundb-mutex*)
-	  db))))
+	  dbdat))))
+
+(define (db:dbdat-get-db dbdat)
+  (if (pair? dbdat)
+      (car dbdat)
+      dbdat))
+
+(define (db:dbdat-get-path dbdat)
+  (if (pair? dbdat)
+      (cdr dbdat)
+      #f))
 
 ;; mod-read:
 ;;     'mod   modified data
@@ -73,18 +101,19 @@
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
 (define (db:with-db dbstruct run-id r/w proc . params)
-  (let* ((db    (db:get-db dbstruct run-id))
-	 )
-    ;; (proc2 (lambda ()
-    (let ((res (apply proc db params)))
-      (db:done-with dbstruct run-id r/w)
-      res)))
-;;     (handle-exceptions
-;;      exn
-;;      (begin
-;;        (thread-sleep! 10)
-;;        (proc2))
-;;      (proc2))))
+  (let* ((dbdat (if (vector? dbstruct)
+		    (db:get-db dbstruct run-id)
+		    dbstruct)) ;; cheat, allow for passing in a dbdat
+	 (db    (db:dbdat-get-db dbdat)))
+    (db:delay-if-busy dbdat)
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (print-call-chain (current-error-port)))
+     (let ((res (apply proc db params)))
+       (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
+       res))))
 
 ;;======================================================================
 ;; K E E P   F I L E D B   I N   dbstruct
@@ -101,7 +130,7 @@
 ;; ;; Can also be used to save arbitrary strings
 ;; ;;
 ;; (define (db:save-path dbstruct path)
-;;   (let ((fdb (db:get-filedb dbstruct)))
+;;   (let ((fdb (db:get-filedb dbstruct)))b
 ;;     (filedb:register-path fdb path)))
 ;; 
 ;; ;; Use to get a path. To get an arbitrary string see next define
@@ -125,6 +154,10 @@
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (conc dbdir fname)))
 	       
+(define (db:set-sync db)
+  (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
+    (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";"))))
+
 ;; open an sql database inside a file lock
 ;;
 ;; returns: db existed-prior-to-opening
@@ -133,16 +166,16 @@
   (if (file-exists? fname)
       (let ((db (sqlite3:open-database fname)))
 	(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	(sqlite3:execute db "PRAGMA synchronous = 0;")
+	(db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	db)
       (let* ((parent-dir   (pathname-directory fname))
 	     (dir-writable (file-write-access? parent-dir)))
 	(if dir-writable
-	    (let ((lock    (obtain-dot-lock fname 1 5 10))
-		  (exists  (file-exists? fname))
+	    (let ((exists  (file-exists? fname))
+		  (lock    (obtain-dot-lock fname 1 5 10))
 		  (db      (sqlite3:open-database fname)))
 	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (sqlite3:execute db "PRAGMA synchronous = 0;")
+	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	      (if (not exists)(initproc db))
 	      (release-dot-lock fname)
 	      db)
@@ -152,26 +185,36 @@
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
-(define (db:open-rundb dbstruct run-id) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((local  (dbr:dbstruct-get-local dbstruct))
 	 (rdb    (if local
 		     (dbr:dbstruct-get-localdb dbstruct run-id)
 		     (dbr:dbstruct-get-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
-    (if rdb
+    (if (or rdb
+	    do-not-open)
 	rdb
 	(let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
-	       (db           (db:lock-create-open dbpath 
+	       (db           (db:lock-create-open dbpath ;; this is the database physically on disk
 						  (lambda (db)
-						    (db:initialize-run-id-db db)
-						    (sqlite3:execute 
-						     db
-						     "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-						     (* run-id 30000) ;; allow for up to 30k tests per run
-						     run-id)
-						    ))) ;; add strings db to rundb, not in use yet
+						    (handle-exceptions
+						     exn
+						     (begin
+						       (release-dot-lock dbpath)
+						       (if (> attemptnum 2)
+							   (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+							   (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
+						     (db:initialize-run-id-db db)
+						     (sqlite3:execute 
+						      db
+						      "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+						      (* run-id 30000) ;; allow for up to 30k tests per run
+						      run-id)
+						     ;; do a dummy query to test that the table exists and the db is truly readable
+						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+						    )))) ;; add strings db to rundb, not in use yet
 	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (if *megatest-db*
 				 *megatest-db* 
@@ -183,7 +226,7 @@
 	       )
 	  (if (and dbexists (not write-access))
 	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	  (dbr:dbstruct-set-rundb!  dbstruct db)
+	  (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
 	  (dbr:dbstruct-set-inuse!  dbstruct #t)
 	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
 	  ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
@@ -193,8 +236,13 @@
 		db)
 	      (begin
 		(dbr:dbstruct-set-inmem!  dbstruct inmem)
+		(sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
 		(db:sync-tables db:sync-tests-only db inmem)
+		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb))
 		(dbr:dbstruct-set-refdb!  dbstruct refdb)
+		(db:sync-tables db:sync-tests-only db refdb)
+		;; sync once more to deal with delays
+		(db:sync-tables db:sync-tests-only db inmem)
 		(db:sync-tables db:sync-tests-only db refdb)
 		inmem))))))
 
@@ -208,12 +256,13 @@
 	       (dbexists     (file-exists? dbpath))
 	       (db           (db:lock-create-open dbpath db:initialize-main-db))
 	       (olddb        (db:open-megatest-db))
-	       (write-access (file-write-access? dbpath)))
+	       (write-access (file-write-access? dbpath))
+	       (dbdat        (cons db dbpath)))
 	  (if (and dbexists (not write-access))
 	      (set! *db-write-access* #f))
-	  (dbr:dbstruct-set-main!   dbstruct db)
-	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
-	  db))))
+	  (dbr:dbstruct-set-main!   dbstruct dbdat)
+	  (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
+	  dbdat))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
@@ -234,7 +283,7 @@
 	 (write-access (file-write-access? dbpath)))
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
-    db))
+    (cons db dbpath)))
 
 ;; sync run to disk if touched
 ;;
@@ -249,6 +298,7 @@
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
     (debug:print-info 4 "Syncing for run-id: " run-id)
+    (mutex-lock! *http-mutex*)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
 	(if maindb
@@ -256,10 +306,13 @@
 		    (not (number? stime))
 		    (> mtime stime)
 		    force-sync)
-		(let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
-		  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-		  num-synced)
-		0)
+		(begin
+		  (db:delay-if-busy maindb)
+		  (db:delay-if-busy olddb)
+		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		    num-synced)
+		  0))
 	    (begin
 	      ;; this can occur when using local access (i.e. not in a server)
 	      ;; need a flag to turn it off.
@@ -271,10 +324,32 @@
 		(not (number? stime))
 		(> mtime stime)
 		force-sync)
-	    (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-	      num-synced)
-	    0))))
+	    (begin
+	      (db:delay-if-busy rundb)
+	      (db:delay-if-busy olddb)
+	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+		(dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+		(mutex-unlock! *http-mutex*)
+		num-synced)
+	      (begin
+		(mutex-unlock! *http-mutex*)
+		0))))))
+
+(define (db:close-main dbstruct)
+  (let ((maindb (dbr:dbstruct-get-main dbstruct)))
+    (if maindb
+	(begin
+	  (sqlite3:finalize! (db:dbdat-get-db maindb))
+	  (dbr:dbstruct-set-main! dbstruct #f)))))
+
+(define (db:close-run-db dbstruct run-id)
+  (let ((rdb (db:open-rundb dbstruct run-id do-not-open: #t)))
+    (if (and rdb
+	     (sqlite3:database? rdb))
+	(begin
+	  (sqlite3:finalize! rdb)
+	  (dbr:dbstruct-set-localdb! dbstruct run-id #f)
+	  (dbr:dbstruct-set-inmem! dbstruct #f)))))
 
 ;; close all opened run-id dbs
 (define (db:close-all dbstruct)
@@ -282,31 +357,41 @@
   (db:sync-touched dbstruct 0 force-sync: #t)
   ;;(common:db-block-further-queries)
   ;; (mutex-lock! *db-sync-mutex*) ;; with this perhaps it isn't necessary to use the block-further-queries mechanism?
-  (sqlite3:finalize! (db:get-db dbstruct #f))
-  (let* ((local (dbr:dbstruct-get-local dbstruct))
-	 (rundb (dbr:dbstruct-get-rundb dbstruct)))
-    (if local
-	(for-each
-	 (lambda (db)
-	   (if (sqlite3:database? db)
-	       (begin
-		 (sqlite3:interrupt! db)
-		 (sqlite3:finalize! db #t))))
-	 (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
-    (thread-sleep! 3)
-    (if (and rundb
-	     (sqlite3:database? rundb))
-	(handle-exceptions
-	 exn
-	 (begin 
-	   (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
-	   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	   (debug:print 0 " db: " rundb)
-	   (print-call-chain)
-	   #f)
-	 (sqlite3:interrupt! rundb)
-	 (sqlite3:finalize! rundb #t))))
-  ;; (mutex-unlock! *db-sync-mutex*)
+
+  (db:close-main dbstruct)
+  
+  (let ((locdbs (dbr:dbstruct-get-locdbs dbstruct)))
+    (if (hash-table? locdbs)
+	(for-each (lambda (run-id)
+		    (db:close-run-db dbstruct run-id))
+		  (hash-table-keys locdbs))))
+
+  ;; (let* ((local (dbr:dbstruct-get-local dbstruct))
+  ;;        (rundb (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct))))
+  ;;   (if local
+  ;;       (for-each
+  ;;        (lambda (dbdat)
+  ;;          (let ((db (db:dbdat-get-db dbdat)))
+  ;;            (if (sqlite3:database? db)
+  ;;       	 (begin
+  ;;       	   (sqlite3:interrupt! db)
+  ;;       	   (sqlite3:finalize! db #t)))))
+  ;;        ;; TODO: Come back to this and rework to delete from hashtable when finalized
+  ;;        (hash-table-values (dbr:dbstruct-get-locdbs dbstruct))))
+  ;;   (thread-sleep! 3)
+  ;;   (if (and rundb
+  ;;            (sqlite3:database? rundb))
+  ;;       (handle-exceptions
+  ;;        exn
+  ;;        (begin 
+  ;;          (debug:print 0 "WARNING: database files may not have been closed correctly. Consider running -cleanup-db")
+  ;;          (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+  ;;          (debug:print 0 " db: " rundb)
+  ;;          (print-call-chain (current-error-port))
+  ;;          #f)
+  ;;        (sqlite3:interrupt! rundb)
+  ;;        (sqlite3:finalize! rundb #t))))
+  ;; ;; (mutex-unlock! *db-sync-mutex*)
   )
 
 (define (db:open-inmem-db)
@@ -314,7 +399,7 @@
 	 (handler (make-busy-timeout 3600)))
     (sqlite3:set-busy-handler! db handler)
     (db:initialize-run-id-db db)
-    db))
+    (cons db #f)))
 
 ;; just tests, test_steps and test_data tables
 (define db:sync-tests-only
@@ -394,99 +479,130 @@
 	   '("jobgroup"       #f)))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
+;; db's are dbdat's
+;;
 (define (db:sync-tables tbls fromdb todb . slave-dbs)
   (mutex-lock! *db-sync-mutex*)
-  (cond
-   ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
-   ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
-   ((not (sqlite3:database? fromdb))
-    (debug:print 0 "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
-   ((not (sqlite3:database? todb))
-    (debug:print 0 "ERROR: db:sync-tables called with todb not a database " todb) -4)
-   (else
-    (let ((stmts       (make-hash-table)) ;; table-field => stmt
-	  (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
-	  (numrecs     (make-hash-table))
-	  (start-time  (current-milliseconds))
-	  (tot-count   0))
-      (for-each ;; table
-       (lambda (tabledat)
-	 (let* ((tablename  (car tabledat))
-		(fields     (cdr tabledat))
-		(num-fields (length fields))
-		(field->num (make-hash-table))
-		(num->field (apply vector (map car fields)))
-		(full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
-				  " FROM " tablename ";"))
-		(full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
-				  " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
-		(fromdat    '())
-		(todat      (make-hash-table))
-		(count      0))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
+     (print-call-chain (current-error-port))
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (print "exn=" (condition->list exn))
+     (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
+     (debug:print 0 " src db:  " (db:dbdat-get-path fromdb))
+     (for-each (lambda (dbdat)
+		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
+	       (cons todb slave-dbs))
+     (if *server-run* ;; we are inside a server
+	 (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
+	 (exit 1)))
+   (cond
+    ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
+    ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
+    ((not (sqlite3:database? (db:dbdat-get-db fromdb)))
+     (debug:print 0 "ERROR: db:sync-tables called with fromdb not a database " fromdb) -3)
+    ((not (sqlite3:database? (db:dbdat-get-db todb)))
+     (debug:print 0 "ERROR: db:sync-tables called with todb not a database " todb) -4)
+    (else
+     (let ((stmts       (make-hash-table)) ;; table-field => stmt
+	   (all-stmts   '())              ;; ( ( stmt1 value1 ) ( stml2 value2 ))
+	   (numrecs     (make-hash-table))
+	   (start-time  (current-milliseconds))
+	   (tot-count   0))
+       (for-each ;; table
+	(lambda (tabledat)
+	  (let* ((tablename  (car tabledat))
+		 (fields     (cdr tabledat))
+		 (num-fields (length fields))
+		 (field->num (make-hash-table))
+		 (num->field (apply vector (map car fields)))
+		 (full-sel   (conc "SELECT " (string-intersperse (map car fields) ",") 
+				   " FROM " tablename ";"))
+		 (full-ins   (conc "INSERT OR REPLACE INTO " tablename " ( " (string-intersperse (map car fields) ",") " ) "
+				   " VALUES ( " (string-intersperse (make-list num-fields "?") ",") " );"))
+		 (fromdat    '())
+		 (fromdats   '())
+		 (totrecords 0)
+		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
+		 (todat      (make-hash-table))
+		 (count      0))
 
-	   ;; set up the field->num table
-	   (for-each
-	    (lambda (field)
-	      (hash-table-set! field->num field count)
-	      (set! count (+ count 1)))
-	    fields)
+	    ;; set up the field->num table
+	    (for-each
+	     (lambda (field)
+	       (hash-table-set! field->num field count)
+	       (set! count (+ count 1)))
+	     fields)
 
-	   ;; read the source table
-	   (sqlite3:for-each-row
-	    (lambda (a . b)
-	      (set! fromdat (cons (apply vector a b) fromdat)))
-	    fromdb
-	    full-sel)
+	    ;; read the source table
+	    (sqlite3:for-each-row
+	     (lambda (a . b)
+	       (set! fromdat (cons (apply vector a b) fromdat))
+	       (if (> (length fromdat) batch-len)
+		   (begin
+		     (set! fromdats (cons fromdat fromdats))
+		     (set! fromdat  '())
+		     (set! totrecords (+ totrecords 1)))))
+	     (db:dbdat-get-db fromdb)
+	     full-sel)
 
-	   (debug:print-info 2 "found " (length fromdat) " records to sync")
+	    (debug:print-info 2 "found " totrecords " records to sync")
 
-	   ;; read the target table
-	   (sqlite3:for-each-row
-	    (lambda (a . b)
-	      (hash-table-set! todat a (apply vector a b)))
-	    todb
-	    full-sel)
+	    ;; read the target table
+	    (sqlite3:for-each-row
+	     (lambda (a . b)
+	       (hash-table-set! todat a (apply vector a b)))
+	     (db:dbdat-get-db todb)
+	     full-sel)
 
-	   ;; first pass implementation, just insert all changed rows
-	   (for-each 
-	    (lambda (targdb)
-	      (let ((stmth (sqlite3:prepare targdb full-ins)))
-		(sqlite3:with-transaction
-		 targdb
-		 (lambda ()
-		   (for-each ;; 
-		    (lambda (fromrow)
-		      (let* ((a    (vector-ref fromrow 0))
-			     (curr (hash-table-ref/default todat a #f))
-			     (same #t))
-			(let loop ((i 0))
-			  (if (or (not curr)
-				  (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
-			      (set! same #f))
-			  (if (and same
-				   (< i (- num-fields 1)))
-			      (loop (+ i 1))))
-			(if (not same)
-			    (begin
-			      (apply sqlite3:execute stmth (vector->list fromrow))
-			      (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
-		    fromdat)))
-		(sqlite3:finalize! stmth)))
-	    (append (list todb) slave-dbs))))
-       tbls)
-      (let* ((runtime      (- (current-milliseconds) start-time))
-	     (should-print (common:low-noise-print 30 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
-	(if should-print (debug:print 0 "INFO: db sync, total run time " runtime " ms"))
-	(for-each 
-	 (lambda (dat)
-	   (let ((tblname (car dat))
-		 (count   (cdr dat)))
-	     (set! tot-count (+ tot-count count))
-	     (if (> count 0)
-		 (if should-print (debug:print 0 (format #f "    ~10a ~5a" tblname count))))))
-	 (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
-      tot-count)))
-  (mutex-unlock! *db-sync-mutex*))
+	    ;; first pass implementation, just insert all changed rows
+	    (for-each 
+	     (lambda (targdb)
+	       (let* ((db     (db:dbdat-get-db targdb))
+		      (stmth  (sqlite3:prepare db full-ins)))
+		 ;; (db:delay-if-busy targdb) ;; NO WAITING
+		 (for-each
+		  (lambda (fromdat-lst)
+		    (sqlite3:with-transaction
+		     db
+		     (lambda ()
+		       (for-each ;; 
+			(lambda (fromrow)
+			  (let* ((a    (vector-ref fromrow 0))
+				 (curr (hash-table-ref/default todat a #f))
+				 (same #t))
+			    (let loop ((i 0))
+			      (if (or (not curr)
+				      (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
+				  (set! same #f))
+			      (if (and same
+				       (< i (- num-fields 1)))
+				  (loop (+ i 1))))
+			    (if (not same)
+				(begin
+				  (apply sqlite3:execute stmth (vector->list fromrow))
+				  (hash-table-set! numrecs tablename (+ 1 (hash-table-ref/default numrecs tablename 0)))))))
+			fromdat-lst))
+		  ))
+		  fromdats)
+		 (sqlite3:finalize! stmth)))
+	     (append (list todb) slave-dbs))))
+	tbls)
+       (let* ((runtime      (- (current-milliseconds) start-time))
+	      (should-print (common:low-noise-print 30 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
+	 (if should-print (debug:print 0 "INFO: db sync, total run time " runtime " ms"))
+	 (for-each 
+	  (lambda (dat)
+	    (let ((tblname (car dat))
+		  (count   (cdr dat)))
+	      (set! tot-count (+ tot-count count))
+	      (if (> count 0)
+		  (if should-print (debug:print 0 (format #f "    ~10a ~5a" tblname count))))))
+	  (sort (hash-table->alist numrecs)(lambda (a b)(> (cdr a)(cdr b))))))
+       tot-count)))
+   (mutex-unlock! *db-sync-mutex*)))
 
 ;; options:
 ;;
@@ -505,27 +621,33 @@
 	 (mtdb     (if toppath (db:open-megatest-db)))
 	 (run-ids  (if run-ids 
 		       run-ids
-		       (if toppath (db:get-all-run-ids mtdb))))
-	 (mdb     (tasks:open-db))
-	 (servers (tasks:get-all-servers mdb)))
+		       (if toppath (begin
+				     (db:delay-if-busy mtdb)
+				     (db:get-all-run-ids mtdb)))))
+	 (tdbdat  (tasks:open-db))
+	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
     
     ;; kill servers
     (if (member 'killservers options)
 	(for-each
 	 (lambda (server)
-	   (tasks:server-delete-record mdb (vector-ref server 0) "dbmigration")
+	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
 	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
 	 servers))
 
     ;; clear out junk records
     ;;
     (if (member 'dejunk options)
-	(db:clean-up mtdb))
+	(begin
+	  (db:delay-if-busy mtdb)
+	  (db:clean-up mtdb)))
 
     ;; adjust test-ids to fit into proper range
     ;;
     (if (member 'adj-testids options)
-	(db:prep-megatest.db-for-migration mtdb))
+	(begin
+	  (db:delay-if-busy mtdb)
+	  (db:prep-megatest.db-for-migration mtdb)))
 
     ;; sync runs, test_meta etc.
     ;;
@@ -534,25 +656,29 @@
 	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 	  (for-each 
 	   (lambda (run-id)
+	     (db:delay-if-busy mtdb)
 	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
-	       (sqlite3:finalize! (dbr:dbstruct-get-rundb dbstruct))))
+	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct)))))
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
     (if (member 'new2old options)
 	(for-each
 	 (lambda (run-id)
-	   (let ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+	   (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+		  (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+	     ;; (db:delay-if-busy frundb)
+	     ;; (db:delay-if-busy mtdb)
 	     (if (eq? run-id 0)
-		 (db:sync-tables (db:sync-main-list dbstruct)(db:get-db fromdb run-id) mtdb)
+		 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
 		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
-	 run-ids))
-    
-    (db:close-all dbstruct)
-    (sqlite3:finalize! mdb)))
+	 (cons 0 run-ids)))
+    ;; (db:close-all dbstruct)
+    ;; (sqlite3:finalize! mdb)
+    ))
 
 ;; keeping it around for debugging purposes only
 (define (open-run-close-no-exception-handling  proc idb . params)
@@ -560,6 +686,7 @@
   (if (or *db-write-access*
 	  (not (member proc *db:all-write-procs*)))
       (let* ((db (cond
+		  ((pair? idb)                 (db:dbdat-get-db idb))
 		  ((sqlite3:database? idb)     idb)
 		  ((not idb)                   (debug:print 0 "ERROR: cannot open-run-close with #f anymore"))
 		  ((procedure? idb)            (idb))
@@ -584,7 +711,7 @@
 	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	(print "exn=" (condition->list exn))
 	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-	(print-call-chain)
+	(print-call-chain (current-error-port))
 	(thread-sleep! sleep-time)
 	(debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")))
      (apply open-run-close-exception-handling proc idb params))
@@ -596,12 +723,13 @@
 ;;			   open-run-close-exception-handling)
 ;;)
 
-(define (db:initialize-main-db db)
+(define (db:initialize-main-db dbdat)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
-	 (fieldstr (keys->key/field keys)))
+	 (fieldstr (keys->key/field keys))
+	 (db       (db:dbdat-get-db dbdat)))
     (for-each (lambda (key)
 		(let ((keyn key))
 		  (if (member (string-downcase keyn)
@@ -616,7 +744,7 @@
      (lambda ()
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, fieldname TEXT, fieldtype TEXT, CONSTRAINT keyconstraint UNIQUE (fieldname));")
        (for-each (lambda (key)
-		   (sqlite3:execute db "INSERT INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
+		   (sqlite3:execute db "INSERT OR REPLACE INTO keys (fieldname,fieldtype) VALUES (?,?);" key "TEXT"))
 		 keys)
        (sqlite3:execute db (conc 
 			    "CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, \n			 " 
@@ -744,7 +872,8 @@
     (if (not dbexists)
 	(begin
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
-	  (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))))
+	  (db:set-sync db) ;; (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))
+	  ))
     db))
 
 (define (db:log-local-event . loglst)
@@ -775,7 +904,8 @@
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
 (define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
-  (let* ((db          (db:get-db dbstruct run-id))
+  (let* ((dbdat        (db:get-db dbstruct run-id))
+	 (db           (db:dbdat-get-db dbdat))
 	 (incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
@@ -792,7 +922,7 @@
     ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
-    ;; (db:delay-if-busy)
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -808,7 +938,7 @@
 
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
-    ;; (db:delay-if-busy)
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -824,7 +954,7 @@
 
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
-    ;; (db:delay-if-busy)
+    (db:delay-if-busy dbdat)
     (let* (;; (min-incompleted (filter (lambda (x)
 	   ;;      		      (let* ((testpath (cadr x))
 	   ;;      			     (tdatpath (conc testpath "/testdat.db"))
@@ -845,6 +975,7 @@
 
     ;; Now do rollups for the toplevel tests
     ;;
+    (db:delay-if-busy dbdat)
     (for-each
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
@@ -863,9 +994,9 @@
 ;;    a. If have tests that are not deleted, set state='unknown'
 ;;    b. ....
 ;;
-(define (db:clean-up db)
+(define (db:clean-up dbdat)
   (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
-  (let* (;; (db         (db:get-db dbstruct #f))
+  (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
 	 (map (lambda (stmt)
@@ -882,6 +1013,7 @@
 	       ;; delete empty runs
 	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
 	       ))))
+    (db:delay-if-busy dbdat)
     (sqlite3:with-transaction 
      db
      (lambda ()
@@ -895,6 +1027,7 @@
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
     ;; (db:find-and-mark-incomplete db)
+    (db:delay-if-busy dbdat)
     (sqlite3:execute db "VACUUM;")))
 
 ;;======================================================================
@@ -910,11 +1043,14 @@
   (let* ((start-ms (current-milliseconds))
          (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
 		     (if t (string->number t) t)))
-	 (res      #f))
+	 (res      #f)
+	 (dbdat    (db:get-db dbstruct #f))
+	 (db       (db:dbdat-get-db dbdat)))
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
-     (db:get-db dbstruct #f)
+     db
      "SELECT val FROM metadat WHERE var=?;" var)
     ;; convert to number if can
     (if (string? res)
@@ -931,12 +1067,16 @@
     res))
 
 (define (db:set-var dbstruct var val)
-  ;; (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val))
+  (let ((dbdat (db:get-db dbstruct #f))
+	(db    (db:dbdat-get-db dbdat)))
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
 
 (define (db:del-var dbstruct var)
   ;; (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) "DELETE FROM metadat WHERE var=?;" var))
+  (db:with-db dbstruct #f #t 
+	      (lambda (db)
+		(sqlite3:execute db "DELETE FROM metadat WHERE var=?;" var))))
 
 ;; use a global for some primitive caching, it is just silly to
 ;; re-read the db over and over again for the keys since they never
@@ -953,7 +1093,7 @@
 		      (sqlite3:for-each-row 
 		       (lambda (key)
 			 (set! res (cons key res)))
-		       (db:get-db dbstruct #f)
+		       db
 		       "SELECT fieldname FROM keys ORDER BY id DESC;")))
 	(set! *db-keys* res)
 	res)))
@@ -978,24 +1118,34 @@
 ;;======================================================================
 
 (define (db:get-run-name-from-id dbstruct run-id)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (runname)
-       (set! res runname))
-     (db:get-db dbstruct #f)
-     "SELECT runname FROM runs WHERE id=?;"
-     run-id)
-    res))
+  (db:with-db 
+   dbstruct
+   #f ;; this is for the main runs db
+   #f ;; does not modify db
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row
+	(lambda (runname)
+	  (set! res runname))
+	db
+	"SELECT runname FROM runs WHERE id=?;"
+	run-id)
+       res))))
 
 (define (db:get-run-key-val dbstruct run-id key)
-  (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (val)
-       (set! res val))
-     (db:get-db dbstruct #f) 
-     (conc "SELECT " key " FROM runs WHERE id=?;")
-     run-id)
-    res))
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row
+	(lambda (val)
+	  (set! res val))
+	db
+	(conc "SELECT " key " FROM runs WHERE id=?;")
+	run-id)
+       res))))
 
 ;; keys list to key1,key2,key3 ...
 (define (runs:get-std-run-fields keys remfields)
@@ -1022,7 +1172,8 @@
 ;; use server api
 ;;
 (define (db:register-run dbstruct keyvals runname state status user)
-  (let* ((db        (db:get-db dbstruct #f))
+  (let* ((dbdat     (db:get-db dbstruct #f))
+	 (db        (db:dbdat-get-db dbdat))
 	 (keys      (map car keyvals))
 	 (keystr    (keys->keystr keys))	 
 	 (comma     (if (> (length keys) 0) "," ""))
@@ -1035,9 +1186,10 @@
     (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
-	  ;; (db:delay-if-busy)
+	  (db:delay-if-busy dbdat)
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
 		 allvals)
+	  (db:delay-if-busy dbdat)
 	  (apply sqlite3:for-each-row 
 		 (lambda (id)
 		   (set! res id))
@@ -1046,7 +1198,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
-	  ;; (db:delay-if-busy)
+	  (db:delay-if-busy dbdat)
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
@@ -1150,74 +1302,97 @@
 	 (keystr     (keys->keystr keys))
 	 (qrystr     (conc "SELECT " keystr " FROM runs WHERE state != 'deleted';"))
 	 (seen       (make-hash-table)))
-    (sqlite3:for-each-row
-     (lambda (a . x)
-       (let ((targ (cons a x)))
-	 (if (not (hash-table-ref/default seen targ #f))
-	     (begin
-	       (hash-table-set! seen targ #t)
-	       (set! res (cons (apply vector targ) res))))))
-     (db:get-db dbstruct #f)
-     qrystr)
-    (debug:print-info 11 "db:get-targets END qrystr: " qrystr )
-    (vector header res)))
+    (db:with-db
+     dbstruct
+     #f
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (a . x)
+	  (let ((targ (cons a x)))
+	    (if (not (hash-table-ref/default seen targ #f))
+		(begin
+		  (hash-table-set! seen targ #t)
+		  (set! res (cons (apply vector targ) res))))))
+	db
+	qrystr)
+       (debug:print-info 11 "db:get-targets END qrystr: " qrystr )
+       (vector header res)))))
 
 ;; just get count of runs
 (define (db:get-num-runs dbstruct runpatt)
-  (let ((numruns 0))
-    (debug:print-info 11 "db:get-num-runs START " runpatt)
-    (sqlite3:for-each-row 
-     (lambda (count)
-       (set! numruns count))
-     (db:get-db dbstruct #f)
-     "SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
-    (debug:print-info 11 "db:get-num-runs END " runpatt)
-    numruns))
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     (let ((numruns 0))
+       (debug:print-info 11 "db:get-num-runs START " runpatt)
+       (sqlite3:for-each-row 
+	(lambda (count)
+	  (set! numruns count))
+	db
+	"SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
+       (debug:print-info 11 "db:get-num-runs END " runpatt)
+       numruns))))
 
 (define (db:get-all-run-ids dbstruct)
-  (let ((run-ids '()))
-    (sqlite3:for-each-row
-     (lambda (run-id)
-       (set! run-ids (cons run-id run-ids)))
-     (db:get-db dbstruct #f)
-     "SELECT id FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;")
-    (reverse run-ids)))
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     (let ((run-ids '()))
+       (sqlite3:for-each-row
+	(lambda (run-id)
+	  (set! run-ids (cons run-id run-ids)))
+	db
+	"SELECT id FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;")
+    (reverse run-ids)))))
 
 ;; get some basic run stats
 ;;
 ;; ( (runname (( state  count ) ... ))
 ;;   (   ...  
 (define (db:get-run-stats dbstruct)
-  (let ((totals       (make-hash-table))
-	(curr         (make-hash-table))
-	(res          '())
-	(runs-info    '()))
+  (let* ((dbdat        (db:get-db dbstruct #f))
+	 (db           (db:dbdat-get-db dbdat))
+	 (totals       (make-hash-table))
+	 (curr         (make-hash-table))
+	 (res          '())
+	 (runs-info    '()))
     ;; First get all the runname/run-ids
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
-     (db:get-db dbstruct #f)
+     db
      "SELECT id,runname FROM runs WHERE state != 'deleted';")
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
        ;; get the net state/status counts for this run
-       (let ((run-id   (car  run-info))
-	     (run-name (cadr run-info)))
-	 (sqlite3:for-each-row
-	  (lambda (state status count)
-	    (let ((netstate (if (equal? state "COMPLETED") status state)))
-	      (if (string? netstate)
-		  (begin
-		    (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
-		    (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
-	  (db:get-db dbstruct run-id)
-	  "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
-	 ;; add the per run counts to res
-	 (for-each (lambda (state)
-		     (set! res (cons (list run-name state (hash-table-ref curr state)) res)))
-		   (sort (hash-table-keys curr) string>=))
-	 (set! curr (make-hash-table))))
+       (let* ((run-id   (car  run-info))
+	      (run-name (cadr run-info)))
+	 (db:with-db
+	  dbstruct
+	  run-id
+	  #f
+	  (lambda (db)
+	    (sqlite3:for-each-row
+	     (lambda (state status count)
+	       (let ((netstate (if (equal? state "COMPLETED") status state)))
+		 (if (string? netstate)
+		     (begin
+		       (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
+		       (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
+	     db
+	     "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
+	    ;; add the per run counts to res
+	    (for-each (lambda (state)
+			(set! res (cons (list run-name state (hash-table-ref curr state)) res)))
+		      (sort (hash-table-keys curr) string>=))
+	    (set! curr (make-hash-table))))))
      runs-info)
     (for-each (lambda (state)
 		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
@@ -1261,7 +1436,7 @@
 		  (sqlite3:for-each-row
 		   (lambda (a . r)
 		     (set! res (cons (list->vector (cons a r)) res)))
-		   (db:get-db dbstruct #f)
+		   db
 		   qry-str
 		   runnamepatt)))
     (vector header res)))
@@ -1270,17 +1445,20 @@
 (define (db:get-run-info dbstruct run-id)
   ;;(if (hash-table-ref/default *run-info-cache* run-id #f)
   ;;    (hash-table-ref *run-info-cache* run-id)
-  (let* ((res       (vector #f #f #f #f))
+  (let* ((dbdat     (db:get-db dbstruct #f))
+	 (db        (db:dbdat-get-db dbdat))
+	 (res       (vector #f #f #f #f))
 	 (keys      (db:get-keys dbstruct))
 	 (remfields (list "id" "runname" "state" "status" "owner" "event_time"))
 	 (header    (append keys remfields))
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (apply vector a x)))
-     (db:get-db dbstruct #f)
+     db 
      (conc "SELECT " keystr " FROM runs WHERE id=? AND state != 'deleted';")
      run-id)
     (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
@@ -1289,50 +1467,73 @@
       finalres)))
 
 (define (db:set-comment-for-run dbstruct run-id comment)
-  ;; (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
-		   run-id))
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     (sqlite3:execute db "UPDATE runs SET comment=? WHERE id=?;" comment ;; (sdb:qry 'getid comment)
+		      run-id))))
 
 ;; does not (obviously!) removed dependent data. But why not!!?
 (define (db:delete-run dbstruct run-id)
   ;; First set any related tests to DELETED
-  (let ((db (db:get-db dbstruct run-id)))
-    ;; (db:delay-if-busy)
-    (sqlite3:execute db "UPDATE tests SET state='DELETED',comment='';")
-    (sqlite3:execute db "DELETE FROM test_steps;")
-    (sqlite3:execute db "DELETE FROM test_data;")
-    (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
+  (let* ((rdbdat (db:get-db dbstruct run-id))
+	 (rdb    (db:dbdat-get-db rdbdat))
+	 (dbdat  (db:get-db dbstruct #f))
+	 (db     (db:dbdat-get-db dbdat)))
+    (db:delay-if-busy rdbdat)
+    (sqlite3:execute rdb "UPDATE tests SET state='DELETED',comment='';")
+    (sqlite3:execute rdb "DELETE FROM test_steps;")
+    (sqlite3:execute rdb "DELETE FROM test_data;")
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
 
 (define (db:update-run-event_time dbstruct run-id)
-  ;; (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))
+  (db:with-db
+   dbstruct
+   #f
+   #t
+   (lambda (db)
+     (sqlite3:execute db "UPDATE runs SET event_time=strftime('%s','now') WHERE id=?;" run-id))))
 
 (define (db:lock/unlock-run dbstruct run-id lock unlock user)
-  (let ((newlockval (if lock "locked"
-			(if unlock
-			    "unlocked"
-			    "locked")))) ;; semi-failsafe
-    (sqlite3:execute (db:get-db dbstruct #f) "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
-    ;; (db:delay-if-busy)
-    (sqlite3:execute (db:get-db dbstruct #f) "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
-		     user (conc newlockval " " run-id))
-    (debug:print-info 1 "" newlockval " run number " run-id)))
+  (db:with-db
+   dbstruct
+   #f
+   #t
+   (lambda (db)
+     (let ((newlockval (if lock "locked"
+			   (if unlock
+			       "unlocked"
+			       "locked")))) ;; semi-failsafe
+       (sqlite3:execute db "UPDATE runs SET state=? WHERE id=?;" newlockval run-id)
+       (sqlite3:execute db "INSERT INTO access_log (user,accessed,args) VALUES(?,strftime('%s','now'),?);"
+			user (conc newlockval " " run-id))
+       (debug:print-info 1 "" newlockval " run number " run-id)))))
 
 (define (db:set-run-status dbstruct run-id status msg)
-  (let ((db (db:get-db dbstruct #f)))
+  (let* ((dbdat (db:get-db dbstruct #f))
+	 (db    (db:dbdat-get-db dbdat)))
+    (db:delay-if-busy dbdat)
     (if msg
 	(sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
 	(sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))))
 
 (define (db:get-run-status dbstruct run-id)
   (let ((res "n/a"))
-    (sqlite3:for-each-row 
-     (lambda (status)
-       (set! res status))
-     (db:get-db dbstruct #f)
-     "SELECT status FROM runs WHERE id=?;" 
-     run-id)
-    res))
+    (db:with-db
+     dbstruct
+     #f
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (status)
+	  (set! res status))
+	db
+	"SELECT status FROM runs WHERE id=?;" 
+	run-id)
+       res))))
 
 ;;======================================================================
 ;; K E Y S
@@ -1342,29 +1543,34 @@
 ;; ( (FIELDNAME1 keyval1) (FIELDNAME2 keyval2) ... )
 (define (db:get-key-val-pairs dbstruct run-id)
   (let* ((keys (db:get-keys dbstruct))
-	 (res  '()))
+	 (res  '())
+	 (dbdat  (db:get-db dbstruct #f))
+	 (db     (db:dbdat-get-db dbdat)))
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
-	 ;; (debug:print 0 "qry: " qry)
+	 (db:delay-if-busy dbdat)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons (list key key-val) res)))
-	  (db:get-db dbstruct #f) qry run-id)))
+	  db qry run-id)))
      keys)
     (reverse res)))
 
 ;; get key vals for a given run-id
 (define (db:get-key-vals dbstruct run-id)
   (let* ((keys (db:get-keys dbstruct))
-	 (res  '()))
+	 (res  '())
+	 (dbdat  (db:get-db dbstruct #f))
+	 (db     (db:dbdat-get-db dbdat)))
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
+	 (db:delay-if-busy dbdat)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons key-val res)))
-	  (db:get-db dbstruct #f) qry run-id)))
+	  db qry run-id)))
      keys)
     (let ((final-res (reverse res)))
       (hash-table-set! *keyvals* run-id final-res)
@@ -1405,7 +1611,7 @@
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
 	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
-	;; (print-call-chain)
+	;; (print-call-chain (current-error-port))
 	'())
       (let* ((qryvalstr       (case qryvals
 				((shortlist) "id,run_id,testname,item_path,state,status")
@@ -1516,9 +1722,19 @@
 
 ;; get a useful subset of the tests data (used in dashboard
 ;; use db:mintests-get-{id ,run_id,testname ...}
+;; 
 (define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
-  (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+  (debug:print 0 "ERROR: BROKN!")
+  ;; (db:get-tests-for-runs dbstruct run-ids testpatt states statuses not-in: not-in qryvals: "id,run_id,testname,state,status,event_time,item_path"))
+)
 
+;; get a useful subset of the tests data (used in dashboard
+;;
+(define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
+  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path"))
+
+;; do not use.
+;;
 (define (db:get-tests-for-runs dbstruct run-ids testpatt states statuses #!key (not-in #f)(qryvals #f))
   ;; (db:delay-if-busy)
   (let ((res '()))
@@ -1536,22 +1752,24 @@
 ;;
 
 (define (db:delete-test-records dbstruct run-id test-id)
-  (let ((db (db:get-db dbstruct run-id)))
-    (db:general-call db 'delete-test-step-records (list test-id))
+  (let* ((dbdat (db:get-db dbstruct run-id))
+	 (db    (db:dbdat-get-db dbdat)))
+    (db:general-call dbdat 'delete-test-step-records (list test-id))
     ;; (db:delay-if-busy)
-    (db:general-call db 'delete-test-data-records (list test-id))
+    (db:general-call dbdat 'delete-test-data-records (list test-id))
     (sqlite3:execute db "UPDATE tests SET state='DELETED',status='n/a',comment='' WHERE id=?;" test-id)))
-
-(define (db:delete-tests-for-run dbdbstruct run-id)
-  (let ((db (db:get-db dbstruct run-id)))
-     (sqlite3:execute db "DELETE FROM tests WHERE run_id=?;" run-id)))
 
 (define (db:delete-old-deleted-test-records dbstruct)
   (let ((run-ids  (db:get-all-run-ids dbstruct))
 	(targtime (- (current-seconds)(* 30 24 60 60)))) ;; one month in the past
     (for-each
      (lambda (run-id)
-       (sqlite3:execute (db:get-db dbstruct run-id) "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime))
+       (db:with-db
+	dbstruct
+	run-id
+	#t
+	(lambda (db)
+	  (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED' AND event_time<?;" targtime))))
      run-ids)))
 
 ;; set tests with state currstate and status currstatus to newstate and newstatus
@@ -1568,100 +1786,107 @@
 			       (if currstate  (conc "state='" currstate "' AND ") "")
 			       (if currstatus (conc "status='" currstatus "' AND ") "")
 			       " run_id=? AND testname LIKE ?;")))
-		(sqlite3:execute (db:get-db dbstruct run-id) qry newstate newstatus run-id testname)))
+		(db:with-db
+		 dbstruct
+		 run-id
+		 #t
+		 (lambda (db)
+		   (sqlite3:execute db qry newstate newstatus run-id testname)))))
 	    testnames))
 
 ;; speed up for common cases with a little logic
 ;; NB// Ultimately this will be deprecated in deference to mt:test-set-state-status-by-id
 ;;
 (define (db:test-set-state-status-by-id dbstruct run-id test-id newstate newstatus newcomment)
-  ;; (db:delay-if-busy)
-  (let ((db (db:get-db dbstruct run-id)))
-    (cond
-     ((and newstate newstatus newcomment)
-    (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment ;; (sdb:qry 'getid newcomment)
-		     test-id))
-     ((and newstate newstatus)
-      (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
-     (else
-      (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
-      (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
-    (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
-				    test-id))))
-    (mt:process-triggers run-id test-id newstate newstatus)))
-
-;; Never used, but should be?
-(define (db:test-set-state-status-by-run-id-testname db run-id test-name item-path status state)
-  ;; (db:delay-if-busy)
-  (sqlite3:execute db "UPDATE tests SET state=?,status=?,event_time=strftime('%s','now') WHERE run_id=? AND testname=? AND item_path=?;" 
- 		   state status run-id test-name item-path))
+  (db:with-db
+   dbstruct
+   run-id
+   #t
+   (lambda (db)
+     (cond
+      ((and newstate newstatus newcomment)
+       (sqlite3:execute db "UPDATE tests SET state=?,status=?,comment=? WHERE id=?;" newstate newstatus newcomment ;; (sdb:qry 'getid newcomment)
+			test-id))
+      ((and newstate newstatus)
+       (sqlite3:execute db "UPDATE tests SET state=?,status=? WHERE id=?;" newstate newstatus test-id))
+      (else
+       (if newstate   (sqlite3:execute db "UPDATE tests SET state=?   WHERE id=?;" newstate   test-id))
+       (if newstatus  (sqlite3:execute db "UPDATE tests SET status=?  WHERE id=?;" newstatus  test-id))
+       (if newcomment (sqlite3:execute db "UPDATE tests SET comment=? WHERE id=?;" newcomment ;; (sdb:qry 'getid newcomment)
+				       test-id))))
+     (mt:process-triggers run-id test-id newstate newstatus))))
 
 ;; NEW BEHAVIOR: Count tests running in only one run!
 ;;
 (define (db:get-count-tests-running dbstruct run-id)
-  (sqlite3:first-result 
-   (db:get-db dbstruct run-id)
-   ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
-   ;; AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted')
-   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND NOT (uname = 'n/a' AND item_path = '');"
-   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
-   ))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result 
+      db
+      ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+      ;; AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted')
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND NOT (uname = 'n/a' AND item_path = '');"
+      ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=?;" 
+      ))))
 
 ;; NEW BEHAVIOR: Count tests running in only one run!
 ;;
 (define (db:get-count-tests-actually-running dbstruct run-id)
-  (sqlite3:first-result
-   (db:get-db dbstruct run-id)
-   ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
-   ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
-   "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
-   run-id)) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result
+      db
+      ;; WARNING BUG EDIT ME - merged from v1.55 - not sure what is right here ...
+      ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id NOT IN (SELECT id FROM runs WHERE state='deleted') AND NOT (uname = 'n/a' AND item_path = '');")
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','REMOTEHOSTSTART') AND run_id=?;" 
+      run-id)))) ;; NOT IN (SELECT id FROM runs WHERE state='deleted');")
 
 ;; NEW BEHAVIOR: Look only at single run with run-id
 ;; 
 ;; (define (db:get-running-stats dbstruct run-id)
 (define (db:get-count-tests-running-for-run-id dbstruct run-id)
-  (sqlite3:first-result
-   (db:get-db dbstruct run-id)
-   "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result
+      db
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))))
 
- ;; override states to count with list of strings.
-;;
-(define (db:get-count-tests-running-for-run-id-blah db run-id states)
-  (let ((res 0)
-	(sqrystr (conc "SELECT count(id) FROM tests WHERE state in ('"
-		       (if states
-			   (string-intersperse states "','")
-			   "RUNNING','LAUNCHED','REMOTEHOSTSTART")
-		       "') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');")))
-    (sqlite3:for-each-row
-     (lambda (count)
-       (set! res count))  ;; select * from tests where run_id=1 and uname = 'n/a' and item_path='';
-     db
-     sqrystr run-id)
-     ;; "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id)
-    res))
-   
-    
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
+  (let* ((dbdat (db:get-db dbstruct #f))
+	 (db    (db:dbdat-get-db dbdat)))
   (if (not jobgroup)
       0 ;; 
       (let ((testnames '()))
 	;; get the testnames
+	(db:delay-if-busy dbdat)
 	(sqlite3:for-each-row
 	 (lambda (testname)
 	   (set! testnames (cons testname testnames)))
-	 (db:get-db dbstruct #f)
+	 db
 	 "SELECT testname FROM test_meta WHERE jobgroup=?"
 	 jobgroup)
 	;; get the jobcount NB// EXTEND THIS TO OPPERATE OVER ALL RUNS?
 	(if (not (null? testnames))
-	    (sqlite3:first-result
-	     (db:get-db dbstruct run-id)
-	     (conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
-		   (string-intersperse testnames "','")
-		   "') AND NOT (uname = 'n/a' AND item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
-	    0))))
+	    (db:with-db
+	     dbstruct
+	     run-id
+	     #f
+	     (lambda (db)
+	       (sqlite3:first-result
+		db
+		(conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
+		      (string-intersperse testnames "','")
+		      "') AND NOT (uname = 'n/a' AND item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
+	       0)))))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
              ;; AND NOT (uname = 'n/a' AND item_path = '');"
@@ -1669,29 +1894,51 @@
 ;; done with run when:
 ;;   0 tests in LAUNCHED, NOT_STARTED, REMOTEHOSTSTART, RUNNING
 (define (db:estimated-tests-remaining dbstruct run-id)
-  (sqlite3:first-result
-   (db:get-db dbstruct run-id) ;; NB// KILLREQ means the jobs is still probably running
-   "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');"))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result
+      db
+      "SELECT count(id) FROM tests WHERE state in ('LAUNCHED','NOT_STARTED','REMOTEHOSTSTART','RUNNING','KILLREQ');"))))
 
 ;; map run-id, testname item-path to test-id
 (define (db:get-test-id dbstruct run-id testname item-path)
-  (let* ((db (db:get-db dbstruct run-id)))
-    (db:first-result-default
-     (db:get-db dbstruct run-id)
-     "SELECT id FROM tests WHERE testname=? AND item_path=?;"
-     #f ;; the default
-     testname item-path)))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (db:first-result-default
+      db
+      "SELECT id FROM tests WHERE testname=? AND item_path=?;"
+      #f ;; the default
+      testname item-path))))
 
 ;; overload the unused attemptnum field for the process id of the runscript or 
 ;; ezsteps step script in progress
 ;;
 (define (db:test-set-top-process-pid dbstruct run-id test-id pid)
-  (sqlite3:execute (db:get-db dbstruct run-id) "UPDATE tests SET attemptnum=? WHERE id=?;"
-		   pid test-id))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tests SET attemptnum=? WHERE id=?;"
+		      pid test-id))))
 
 (define (db:test-get-top-process-pid dbstruct run-id test-id)
-  (sqlite3:first-result (db:get-db dbstruct run-id) "SELECT attemptnum FROM tests WHERE id=?;"
-			test-id))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (db:first-result-default 
+      db
+      "SELECT attemptnum FROM tests WHERE id=?;"
+      #f
+      test-id))))
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
@@ -1717,14 +1964,18 @@
 ;; NOTE: Use db:test-get* to access records
 ;; NOTE: This needs rundir decoding? Decide, decode here or where used? For the moment decode where used.
 (define (db:get-all-tests-info-by-run-id dbstruct run-id)
-  (let ((db (db:get-db dbstruct run-id))
-	(res '()))
+  (let* ((dbdat (if (vector? dbstruct)
+		    (db:get-db dbstruct run-id)
+		    dbstruct)) ;; still settling on when to use dbstruct or dbdat
+	 (db    (db:dbdat-get-db dbdat))
+	 (res '()))
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15
        (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
 		       res)))
-     (db:get-db dbstruct run-id)
+     db
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
      run-id)
     res))
@@ -1756,7 +2007,7 @@
 	  (sqlite3:for-each-row 
 	   (lambda (id)
 	     (set! test-id-found id))
-	   mtdb
+	   (db:dbdat-get-db mtdb)
 	   "SELECT id FROM tests WHERE id=?;"
 	   new-id)
 	  ;; if test-id-found then need to try again
@@ -1774,7 +2025,7 @@
     (for-each 
      (lambda (testrec)
        (let* ((test-id (vector-ref testrec (db:field->number "id" db:test-record-fields))))
-	 (db:adj-test-id mtdb min-test-id test-id)))
+	 (db:adj-test-id (db:dbdat-get-db mtdb) min-test-id test-id)))
      testrecs)))
 	
 ;; 1. move test ids into the 30k * run_id range
@@ -1785,93 +2036,119 @@
     (for-each 
      (lambda (run-id)
        (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
-	 (db:prep-megatest.db-adj-test-ids mtdb run-id testrecs)))
+	 (db:prep-megatest.db-adj-test-ids (db:dbdat-get-db mtdb) run-id testrecs)))
      run-ids)))
 
 ;; Get test data using test_id
 (define (db:get-test-info-by-id dbstruct run-id test-id)
-  (let ((db (db:get-db dbstruct run-id))
-	(res #f))
-    (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)
-	   ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-       (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)))
-     (db:get-db dbstruct run-id)
-     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
-	 test-id)
-    res))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
+	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)
+	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
+	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)))
+	db
+	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
+	test-id)
+       res))))
 
 ;; Use db:test-get* to access
 ;; Get test data using test_ids. NB// Only works within a single run!!
 ;;
 (define (db:get-test-info-by-ids dbstruct run-id test-ids)
-  (let ((db (db:get-db dbstruct run-id))
-	(res '()))
-    (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
-	   ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id)
-			   res)))
-     (db:get-db dbstruct run-id) 
-     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
-	       (string-intersperse (map conc test-ids) ",") ");"))
-    res))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res '()))
+       (sqlite3:for-each-row
+	(lambda (a . b)
+	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
+	  (set! res (cons (apply vector a b) res)))
+	db
+	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
+	      (string-intersperse (map conc test-ids) ",") ");"))
+       res))))
 
 (define (db:get-test-info dbstruct run-id testname item-path)
-  (let ((db (db:get-db dbstruct run-id))
-	(res #f))
-    (sqlite3:for-each-row
-     (lambda (a . b)
-       (set! res (apply vector a b)))
-     (db:get-db dbstruct run-id)
-     (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
-     test-name item-path)
-    res))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row
+	(lambda (a . b)
+	  (set! res (apply vector a b)))
+	db
+	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
+	test-name item-path)
+       res))))
 
 (define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
-  (db:first-result-default
-   (db:get-db dbstruct run-id)
-   "SELECT rundir FROM tests WHERE id=?;"
-   #f ;; default result
-   test-id))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (db:first-result-default
+      db
+      "SELECT rundir FROM tests WHERE id=?;"
+      #f ;; default result
+      test-id))))
 
 ;;======================================================================
 ;; S T E P S
 ;;======================================================================
 
 (define (db:teststep-set-status! dbstruct run-id test-id teststep-name state-in status-in comment logfile)
-  (let ((db (db:get-db dbstruct run-id)))
-    (sqlite3:execute 
-     db
-     "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
-     test-id teststep-name state-in status-in (current-seconds)
-     ;; (sdb:qry 'getid 
-     (if comment comment "") ;; )
-     ;; (sdb:qry 'getid  
-     (if logfile logfile "")))) ;; )
+  (db:with-db
+   dbstruct
+   run-id
+   #t
+   (lambda (db)
+     (sqlite3:execute 
+      db
+      "INSERT OR REPLACE into test_steps (test_id,stepname,state,status,event_time,comment,logfile) VALUES(?,?,?,?,?,?,?);"
+      test-id teststep-name state-in status-in (current-seconds)
+      (if comment comment "")
+      (if logfile logfile "")))))
    
 ;; db-get-test-steps-for-run
 (define (db:get-steps-for-test dbstruct run-id test-id)
-  (let* ((db (db:get-db dbstruct run-id))
-	 (res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test-id stepname state status event-time logfile)
-       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-     db
-     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-     test-id)
-    (reverse res)))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let* ((res '()))
+       (sqlite3:for-each-row 
+	(lambda (id test-id stepname state status event-time logfile)
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	db
+	"SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	test-id)
+       (reverse res)))))
 
 (define (db:get-steps-data dbstruct run-id test-id)
-  (let ((db  (db:get-db dbstruct run-id))
-	(res '()))
-    (sqlite3:for-each-row 
-     (lambda (id test-id stepname state status event-time logfile)
-       (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
-     db
-     "SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
-     test-id)
-    (reverse res)))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res '()))
+       (sqlite3:for-each-row 
+	(lambda (id test-id stepname state status event-time logfile)
+	  (set! res (cons (vector id test-id stepname state status event-time (if (string? logfile) logfile "")) res)))
+	db
+	"SELECT id,test_id,stepname,state,status,event_time,logfile FROM test_steps WHERE status != 'DELETED' AND test_id=? ORDER BY id ASC;" ;; event_time DESC,id ASC;
+	test-id)
+       (reverse res)))))
 
 ;;======================================================================
 ;; T E S T  D A T A 
@@ -1883,9 +2160,11 @@
 ;;    if all are pass (any case) and the test status is PASS or NULL or '' then set test status to PASS.
 ;;    if one or more are fail (any case) then set test status to PASS, non "pass" or "fail" are ignored
 (define (db:test-data-rollup dbstruct run-id test-id status)
-  (let ((db        (db:get-db dbstruct run-id))
-	(fail-count 0)
-	(pass-count 0))
+  (let* ((dbdat      (db:get-db dbstruct run-id))
+	 (db         (db:dbdat-get-db dbdat))
+	 (fail-count 0)
+	 (pass-count 0))
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
      (lambda (fcount pcount)
        (set! fail-count fcount)
@@ -1895,17 +2174,18 @@
              (SELECT count(id) FROM test_data WHERE test_id=? AND status like 'pass') AS pass_count;"
      test-id test-id)
     ;; Now rollup the counts to the central megatest.db
-    (db:general-call db 'pass-fail-counts (list pass-count fail-count test-id))
+    (db:general-call dbdat 'pass-fail-counts (list pass-count fail-count test-id))
     ;; if the test is not FAIL then set status based on the fail and pass counts.
-    (db:general-call db 'test_data-pf-rollup (list test-id test-id test-id test-id))))
+    (db:general-call dbdat 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
-  (let ((db (db:get-db dbstruct run-id))
-	(csvlist (csv->list (make-csv-reader
-			     (open-input-string csvdata)
-			     '((strip-leading-whitespace? #t)
-			       (strip-trailing-whitespace? #t)) )))) ;; (csv->list csvdata)))
+  (let* ((dbdat   (db:get-db dbstruct run-id))
+	 (db      (db:dbdat-get-db dbdat))
+	 (csvlist (csv->list (make-csv-reader
+			      (open-input-string csvdata)
+			      '((strip-leading-whitespace? #t)
+				(strip-trailing-whitespace? #t)))))) ;; (csv->list csvdata)))
     (for-each 
      (lambda (csvrow)
        (let* ((padded-row  (take (append csvrow (list #f #f #f #f #f #f #f #f #f)) 9))
@@ -1953,6 +2233,7 @@
 			 (else (conc "ERROR: bad tol comparator " tol))))))
 	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
+	 (db:delay-if-busy dbdat)
 	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
@@ -1962,7 +2243,9 @@
 ;;======================================================================
 
 (define (db:get-run-ids-matching-target dbstruct keynames target res runname testpatt statepatt statuspatt)
-  (let* ((row-ids '())
+  (let* ((dbdat    (db:get-db dbstruct #f))
+	 (db       (db:dbdat-get-db dbdat))
+	 (row-ids '())
 	 (keystr (string-intersperse 
 		  (map (lambda (key val)
 			 (conc key " like '" val "'"))
@@ -1970,7 +2253,7 @@
 		       (string-split target "/"))
 		  " AND "))
 	 ;; (testqry (tests:match->sqlqry testpatt))
-	 (runsqry (sqlite3:prepare (db:get-db dbstruct #f)(conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
+	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
     ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
@@ -1982,23 +2265,33 @@
 (define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
   (let* ((testqry (tests:match->sqlqry testpatt))
 	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
-    (sqlite3:for-each-row 
-     (lambda (p)
-       (set! res (cons p res)))
-     (db:get-db dbstruct run-id)
-     tstsqry)
-    res))
+    (db:with-db
+     dbstruct
+     run-id
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (p)
+	  (set! res (cons p res)))
+	db
+	tstsqry)
+       res))))
 
 (define (db:test-toplevel-num-items dbstruct run-id testname)
-  (let ((res 0))
-    (sqlite3:for-each-row
-     (lambda (num-items)
-       (set! res num-items))
-     (db:get-db dbstruct run-id)
-     "SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
-     run-id
-     testname)
-    res))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res 0))
+       (sqlite3:for-each-row
+	(lambda (num-items)
+	  (set! res num-items))
+	db
+	"SELECT count(id) FROM tests WHERE run_id=? AND testname=? AND item_path != '' AND state NOT IN ('DELETED');"
+	run-id
+	testname)
+       res))))
 
 ;;======================================================================
 ;; QUEUE UP META, TEST STATUS AND STEPS REMOTE ACCESS
@@ -2030,56 +2323,61 @@
 	       (string-substitute 
 		(regexp "_") "=" msg #t)))
 	   (lambda ()(deserialize)))
-	 (vector #f #f #f))) ;; crude reply for when things go awry
+	 (begin
+	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
+	   #f))) ;; crude reply for when things go awry
     ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
-  (let ((db  (db:get-db dbstruct run-id)))
-  (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
-      (db:general-call db 'set-test-start-time (list test-id)))
-  (if msg
-      (db:general-call db 'state-status-msg (list state status msg test-id))
-	(db:general-call db 'state-status     (list state status test-id)))))
+  (let ((dbdat  (db:get-db dbstruct run-id)))
+    (if (member state '("LAUNCHED" "REMOTEHOSTSTART"))
+	(db:general-call dbdat 'set-test-start-time (list test-id)))
+    (if msg
+	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
+	(db:general-call dbdat 'state-status     (list state status test-id)))))
 
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
   (if (and (not (equal? item-path ""))
 	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
-      (let ((db (db:get-db dbstruct run-id)))
-	(db:general-call db 'update-pass-fail-counts (list test-name test-name test-name))
+      (let ((dbdat (db:get-db dbstruct run-id)))
+	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
 	(if (equal? status "RUNNING")
-	    (db:general-call db 'top-test-set-running (list test-name))
+	    (db:general-call dbdat 'top-test-set-running (list test-name))
 	    (if (equal? status "LAUNCHED")
-		(db:general-call db 'top-test-set (list "LAUNCHED" test-name))
-		(db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
+		(db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name))
+		(db:general-call dbdat 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
 	#f)
       #f))
 
 (define (db:tests-register-test dbstruct run-id test-name item-path)
-  (sqlite3:execute (db:get-db dbstruct run-id) 'register-test run-id test-name item-path))
-;;        (let ((sleep-time (random 20))
-;; 	     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-;; 	 (case err-status
-;; 	   ((busy)(thread-sleep! 4))
-;; 	   (else
-;; 	    (debug:print 0 "WARNING: possible problem with call to cdb:remote-run, database may be read-only and locked, waiting and trying again ...")
-;; 	    (thread-sleep! sleep-time)))
+  (db:with-db
+   dbstruct
+   run-id
+   #t
+   (lambda (db)
+     (sqlite3:execute db 'register-test run-id test-name item-path))))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
-  (let ((res #f))
-    (sqlite3:for-each-row 
-     (lambda (path final_logf)
-       ;; (let ((path       (sdb:qry 'getstr path-id))
-       ;;       (final_logf (sdb:qry 'getstr final_logf-id)))
-       (set! logf final_logf)
-       (set! res (list path final_logf))
-       (if (directory? path)
-	   (debug:print 2 "Found path: " path)
-	   (debug:print 2 "No such path: " path))) ;; )
-    (db:get-db dbstruct run-id)
-     "SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='';"
-     test-name)
-    res))
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row 
+	(lambda (path final_logf)
+	  ;; (let ((path       (sdb:qry 'getstr path-id))
+	  ;;       (final_logf (sdb:qry 'getstr final_logf-id)))
+	  (set! logf final_logf)
+	  (set! res (list path final_logf))
+	  (if (directory? path)
+	      (debug:print 2 "Found path: " path)
+	      (debug:print 2 "No such path: " path))) ;; )
+	db
+	"SELECT rundir,final_logf FROM tests WHERE testname=? AND item_path='';"
+	test-name)
+       res))))
 
 ;;======================================================================
 ;; A G R E G A T E D   T R A N S A C T I O N   D B   W R I T E S 
@@ -2180,14 +2478,15 @@
     (hash-table-set! *logged-in-clients* client-signature (current-seconds))
     '(#t "successful login"))))
 
-(define (db:general-call db stmtname params)
+(define (db:general-call dbdat stmtname params)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
 				       (string->symbol stmtname)
 				       stmtname)
 				   db:queries)))
  		 (if q (car q) #f))))
-    (apply sqlite3:execute db query params)
-    #t))
+    (db:delay-if-busy dbdat)
+    (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
+    #t)) ;; BUG or Sillyness, why do I return #t instead of the query result?
 
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
@@ -2196,13 +2495,15 @@
 ;; Run this remotely!!
 ;;
 (define (db:get-matching-previous-test-run-records dbstruct run-id test-name item-path)
-  (let* ((db      (db:get-db dbstruct #f))
+  (let* ((dbdat   (db:get-db dbstruct #f))
+	 (db      (db:dbdat-get-db dbdat))
 	 (keys    (db:get-keys db))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
+    (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
      (lambda (a . b)
        (set! keyvals (cons a b)))
@@ -2240,69 +2541,60 @@
 		  (if (null? tal)
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
-;; 			   (let* ((remtries 10)
-;; 				  (proc     #f))
-;; 			     (set! proc (lambda (remtries)
-;; 					  (if (> remtries 0)
-;; 					      (handle-exceptions
-;; 					       exn
-;; 					       (let ((sleep-time (random 30))
-;; 						     (err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-;; 						 (case err-status
-;; 						   ((busy)
-;; 						    (thread-sleep! sleep-time)
-;; 						    (proc 10)) ;; we never give up on busy
-;; 						   (else
-;; 						    (debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-;; 						    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-;; 						    (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status)  exn))
-;; 						    (print-call-chain)
-;; 						    (debug:print 0 "Sleeping for " sleep-time)
-;; 						    (thread-sleep! sleep-time)
-;; 						    (debug:print-info 0 "trying db call one more time....this may never recover, if necessary kill process " (current-process-id) " on host " (get-host-name) " to clean up")
-;; 						    (proc (- remtries 1)))))
-;; 					       (apply sqlite3:execute db query params))
-;; 					      (debug:print 0 "ERROR: too many attempts to access db were made and no sucess. query: "
-;; 							   query ", params: " params))))
-;; 			     (proc remtries))
-(define (db:delay-if-busy #!key (count 6))
-  (let ((dbfj (conc *toppath* "/megatest.db-journal")))
-    (if (file-exists? dbfj)
-	(case count
-	  ((6)
-	   (thread-sleep! 0.2)
-	   (db:delay-if-busy count: 5))
-	  ((5)
-	   (thread-sleep! 0.4)
-	   (db:delay-if-busy count: 4))
-	  ((4)
-	   (thread-sleep! 0.8)
-	   (db:delay-if-busy count: 3))
-	  ((3)
-	   (thread-sleep! 1.6)
-	   (db:delay-if-busy count: 2))
-	  ((2)
-	   (thread-sleep! 3.2)
-	   (db:delay-if-busy count: 1))
-	  ((1)
-	   (thread-sleep! 6.4)
-	   (db:delay-if-busy count: 0))
-	  (else
-	   (debug:print-info 0 "delaying db access due to high database load.")
-	   (thread-sleep! 12.8))))))
-;; (db:delay-if-busy)
-;; (apply sqlite3:execute db query params)))
-;; (db:delay-if-busy)
+
+(define (db:delay-if-busy dbdat #!key (count 6))
+  (if (not (configf:lookup *configdat* "server" "delay-on-busy"))
+      (and dbdat (db:dbdat-get-db dbdat))
+      (if dbdat
+	  (let* ((dbpath (db:dbdat-get-path dbdat))
+		 (db     (db:dbdat-get-db   dbdat)) ;; we'll return this so (db:delay--if-busy can be called inline
+		 (dbfj   (conc dbpath "-journal")))
+	    (if (handle-exceptions
+		 exn
+		 (begin
+		   (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
+		   (thread-sleep! 1)
+		   (db:delay-if-busy count (- count 1)))
+		 (file-exists? dbfj))
+		(case count
+		  ((6)
+		   (thread-sleep! 0.2)
+		   (db:delay-if-busy count: 5))
+		  ((5)
+		   (thread-sleep! 0.4)
+		   (db:delay-if-busy count: 4))
+		  ((4)
+		   (thread-sleep! 0.8)
+		   (db:delay-if-busy count: 3))
+		  ((3)
+		   (thread-sleep! 1.6)
+		   (db:delay-if-busy count: 2))
+		  ((2)
+		   (thread-sleep! 3.2)
+		   (db:delay-if-busy count: 1))
+		  ((1)
+		   (thread-sleep! 6.4)
+		   (db:delay-if-busy count: 0))
+		  (else
+		   (debug:print-info 0 "delaying db access due to high database load.")
+		   (thread-sleep! 12.8))))
+	    db)
+	  "bogus result from db:delay-if-busy")))
 
 (define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
-    (sqlite3:for-each-row 
-     (lambda (id itempath state status run_duration logf comment)
-       (set! res (cons (vector id itempath state status run_duration logf comment) res)))
-     (db:get-db dbstruct run-id)
-     "SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '';"
-     test-name)
-    res))
+    (db:with-db
+     dbstruct
+     run-id
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row 
+	(lambda (id itempath state status run_duration logf comment)
+	  (set! res (cons (vector id itempath state status run_duration logf comment) res)))
+	db
+	"SELECT id,item_path,state,status,run_duration,final_logf,comment FROM tests WHERE testname=? AND item_path != '';"
+	test-name)
+       res))))
 
 ;;======================================================================
 ;; Tests meta data
@@ -2311,32 +2603,45 @@
 ;; read the record given a testname
 (define (db:testmeta-get-record dbstruct testname)
   (let ((res #f))
-    (sqlite3:for-each-row
-     (lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
-       (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
-     (db:get-db dbstruct #f)
-     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
-     testname)
-    res))
+    (db:with-db
+     dbstruct
+     #f
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)
+	  (set! res (vector id testname author owner description reviewed iterated avg_runtime avg_disk tags jobgroup)))
+	db
+	"SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta WHERE testname=?;"
+	testname)
+       res))))
 
 ;; create a new record for a given testname
 (define (db:testmeta-add-record dbstruct testname)
-  (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))
+  (db:with-db dbstruct #f #f 
+	      (lambda (db)
+		(sqlite3:execute 
+		 db
+		 "INSERT OR IGNORE INTO test_meta (testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags) VALUES (?,'','','','','','','','');" testname))))
 
 ;; update one of the testmeta fields
 (define (db:testmeta-update-field dbstruct testname field value)
-  (db:delay-if-busy)
-  (sqlite3:execute (db:get-db dbstruct #f) (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))
+  (db:with-db dbstruct #f #f 
+	      (lambda (db)
+		(sqlite3:execute 
+		 db
+		 (conc "UPDATE test_meta SET " field "=? WHERE testname=?;") value testname))))
 
 (define (db:testmeta-get-all dbstruct)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (a . b)
-       (set! res (cons (apply vector a b) res)))
-     (db:get-db dbstruct run-id)
-     "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta;")
-    res))
+  (db:with-db dbstruct #f #f 
+	      (lambda (db)
+		(let ((res '()))
+		  (sqlite3:for-each-row
+		   (lambda (a . b)
+		     (set! res (cons (apply vector a b) res)))
+		   db
+		   "SELECT id,testname,author,owner,description,reviewed,iterated,avg_runtime,avg_disk,tags,jobgroup FROM test_meta;")
+		  res))))
 
 ;;======================================================================
 ;; M I S C   M A N A G E M E N T   I T E M S 
@@ -2430,24 +2735,6 @@
 		 (set! result (append (if (null? tests)(list waitontest-name) tests) result)))))
 	 waitons)
 	(delete-duplicates result))))
-
-;;======================================================================
-;; SQLITE3 HELPERS
-;;======================================================================
-
-;; convert to -inline
-(define (db:first-result-default db stmt default . params)
-  (handle-exceptions
-   exn
-   (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
-     (if (eq? err-status 'done)
-	 default
-	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
-	   (print-call-chain)
-	   default)))
-   (apply sqlite3:first-result db stmt params)))
 
 ;;======================================================================
 ;; Extract ods file from the db
