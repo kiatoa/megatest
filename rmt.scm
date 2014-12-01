@@ -575,3 +575,16 @@
 
 (define (rmt:csv->test-data run-id test-id csvdata)
   (rmt:send-receive 'csv->test-data run-id (list run-id test-id csvdata)))
+
+;;======================================================================
+;;  T A S K S
+;;======================================================================
+
+(define (rmt:tasks-find-task-queue-records target run-name test-patt state-patt action-patt)
+  (rmt:send-receive 'find-task-queue-records #f (list target run-name test-patt state-patt action-patt)))
+
+(define (rmt:tasks-add action owner target runname testpatt params)
+  (rmt:send-receive 'tasks-add #f (list action owner target runname testpatt params)))
+
+(define (rmt:tasks-set-state-given-param-key dbstruct param-key new-state)
+  (rmt:send-receive 'tasks-set-state-given-param-key #f (list  param-key new-state)))

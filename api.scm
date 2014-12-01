@@ -128,6 +128,12 @@
     ((testmeta-get-record)       (apply db:testmeta-get-record dbstruct params))
     ((testmeta-add-record)       (apply db:testmeta-add-record dbstruct params))
     ((testmeta-update-field)     (apply db:testmeta-update-field dbstruct params))
+
+    ;; TASKS 
+    ((find-task-queue-records)   (apply tasks:find-task-queue-records dbstruct params))
+    ((tasks-add)                 (apply tasks:add dbstruct params))   
+    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
+
     (else
      (list "ERROR" 0))))
 

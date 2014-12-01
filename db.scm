@@ -771,6 +771,19 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+                                action TEXT DEFAULT '',
+                                owner TEXT,
+                                state TEXT DEFAULT 'new',
+                                target TEXT DEFAULT '',
+                                name TEXT DEFAULT '',
+                                testpatt TEXT DEFAULT '',
+                                keylock TEXT,
+                                params TEXT,
+                                creation_time TIMESTAMP,
+                                execution_time TIMESTAMP);")
+       ;; move this clean up call somewhere else
+       (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
        (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
        ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
