@@ -586,5 +586,5 @@
 (define (rmt:tasks-add action owner target runname testpatt params)
   (rmt:send-receive 'tasks-add #f (list action owner target runname testpatt params)))
 
-(define (rmt:tasks-set-state-given-param-key dbstruct param-key new-state)
+(define (rmt:tasks-set-state-given-param-key param-key new-state)
   (rmt:send-receive 'tasks-set-state-given-param-key #f (list  param-key new-state)))

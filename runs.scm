@@ -225,13 +225,13 @@
 			   (signal-mask! signum)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((tdbdat (tasks:open-db)))
-			     (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "killed"))
+			     (rmt:tasks-set-state-given-param-key task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
-    (rmt:tasks-set-state-given-param-key (db:delay-if-busy tdbdat) task-key "running")
+    (rmt:tasks-set-state-given-param-key task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
