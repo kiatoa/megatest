@@ -190,11 +190,12 @@
     (5 "WAIVED")
     (6 "SKIP")
     (7 "DELETED")
-    (8 "STUCK/DEAD")))
+    (8 "STUCK/DEAD")
+    (9 "ABORT")))
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE))
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT))
 
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
@@ -641,4 +642,5 @@
    ((equal? status "KILLED")  "orange")
    ((equal? status "KILLREQ") "purple")
    ((equal? status "RUNNING") "blue")
+   ((equal? status "ABORT")   "brown")
    (else "black")))
