@@ -363,29 +363,27 @@
 	(result      '()))
     (if (null? run-id-list)
 	'()
-	(for-each 
-	 (lambda (th)
-
-	   (thread-join! th)) ;; I assume that joining completed threads just moves on
-	 (let loop ((hed     (car run-id-list))
-		    (tal     (cdr run-id-list))
-		    (threads '()))
-	   (let* ((newthread (make-thread
-			      (lambda ()
-				(let ((res (rmt:send-receive 'get-tests-for-run-mindata hed (list hed testpatt states status not-in))))
-				  (if (list? res)
-				      (begin
-					(mutex-lock! multi-run-mutex)
-					(set! result (append result res))
-					(mutex-unlock! multi-run-mutex))
-				      (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
-			      (conc "multi-run-thread for run-id " hed)))
-		  (newthreads (cons newthread threads)))
-	     (thread-start! newthread)
-	     (thread-sleep! 0.5) ;; give that thread some time to start
-	     (if (null? tal)
-		 newthreads
-		 (loop (car tal)(cdr tal) newthreads))))))
+	(let loop ((hed     (car run-id-list))
+		   (tal     (cdr run-id-list))
+		   (threads '()))
+	  (if (> (length threads) 5)
+	      (loop hed tal (filter (lambda (th)(not (member (thread-state th) '(terminated dead)))) threads))
+	      (let* ((newthread (make-thread
+				 (lambda ()
+				   (let ((res (rmt:send-receive 'get-tests-for-run-mindata hed (list hed testpatt states status not-in))))
+				     (if (list? res)
+					 (begin
+					   (mutex-lock! multi-run-mutex)
+					   (set! result (append result res))
+					   (mutex-unlock! multi-run-mutex))
+					 (debug:print 0 "ERROR: get-tests-for-run-mindata failed for run-id " hed ", testpatt " testpatt ", states " states ", status " status ", not-in " not-in))))
+				 (conc "multi-run-thread for run-id " hed)))
+		     (newthreads (cons newthread threads)))
+		(thread-start! newthread)
+		(thread-sleep! 0.5) ;; give that thread some time to start
+		(if (null? tal)
+		    newthreads
+		    (loop (car tal)(cdr tal) newthreads))))))
     result))
 
 ;; ;; IDEA: Threadify these - they spend a lot of time waiting ...
