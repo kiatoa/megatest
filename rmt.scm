@@ -143,10 +143,10 @@
 	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
 	    (begin
-	      (debug:print 0 "ERROR: Communication failed!")
+	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (exit)
-	      ;; (rmt:open-qry-close-locally cmd run-id params))))
+	      ;; (exit)
+	      (rmt:open-qry-close-locally cmd run-id params)
 	      )))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
@@ -216,7 +216,7 @@
 	 (db-file-path   (db:dbfile-path 0)))
     ;; (read-only      (not (file-read-access? db-file-path)))
     (let* ((start         (current-milliseconds))
-	   (resdat        (api:execute-requests dbstruct-local (symbol->string cmd) params))
+	   (resdat        (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
 	   (res           (vector-ref resdat 1))
 	   (duration      (- (current-milliseconds) start)))
       (rmt:update-db-stats run-id cmd params duration)

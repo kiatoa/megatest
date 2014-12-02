@@ -368,7 +368,7 @@
       #t)
      ((> maxqry threshold)
       (if (common:low-noise-print 60 run-id "Max query time execeeded")
-	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, starting server."))
+	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
       #t)
      (else
       #f))))

@@ -78,6 +78,12 @@
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
     (handle-directory spiffy-directory-listing)
+    (handle-exception (lambda (exn chain)
+			(signal (make-composite-condition
+				 (make-property-condition 
+				  'server
+				  'message "server error")))))
+
     ;; http-transport:handle-directory) ;; simple-directory-handler)
     ;; Setup the web server and a /ctrl interface
     ;;
