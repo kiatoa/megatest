@@ -176,7 +176,9 @@
 		  (db      (sqlite3:open-database fname)))
 	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	      (if (not exists)(initproc db))
+	      (if (not exists)
+		  (initproc db)
+		  (initproc db update-only: #t))
 	      (release-dot-lock fname)
 	      db)
 	    (begin
@@ -198,23 +200,7 @@
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
 	       (db           (db:lock-create-open dbpath ;; this is the database physically on disk
-						  (lambda (db)
-						    (handle-exceptions
-						     exn
-						     (begin
-						       (release-dot-lock dbpath)
-						       (if (> attemptnum 2)
-							   (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
-							   (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
-						     (db:initialize-run-id-db db)
-						     (sqlite3:execute 
-						      db
-						      "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-						      (* run-id 30000) ;; allow for up to 30k tests per run
-						      run-id)
-						     ;; do a dummy query to test that the table exists and the db is truly readable
-						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
-						    )))) ;; add strings db to rundb, not in use yet
+						 whatever-goes-here! ) ;; add strings db to rundb, not in use yet
 	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (if *megatest-db*
 				 *megatest-db* 
@@ -277,9 +263,9 @@
   (let* ((dbpath       (conc *toppath* "/megatest.db"))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
-					    (lambda (db)
-					      (db:initialize-main-db db)
-					      (db:initialize-run-id-db db))))
+					    (lambda (db update-only)
+					      (db:initialize-main-db db update-only)
+					      (db:initialize-run-id-db db update-only))))
 	 (write-access (file-write-access? dbpath)))
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
@@ -723,22 +709,23 @@
 ;;			   open-run-close-exception-handling)
 ;;)
 
-(define (db:initialize-main-db dbdat)
+(define (db:initialize-main-db dbdat update-only)
   (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
 	 (fieldstr (keys->key/field keys))
 	 (db       (db:dbdat-get-db dbdat)))
-    (for-each (lambda (key)
-		(let ((keyn key))
-		  (if (member (string-downcase keyn)
-			      (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
-				    "pass_count"))
-		      (begin
-			(print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
-			(exit 1)))))
-	      keys)
+    (if (not update-only)
+	(for-each (lambda (key)
+		    (let ((keyn key))
+		      (if (member (string-downcase keyn)
+				  (list "runname" "state" "status" "owner" "event_time" "comment" "fail_count"
+					"pass_count"))
+			  (begin
+			    (print "ERROR: your key cannot be named " keyn " as this conflicts with the same named field in the runs table, you must remove your megatest.db and <linktree>/.db before trying again.")
+			    (exit 1)))))
+		  keys))
     (sqlite3:with-transaction
      db
      (lambda ()
@@ -799,7 +786,15 @@
 ;; R U N   S P E C I F I C   D B 
 ;;======================================================================
 
-(define (db:initialize-run-id-db db)
+(define (db:initialize-run-id-db db update-only)
+  (handle-exceptions
+   exn
+   (begin
+     (release-dot-lock dbpath)
+     (if (> attemptnum 2)
+	 (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+	 (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
+   (db:initialize-run-id-db db)
   (sqlite3:with-transaction 
    db
    (lambda ()
@@ -868,6 +863,16 @@
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
                               run_duration INTEGER DEFAULT 0);")))
+   (sqlite3:execute 
+    db
+    "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','
+                                                      (* run-id 30000) ;; allow for up to 30k tests per run
+                                                      run-id)
+                                                     ;; do a dummy query to test that the table exists and the db is truly readable
+                                                     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+						     )))) ;; add strings db to rundb, not in use yet
+
+
   db)
 
 ;;======================================================================
