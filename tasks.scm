@@ -384,7 +384,7 @@
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
 		(debug:print 0 "Try starting server for run-id " run-id))
-	    (thread-sleep! (/ (random 1000) 1000))
+	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
