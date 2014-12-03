@@ -148,6 +148,22 @@ $(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
 
 #======================================================================
+# N  A N O M S G
+#======================================================================
+
+nanomsg-0.5-beta.tar.gz :
+	wget http://download.nanomsg.org/nanomsg-0.5-beta.tar.gz
+
+nanomsg-0.5-beta/COPYING : nanomsg-0.5-beta.tar.gz
+	tar xfvz nanomsg-0.5-beta.tar.gz
+
+$(PREFIX)/bin/nanocat : nanomsg-0.5-beta/COPYING
+	cd nanomsg-0.5-beta;./configure --prefix=$(PREFIX);make;make install
+
+$(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
+	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) nanomsg
+
+#======================================================================
 # M A T T S   U T I L S
 #======================================================================
 

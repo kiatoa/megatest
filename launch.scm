@@ -460,6 +460,13 @@
 			    pathenvvar: "MT_RUN_AREA_HOME"))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
+	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
+	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
+	  (if (member transport '(http rpc nmsg))
+	      (set! *transport-type* transport)
+	      (begin
+		(debug:print 0 "ERROR: Unrecognised transport " transport)
+		(exit))))
 	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
 	  (if linktree
 	      (if (not (file-exists? linktree))

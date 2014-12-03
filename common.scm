@@ -68,7 +68,7 @@
 ;; SERVER
 (define *my-client-signature* #f)
 (define *transport-type*    'http)
-(define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
+(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
@@ -228,6 +228,7 @@
 	     (configf:lookup *configdat* "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
   (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if *inmemdb*     (db:close-all *inmemdb*))
   (if (and *megatest-db*
 	   (sqlite3:database? *megatest-db*))
       (begin

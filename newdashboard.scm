@@ -80,6 +80,10 @@ Misc
 ;;       (client:launch))
 ;;     (client:launch))
 
+;; ease debugging by loading ~/.dashboardrc
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
 
 (define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*

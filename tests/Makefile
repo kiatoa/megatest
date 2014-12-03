@@ -36,7 +36,7 @@ stopserver :
 
 repl :
 	cd ..;make -j && make install
-	cd fullrun;$(MEGATEST) -repl
+	cd fullrun;$(MEGATEST) -:b -repl
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
@@ -118,23 +118,23 @@ test9 : minsetup test9a test9b test9c test9d test9e
 test9a :
 	@echo Run super-simple mintest e, no waitons.
 	cd mintest;$(DASHBOARD)&
-	cd mintest;$(MEGATEST) -preclean -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests e -target $(VER) -runname $(shell date +%H.%M.%S) -debug $(DEBUG)
 
 test9b :
 	@echo Run simple mintest d with one waiton c
-	cd mintest;$(MEGATEST) -preclean -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests d -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
-	cd mintest;$(MEGATEST) -preclean -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
 	@echo Run an itemized test with no items
-	cd mintest;$(MEGATEST) -preclean -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests g -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9e :
 	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
-	cd mintest;$(MEGATEST) -preclean -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a1 -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously

@@ -10,11 +10,12 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json 
-     http-client directory-utils z3 srfi-18) ;;  extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+     http-client srfi-18) ;;  zmq extras)
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(import (prefix rpc rpc:))
 
 ;; (use zmq)
 
@@ -29,8 +30,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-;; (declare (uses sdb))
-;; (declare (uses filedb))
+
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
@@ -133,6 +133,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -transport http|zmq     : use http or zmq for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -208,6 +209,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-start-dir"
 			"-server"
 			"-stop-server"
+			"-transport"
+			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -285,11 +288,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
+(define *time-zero* (current-seconds))
 (define *watchdog*
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db")))
+     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+	   (debug-mode  (debug:debug-mode 1))
+	   (last-time   (current-seconds)))
        (let loop ()
 	 ;; sync for filesystem local db writes
 	 ;;
@@ -312,13 +318,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;;       (server:kind-run run-id)))))
 		    (hash-table-delete! *db-local-sync* run-id)))
 	      (mutex-unlock! *db-multi-sync-mutex*))
-	    (hash-table-keys *db-local-sync*)))
-
+	    (hash-table-keys *db-local-sync*))
+	   (if (and debug-mode
+		    (> (- start-time last-time) 14))
+	       (begin
+		 (set! last-time start-time)
+		 (debug:print-info 0 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	 
 	 ;; keep going unless time to exit
 	 ;;
 	 (if (not *time-to-exit*)
 	     (begin
-	       (thread-sleep! 1) ;; wait one second before syncing again
+	       (thread-sleep! 5) ;; wait five seconds before syncing again, we'll also sync on exit
 	       (loop)))))
      "Watchdog thread")))
 
@@ -477,6 +488,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (host:port     (args:get-arg "-ping")))
       (server:ping run-id host:port)))
 
+;;       (set! *did-something* #t)
+;; 	      (begin
+;; 		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
+;; 		(case (server:get-transport)
+;; 		  ((http)(http:ping run-id host-port))
+;; 		  ((rpc) (rpc:procedure 'server:login (car host-port)(cadr host-port));;  *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
+;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
+
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
@@ -504,7 +523,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     '("-list-servers"
 		       "-stop-server"
 		       "-show-cmdinfo"
-		       "-list-runs")))
+		       "-list-runs"
+		       "-ping")))
 	(if (launch:setup-for-run)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
@@ -910,6 +930,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -957,6 +978,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -1035,6 +1057,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
 	(exit 5))
       (let* ((cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	     (transport (assoc/default 'transport cmdinfo))
 	     (testpath  (assoc/default 'testpath  cmdinfo))
 	     (test-name (assoc/default 'test-name cmdinfo))
 	     (runscript (assoc/default 'runscript cmdinfo))
@@ -1081,6 +1104,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (exit 5))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))

@@ -182,15 +182,16 @@
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
                    VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?,-1,?,        ?,        ?);"
-   (current-process-id)       ;; pid
-   (get-host-name)            ;; hostname
-   -1                         ;; port
-   -1                         ;; pubport
-   (random 1000)              ;; priority (used a tiebreaker on get-available)
-   "available"                ;; state
-   (common:version-signature) ;; mt_version
-   -1                         ;; interface
-   "http"                     ;; transport
+   (current-process-id)          ;; pid
+   (get-host-name)               ;; hostname
+   -1                            ;; port
+   -1                            ;; pubport
+   (random 1000)                 ;; priority (used a tiebreaker on get-available)
+   "available"                   ;; state
+   (common:version-signature)    ;; mt_version
+   -1                            ;; interface
+   ;; (conc (server:get-transport)) ;; transport
+   (conc *transport-type*)    ;; transport
    run-id
    ))
 
@@ -366,11 +367,11 @@
     (cond
      (forced 
       (if (common:low-noise-print 60 run-id "server required is set")
-	  (debug:print-info 0 "Server required is set, starting server."))
+	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
       #t)
      ((> maxqry threshold)
       (if (common:low-noise-print 60 run-id "Max query time execeeded")
-	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, starting server."))
+	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
       #t)
      (else
       #f))))
@@ -386,8 +387,9 @@
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
 		(debug:print 0 "Try starting server for run-id " run-id))
+	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
-	    (thread-sleep! (min delay-time 5))
+	    (thread-sleep! (min delay-time 1))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
