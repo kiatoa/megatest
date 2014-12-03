@@ -1,0 +1,9 @@
+;;;; trace.setup -*- Scheme -*-
+
+
+(compile -s trace.scm -O3 -d1 -j trace)
+(compile -s trace.import.scm -O3 -d0)
+
+(install-extension
+ 'trace
+ '("trace.so" "trace.import.so"))

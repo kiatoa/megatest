@@ -225,13 +225,13 @@
 			   (signal-mask! signum)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((tdbdat (tasks:open-db)))
-			     (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "killed"))
+			     (rmt:tasks-set-state-given-param-key task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
-    (tasks:add (db:delay-if-busy tdbdat) "run-tests" user target runname test-patts task-key) ;; params)
-    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "running")
+    (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
+    (rmt:tasks-set-state-given-param-key task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -396,7 +396,7 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "done")
+    (rmt:tasks-set-state-given-param-key task-key "done")
     ;; (sqlite3:finalize! tasks-db)
     ))
 
@@ -946,7 +946,7 @@
 	;; every couple minutes verify the server is there for this run
 	(if (and (common:low-noise-print 60 "try start server"  run-id)
 		 (tasks:need-server run-id))
-	    (tasks:start-and-wait-for-server tdbdat run-id 10))
+	    (tasks:start-and-wait-for-server tdbdat run-id 10)) ;; NOTE: delay and wait is done under the hood
 	
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
@@ -1446,7 +1446,7 @@
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
-			(tasks:kill-runner (db:delay-if-busy tdbdat) target run-name)
+			(tasks:kill-runner target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)

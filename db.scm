@@ -298,7 +298,7 @@
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
     (debug:print-info 4 "Syncing for run-id: " run-id)
-    (mutex-lock! *http-mutex*)
+    ;; (mutex-lock! *http-mutex*)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
 	(if maindb
@@ -327,12 +327,12 @@
 	    (begin
 	      (db:delay-if-busy rundb)
 	      (db:delay-if-busy olddb)
+	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-		(dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		0))))))
 
 (define (db:close-main dbstruct)
@@ -619,6 +619,7 @@
   (let* ((toppath  (launch:setup-for-run))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	 (mtdb     (if toppath (db:open-megatest-db)))
+	 (allow-cleanup (if run-ids #f #t))
 	 (run-ids  (if run-ids 
 		       run-ids
 		       (if toppath (begin
@@ -665,17 +666,43 @@
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
+    ;; do not use the run-ids list passed in to the function
+    ;;
     (if (member 'new2old options)
-	(for-each
-	 (lambda (run-id)
-	   (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-		  (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	     ;; (db:delay-if-busy frundb)
-	     ;; (db:delay-if-busy mtdb)
-	     (if (eq? run-id 0)
-		 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
-	 (cons 0 run-ids)))
+	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
+	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0))))
+	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
+	       (count       1)
+	       (total       (length all-run-ids))
+	       (dead-runs  '()))
+	  (for-each
+	   (lambda (run-id)
+	     (debug:print 0 "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
+	     (set! count (+ count 1))
+	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+	       ;; (db:delay-if-busy frundb)
+	       ;; (db:delay-if-busy mtdb)
+	       ;; (db:clean-up frundb)
+	       (if (eq? run-id 0)
+		   (begin
+		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+		   (begin
+		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
+		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+		     (db:clean-up-rundb (db:get-db fromdb run-id))
+		     ))))
+	   all-run-ids)
+	  ;; removed deleted runs
+	  (let ((dbdir (tasks:get-task-db-path)))
+	    (for-each (lambda (run-id)
+			(let ((fullname (conc dbdir "/" run-id ".db")))
+			  (if (file-exists? fullname)
+			      (begin
+				(debug:print 0 "Removing database file for deleted run " fullname)
+				(delete-file fullname)))))
+		      dead-runs))))
     ;; (db:close-all dbstruct)
     ;; (sqlite3:finalize! mdb)
     ))
@@ -771,6 +798,19 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+                                action TEXT DEFAULT '',
+                                owner TEXT,
+                                state TEXT DEFAULT 'new',
+                                target TEXT DEFAULT '',
+                                name TEXT DEFAULT '',
+                                testpatt TEXT DEFAULT '',
+                                keylock TEXT,
+                                params TEXT,
+                                creation_time TIMESTAMP,
+                                execution_time TIMESTAMP);")
+       ;; move this clean up call somewhere else
+       (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
        (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
        ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
@@ -898,6 +938,60 @@
 ;; M A I N T E N A N C E
 ;;======================================================================
 
+(define (db:have-incompletes? dbstruct run-id ovr-deadtime)
+  (let* ((dbdat        (db:get-db dbstruct run-id))
+	 (db           (db:dbdat-get-db dbdat))
+	 (incompleted '())
+	 (oldlaunched '())
+	 (toplevels   '())
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime     (if (and deadtime-str
+				(string->number deadtime-str))
+			   (string->number deadtime-str)
+			   7200))) ;; two hours
+    (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
+    
+    ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+    ;;
+    ;; HOWEVER: this code in run:test seems to work fine
+    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+    ;;                     (db:test-get-run_duration testdat)))
+    ;;                    600) 
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row 
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (begin
+	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     run-id deadtime)
+
+    ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+    ;;
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+     run-id)
+    
+    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+    (if (and (null? incompleted)
+	     (null? oldlaunched)
+	     (null? toplevels))
+	#f
+	#t)))
+
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in
@@ -995,7 +1089,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up dbdat)
-  (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
@@ -1029,6 +1123,95 @@
     ;; (db:find-and-mark-incomplete db)
     (db:delay-if-busy dbdat)
     (sqlite3:execute db "VACUUM;")))
+
+;; Clean out old junk and vacuum the database
+;;
+;; Ultimately do something like this:
+;;
+;; 1. Look at test records either deleted or part of deleted run:
+;;    a. If test dir exists, set the the test to state='UNKNOWN', Set the run to 'unknown'
+;;    b. If test dir gone, delete the test record
+;; 2. Look at run records
+;;    a. If have tests that are not deleted, set state='unknown'
+;;    b. ....
+;;
+(define (db:clean-up-rundb dbdat)
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  (let* ((db         (db:dbdat-get-db dbdat))
+	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests);"))
+	(statements
+	 (map (lambda (stmt)
+		(sqlite3:prepare db stmt))
+	      (list
+	       ;; delete all tests that belong to runs that are 'deleted'
+	       ;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
+	       ;; delete all tests that are 'DELETED'
+	       "DELETE FROM tests WHERE state='DELETED';"
+	       ))))
+    (db:delay-if-busy dbdat)
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count before clean: " tot))
+			     count-stmt)
+       (map sqlite3:execute statements)
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count after  clean: " tot))
+			     count-stmt)))
+    (map sqlite3:finalize! statements)
+    (sqlite3:finalize! count-stmt)
+    ;; (db:find-and-mark-incomplete db)
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "VACUUM;")))
+
+;; Clean out old junk and vacuum the database
+;;
+;; Ultimately do something like this:
+;;
+;; 1. Look at test records either deleted or part of deleted run:
+;;    a. If test dir exists, set the the test to state='UNKNOWN', Set the run to 'unknown'
+;;    b. If test dir gone, delete the test record
+;; 2. Look at run records
+;;    a. If have tests that are not deleted, set state='unknown'
+;;    b. ....
+;;
+(define (db:clean-up-maindb dbdat)
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  (let* ((db         (db:dbdat-get-db dbdat))
+	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM runs);"))
+	 (statements
+	  (map (lambda (stmt)
+		 (sqlite3:prepare db stmt))
+	       (list
+		;; delete all tests that belong to runs that are 'deleted'
+		;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
+		;; delete all tests that are 'DELETED'
+		"DELETE FROM runs WHERE state='deleted';"
+		)))
+	 (dead-runs '()))
+    (sqlite3:for-each-row
+     (lambda (run-id)
+       (set! dead-runs (cons run-id dead-runs)))
+       db
+       "SELECT id FROM runs WHERE state='deleted';")
+    (db:delay-if-busy dbdat)
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count before clean: " tot))
+			     count-stmt)
+       (map sqlite3:execute statements)
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count after  clean: " tot))
+			     count-stmt)))
+    (map sqlite3:finalize! statements)
+    (sqlite3:finalize! count-stmt)
+    ;; (db:find-and-mark-incomplete db)
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "VACUUM;")
+    dead-runs))
 
 ;;======================================================================
 ;; M E T A   G E T   A N D   S E T   V A R S
@@ -2298,8 +2481,8 @@
 ;;======================================================================
 
 ;; NOTE: Can remove the regex and base64 encoding for zmq
-(define (db:obj->string obj)
-  (case *transport-type*
+(define (db:obj->string obj #!key (transport 'http))
+  (case transport
     ;; ((fs) obj)
     ((http fs)
      (string-substitute
@@ -2309,11 +2492,11 @@
 	(with-output-to-string
 	  (lambda ()(serialize obj)))))
       #t))
-    ((zmq)(with-output-to-string (lambda ()(serialize obj))))
+    ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
 
-(define (db:string->obj msg)
-  (case *transport-type*
+(define (db:string->obj msg #!key (transport 'http))
+  (case transport
     ;; ((fs) msg)
     ((http fs)
      (if (string? msg)
@@ -2325,8 +2508,8 @@
 	   (lambda ()(deserialize)))
 	 (begin
 	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
-	   #f))) ;; crude reply for when things go awry
-    ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
+	   msg))) ;; crude reply for when things go awry
+    ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)

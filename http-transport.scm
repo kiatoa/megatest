@@ -78,6 +78,12 @@
 		       link-tree-path
 		       (current-directory))) ;; WARNING: SECURITY HOLE. FIX ASAP!
     (handle-directory spiffy-directory-listing)
+    (handle-exception (lambda (exn chain)
+			(signal (make-composite-condition
+				 (make-property-condition 
+				  'server
+				  'message "server error")))))
+
     ;; http-transport:handle-directory) ;; simple-directory-handler)
     ;; Setup the web server and a /ctrl interface
     ;;
@@ -95,27 +101,6 @@
 				   (mutex-lock! *heartbeat-mutex*)
 				   (set! *last-db-access* (current-seconds))
 				   (mutex-unlock! *heartbeat-mutex*))
-				  ;; This is the /ctrl path where data is handed to the server and
-				  ;; responses 
-				  ;; ((equal? (uri-path (request-uri (current-request)))
-				  ;;          '(/ "ctrl"))
-				  ;;  (let* ((packet (db:string->obj dat))
-				  ;;         (qtype  (cdb:packet-get-qtype packet)))
-				  ;;    (debug:print-info 12 "server=> received packet=" packet)
-				  ;;    (if (not (member qtype '(sync ping)))
-				  ;;        (begin
-				  ;;          (mutex-lock! *heartbeat-mutex*)
-				  ;;          (set! *last-db-access* (current-seconds))
-				  ;;          (mutex-unlock! *heartbeat-mutex*)))
-				  ;;    ;; (mutex-lock! *db:process-queue-mutex*) ;; trying a mutex
-				  ;;    ;; (set! res (open-run-close db:process-queue-item open-db packet))
-				  ;;    (set! res (db:process-queue-item db packet))
-				  ;;    ;; (mutex-unlock! *db:process-queue-mutex*)
-				  ;;    (debug:print-info 11 "Return value from db:process-queue-item is " res)
-				  ;;    (send-response body: (conc "<head>ctrl data</head>\n<body>"
-				  ;;       			res
-				  ;;       			"</body>")
-				  ;;       	    headers: '((content-type text/plain)))))
 				  ((equal? (uri-path (request-uri (current-request))) 
 					   '(/ ""))
 				   (send-response body: (http-transport:main-page)))
@@ -245,24 +230,26 @@
 			   (debug:print 0 "FATAL ERROR: http-transport:client-api-send-receive called with no server info")
 			   (exit 1))))
 	 (res        #f)
-	 (success    #t))
-    (handle-exceptions
-     exn
-     (if (> numretries 0)
-	 (begin
-	   (mutex-unlock! *http-mutex*)
-	   (thread-sleep! 1)
-	   (handle-exceptions
-	    exn
-	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
-	    (close-all-connections!))
-	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
-	   (http-transport:client-api-send-receive run-id serverdat cmd params numretries: (- numretries 1)))
-	 (begin
-	   (mutex-unlock! *http-mutex*)
-	   (tasks:kill-server-run-id run-id)
-	   #f))
-     (begin
+	 (success    #t)
+	 (sparams    (db:obj->string params transport: 'http)))
+;;    (condition-case
+;;     handle-exceptions
+;;     exn
+;;     (if (> numretries 0)
+;;	 (begin
+;;	   (mutex-unlock! *http-mutex*)
+;;	   (thread-sleep! 1)
+;;	   (handle-exceptions
+;;	    exn
+;;	    (debug:print 0 "WARNING: closing connections failed. Server at " fullurl " almost certainly dead")
+;;	    (close-all-connections!))
+;;	   (debug:print 0 "WARNING: Failed to communicate with server, trying again, numretries left: " numretries)
+;;	   (http-transport:client-api-send-receive run-id serverdat cmd sparams numretries: (- numretries 1)))
+;;	 (begin
+;;	   (mutex-unlock! *http-mutex*)
+;;	   (tasks:kill-server-run-id run-id)
+;;	   #f))
+;;     (begin
        (debug:print-info 11 "fullurl=" fullurl ", cmd=" cmd ", params=" params ", run-id=" run-id "\n")
        ;; set up the http-client here
        (max-retry-attempts 1)
@@ -278,21 +265,26 @@
 			      ;;					       ((exn http client-error) e (print e)))
 			      (set! res (vector
 					 success
-					 (handle-exceptions
-					  exn
-					  (begin
-					    (set! success #f)
-					    (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ". Killing associated server to allow clean retry.")
-					    (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-					    (hash-table-delete! *runremote* run-id)
-					    ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine.
-					    #f)
-					  (with-input-from-request ;; was dat
-					   fullurl 
-					   (list (cons 'key "thekey")
-						 (cons 'cmd cmd)
-						 (cons 'params params))
-					   read-string))))
+					 (db:string->obj 
+					  (handle-exceptions
+					   exn
+					   (begin
+					     (set! success #f)
+					     (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ".")
+					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+					     (hash-table-delete! *runremote* run-id)
+					     ;; Killing associated server to allow clean retry.")
+					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					     ;; (signal (make-composite-condition
+					     ;;          (make-property-condition 'commfail 'message "failed to connect to server")))
+					     "communications failed")
+					   (with-input-from-request ;; was dat
+					    fullurl 
+					    (list (cons 'key "thekey")
+						  (cons 'cmd cmd)
+						  (cons 'params sparams))
+					    read-string))
+					  transport: 'http)))
 			      ;; Shouldn't this be a call to the managed call-all-connections stuff above?
 			      (close-all-connections!)
 			      (mutex-unlock! *http-mutex*)
@@ -307,7 +299,20 @@
 	 (thread-join! th1)
 	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
-	 res)))))
+	 (if (vector? res)
+	     (if (vector-ref res 0)
+		 res
+		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
+		   (debug:print 0 "ERROR: error occured at server, info=" (vector-ref res 2))
+		   (debug:print 0 " client call chain:")
+		   (print-call-chain (current-error-port))
+		   (debug:print 0 " server call chain:")
+		   (pp (vector-ref res 1) (current-error-port))
+		   (signal (vector-ref result 0))))
+	     (signal (make-composite-condition
+		      (make-property-condition 
+		       'timeout
+		       'message "nmsg-transport:client-api-send-receive-raw timed out talking to server")))))))
 
 ;; careful closing of connections stored in *runremote*
 ;;
@@ -320,13 +325,14 @@
 	#f)))
 
 
-(define (make-http-transport:server-dat)(make-vector 5))
+(define (make-http-transport:server-dat)(make-vector 6))
 (define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
 (define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
 (define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
 (define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
 (define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
 (define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
+(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -357,6 +363,7 @@
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
+  (debug:print-info 0 "Starting the sync-back, keep alive thread in server for run-id=" run-id)
   (let* ((tdbdat      (tasks:open-db))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
@@ -385,16 +392,11 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
-			   (if (and (string? tmo)
-				    (string->number tmo))
-			       (* 60 60 (string->number tmo))
-			       ;; (* 3 24 60 60) ;; default to three days
-			       (* 60 1)         ;; default to one minute
-			       ;; (* 60 60 25)      ;; default to 25 hours
-			       ))))
+	 (server-timeout (server:get-timeout)))
     (let loop ((count         0)
 	       (server-state 'available))
+
+
       ;; Use this opportunity to sync the inmemdb to db
       (let ((start-time (current-milliseconds))
 	    (sync-time  #f)
@@ -447,14 +449,8 @@
       ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
       ;;
       (if (and *server-run*
-	       ;; (or
 	       (> (+ last-access server-timeout)
 		  (current-seconds)))
-;;		   (and (eq? run-id 0)
-;;			(> (tasks:num-servers-non-zero-running tdb) 0))
-;;		   (and (not (eq? run-id 0)) ;; only makes sense in non-zero run-id servers
-;;			(> (db:get-count-tests-actually-running *inmemdb* run-id) 0))
-;;		   ))
 	  (begin
 	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
 	    ;;
@@ -547,6 +543,18 @@
 	    (set! *didsomething* #t)
 	    (thread-join! th2)
 	    (exit))))))
+
+(define (http:ping run-id host-port)
+  (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
+	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+    (if (and (list? login-res)
+	     (car login-res))
+	(begin
+	  (print "LOGIN_OK")
+	  (exit 0))
+	(begin
+	  (print "LOGIN_FAILED")
+	  (exit 1)))))
 
 (define (http-transport:server-signal-handler signum)
   (signal-mask! signum)
