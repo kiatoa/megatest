@@ -120,8 +120,9 @@
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		(if (eq? (modulo attemptnum 5) 0)
-		    (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
+		;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
+		;; (if (eq? (modulo attemptnum 5) 0)
+		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
 		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
 		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
 		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
@@ -134,12 +135,12 @@
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
 	;; no connection info? try to start a server
 	(if (and (< attemptnum 15)
-		 (tasks:need-server run-id))
+		 (member cmd api:write-queries))
 	    (begin
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	      (client:setup run-id)
+	      ;; (client:setup run-id) ;; client setup happens in rmt:get-connection-info
 	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
 	    (begin

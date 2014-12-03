@@ -71,6 +71,7 @@ test4a : cleanprep
 
 # NOTE: Only one instance can be a server
 test5 : cleanprep
+	rm -f fullrun/a*.log fullrun/logs/*
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
 	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
 	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
