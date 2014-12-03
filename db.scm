@@ -938,6 +938,60 @@
 ;; M A I N T E N A N C E
 ;;======================================================================
 
+(define (db:have-incompletes? dbstruct run-id ovr-deadtime)
+  (let* ((dbdat        (db:get-db dbstruct run-id))
+	 (db           (db:dbdat-get-db dbdat))
+	 (incompleted '())
+	 (oldlaunched '())
+	 (toplevels   '())
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime     (if (and deadtime-str
+				(string->number deadtime-str))
+			   (string->number deadtime-str)
+			   7200))) ;; two hours
+    (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
+    
+    ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+    ;;
+    ;; HOWEVER: this code in run:test seems to work fine
+    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+    ;;                     (db:test-get-run_duration testdat)))
+    ;;                    600) 
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row 
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (begin
+	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     run-id deadtime)
+
+    ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+    ;;
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+     run-id)
+    
+    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+    (if (and (null? incompleted)
+	     (null? oldlaunched)
+	     (null? toplevels))
+	#f
+	#t)))
+
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
 ;;                          end_time,strftime('%s','now') as now from tests where state in

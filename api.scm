@@ -47,7 +47,9 @@
     get-runs-by-patt
     get-steps-data
     login
-    testmeta-get-record))
+    testmeta-get-record
+    have-incompletes?
+    ))
 
 (define api:write-queries
   '(
@@ -70,7 +72,7 @@
     delete-run
     lock/unlock-run
     update-run-event_time
-    find-and-mark-incomplete
+    mark-incomplete
 
     ;; STEPS
     teststep-set-status!
@@ -136,8 +138,6 @@
 	    ((delete-run)                   (apply db:delete-run dbstruct params))
 	    ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
 	    ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
-	    ((find-and-mark-incomplete)     (apply db:find-and-mark-incomplete dbstruct params))
-
 
 	    ;; STEPS
 	    ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))
@@ -149,6 +149,7 @@
 	    ;; MISC
 	    ((sync-inmem->db)               (let ((run-id (car params)))
 					      (db:sync-touched dbstruct run-id force-sync: #t)))
+	    ((mark-incomplete)              (apply db:find-and-mark-incomplete dbstruct params))
 
 	    ;; TESTMETA
 	    ((testmeta-add-record)       (apply db:testmeta-add-record dbstruct params))
@@ -201,6 +202,7 @@
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
 
 	    ;; MISC
+	    ((have-incompletes?)            (apply db:have-incompletes? dbstruct params))
 	    ((login)                        (apply db:login dbstruct params))
 	    ((general-call)                 (let ((stmtname   (car params))
 						  (run-id     (cadr params))

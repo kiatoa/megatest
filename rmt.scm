@@ -519,7 +519,8 @@
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
-  (rmt:send-receive 'find-and-mark-incomplete run-id (list run-id ovr-deadtime)))
+  (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
+      (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))))
 
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
