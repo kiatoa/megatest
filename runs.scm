@@ -396,7 +396,7 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (rmt:tasks-set-state-given-param-key (db:delay-if-busy tdbdat) task-key "done")
+    (rmt:tasks-set-state-given-param-key task-key "done")
     ;; (sqlite3:finalize! tasks-db)
     ))
 
