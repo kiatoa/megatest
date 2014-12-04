@@ -283,20 +283,22 @@
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
-		     (begin (debug:print 0 "ERROR: no servers listed, should be at least one by now.") 
-			    (sqlite3:finalize! mdb)
-			    (exit 1))
-		     (car (db:get-rows all))))
-	 (header   (db:get-header all))
-	 (id       (db:get-value-by-header first header "id"))
-	 (hostname (db:get-value-by-header first header "hostname"))
-	 (pid      (db:get-value-by-header first header "pid"))
-	 (priority (db:get-value-by-header first header "priority")))
-    (debug:print 0 "INFO: am-i-the-server got record " first)
-    ;; for now a basic check. add tiebreaking by priority later
-    (if (and (equal? hostname (get-host-name))
-	     (equal? pid      (current-process-id)))
-	id
+		     #f;; (begin (debug:print 0 "ERROR: no servers listed, should be at least one by now.") 
+		       ;;      (sqlite3:finalize! mdb)
+		       ;;      (exit 1))
+		     (car (db:get-rows all)))))
+    (if first
+	(let* ((header   (db:get-header all))
+	       (id       (db:get-value-by-header first header "id"))
+	       (hostname (db:get-value-by-header first header "hostname"))
+	       (pid      (db:get-value-by-header first header "pid"))
+	       (priority (db:get-value-by-header first header "priority")))
+	  ;; (debug:print 0 "INFO: am-i-the-server got record " first)
+	  ;; for now a basic check. add tiebreaking by priority later
+	  (if (and (equal? hostname (get-host-name))
+		   (equal? pid      (current-process-id)))
+	      id
+	      #f))
 	#f)))
 	     
 ;; Use: (db:get-value-by-header (car (db:get-rows dat)) (db:get-header dat) "fieldname")
