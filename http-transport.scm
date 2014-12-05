@@ -411,11 +411,16 @@
       ;; set_running after our first pass through and start the db
       ;;
       (if (eq? server-state 'available)
-	  (begin
-	    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
-	    (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
-	    (set! *inmemdb*  (db:setup run-id))
-	    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")))
+	  (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
+	    (if (equal? new-server-id server-id)
+		(begin
+		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+		  (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
+		  (set! *inmemdb*  (db:setup run-id))
+		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
+		(begin ;; gotta exit nicely
+		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
+		  (http-transport:server-shutdown server-id port)))))
 
       (if (and (<= rem-time 4)
 	       (> rem-time 0))
