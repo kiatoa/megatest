@@ -1625,7 +1625,7 @@
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
-      (let ((db   #f)
+      (let (;; (db   #f)
 	    (keys #f))
 	(if (not (launch:setup-for-run))
 	    (begin 
@@ -1643,8 +1643,9 @@
 		    
 		  (begin
 		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
-		    (if db (sqlite3:finalize! db))
-		    (exit 1))))
+		    ;; (if db (sqlite3:finalize! db))
+		    (exit 1)
+		    )))
 	    (if (args:get-arg "-target")
 		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
 	(if (not (car *configinfo*))
@@ -1655,7 +1656,7 @@
 	    ;; here then call proc
 	    (let* ((keyvals    (keys:target->keyval keys target)))
 	      (proc target runname keys keyvals)))
-	(if db (sqlite3:finalize! db))
+	;; (if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
 ;;======================================================================

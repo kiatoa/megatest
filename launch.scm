@@ -590,7 +590,12 @@
     ;; create the directory for the tests dir links, this is needed no matter what...
     (if (and (not (directory-exists? lnkbase))
 	     (not (file-exists? lnkbase)))
-	(create-directory lnkbase #t))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print "ERROR: Problem creating linktree base at " lnkbase)
+	   (print-error-message exn (current-error-port)))
+	 (create-directory lnkbase #t)))
     
     ;; update the toptest record with its location rundir, cache the path
     ;; This wass highly inefficient, one db write for every subtest, potentially

@@ -495,9 +495,14 @@
      (for-each (lambda (dbdat)
 		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
 	       (cons todb slave-dbs))
-     (if *server-run* ;; we are inside a server
-	 (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
-	 (exit 1)))
+     (if *server-run* ;; we are inside a server, throw a sync-failed error
+	 (signal (make-composite-condition
+		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))))
+
+	 ;; (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
+	 ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
+	 ;; (portlogger:open-run-close portlogger:set-port port "released")
+	 ;; (exit 1)))
    (cond
     ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)

@@ -394,41 +394,53 @@
          (last-access 0)
 	 (server-timeout (server:get-timeout)))
     (let loop ((count         0)
-	       (server-state 'available))
-
+	       (server-state 'available)
+	       (bad-sync-count 0))
 
       ;; Use this opportunity to sync the inmemdb to db
-      (let ((start-time (current-milliseconds))
-	    (sync-time  #f)
-	    (rem-time   #f))
-	;; inmemdb is a dbstruct
-	(if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
-	(set! sync-time  (- (current-milliseconds) start-time))
-	(set! rem-time (quotient (- 4000 sync-time) 1000))
-	(debug:print 2 "SYNC: time= " sync-time ", rem-time=" rem-time)
+      (if *inmemdb* 
+	  (let ((start-time (current-milliseconds))
+		(sync-time  #f)
+		(rem-time   #f))
+	    ;; inmemdb is a dbstruct
+	    (condition-case
+	     (db:sync-touched *inmemdb* *run-id* force-sync: #t)
+	     ((sync-failed)(cond
+			    ((> bad-sync-count 10) ;; time to give up
+			     (http-transport:server-shutdown server-id port))
+			    (else ;; (> bad-sync-count 0)  ;; we've had a fail or two, delay and loop
+			     (thread-sleep! 5)
+			     (loop count server-state (+ bad-sync-count 1)))))
+	     ((exn)
+	      (debug:print 0 "ERROR: error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
+	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
+	      (exit)))
+	    (set! sync-time  (- (current-milliseconds) start-time))
+	    (set! rem-time (quotient (- 4000 sync-time) 1000))
+	    (debug:print 2 "SYNC: time= " sync-time ", rem-time=" rem-time)
+	    
+	    (if (and (<= rem-time 4)
+		     (> rem-time 0))
+		(thread-sleep! rem-time)
+		(thread-sleep! 4))) ;; fallback for if the math is changed ...
 
-      ;;
-      ;; set_running after our first pass through and start the db
-      ;;
-      (if (eq? server-state 'available)
-	  (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
-	    (if (equal? new-server-id server-id)
-		(begin
-		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
-		  (thread-sleep! 5) ;; give some margin for queries to complete before switching from file based access to server based access
-		  (set! *inmemdb*  (db:setup run-id))
-		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
-		(begin ;; gotta exit nicely
-		  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
-		  (http-transport:server-shutdown server-id port)))))
-
-      (if (and (<= rem-time 4)
-	       (> rem-time 0))
-	  (thread-sleep! rem-time)
-	  (thread-sleep! 4))) ;; fallback for if the math is changed ...
+	  ;;
+	  ;; no *inmemdb* yet, set running after our first pass through and start the db
+	  ;;
+	  (if (eq? server-state 'available)
+	      (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
+		(if (equal? new-server-id server-id)
+		    (begin
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
+		      (set! *inmemdb*  (db:setup run-id))
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
+		    (begin ;; gotta exit nicely
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
+		      (http-transport:server-shutdown server-id port))))))
       
       (if (< count 1) ;; 3x3 = 9 secs aprox
-	  (loop (+ count 1) 'running))
+	  (loop (+ count 1) 'running bad-sync-count))
       
       ;; Check that iface and port have not changed (can happen if server port collides)
       (mutex-lock! *heartbeat-mutex*)
@@ -465,7 +477,7 @@
 	    ;; (if (tasks:server-am-i-the-server? tdb run-id)
 	    ;;     (tasks:server-set-state! tdb server-id "running"))
 	    ;;
-	    (loop 0 server-state))
+	    (loop 0 server-state bad-sync-count))
 	  (http-transport:server-shutdown server-id port)))))
 
 (define (http-transport:server-shutdown server-id port)
