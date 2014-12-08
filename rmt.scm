@@ -35,6 +35,8 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
+;; NOT USED
+;;
 (define (rmt:call-transport run-id connection-info cmd jparams)
   (case (server:get-transport)
     ((rpc)  ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))
@@ -234,7 +236,9 @@
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res  	   (http-transport:client-api-send-receive run-id connection-info cmd params)))
+	 (res  	   (condition-case
+		    (http-transport:client-api-send-receive run-id connection-info cmd params)
+		    ((commfail)(vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	res
 	#f)))

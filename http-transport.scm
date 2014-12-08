@@ -275,8 +275,8 @@
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
-					     ;; (signal (make-composite-condition
-					     ;;          (make-property-condition 'commfail 'message "failed to connect to server")))
+					     (signal (make-composite-condition
+						      (make-property-condition 'commfail 'message "failed to connect to server")))
 					     "communications failed")
 					   (with-input-from-request ;; was dat
 					    fullurl 

@@ -453,7 +453,7 @@
   ;; special case
   (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
       (begin
-	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
+	(set! *configinfo* (or (if (get-environment-variable "MT_MDINFO") ;; we are inside a test - do not reprocess configs
 				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
 							    (get-environment-variable "MT_TARGET")   "/"
 							    (get-environment-variable "MT_RUNNAME")  "/"
@@ -532,9 +532,12 @@
 	      (if (and target
 		       runname
 		       (file-exists? fulldir))
-		  (begin
+		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
+			(targfile (conc fulldir "/.megatest.cfg")))
 		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
-		    (configf:write-alist *configdat* (conc fulldir "/.megatest.cfg")))))))))
+		    (configf:write-alist *configdat* tmpfile)
+		    (system (conc "ln -sf " tmpfile " " targfile))
+		    )))))))
 
 
 (define (get-best-disk confdat)
@@ -694,7 +697,10 @@
 		  (not (directory-exists? toptest-path)))
 	      (begin
 		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
-		(create-directory toptest-path #t)
+		(handle-exceptions
+		 exn
+		 #f ;; don't care to catch and deal with errors here for now.
+		 (create-directory toptest-path #t))
 		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
     ;; The toptest path has been created, the link to the test in the linktree has
