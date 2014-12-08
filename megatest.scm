@@ -328,10 +328,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;; keep going unless time to exit
 	 ;;
 	 (if (not *time-to-exit*)
-	     (begin
-	       (thread-sleep! 5) ;; wait five seconds before syncing again, we'll also sync on exit
-	       (loop)))))
-     "Watchdog thread")))
+	     (let delay-loop ((count 0))
+	       (if (and (not *time-to-exit*)
+			(< count 11)) ;; aprox 5-6 seconds
+		   (delay-loop (+ count 1))))
+	     (loop)))))
+   "Watchdog thread"))
 
 (thread-start! *watchdog*)
 
@@ -1082,8 +1084,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (megatest:step 
        (args:get-arg "-step")
-       (args:get-arg ":state")
-       (args:get-arg ":status")
+       (or (args:get-arg "-state")(args:get-arg ":state"))
+       (or (args:get-arg "-status")(args:get-arg ":status"))
        (args:get-arg "-setlog")
        (args:get-arg "-m"))
       ;; (if db (sqlite3:finalize! db))
