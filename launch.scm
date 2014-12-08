@@ -453,11 +453,21 @@
   ;; special case
   (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
       (begin
-	(set! *configinfo* (find-and-read-config 
-			    (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-			    environ-patt: "env-override"
-			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-			    pathenvvar: "MT_RUN_AREA_HOME"))
+	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
+				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
+							    (get-environment-variable "MT_TARGET")   "/"
+							    (get-environment-variable "MT_RUNNAME")  "/"
+							    ".megatest.cfg")))
+				     (if (file-exists? alistconfig)
+					 (list (configf:read-alist alistconfig)
+					       (get-environment-variable "MT_RUN_AREA_HOME"))
+					 #f))
+				   #f) ;; no config cached - give up
+			       (find-and-read-config 
+				(if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+				environ-patt: "env-override"
+				given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+				pathenvvar: "MT_RUN_AREA_HOME")))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
@@ -498,8 +508,34 @@
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      (begin
 		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
-		(exit 1))))))
+		(exit 1)))
+	  )))
   *toppath*)
+
+(define (launch:cache-config)
+  ;; if we have a linktree and -runtests and -target and the directory exists dump the config
+  ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
+  (if (and *configdat* 
+	   (args:get-arg "-runtests"))
+      (let* ((linktree (get-environment-variable "MT_LINKTREE"))
+	     (target   (common:args-get-target))
+	     (runname  (or (args:get-arg "-runname")
+			   (args:get-arg ":runname")))
+	     (fulldir  (conc linktree "/"
+			     target "/"
+			     runname)))
+	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
+	(if (file-exists? linktree) ;; can't proceed without linktree
+	    (begin
+	      (if (not (file-exists? fulldir))
+		  (create-directory fulldir #t)) ;; need to protect with exception handler 
+	      (if (and target
+		       runname
+		       (file-exists? fulldir))
+		  (begin
+		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
+		    (configf:write-alist *configdat* (conc fulldir "/.megatest.cfg")))))))))
+
 
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))

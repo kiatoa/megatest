@@ -1627,7 +1627,8 @@
      (else
       (let (;; (db   #f)
 	    (keys #f))
-	(if (not (launch:setup-for-run))
+	(if (launch:setup-for-run)
+	    (launch:cache-config)
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))

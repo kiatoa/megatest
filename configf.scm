@@ -492,3 +492,28 @@
 	     (map car sectiondat))))
 	(map car sheetdat))))
    (map car data)))
+
+;;======================================================================
+;;  C O N F I G   T O / F R O M   A L I S T
+;;======================================================================
+
+(define (configf:config->alist cfgdat)
+  (hash-table->alist cfgdat))
+
+(define (configf:alist->config adat)
+  (let ((ht (make-hash-table)))
+    (for-each
+     (lambda (section)
+       (hash-table-set! ht (car section)(cdr section)))
+     adat)
+    ht))
+
+(define (configf:read-alist fname)
+  (configf:alist->config
+   (with-input-from-file fname read)))
+
+(define (configf:write-alist cdat fname)
+  (with-output-to-file fname
+    (lambda ()
+      (pp (configf:config->alist cdat)))))
+     
