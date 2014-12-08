@@ -83,7 +83,7 @@
     (for-each 
      (lambda (run-id)
        (let ((connection (hash-table-ref/default *runremote* run-id #f)))
-         (if (and connection 
+         (if (and (vector? connection)
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
                (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
@@ -108,9 +108,9 @@
 				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((timeout)(vector #f "timeout talking to server"))))
 			  (else  (exit))))
-	       (success (if (and dat (vector? dat)) (vector-ref dat 0) #f))
-	       (res     (if (and dat (vector? dat)) (vector-ref dat 1) #f)))
-	  (http-transport:server-dat-update-last-access connection-info)
+	       (success (if (vector? dat) (vector-ref dat 0) #f))
+	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
+	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info))
 	  (if success
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
