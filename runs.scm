@@ -388,7 +388,10 @@
 					    (let ((run-ids (rmt:get-all-run-ids)))
 					      (for-each (lambda (run-id)
 							  (if keep-going
-							      (rmt:find-and-mark-incomplete run-id #f))) ;; ovr-deadtime)))
+							      (handle-exceptions
+							       exn
+							       (debug:print 0 "error in calling find-and-mark-incomplete for run-id " run-id)
+							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
 							run-ids)))
 					  "runs: mark-incompletes")))
 	    (thread-start! th1)

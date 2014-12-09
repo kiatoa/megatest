@@ -103,7 +103,8 @@
 	(let* ((dat     (case *transport-type*
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((commfail)(vector #f "communications fail"))))
+				  ((commfail)(vector #f "communications fail"))
+				  ((exn)(vector #f "other fail"))))
 			  ((nmsg)(condition-case
 				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((timeout)(vector #f "timeout talking to server"))))
@@ -236,9 +237,11 @@
 (define (rmt:send-receive-no-auto-client-setup connection-info cmd run-id params)
   (let* ((run-id   (if run-id run-id 0))
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
-	 (res  	   (condition-case
-		    (http-transport:client-api-send-receive run-id connection-info cmd params)
-		    ((commfail) #f)))) ;; (vector #f "communications fail")))))
+	 (res  	   (handle-exceptions
+		    exn
+		    #f
+		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
+;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	res
 	#f)))

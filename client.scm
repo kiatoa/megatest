@@ -50,18 +50,18 @@
     ((zmq)  (zmq:client-connect  iface port))
     (else   (rpc:client-connect  iface port))))
 
-(define (client:login-no-auto-setup server-info run-id)
-  (case (server:get-transport)
-    ((rpc)  (rpc:login-no-auto-client-setup server-info run-id))
-    ((http) (rmt:login-no-auto-client-setup server-info run-id))
-    (else   (rpc:login-no-auto-client-setup server-info run-id))))
-
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
     ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
     ((http)(client:setup-http run-id))
     (else  (rpc-transport:client-setup run-id)))) ;; (client:setup-rpc run-id))))
 
+;; (define (client:login-no-auto-setup server-info run-id)
+;;   (case (server:get-transport)
+;;     ((rpc)  (rpc:login-no-auto-client-setup server-info run-id))
+;;     ((http) (rmt:login-no-auto-client-setup server-info run-id))
+;;     (else   (rpc:login-no-auto-client-setup server-info run-id))))
+;; 
 ;; (define (client:setup-rpc run-id)
 ;;   (debug:print 0 "INFO: client:setup remaining-tries=" remaining-tries)
 ;;   (if (<= remaining-tries 0)
