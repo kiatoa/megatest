@@ -238,7 +238,7 @@
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
 	 (res  	   (condition-case
 		    (http-transport:client-api-send-receive run-id connection-info cmd params)
-		    ((commfail)(vector #f "communications fail")))))
+		    ((commfail) #f)))) ;; (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
 	res
 	#f)))

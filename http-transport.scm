@@ -275,6 +275,7 @@
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					     (mutex-unlock! *http-mutex*)
 					     (signal (make-composite-condition
 						      (make-property-condition 'commfail 'message "failed to connect to server")))
 					     "communications failed")
