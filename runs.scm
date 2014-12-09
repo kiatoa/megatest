@@ -369,36 +369,38 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (let* ((keep-going        #t)
-		 (run-queue-retries 5)
-		 (th1        (make-thread (lambda ()
-					    (handle-exceptions
-					     exn
-					     (begin
-					       (print-call-chain (current-error-port))
-					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
-					       (if (> run-queue-retries 0)
-						   (begin
-						     (set! run-queue-retries (- run-queue-retries 1))
-						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
-					  "runs:run-tests-queue"))
-		 (th2        (make-thread (lambda ()				    
-					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
-					    (let ((run-ids (rmt:get-all-run-ids)))
-					      (for-each (lambda (run-id)
-							  (if keep-going
-							      (handle-exceptions
-							       exn
-							       (debug:print 0 "error in calling find-and-mark-incomplete for run-id " run-id)
-							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
-							run-ids)))
-					  "runs: mark-incompletes")))
-	    (thread-start! th1)
-	    (thread-start! th2)
-	    (thread-join! th1)
-	    (set! keep-going #f)
-	    (thread-join! th2)
+	  (begin
+	    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)
+	    ;; (let* ((keep-going        #t)
+	    ;;   	 (run-queue-retries 5)
+	    ;;   	 (th1        (make-thread (lambda ()
+	    ;;   				    (handle-exceptions
+	    ;;   				     exn
+	    ;;   				     (begin
+	    ;;   				       (print-call-chain (current-error-port))
+	    ;;   				       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+	    ;;   				       (if (> run-queue-retries 0)
+	    ;;   					   (begin
+	    ;;   					     (set! run-queue-retries (- run-queue-retries 1))
+	    ;;   					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
+	    ;;   				     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
+	    ;;   				  "runs:run-tests-queue"))
+	    ;;   	 (th2        (make-thread (lambda ()				    
+	    ;;   				    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
+	    ;;   				    (let ((run-ids (rmt:get-all-run-ids)))
+	    ;;   				      (for-each (lambda (run-id)
+	    ;;   						  (if keep-going
+	    ;;   						      (handle-exceptions
+	    ;;   						       exn
+	    ;;   						       (debug:print 0 "error in calling find-and-mark-incomplete for run-id " run-id)
+	    ;;   						       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
+	    ;;   						run-ids)))
+	    ;;   				  "runs: mark-incompletes")))
+	    ;;       (thread-start! th1)
+	    ;;       (thread-start! th2)
+	    ;;       (thread-join! th1)
+	    ;;       (set! keep-going #f)
+	    ;;       (thread-join! th2)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
 	    (if (> run-count 0)
 		(begin
