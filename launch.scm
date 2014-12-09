@@ -541,7 +541,7 @@
 
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))
-	 (minspace (let ((m (configf:lookup "setup" "minspace")))
+	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
 		     (string->number (or m "10000")))))
     (if disks 
 	(let ((res (common:get-disk-with-most-free-space disks minspace))) ;; min size of 1000, seems tad dumb

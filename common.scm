@@ -525,7 +525,7 @@
   
 ;; paths is list of lists ((name path) ... )
 ;;
-(define (common:get-disk-with-most-free-space disks minspace)
+(define (common:get-disk-with-most-free-space disks minsize)
   (let ((best     #f)
 	(bestsize 0))
     (for-each 
