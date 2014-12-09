@@ -163,7 +163,7 @@
      #f) ;; if this fails we don't care, it is just stats
    (let* ((cmd      (conc "run-id=" run-id " " (if (eq? rawcmd 'general-call) (car params) rawcmd)))
 	  (stat-vec (hash-table-ref/default *db-stats* cmd #f)))
-     (if (not stat-vec)
+     (if (not (vector? stat-vec))
 	 (let ((newvec (vector 0 0)))
 	   (hash-table-set! *db-stats* cmd newvec)
 	   (set! stat-vec newvec)))

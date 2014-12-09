@@ -371,7 +371,12 @@
       (if (> (length (hash-table-keys test-records)) 0)
 	  (let* ((keep-going #t)
 		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    (handle-exceptions
+					     exn
+					     (begin
+					       (print-call-chain (current-error-port))
+					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn)))
+					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...

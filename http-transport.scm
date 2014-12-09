@@ -344,7 +344,11 @@
       #f))
 
 (define (http-transport:server-dat-update-last-access vec)
-  (vector-set! vec 5 (current-seconds)))
+  (if (vector? vec)
+      (vector-set! vec 5 (current-seconds))
+      (begin
+	(print-call-chain (current-error-port))
+	(debug:print 0 "ERROR: call to http-transport:server-dat-update-last-access with non-vector!!"))))
 
 ;;
 ;; connect
