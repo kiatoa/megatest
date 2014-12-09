@@ -445,20 +445,6 @@
 			  dir
 			  (conc (current-directory) "/" dir))))
 
-(define (get-df path)
-  (let* ((df-results (cmd-run->list (conc "df " path)))
-	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
-	 (freespc    #f))
-    ;; (write df-results)
-    (for-each (lambda (l)
-		(let ((match (string-search space-rx l)))
-		  (if match 
-		      (let ((newval (string->number (cadr match))))
-			(if (number? newval)
-			    (set! freespc newval))))))
-	      (car df-results))
-    freespc))
-  
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
 ;;   (let* ((load-res (cmd-run->list "uptime"))
@@ -515,6 +501,63 @@
     (if (null? (car uname-res))
 	"unknown"
 	(caar uname-res))))
+
+;;======================================================================
+;; D I S K   S P A C E 
+;;======================================================================
+
+(define (common:get-disk-space-used fpath)
+  (with-input-from-pipe (conc "/usr/bin/du -s " fpath) read))
+
+(define (get-df path)
+  (let* ((df-results (cmd-run->list (conc "df " path)))
+	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
+	 (freespc    #f))
+    ;; (write df-results)
+    (for-each (lambda (l)
+		(let ((match (string-search space-rx l)))
+		  (if match 
+		      (let ((newval (string->number (cadr match))))
+			(if (number? newval)
+			    (set! freespc newval))))))
+	      (car df-results))
+    freespc))
+  
+;; paths is list of lists ((name path) ... )
+;;
+(define (common:get-disk-with-most-free-space disks minspace)
+  (let ((best     #f)
+	(bestsize 0))
+    (for-each 
+     (lambda (disk-num)
+       (let* ((dirpath    (cadr (assoc disk-num disks)))
+	      (freespc    (cond
+			   ((not (directory? dirpath))
+			    (if (common:low-noise-print 50 "disks not a dir " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
+			    -1)
+			   ((not (file-write-access? dirpath))
+			    (if (common:low-noise-print 50 "disks not writeable " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
+			    -1)
+			   ((not (eq? (string-ref dirpath 0) #\/))
+			    (if (common:low-noise-print 50 "disks not a proper path " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
+			    -1)
+			   (else
+			    (get-df dirpath)))))
+	 (if (> freespc bestsize)
+	     (begin
+	       (set! best     (cons disk-num dirpath))
+	       (set! bestsize freespc)))))
+     (map car disks))
+    (if (and best (> bestsize minsize))
+	best
+	#f))) ;; #f means no disk candidate found
+
+;;======================================================================
+;; E N V I R O N M E N T   V A R S
+;;======================================================================
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF")))
   (let ((envvars (get-environment-variables))

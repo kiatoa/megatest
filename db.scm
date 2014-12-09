@@ -812,8 +812,31 @@
                                 testpatt TEXT DEFAULT '',
                                 keylock TEXT,
                                 params TEXT,
-                                creation_time TIMESTAMP,
+                                creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 execution_time TIMESTAMP);")
+       ;; archive disk areas, cached info from [archivedisks]
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_disks (
+                                id INTEGER PRIMARY KEY,
+                                archive_area_name TEXT,
+                                disk_path TEXT,
+                                last_df INTEGER DEFAULT -1,
+                                last_df_time TIMESTAMP DEFAULT (strftime('%s','now')),
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
+       ;; individual bup (or tar) data chunks
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_blocks (
+                                id INTEGER PRIMARY KEY,
+                                archive_disk_id INTEGER,
+                                disk_path TEXT,
+                                last_du INTEGER DEFAULT -1,
+                                last_du_time TIMESTAMP DEFAULT (strftime('%s','now')),
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
+       ;; tests allocated to what chunks. reusing a chunk for a test/item_path is very efficient
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_allocations (
+                                id INTEGER PRIMARY KEY,
+                                archive_block_id INTEGER,
+                                testname TEXT,
+                                item_path TEXT,
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; move this clean up call somewhere else
        (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
        (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
@@ -899,8 +922,53 @@
                               cpuload      INTEGER DEFAULT -1,
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
-                              run_duration INTEGER DEFAULT 0);")))
+                              run_duration INTEGER DEFAULT 0);")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
+                              id           INTEGER PRIMARY KEY,
+                              test_id      INTEGER,
+                              state        TEXT DEFAULT 'new',
+                              status       TEXT DEFAULT 'n/a',
+                              archive_type TEXT DEFAULT 'bup',
+                              du           INTEGER,
+                              archive_path TEXT);")))
   db)
+
+;;======================================================================
+;; A R C H I V E S
+;;======================================================================
+
+;; dneeded is minimum space needed, scan for existing archives that 
+;; are on disks with adequate space and already have this test/itempath
+;; archived
+;;
+(define (db:archive-get-allocations dbstruct testname itempath dneeded)
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          '())
+	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
+    (sqlite3:for-each-row
+     (lambda (id archive-disk-id disk-path last-du last-du-time)
+       (set! res (cons (vector id archive-disk-id disk-path last-du last-du-time) res)))
+     db
+     "SELECT b.id,b.archive_disk_id,b.disk_path,b.last_du,b.last_du_time FROM archive_blocks AS b
+        INNER JOIN archive_allocations AS a ON a.archive_block_id=b.id
+        WHERE a.testname=? AND a.item_path=?;" 
+     testname itempath)
+    ;; Now res has list of candidate paths, look in archive_disks for candidate with potential free space
+    (if (null? res)
+	'()
+	(sqlite3:for-each-row
+	 (lambda (id archive-area-name disk-path last-df last-df-time)
+	   (set! blocks (cons (vector id archive-area-name disk-path last-df last-df-time) blocks)))
+	 db 
+	 (conc
+	  "SELECT d.id,d.archive_area_name,disk_path,last_df,last_df_time FROM archive_disks AS d
+             INNER JOIN archive_blocks AS b ON d.id=b.archive_disk_id
+             WHERE b.id IN (" (string-intersperse (map conc res) ",") ") AND
+         last_df > ?;")
+	 dneeded))
+    blocks))
+    
 
 ;;======================================================================
 ;; L O G G I N G    D B 

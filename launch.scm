@@ -539,41 +539,18 @@
 		    (system (conc "ln -sf " tmpfile " " targfile))
 		    )))))))
 
-
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))
-	 (best     #f)
-	 (bestsize 0))
+	 (minspace (let ((m (configf:lookup "setup" "minspace")))
+		     (string->number (or m "10000")))))
     (if disks 
-	(for-each 
-	 (lambda (disk-num)
-	   (let* ((dirpath    (cadr (assoc disk-num disks)))
-		  (freespc    (cond
-			       ((not (directory? dirpath))
-				(if (common:low-noise-print 50 "disks not a dir " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
-				-1)
-			       ((not (file-write-access? dirpath))
-				(if (common:low-noise-print 50 "disks not writeable " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
-				-1)
-			       ((not (eq? (string-ref dirpath 0) #\/))
-				(if (common:low-noise-print 50 "disks not a proper path " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
-				-1)
-			       (else
-				(get-df dirpath)))))
-	     (if (> freespc bestsize)
-		 (begin
-		   (set! best     dirpath)
-		   (set! bestsize freespc)))))
-	 (map car disks)))
-    (if (and best (> bestsize 0))
-	best
-	(begin
-	  (if (common:low-noise-print 20 "no valid disks")
-	      (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
-	  (exit 1)))))
+	(let ((res (common:get-disk-with-most-free-space disks minspace))) ;; min size of 1000, seems tad dumb
+	  (if res
+	      (cdr res)
+	      (begin
+		(if (common:low-noise-print 20 "no valid disks")
+		    (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
+		(exit 1)))))))
 
 ;; Desired directory structure:
 ;;

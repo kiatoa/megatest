@@ -628,3 +628,10 @@
 
 (define (rmt:tasks-set-state-given-param-key param-key new-state)
   (rmt:send-receive 'tasks-set-state-given-param-key #f (list  param-key new-state)))
+
+;;======================================================================
+;; A R C H I V E S
+;;======================================================================
+
+(define (rmt:archive-get-allocations  testname itempath dneeded)
+  (rmt:send-receive 'archive-get-allocations #f (list testname itempath dneeded)))
