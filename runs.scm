@@ -369,13 +369,18 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (let* ((keep-going #t)
+	  (let* ((keep-going        #t)
+		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
 					    (handle-exceptions
 					     exn
 					     (begin
 					       (print-call-chain (current-error-port))
-					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn)))
+					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					       (if (> run-queue-retries 0)
+						   (begin
+						     (set! run-queue-retries (- run-queue-retries 1))
+						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
 					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
