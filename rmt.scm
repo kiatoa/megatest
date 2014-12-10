@@ -225,6 +225,7 @@
 	(if (> remretries 0)
 	    (begin
 	      (debug:print 0 "ERROR: local query failed. Trying again.")
+	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
 	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
 	    (begin
 	      (debug:print 0 "ERROR: too many retries in rmt:open-qry-close-locally, giving up")

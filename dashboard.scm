@@ -1476,7 +1476,7 @@ Misc
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
     (if (and (eq? *current-tab-number* 0)
 	     (or (> monitor-modtime *last-monitor-update-time*)
-		 (> (- run-update-time *last-monitor-update-time*) 30))) ;; update every 1/2 minute just in case
+		 (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
 	(begin
 	  (set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
 	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
