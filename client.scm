@@ -205,7 +205,7 @@
 		;;   (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
 		;;   (if (< num-available 2)
 		;;       (server:try-running run-id))
-		(tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
+		(tasks:start-and-wait-for-server tdbdat run-id 10)
 		;; (thread-sleep! (+ 2 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
 		(client:setup run-id remaining-tries: (- remaining-tries 1))))))))
 
