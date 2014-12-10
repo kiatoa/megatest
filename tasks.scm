@@ -363,20 +363,21 @@
     res))
 
 (define (tasks:need-server run-id)
-  (let ((forced (configf:lookup *configdat* "server" "required"))
-	(maxqry (cdr (rmt:get-max-query-average run-id)))
-	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
-    (cond
-     (forced 
-      (if (common:low-noise-print 60 run-id "server required is set")
-	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
-      #t)
-     ((> maxqry threshold)
-      (if (common:low-noise-print 60 run-id "Max query time execeeded")
-	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
-      #t)
-     (else
-      #f))))
+  (configf:lookup *configdat* "server" "required"))
+
+;; 	(maxqry (cdr (rmt:get-max-query-average run-id)))
+;; 	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
+;;     (cond
+;;      (forced 
+;;       (if (common:low-noise-print 60 run-id "server required is set")
+;; 	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
+;;       #t)
+;;      ((> maxqry threshold)
+;;       (if (common:low-noise-print 60 run-id "Max query time execeeded")
+;; 	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
+;;       #t)
+;;      (else
+;;       #f))))
 
 ;; try to start a server and wait for it to be available
 ;;
