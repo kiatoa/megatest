@@ -2606,14 +2606,6 @@
 	#f)
       #f))
 
-(define (db:tests-register-test dbstruct run-id test-name item-path)
-  (db:with-db
-   dbstruct
-   run-id
-   #t
-   (lambda (db)
-     (sqlite3:execute db 'register-test run-id test-name item-path))))
-
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
    dbstruct

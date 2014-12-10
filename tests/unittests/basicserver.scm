@@ -21,38 +21,40 @@
 ;; (exit)
 
 ;; Server tests go here 
-(for-each (lambda (run-id)
-(test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
-(server:kind-run run-id)
-(test "did server start within 20 seconds?"
-      #t
-      (let loop ((remtries 20)
-		 (running (tasks:server-running-or-starting? (db:delay-if-busy
-							      (tasks:open-db))
-							     run-id)))
-	(if running 
-	    (> running 0)
-	    (if (> remtries 0)
-		(begin
-		  (thread-sleep! 1)
-		  (loop (- remtries 1)
-			(tasks:server-running-or-starting? (db:delay-if-busy
-							    (tasks:open-db))
-							   run-id)))))))
+(for-each
+ (lambda (run-id)
+   (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
+   (server:kind-run run-id)
+   (test "did server start within 20 seconds?"
+	 #t
+	 (let loop ((remtries 20)
+		    (running (tasks:server-running-or-starting? (db:delay-if-busy
+								 (tasks:open-db))
+								run-id)))
+	   (if running 
+	       (> running 0)
+	       (if (> remtries 0)
+		   (begin
+		     (thread-sleep! 1)
+		     (loop (- remtries 1)
+			   (tasks:server-running-or-starting? (db:delay-if-busy
+							       (tasks:open-db))
+							      run-id)))))))
+   
+   (test "did server become available" #t
+	 (let loop ((remtries 10)
+		    (res      (tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
+	   (if res
+	       (vector? res)
+	       (begin
+		 (if (> remtries 0)
+		     (begin
+		       (thread-sleep! 1.1)
+		       (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
+		     res)))))
+   )
+ (list 0 1))
 
-(test "did server become available" #t
-      (let loop ((remtries 10)
-		 (res      (tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
-	(if res
-	    (vector? res)
-	    (begin
-	      (if (> remtries 0)
-		  (begin
-		    (thread-sleep! 1.1)
-		    (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
-		  res)))))
-)
-(list 0 1))
 (define user    (current-user-name))
 (define runname "mytestrun")
 (define keys    (rmt:get-keys))
