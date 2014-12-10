@@ -382,9 +382,9 @@
 ;;
 (define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
   ;; ensure a server is running for this run
-  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+  (let loop ((server-running (tasks:server-running? (db:delay-if-busy tdbdat) run-id))
 	     (delay-time 0))
-      (if (and (not server-dat)
+      (if (and (not server-running)
 	       (< delay-time delay-max-tries))
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
@@ -392,7 +392,7 @@
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
-	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+	    (loop (tasks:server-running? (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
