@@ -208,38 +208,6 @@
 		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
 		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
 
-;; 	(let ((host-info (hash-table-ref/default *runremote* run-id #f)))
-;; 	  (if host-info ;; this is a bit circular. the host-info *is* the start-res FIXME
-;; 	      (let* ((iface     (http-transport:server-dat-get-iface host-info))
-;; 		     (port      (http-transport:server-dat-get-port  host-info))
-;; 		     (start-res (case *transport-type* 
-;; 				  ((http)(http-transport:client-connect iface port))
-;; 				  ((nmsg)(nmsg-transport:client-connect iface port)) ;; (http-transport:server-dat-get-socket host-info))
-;; 				  (else #f)))
-;; 		     (ping-res  (case *transport-type*
-;; 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
-;; 				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
-;; 					   (if logininfo
-;; 					       (vector-ref (vector-ref logininfo 1) 1)
-;; 					       #f)))
-;; 				  (else #f))))
-;; 		(if ping-res   ;; sucessful login?
-;; 		    (begin
-;; 		      (debug:print-info 2 "client:setup, ping is good using host-info=" host-info ", remaining-tries=" remaining-tries)
-;; 		      start-res)  ;; return the server info
-;; 		    ;; have host info but no ping. shutdown the current connection and try again
-;; 		    (begin    ;; login failed
-;; 		      (debug:print-info 1 "client:setup, ping is bad for start-res=" start-res " and *runremote*=" host-info)
-;; 		      (case *transport-type*
-;; 			((http)(http-transport:close-connections run-id)))
-;; 		      (hash-table-delete! *runremote* run-id)
-;; 		      (if (< remaining-tries 8)
-;; 			  (thread-sleep! 5)
-;; 			  (thread-sleep! 1))
-;; 		      (client:setup run-id remaining-tries: (- remaining-tries 1)))))
-;; 	      ;; YUK: rename server-dat here
-;; 
-
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)
   (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
