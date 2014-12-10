@@ -233,7 +233,7 @@
 		      "\ntime:     " (tdb:step-get-event_time step))
 	 (case (string->symbol (tdb:step-get-state step))
 	   ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	    (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+	    (vector-set! record 3 (if (equal? (safe-vector-ref record 3) "")
 				      (tdb:step-get-status step)))
 	    (if (> (string-length (tdb:step-get-logfile step))
 		   0)
@@ -241,9 +241,9 @@
 	   ((end)  
 	    (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
 	    (vector-set! record 3 (tdb:step-get-status step))
-	    (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					(endt   (any->number (vector-ref record 2))))
-				    (debug:print 4 "record[1]=" (vector-ref record 1) 
+	    (vector-set! record 4 (let ((startt (any->number (safe-vector-ref record 1)))
+					(endt   (any->number (safe-vector-ref record 2))))
+				    (debug:print 4 "record[1]=" (safe-vector-ref record 1) 
 						 ", startt=" startt ", endt=" endt
 						 ", get-status: " (tdb:step-get-status step))
 				    (if (and (number? startt)(number? endt))
@@ -294,7 +294,7 @@
 		      "\ntime:     " (tdb:step-get-event_time step))
 	 (case (string->symbol (tdb:step-get-state step))
 	   ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	    (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+	    (vector-set! record 3 (if (equal? (safe-vector-ref record 3) "")
 				      (tdb:step-get-status step)))
 	    (if (> (string-length (tdb:step-get-logfile step))
 		   0)
@@ -302,9 +302,9 @@
 	   ((end)  
 	    (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
 	    (vector-set! record 3 (tdb:step-get-status step))
-	    (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					(endt   (any->number (vector-ref record 2))))
-				    (debug:print 4 "record[1]=" (vector-ref record 1) 
+	    (vector-set! record 4 (let ((startt (any->number (safe-vector-ref record 1)))
+					(endt   (any->number (safe-vector-ref record 2))))
+				    (debug:print 4 "record[1]=" (safe-vector-ref record 1) 
 						 ", startt=" startt ", endt=" endt
 						 ", get-status: " (tdb:step-get-status step))
 				    (if (and (number? startt)(number? endt))
@@ -339,24 +339,24 @@
   (map (lambda (x)
 	 ;; take advantage of the \n on time->string
 	 (vector
-	  (vector-ref x 0)
-	  (let ((s (vector-ref x 1)))
+	  (safe-vector-ref x 0)
+	  (let ((s (safe-vector-ref x 1)))
 	    (if (number? s)(seconds->time-string s) s))
-	  (let ((s (vector-ref x 2)))
+	  (let ((s (safe-vector-ref x 2)))
 	    (if (number? s)(seconds->time-string s) s))
-	  (vector-ref x 3)    ;; status
-	  (vector-ref x 4)
-	  (vector-ref x 5)))  ;; time delta
+	  (safe-vector-ref x 3)    ;; status
+	  (safe-vector-ref x 4)
+	  (safe-vector-ref x 5)))  ;; time delta
        (sort (hash-table-values comprsteps)
 	     (lambda (a b)
-	       (let ((time-a (vector-ref a 1))
-		     (time-b (vector-ref b 1)))
+	       (let ((time-a (safe-vector-ref a 1))
+		     (time-b (safe-vector-ref b 1)))
 		 (if (and (number? time-a)(number? time-b))
 		     (if (< time-a time-b)
 			 #t
 			 (if (eq? time-a time-b)
-			     (string<? (conc (vector-ref a 2))
-				       (conc (vector-ref b 2)))
+			     (string<? (conc (safe-vector-ref a 2))
+				       (conc (safe-vector-ref b 2)))
 			     #f))
 		     (string<? (conc time-a)(conc time-b))))))))
 

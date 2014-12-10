@@ -30,6 +30,14 @@
   (syntax-rules ()
     ((_ exn-in errstmt ...)(handle-exceptions exn-in errstmt ...))))
 
+(define (safe-vector-ref vec indx)
+  (if vec
+      (vector-ref vec indx)
+      (begin
+	(debug:print 0 "vector-ref called with #f")
+	(print-call-chain (current-error-port))
+	(exit))))
+
 (define (debug:calc-verbosity vstr)
   (cond
    ((number? vstr) vstr)

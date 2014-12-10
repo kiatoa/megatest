@@ -274,7 +274,7 @@
 					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
-					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
 					     (signal (make-composite-condition
 						      (make-property-condition 'commfail 'message "failed to connect to server")))
@@ -300,16 +300,16 @@
 	 (thread-join! th1)
 	 (thread-terminate! th2)
 	 (debug:print-info 11 "got res=" res)
-	 (if (vector? res)
-	     (if (vector-ref res 0)
+	 (if (and res (vector? res))
+	     (if (safe-vector-ref res 0)
 		 res
 		 (begin ;; note: this code also called in nmsg-transport - consider consolidating it
-		   (debug:print 0 "ERROR: error occured at server, info=" (vector-ref res 2))
+		   (debug:print 0 "ERROR: error occured at server, info=" (safe-vector-ref res 2))
 		   (debug:print 0 " client call chain:")
 		   (print-call-chain (current-error-port))
 		   (debug:print 0 " server call chain:")
-		   (pp (vector-ref res 1) (current-error-port))
-		   (signal (vector-ref result 0))))
+		   (pp (safe-vector-ref res 1) (current-error-port))
+		   (signal (safe-vector-ref result 0))))
 	     (signal (make-composite-condition
 		      (make-property-condition 
 		       'timeout
@@ -327,13 +327,13 @@
 
 
 (define (make-http-transport:server-dat)(make-vector 6))
-(define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
-(define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
-(define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
-(define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
-(define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
-(define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
-(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
+(define (http-transport:server-dat-get-iface         vec)    (safe-vector-ref  vec 0))
+(define (http-transport:server-dat-get-port          vec)    (safe-vector-ref  vec 1))
+(define (http-transport:server-dat-get-api-uri       vec)    (safe-vector-ref  vec 2))
+(define (http-transport:server-dat-get-api-url       vec)    (safe-vector-ref  vec 3))
+(define (http-transport:server-dat-get-api-req       vec)    (safe-vector-ref  vec 4))
+(define (http-transport:server-dat-get-last-access   vec)    (safe-vector-ref  vec 5))
+(define (http-transport:server-dat-get-socket        vec)    (safe-vector-ref  vec 6))
 
 (define (http-transport:server-dat-make-url vec)
   (if (and (http-transport:server-dat-get-iface vec)
@@ -439,6 +439,7 @@
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
 		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
 		      (set! *inmemdb*  (db:setup run-id))
+		      (thread-sleep! 0.1)
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
 		    (begin ;; gotta exit nicely
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")

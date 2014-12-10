@@ -92,7 +92,7 @@
     ((rpc)  (db:obj->string (vector success/fail query-sig result)))
     ((http) (db:obj->string (vector success/fail query-sig result)))
     ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
+     (let ((pub-socket (safe-vector-ref *runremote* 1)))
        (send-message pub-socket return-addr send-more: #t)
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)

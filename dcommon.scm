@@ -39,32 +39,32 @@
 ;; intent of converging on a single app.
 ;;
 (define *data* (make-vector 25 #f))
-(define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
-(define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
-(define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
-(define (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
-(define (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
-(define (dboard:data-get-curr-test-ids vec)    (vector-ref  vec 5))
-;; (define (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
-(define (dboard:data-get-path-test-ids vec)    (vector-ref  vec 7))
-(define (dboard:data-get-updaters      vec)    (vector-ref  vec 8))
-(define (dboard:data-get-path-run-ids  vec)    (vector-ref  vec 9))
-(define (dboard:data-get-curr-run-id   vec)    (vector-ref  vec 10))
-(define (dboard:data-get-runs-tree     vec)    (vector-ref  vec 11))
+(define (dboard:data-get-runs          vec)    (safe-vector-ref  vec 0))
+(define (dboard:data-get-tests         vec)    (safe-vector-ref  vec 1))
+(define (dboard:data-get-runs-matrix   vec)    (safe-vector-ref  vec 2))
+(define (dboard:data-get-tests-tree    vec)    (safe-vector-ref  vec 3))
+(define (dboard:data-get-run-keys      vec)    (safe-vector-ref  vec 4))
+(define (dboard:data-get-curr-test-ids vec)    (safe-vector-ref  vec 5))
+;; (define (dboard:data-get-test-details  vec)    (safe-vector-ref  vec 6))
+(define (dboard:data-get-path-test-ids vec)    (safe-vector-ref  vec 7))
+(define (dboard:data-get-updaters      vec)    (safe-vector-ref  vec 8))
+(define (dboard:data-get-path-run-ids  vec)    (safe-vector-ref  vec 9))
+(define (dboard:data-get-curr-run-id   vec)    (safe-vector-ref  vec 10))
+(define (dboard:data-get-runs-tree     vec)    (safe-vector-ref  vec 11))
 ;; For test-patts convert #f to ""
 (define (dboard:data-get-test-patts    vec)    
-  (let ((val (vector-ref  vec 12)))(if val val "")))
-(define (dboard:data-get-states        vec)    (vector-ref vec 13))
-(define (dboard:data-get-statuses      vec)    (vector-ref vec 14))
-(define (dboard:data-get-logs-textbox  vec val)(vector-ref vec 15))
-(define (dboard:data-get-command       vec)    (vector-ref vec 16))
-(define (dboard:data-get-command-tb    vec)    (vector-ref vec 17))
-(define (dboard:data-get-target        vec)    (vector-ref vec 18))
+  (let ((val (safe-vector-ref  vec 12)))(if val val "")))
+(define (dboard:data-get-states        vec)    (safe-vector-ref vec 13))
+(define (dboard:data-get-statuses      vec)    (safe-vector-ref vec 14))
+(define (dboard:data-get-logs-textbox  vec val)(safe-vector-ref vec 15))
+(define (dboard:data-get-command       vec)    (safe-vector-ref vec 16))
+(define (dboard:data-get-command-tb    vec)    (safe-vector-ref vec 17))
+(define (dboard:data-get-target        vec)    (safe-vector-ref vec 18))
 (define (dboard:data-get-target-string vec)
   (let ((targ (dboard:data-get-target vec)))
     (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
-(define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
-(define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
+(define (dboard:data-get-run-name      vec)    (safe-vector-ref vec 19))
+(define (dboard:data-get-runs-listbox  vec)    (safe-vector-ref vec 20))
 
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
@@ -285,11 +285,11 @@
       (let loop ((hed (car tests-dat))
 		 (tal (cdr tests-dat))
 		 (res '()))
-	(let* ((test-id    (vector-ref hed 0)) ;; look at the tests-dat spec for locations
-	       (test-name  (vector-ref hed 1))
-	       (item-path  (vector-ref hed 2))
-	       (state      (vector-ref hed 3))
-	       (status     (vector-ref hed 4))
+	(let* ((test-id    (safe-vector-ref hed 0)) ;; look at the tests-dat spec for locations
+	       (test-name  (safe-vector-ref hed 1))
+	       (item-path  (safe-vector-ref hed 2))
+	       (state      (safe-vector-ref hed 3))
+	       (status     (safe-vector-ref hed 4))
 	       (newitem    (list test-name item-path (list test-id state status))))
 	  (if (null? tal)
 	      (reverse (cons newitem res))
@@ -470,19 +470,19 @@
 			     (for-each 
 			      (lambda (server)
 				(set! colnum 0)
-				(let* ((vals (list (vector-ref server 0) ;; Id
-						   (vector-ref server 9) ;; MT-Ver
-						   (vector-ref server 1) ;; Pid
-						   (vector-ref server 2) ;; Hostname
-						   (conc (vector-ref server 3) ":" (vector-ref server 4)) ;; IP:Port
-						   (seconds->hr-min-sec (- (current-seconds)(vector-ref server 6)))
-						   ;; (vector-ref server 5) ;; Pubport
-						   ;; (vector-ref server 10) ;; Last beat
-						   ;; (vector-ref server 6) ;; Start time
-						   ;; (vector-ref server 7) ;; Priority
-						   ;; (vector-ref server 8) ;; State
-						   (vector-ref server 8) ;; State
-						   (vector-ref server 12)  ;; RunId
+				(let* ((vals (list (safe-vector-ref server 0) ;; Id
+						   (safe-vector-ref server 9) ;; MT-Ver
+						   (safe-vector-ref server 1) ;; Pid
+						   (safe-vector-ref server 2) ;; Hostname
+						   (conc (safe-vector-ref server 3) ":" (safe-vector-ref server 4)) ;; IP:Port
+						   (seconds->hr-min-sec (- (current-seconds)(safe-vector-ref server 6)))
+						   ;; (safe-vector-ref server 5) ;; Pubport
+						   ;; (safe-vector-ref server 10) ;; Last beat
+						   ;; (safe-vector-ref server 6) ;; Start time
+						   ;; (safe-vector-ref server 7) ;; Priority
+						   ;; (safe-vector-ref server 8) ;; State
+						   (safe-vector-ref server 8) ;; State
+						   (safe-vector-ref server 12)  ;; RunId
 						   )))
 				  (for-each (lambda (val)
 					      (let* ((row-col (conc rownum ":" colnum))
@@ -668,7 +668,7 @@
 			"\ntime:     " (tdb:step-get-event_time step))
 	   (case (string->symbol (tdb:step-get-state step))
 	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+	      (vector-set! record 3 (if (equal? (safe-vector-ref record 3) "")
 					(tdb:step-get-status step)))
 	      (if (> (string-length (tdb:step-get-logfile step))
 		     0)
@@ -676,9 +676,9 @@
 	     ((end)  
 	      (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
 	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+	      (vector-set! record 4 (let ((startt (any->number (safe-vector-ref record 1)))
+					  (endt   (any->number (safe-vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (safe-vector-ref record 1) 
 						   ", startt=" startt ", endt=" endt
 						   ", get-status: " (tdb:step-get-status step))
 				      (if (and (number? startt)(number? endt))
@@ -712,24 +712,24 @@
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string
 	   (vector
-	    (vector-ref x 0)
-	    (let ((s (vector-ref x 1)))
+	    (safe-vector-ref x 0)
+	    (let ((s (safe-vector-ref x 1)))
 	      (if (number? s)(seconds->time-string s) s))
-	    (let ((s (vector-ref x 2)))
+	    (let ((s (safe-vector-ref x 2)))
 	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
+	    (safe-vector-ref x 3)    ;; status
+	    (safe-vector-ref x 4)
+	    (safe-vector-ref x 5)))  ;; time delta
 	 (sort (hash-table-values comprsteps)
 	       (lambda (a b)
-		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
+		 (let ((time-a (safe-vector-ref a 1))
+		       (time-b (safe-vector-ref b 1)))
 		   (if (and (number? time-a)(number? time-b))
 		       (if (< time-a time-b)
 			   #t
 			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
+			       (string<? (conc (safe-vector-ref a 2))
+					 (conc (safe-vector-ref b 2)))
 			       #f))
 		       (string<? (conc time-a)(conc time-b)))))))))
 
@@ -742,7 +742,7 @@
 		   (rownum 1)
 		   (colnum 1))
 	  (if (> rownum max-row)(set! max-row rownum))
-	  (let ((val     (vector-ref hed (- colnum 1)))
+	  (let ((val     (safe-vector-ref hed (- colnum 1)))
 		(mtrx-rc (conc rownum ":" colnum)))
 	    (iup:attribute-set! steps-matrix  mtrx-rc (if val (conc val) ""))
 	    (if (< colnum 6)

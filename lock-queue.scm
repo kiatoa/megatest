@@ -24,8 +24,8 @@
 ;;======================================================================
 
 (define (make-lock-queue:db-dat)(make-vector 3))
-(define-inline (lock-queue:db-dat-get-db        vec)    (vector-ref  vec 0))
-(define-inline (lock-queue:db-dat-get-path      vec)    (vector-ref  vec 1))
+(define-inline (lock-queue:db-dat-get-db        vec)    (safe-vector-ref  vec 0))
+(define-inline (lock-queue:db-dat-get-path      vec)    (safe-vector-ref  vec 1))
 (define-inline (lock-queue:db-dat-set-db!       vec val)(vector-set! vec 0 val))
 (define-inline (lock-queue:db-dat-set-path!     vec val)(vector-set! vec 1 val))
 

@@ -159,13 +159,13 @@
 ;;======================================================================
 
 ;; make-vector-record tasks hostinfo id interface port pubport transport pid hostname
-(define (tasks:hostinfo-get-id          vec)    (vector-ref  vec 0))
-(define (tasks:hostinfo-get-interface   vec)    (vector-ref  vec 1))
-(define (tasks:hostinfo-get-port        vec)    (vector-ref  vec 2))
-(define (tasks:hostinfo-get-pubport     vec)    (vector-ref  vec 3))
-(define (tasks:hostinfo-get-transport   vec)    (vector-ref  vec 4))
-(define (tasks:hostinfo-get-pid         vec)    (vector-ref  vec 5))
-(define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
+(define (tasks:hostinfo-get-id          vec)    (safe-vector-ref  vec 0))
+(define (tasks:hostinfo-get-interface   vec)    (safe-vector-ref  vec 1))
+(define (tasks:hostinfo-get-port        vec)    (safe-vector-ref  vec 2))
+(define (tasks:hostinfo-get-pubport     vec)    (safe-vector-ref  vec 3))
+(define (tasks:hostinfo-get-transport   vec)    (safe-vector-ref  vec 4))
+(define (tasks:hostinfo-get-pid         vec)    (safe-vector-ref  vec 5))
+(define (tasks:hostinfo-get-hostname    vec)    (safe-vector-ref  vec 6))
 
 (define (tasks:server-lock-slot mdb run-id)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id " tasks:server-lock-slot")
@@ -382,9 +382,9 @@
 ;;
 (define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
   ;; ensure a server is running for this run
-  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+  (let loop ((server-running (tasks:server-running? (db:delay-if-busy tdbdat) run-id))
 	     (delay-time 0))
-      (if (and (not server-dat)
+      (if (and (not server-running)
 	       (< delay-time delay-max-tries))
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
@@ -392,7 +392,7 @@
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
-	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+	    (loop (tasks:server-running? (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
@@ -420,9 +420,9 @@
   (let* ((tdbdat  (tasks:open-db))
 	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
     (if sdat
-	(let ((hostname (vector-ref sdat 6))
-	      (pid      (vector-ref sdat 5))
-	      (server-id (vector-ref sdat 0)))
+	(let ((hostname (safe-vector-ref sdat 6))
+	      (pid      (safe-vector-ref sdat 5))
+	      (server-id (safe-vector-ref sdat 0)))
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
 	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
@@ -548,10 +548,10 @@
 		      (if params params "")))))
 
 (define (keys:key-vals-hash->target keys key-params)
-  (let ((tmp (hash-table-ref/default key-params (vector-ref (car keys) 0) "")))
+  (let ((tmp (hash-table-ref/default key-params (safe-vector-ref (car keys) 0) "")))
     (if (> (length keys) 1)
 	(for-each (lambda (key)
-		    (set! tmp (conc tmp "/" (hash-table-ref/default key-params (vector-ref key 0) ""))))
+		    (set! tmp (conc tmp "/" (hash-table-ref/default key-params (safe-vector-ref key 0) ""))))
 		  (cdr keys)))
     tmp))
 								

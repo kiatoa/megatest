@@ -42,10 +42,10 @@
 		      (apply
 		       iup:vbox
 		       (map (lambda (key)
-			      (iup:hbox (iup:label (vector-ref key 0) #:size "60x15") ; #:expand "HORIZONTAL")
+			      (iup:hbox (iup:label (safe-vector-ref key 0) #:size "60x15") ; #:expand "HORIZONTAL")
 					(iup:textbox #:expand "HORIZONTAL"
 						     #:action (lambda (obj a val)
-								(hash-table-set! key-params (vector-ref key 0) val)))))
+								(hash-table-set! key-params (safe-vector-ref key 0) val)))))
 			    keys))))
 	 (othervars  (iup:frame
 		      #:title "Run Vars"

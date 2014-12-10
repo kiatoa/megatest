@@ -53,8 +53,8 @@
 			  (let ((v (vector (current-seconds) 0)))
 			    (hash-table-set! *write-frequency* run-id v)
 			    v)))
-	      (count  (+ 1 (vector-ref record 1)))
-	      (start  (vector-ref record 0))
+	      (count  (+ 1 (safe-vector-ref record 1)))
+	      (start  (safe-vector-ref record 0))
 	      (queries-per-second (/ (* count 1.0)
 				     (max (- (current-seconds) start) 1))))
 	 (vector-set! record 1 count)
@@ -65,15 +65,17 @@
 	       #t)
 	     #f))))
 
-(define (rmt:get-connection-info run-id)
-  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
-    (if cinfo
-	cinfo
-	;; NB// can cache the answer for server running for 10 seconds ...
-	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
-	    (client:setup run-id)
-	    #f))))
+;; (define (rmt:get-connection-info run-id)
+;;   (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+;;     (if cinfo
+;; 	cinfo
+;; 	;; NB// can cache the answer for server running for 10 seconds ...
+;; 	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
+;; 	;; (if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
+;; 	;; (begin
+;; 	;;   (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id)
+;; 	(client:setup run-id))))
+;; 	;; #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
 (define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
@@ -96,45 +98,39 @@
   (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
-	 (connection-info (rmt:get-connection-info run-id)))
+	 (connection-info  (hash-table-ref/default *runremote* run-id #f))) ;; (rmt:get-connection-info run-id)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
 	(let* ((dat     (case *transport-type*
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((commfail)(vector #f "communications fail"))
-				  ((exn)(vector #f "other fail"))))
+				  ((commfail) 
+				   (tasks:kill-server-run-id run-id) 
+				   (vector #f "communications fail"))
+				  ((exn)
+				   (tasks:kill-server-run-id run-id)
+				   (vector #f "other fail"))))
 			  ((nmsg)(condition-case
 				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((timeout)(vector #f "timeout talking to server"))))
 			  (else  (exit))))
-	       (success (if (vector? dat) (vector-ref dat 0) #f))
-	       (res     (if (vector? dat) (vector-ref dat 1) #f)))
-	  (if (vector? connection-info)(http-transport:server-dat-update-last-access connection-info))
+	       (success (if (vector? dat) (safe-vector-ref dat 0) #f))
+	       (res     (if (vector? dat) (safe-vector-ref dat 1) #f)))
+	  (if (and connection-info (vector? connection-info))(http-transport:server-dat-update-last-access connection-info))
 	  (if success
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
+		;; all is well, return the result!
 		(case *transport-type* 
 		  ((http) res) ;; (db:string->obj res))
-		  ((nmsg) res))) ;; (vector-ref res 1)))
+		  ((nmsg) res))) ;; (safe-vector-ref res 1)))
+	      ;; we had a connection but it is borked. clean up and reconnect
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
 		(debug:print 0 "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
 		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
-		;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
-		;; (if (eq? (modulo attemptnum 5) 0)
-		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
-		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
-		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
-		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
-
-		;; no longer killing the server in http-transport:client-api-send-receive
-		;; may kill it here but what are the criteria?
-		;; start with three calls then kill server
-		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
-		;; (thread-sleep! 2)
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
 	;; no connection info? try to start a server
 	(if (and (< attemptnum 15)
@@ -143,13 +139,9 @@
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	      ;; (client:setup run-id) ;; client setup happens in rmt:get-connection-info
-	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+	      (client:setup run-id)
 	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
 	    (begin
-	      ;; (debug:print 0 "ERROR: Communication failed!")
-	      ;; (mutex-unlock! *send-receive-mutex*)
-	      ;; (exit)
 	      (rmt:open-qry-close-locally cmd run-id params)
 	      )))))
 
@@ -168,8 +160,8 @@
 	 (let ((newvec (vector 0 0)))
 	   (hash-table-set! *db-stats* cmd newvec)
 	   (set! stat-vec newvec)))
-     (vector-set! stat-vec 0 (+ (vector-ref stat-vec 0) 1))
-     (vector-set! stat-vec 1 (+ (vector-ref stat-vec 1) duration))))
+     (vector-set! stat-vec 0 (+ (safe-vector-ref stat-vec 0) 1))
+     (vector-set! stat-vec 1 (+ (safe-vector-ref stat-vec 1) duration))))
   (mutex-unlock! *db-stats-mutex*))
 
 
@@ -179,11 +171,11 @@
     (debug:print 18 (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
     (for-each (lambda (cmd)
 		(let ((cmd-dat (hash-table-ref *db-stats* cmd)))
-		  (debug:print 18 (format #f fmtstr cmd (vector-ref cmd-dat 0) (vector-ref cmd-dat 1) (/ (vector-ref cmd-dat 1)(vector-ref cmd-dat 0))))))
+		  (debug:print 18 (format #f fmtstr cmd (safe-vector-ref cmd-dat 0) (safe-vector-ref cmd-dat 1) (/ (safe-vector-ref cmd-dat 1)(safe-vector-ref cmd-dat 0))))))
 	      (sort (hash-table-keys *db-stats*)
 		    (lambda (a b)
-		      (> (vector-ref (hash-table-ref *db-stats* a) 0)
-			 (vector-ref (hash-table-ref *db-stats* b) 0)))))))
+		      (> (safe-vector-ref (hash-table-ref *db-stats* a) 0)
+			 (safe-vector-ref (hash-table-ref *db-stats* b) 0)))))))
 
 (define (rmt:get-max-query-average run-id)
   (mutex-lock! *db-stats-mutex*)
@@ -198,8 +190,8 @@
 				(max-cmd (car cmds))
 				(res 0))
 		       (let* ((cmd-dat (hash-table-ref *db-stats* cmd))
-			      (tot     (vector-ref cmd-dat 0))
-			      (curravg (/ (vector-ref cmd-dat 1) (vector-ref cmd-dat 0))) ;; count is never zero by construction
+			      (tot     (safe-vector-ref cmd-dat 0))
+			      (curravg (/ (safe-vector-ref cmd-dat 1) (safe-vector-ref cmd-dat 0))) ;; count is never zero by construction
 			      (currmax (max res curravg))
 			      (newmax-cmd (if (> curravg res) cmd max-cmd)))
 			 (if (null? tal)
@@ -221,7 +213,7 @@
     ;; (read-only      (not (file-read-access? db-file-path)))
     (let* ((start         (current-milliseconds))
 	   (resdat        (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
-	   (res           (vector-ref resdat 1))
+	   (res           (safe-vector-ref resdat 1))
 	   (duration      (- (current-milliseconds) start)))
       (rmt:update-db-stats run-id cmd params duration)
       ;; mark this run as dirty if this was a write
@@ -242,10 +234,10 @@
 		    #f
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
 ;;		    ((commfail) (vector #f "communications fail")))))
-    (if (and res (vector-ref res 0))
+    (if (and res (safe-vector-ref res 0))
 	res
 	#f)))
-;; 	(db:string->obj (vector-ref dat 1))
+;; 	(db:string->obj (safe-vector-ref dat 1))
 ;; 	(begin
 ;; 	  (debug:print 0 "ERROR: rmt:send-receive-no-auto-client-setup failed, attempting to continue. Got " dat)
 ;; 	  dat))))

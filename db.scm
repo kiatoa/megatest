@@ -120,7 +120,7 @@
 ;;======================================================================
 
 ;; (define (db:get-filedb dbstruct run-id)
-;;   (let ((db (vector-ref dbstruct 2)))
+;;   (let ((db (safe-vector-ref dbstruct 2)))
 ;;     (if db
 ;; 	db
 ;; 	(let ((fdb (filedb:open-db (conc *toplevel* "/db/files.db"))))
@@ -575,12 +575,12 @@
 		     (lambda ()
 		       (for-each ;; 
 			(lambda (fromrow)
-			  (let* ((a    (vector-ref fromrow 0))
+			  (let* ((a    (safe-vector-ref fromrow 0))
 				 (curr (hash-table-ref/default todat a #f))
 				 (same #t))
 			    (let loop ((i 0))
 			      (if (or (not curr)
-				      (not (equal? (vector-ref fromrow i)(vector-ref curr i))))
+				      (not (equal? (safe-vector-ref fromrow i)(safe-vector-ref curr i))))
 				  (set! same #f))
 			      (if (and same
 				       (< i (- num-fields 1)))
@@ -637,8 +637,8 @@
     (if (member 'killservers options)
 	(for-each
 	 (lambda (server)
-	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
-	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
+	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (safe-vector-ref server 0) "dbmigration")
+	   (tasks:kill-server (safe-vector-ref server 2)(safe-vector-ref server 1)))
 	 servers))
 
     ;; clear out junk records
@@ -1361,13 +1361,13 @@
 		 (tal (cdr header))
 		 (n   0))
 	(if (equal? hed field)
-	    (vector-ref row n)
+	    (safe-vector-ref row n)
 	    (if (null? tal) #f (loop (car tal)(cdr tal)(+ n 1)))))))
 
 ;; Accessors for the header/data structure
 ;; get rows and header from 
-(define (db:get-header vec)(vector-ref vec 0))
-(define (db:get-rows   vec)(vector-ref vec 1))
+(define (db:get-header vec)(safe-vector-ref vec 0))
+(define (db:get-rows   vec)(safe-vector-ref vec 1))
 
 ;;======================================================================
 ;;  R U N S
@@ -1936,13 +1936,13 @@
 (define (db:test-short-record->norm inrec)
   ;;  "id,run_id,testname,item_path,state,status"
   ;;  "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-  (vector (vector-ref inrec 0) ;; id
-	  (vector-ref inrec 1) ;; run_id
-	  (vector-ref inrec 2) ;; testname
-	  (vector-ref inrec 4) ;; state
-	  (vector-ref inrec 5) ;; status
+  (vector (safe-vector-ref inrec 0) ;; id
+	  (safe-vector-ref inrec 1) ;; run_id
+	  (safe-vector-ref inrec 2) ;; testname
+	  (safe-vector-ref inrec 4) ;; state
+	  (safe-vector-ref inrec 5) ;; status
 	  -1 "" -1 -1 "" "-" 
-	  (vector-ref inrec 3) ;; item-path
+	  (safe-vector-ref inrec 3) ;; item-path
 	  -1 "-" "-"))
 
 
@@ -2280,7 +2280,7 @@
   (let ((min-test-id (* run-id 30000)))
     (for-each 
      (lambda (testrec)
-       (let* ((test-id (vector-ref testrec (db:field->number "id" db:test-record-fields))))
+       (let* ((test-id (safe-vector-ref testrec (db:field->number "id" db:test-record-fields))))
 	 (db:adj-test-id (db:dbdat-get-db mtdb) min-test-id test-id)))
      testrecs)))
 	
@@ -2754,8 +2754,8 @@
   (let* ((dbdat   (db:get-db dbstruct #f))
 	 (db      (db:dbdat-get-db dbdat))
 	 (keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (selstr  (string-intersperse (map (lambda (x)(safe-vector-ref x 0)) keys) ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc (safe-vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
@@ -3060,12 +3060,12 @@
 							    (if (>= i numkeys)
 								res
 								(loop (+ i 1)
-								      (append res (list (vector-ref vb (+ i 2))))))))
-					       (runname   (vector-ref vb 1))
-					       (testname  (vector-ref vb (+  2 numkeys)))
-					       (item-path (vector-ref vb (+  3 numkeys)))
-					       (final-log (vector-ref vb (+  7 numkeys)))
-					       (run-dir   (vector-ref vb (+ 18 numkeys)))
+								      (append res (list (safe-vector-ref vb (+ i 2))))))))
+					       (runname   (safe-vector-ref vb 1))
+					       (testname  (safe-vector-ref vb (+  2 numkeys)))
+					       (item-path (safe-vector-ref vb (+  3 numkeys)))
+					       (final-log (safe-vector-ref vb (+  7 numkeys)))
+					       (run-dir   (safe-vector-ref vb (+ 18 numkeys)))
 					       (log-fpath (conc run-dir "/"  final-log))) ;; (string-intersperse keyvals "/") "/" testname "/" item-path "/"
 					  (debug:print 4 "log: " log-fpath " exists: " (file-exists? log-fpath))
 					  (vector-set! vb (+ 7 numkeys) (if (file-exists? log-fpath)

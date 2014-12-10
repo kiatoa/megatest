@@ -105,13 +105,13 @@
 			   db params))
 	 (postdat  #f)
 	 (make-indexed (lambda (x)
-			 (list (vector-ref x keynum) x))))
+			 (list (safe-vector-ref x keynum) x))))
     ;; Now process newdat based on the query type
     (set! postdat (case proc
 		    ((db:get-runs)
 		     ;; (debug:print-info 2 "Get runs call")
-		     (let ((header (vector-ref newdat 0))
-			   (data   (vector-ref newdat 1)))
+		     (let ((header (safe-vector-ref newdat 0))
+			   (data   (safe-vector-ref newdat 1)))
 		       ;; (debug:print-info 2 "header: " header ", data: " data)
 		       (cons (list "header" header)         ;; add the header keyed by the word "header"
 			     (map make-indexed data))))        ;; add each element keyed by the keynum'th val

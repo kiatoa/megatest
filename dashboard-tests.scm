@@ -239,8 +239,8 @@
   (let* ((state  (db:test-get-state  testdat))
 	 (status (db:test-get-status testdat))
 	 (color  (car (gutils:get-color-for-state-status state status))))
-    ((vector-ref *state-status* 0) state color)
-    ((vector-ref *state-status* 1) status color)))
+    ((safe-vector-ref *state-status* 0) state color)
+    ((safe-vector-ref *state-status* 1) status color)))
 
 (define *dashboard-test-db* #t)
 (define *dashboard-comment-share-slot* #f)

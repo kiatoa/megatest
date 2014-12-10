@@ -63,8 +63,8 @@
 ;; S E R V E R
 ;;======================================================================
 
-(define-inline (zmqsock:get-pub  dat)(vector-ref dat 0))
-(define-inline (zmqsock:get-pull dat)(vector-ref dat 1))
+(define-inline (zmqsock:get-pub  dat)(safe-vector-ref dat 0))
+(define-inline (zmqsock:get-pull dat)(safe-vector-ref dat 1))
 (define-inline (zmqsock:set-pub! dat s)(vector-set! dat s 0))
 (define-inline (zmqsock:set-pull! dat s)(vector-set! dat s 0))
 

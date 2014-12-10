@@ -248,8 +248,8 @@
 					   (let loop ((ezstep (car ezstepslst))
 						      (tal    (cdr ezstepslst))
 						      (prevstep #f))
-					     ;; check exit-info (vector-ref exit-info 1)
-					     (if (vector-ref exit-info 1)
+					     ;; check exit-info (safe-vector-ref exit-info 1)
+					     (if (safe-vector-ref exit-info 1)
 						 (let* ((stepname  (car ezstep))  ;; do stuff to run the step
 							(stepinfo  (cadr ezstep))
 							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
@@ -289,15 +289,15 @@
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
 								   ))
-                                                     (let ((exinfo (vector-ref exit-info 2))
+                                                     (let ((exinfo (safe-vector-ref exit-info 2))
                                                            (logfna (if logpro-used (conc stepname ".html") "")))
 						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 						     (if logpro-used
 							 (rmt:test-set-log! run-id test-id (conc stepname ".html")))
 						     ;; set the test final status
 						     (let* ((this-step-status (cond
-									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-									       ((eq? (vector-ref exit-info 2) 0)                   'pass)
+									       ((and (eq? (safe-vector-ref exit-info 2) 2) logpro-used) 'warn)
+									       ((eq? (safe-vector-ref exit-info 2) 0)                   'pass)
 									       (else 'fail)))
 							    (overall-status   (cond
 									       ((eq? rollup-status 2) 'warn)
@@ -314,7 +314,7 @@
 									        "COMPLETED")
 									       (else "RUNNING")))
 							    )
-						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+						       (debug:print 4 "Exit value received: " (safe-vector-ref exit-info 2) " logpro-used: " logpro-used 
 								    " this-step-status: " this-step-status " overall-status: " overall-status 
 								    " next-status: " next-status " rollup-status: " rollup-status)
 						       (case next-status
@@ -330,7 +330,7 @@
 							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
 							  (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 							  ))))
-						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
+						   (if (and (steprun-good? logpro-used (safe-vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
 						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
@@ -363,7 +363,7 @@
 					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
 					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
 					     ;;       between tries?
-					     (let* ((pid1 (vector-ref exit-info 0))
+					     (let* ((pid1 (safe-vector-ref exit-info 0))
 						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
 						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
 					       (if (not (null? pids))
@@ -413,12 +413,12 @@
 		   (testinfo  (rmt:get-testinfo-state-status run-id test-id)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
-		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
+		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (safe-vector-ref exit-info 2) 0) ;; exited with "good" status
 				                                        ;; "COMPLETED"
 							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
 				    )
 			(new-status (cond
-				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
+				     ((not (safe-vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				     ((eq? rollup-status 0)
 				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
@@ -427,7 +427,7 @@
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (safe-vector-ref exit-info 1) " and rollup-status of " rollup-status)
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -440,9 +440,9 @@
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items run-id test-id test-name #f))) ;; don't force - just update if no
 	    (mutex-unlock! m)
-	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
-			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    (if (not (vector-ref exit-info 1))
+	    (debug:print 2 "Output from running " fullrunscript ", pid " (safe-vector-ref exit-info 0) " in work area " 
+			 work-area ":\n====\n exit code " (safe-vector-ref exit-info 2) "\n" "====\n")
+	    (if (not (safe-vector-ref exit-info 1))
 		(exit 4)))))))
 
 ;; set up the very basics needed for doing anything here.

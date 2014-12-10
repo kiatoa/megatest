@@ -109,8 +109,8 @@
        (vector #f #f "remote must be called with a vector")       
        (vector                                   ;; return a vector + the returned data structure
 	#t 
-	(let ((cmd    (vector-ref dat 0))
-	      (params (vector-ref dat 1)))
+	(let ((cmd    (safe-vector-ref dat 0))
+	      (params (safe-vector-ref dat 1)))
 	  (case (if (symbol? cmd)
 		    cmd
 		    (string->symbol cmd))
@@ -231,7 +231,7 @@
 	 (paramsj ($ 'params))
 	 (params  (db:string->obj paramsj transport: 'http)) ;; (rmt:json-str->dat paramsj))
 	 (resdat  (api:execute-requests dbstruct (vector cmd params))) ;; #( flag result )
-	 (res     (vector-ref resdat 1)))
+	 (res     (safe-vector-ref resdat 1)))
 
     ;; This can be here but needs controls to ensure it doesn't run more than every 4 seconds
     ;; (rmt:dat->json-str

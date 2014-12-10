@@ -56,7 +56,7 @@
 		     (tal      (cdr ezstepslst))
 		     (prevstep #f)
 		     (runflag  #f)) ;; flag used to skip steps when not starting at the beginning
-	    (if (vector-ref exit-info 1)
+	    (if (safe-vector-ref exit-info 1)
 		(let* ((stepname  (car ezstep))  ;; do stuff to run the step
 		       (stepinfo  (cadr ezstep))
 		       (stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
@@ -98,15 +98,15 @@
 					(thread-sleep! 1)
 					(processloop (+ i 1))))
 				  ))
-		    (let ((exinfo (vector-ref exit-info 2))
+		    (let ((exinfo (safe-vector-ref exit-info 2))
 			  (logfna (if logpro-used (conc stepname ".html") "")))
 		      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
 		    (if logpro-used
 			(rmt:test-set-log! test-id (conc stepname ".html")))
 		    ;; set the test final status
 		    (let* ((this-step-status (cond
-					      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-					      ((eq? (vector-ref exit-info 2) 0)                   'pass)
+					      ((and (eq? (safe-vector-ref exit-info 2) 2) logpro-used) 'warn)
+					      ((eq? (safe-vector-ref exit-info 2) 0)                   'pass)
 					      (else 'fail)))
 			   (overall-status   (cond
 					      ((eq? rollup-status 2) 'warn)
@@ -117,7 +117,7 @@
 					      ((eq? overall-status 'warn)
 					       (if (eq? this-step-status 'fail) 'fail 'warn))
 					      (else 'fail))))
-		      (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+		      (debug:print 4 "Exit value received: " (safe-vector-ref exit-info 2) " logpro-used: " logpro-used 
 				   " this-step-status: " this-step-status " overall-status: " overall-status 
 				   " next-status: " next-status " rollup-status: " rollup-status)
 		      (case next-status
@@ -133,7 +133,7 @@
 			 (set! rollup-status 1) ;; force fail
 			 (tests:test-set-status! test-id "RUNNING" "FAIL" (conc "Failed at step " stepname) #f)
 			 ))))
-		  (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
+		  (if (and (steprun-good? logpro-used (safe-vector-ref exit-info 2))
 			   (not (null? tal)))
 		      (if (not run-one) ;; if we got here we completed the step, if run-one is true, stop
 			  (loop (car tal) (cdr tal) stepname runflag))))
@@ -145,12 +145,12 @@
 		 (testinfo  (rmt:get-testinfo-by-id run-id test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
 	    ;; Am I completed?
 	    (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
-		(let ((new-state  (if kill-job "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
+		(let ((new-state  (if kill-job "KILLED" "COMPLETED") ;; (if (eq? (safe-vector-ref exit-info 2) 0) ;; exited with "good" status
 				  ;; "COMPLETED"
 				  ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
 				  )
 		      (new-status (cond
-				   ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
+				   ((not (safe-vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				   ((eq? rollup-status 0)
 				    ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
 				    (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))

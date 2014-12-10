@@ -61,8 +61,8 @@
   (let* ((existing-blocks (rmt:archive-get-allocations testname itempath dused))
 	 (candidate-disks (map (lambda (block)
 				 (list
-				  (vector-ref block 1)   ;; archive-area-name
-				  (vector-ref block 2))) ;; disk-path
+				  (safe-vector-ref block 1)   ;; archive-area-name
+				  (safe-vector-ref block 2))) ;; disk-path
 			       existing-blocks)))
     (or (common:get-disk-with-most-free-space candidate-disks dused)
 	(archive:allocate-new-archive-block testname itempath))))

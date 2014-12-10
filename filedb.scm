@@ -100,11 +100,11 @@
 	(sqlite3:execute stmt
 			 path
 			 parent
-			 (vector-ref statinfo 1) ;; mode
-			 (vector-ref statinfo 3) ;; uid
-			 (vector-ref statinfo 4) ;; gid
-			 (vector-ref statinfo 5) ;; size
-			 (vector-ref statinfo 8) ;; mtime
+			 (safe-vector-ref statinfo 1) ;; mode
+			 (safe-vector-ref statinfo 3) ;; uid
+			 (safe-vector-ref statinfo 4) ;; gid
+			 (safe-vector-ref statinfo 5) ;; size
+			 (safe-vector-ref statinfo 8) ;; mtime
 			 )
 	(sqlite3:finalize! stmt))) ;;  (filedb:get-current-time-string))))
   

@@ -184,7 +184,7 @@
 		   (nmsg-transport:client-api-send-receive-raw req dat timeout: timeout)
 		   ((timeout)(set! success #f) #f)))
 	 (key     (if success 
-		      (vector-ref result 1)
+		      (safe-vector-ref result 1)
 		      #f)))
     (debug:print 0 "success=" success ", key=" key ", expected-key=" expected-key ", equal? " (equal? key expected-key))
     (if (and success
@@ -239,15 +239,15 @@
     ;; raise timeout error if timed out
     (if success
 	(if (and (vector? result)
-		 (vector-ref result 0)) ;; did it fail at the server?
+		 (safe-vector-ref result 0)) ;; did it fail at the server?
 	    result                ;; nope, all good
 	    (begin
-	      (debug:print 0 "ERROR: error occured at server, info=" (vector-ref result 2))
+	      (debug:print 0 "ERROR: error occured at server, info=" (safe-vector-ref result 2))
 	      (debug:print 0 " client call chain:")
 	      (print-call-chain (current-error-port))
 	      (debug:print 0 " server call chain:")
-	      (pp (vector-ref result 1) (current-error-port))
-	      (signal (vector-ref result 0))))
+	      (pp (safe-vector-ref result 1) (current-error-port))
+	      (signal (safe-vector-ref result 0))))
 	(signal (make-composite-condition
 		 (make-property-condition 'timeout 'message "nmsg-transport:client-api-send-receive-raw timed out talking to server"))))))
 
@@ -327,8 +327,8 @@
   (let* ((packet  (vector cmd param))
 	 (reqsoc  (http-transport:server-dat-get-socket connection-info))
 	 (res     (nmsg-transport:client-api-send-receive-raw reqsoc packet)))
-;;	 (status  (vector-ref rawres 0))
-;;	 (result  (vector-ref rawres 1)))
+;;	 (status  (safe-vector-ref rawres 0))
+;;	 (result  (safe-vector-ref rawres 1)))
     (mutex-unlock! *http-mutex*)
     res)) ;; (vector status (if status (db:string->obj result transport: 'nmsg) result))))
 	

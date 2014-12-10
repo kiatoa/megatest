@@ -174,7 +174,7 @@
 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
 				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
  					   (if logininfo
- 					       (car (vector-ref logininfo 1))
+ 					       (car (safe-vector-ref logininfo 1))
  					       #f))))))
 		(if (and start-res
 			 ping-res)
@@ -201,12 +201,13 @@
 		      (client:setup run-id remaining-tries: (- remaining-tries 1))
 		      )))
 	      (begin    ;; no server registered
-		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
-		  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
-		  (if (< num-available 2)
-		      (server:try-running run-id))
-		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+		;; (let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
+		;;   (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
+		;;   (if (< num-available 2)
+		;;       (server:try-running run-id))
+		(tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
+		;; (thread-sleep! (+ 2 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
+		(client:setup run-id remaining-tries: (- remaining-tries 1))))))))
 
 ;; 	(let ((host-info (hash-table-ref/default *runremote* run-id #f)))
 ;; 	  (if host-info ;; this is a bit circular. the host-info *is* the start-res FIXME
@@ -220,7 +221,7 @@
 ;; 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
 ;; 				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
 ;; 					   (if logininfo
-;; 					       (vector-ref (vector-ref logininfo 1) 1)
+;; 					       (safe-vector-ref (safe-vector-ref logininfo 1) 1)
 ;; 					       #f)))
 ;; 				  (else #f))))
 ;; 		(if ping-res   ;; sucessful login?

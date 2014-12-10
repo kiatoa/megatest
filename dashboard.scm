@@ -161,7 +161,7 @@ Misc
 	3)))
 
 (define (get-curr-sort)
-  (vector-ref *tests-sort-options* *tests-sort-reverse*))
+  (safe-vector-ref *tests-sort-options* *tests-sort-reverse*))
 
 (define *hide-empty-runs* #f)
 (define *hide-not-hide* #t) ;; toggle for hide/not hide
@@ -175,10 +175,10 @@ Misc
 
 (define uidat #f)
 
-(define-inline (dboard:uidat-get-keycol  vec)(vector-ref vec 0))
-(define-inline (dboard:uidat-get-lftcol  vec)(vector-ref vec 1))
-(define-inline (dboard:uidat-get-header  vec)(vector-ref vec 2))
-(define-inline (dboard:uidat-get-runsvec vec)(vector-ref vec 3))
+(define-inline (dboard:uidat-get-keycol  vec)(safe-vector-ref vec 0))
+(define-inline (dboard:uidat-get-lftcol  vec)(safe-vector-ref vec 1))
+(define-inline (dboard:uidat-get-header  vec)(safe-vector-ref vec 2))
+(define-inline (dboard:uidat-get-runsvec vec)(safe-vector-ref vec 3))
 
 (if (get-environment-variable "MT_RUN_AREA_HOME")(change-directory (get-environment-variable "MT_RUN_AREA_HOME")))
 
@@ -220,8 +220,8 @@ Misc
 	 (states      (hash-table-keys *state-ignore-hash*))
 	 (statuses    (hash-table-keys *status-ignore-hash*))
 	 (sort-info   (get-curr-sort))
-	 (sort-by     (vector-ref sort-info 1))
-	 (sort-order  (vector-ref sort-info 2))
+	 (sort-by     (safe-vector-ref sort-info 1))
+	 (sort-order  (safe-vector-ref sort-info 2))
 	 (bubble-type (if (member sort-order '(testname))
 			  'testname
 			  'itempath)))
@@ -265,7 +265,7 @@ Misc
 ; (define *row-lookup* (make-hash-table)) ;; testname => (rownum lableobj)
 
 (define (toggle-hide lnum) ; fulltestname)
-  (let* ((btn (vector-ref (dboard:uidat-get-lftcol uidat) lnum))
+  (let* ((btn (safe-vector-ref (dboard:uidat-get-lftcol uidat) lnum))
 	 (fulltestname (iup:attribute btn "TITLE"))
 	 (parts        (string-split fulltestname "("))
 	 (basetestname (if (null? parts) "" (car parts))))
@@ -292,8 +292,8 @@ Misc
 
 (define (collapse-rows inlst)
   (let* ((sort-info   (get-curr-sort))
-	 (sort-by     (vector-ref sort-info 1))
-	 (sort-order  (vector-ref sort-info 2))
+	 (sort-by     (safe-vector-ref sort-info 1))
+	 (sort-order  (safe-vector-ref sort-info 2))
 	 (bubble-type (if (member sort-order '(testname))
 			  'testname
 			  'itempath))
@@ -312,9 +312,9 @@ Misc
 	 (vlst         (run-item-name->vectors newlst))
 	 (vlst2        (bubble-up vlst priority: bubble-type)))
     (map (lambda (x)
-	   (if (equal? (vector-ref x 1) "")
-	       (vector-ref x 0)
-	       (conc (vector-ref x 0) "(" (vector-ref x 1) ")")))
+	   (if (equal? (safe-vector-ref x 1) "")
+	       (safe-vector-ref x 0)
+	       (conc (safe-vector-ref x 0) "(" (safe-vector-ref x 1) ")")))
 	 vlst2)))
     
 (define (update-labels uidat)
@@ -330,10 +330,10 @@ Misc
 		(set! rown (+ 1 rown)))
 	      *alltestnamelst*)
     (let loop ((i 0))
-      (let* ((lbl    (vector-ref lftcol i))
-	     (keyval (vector-ref keycol i))
+      (let* ((lbl    (safe-vector-ref lftcol i))
+	     (keyval (safe-vector-ref keycol i))
 	     (oldval (iup:attribute lbl "TITLE"))
-	     (newval (vector-ref allvals i)))
+	     (newval (safe-vector-ref allvals i)))
 	(if (not (equal? oldval newval))
 	    (let ((munged-val (let ((parts (string-split newval "(")))
 				(if (> (length parts) 1)(conc "  " (car (string-split (cadr parts) ")"))) newval))))
@@ -347,8 +347,8 @@ Misc
 (define (get-itemized-tests test-dats)
   (let ((tnames '()))
     (for-each (lambda (tdat)
-		(let ((tname (vector-ref tdat 0))  ;; (db:test-get-testname tdat))
-		      (ipath (vector-ref tdat 1))) ;; (db:test-get-item-path tdat)))
+		(let ((tname (safe-vector-ref tdat 0))  ;; (db:test-get-testname tdat))
+		      (ipath (safe-vector-ref tdat 1))) ;; (db:test-get-item-path tdat)))
 		  (if (not (equal? ipath ""))
 		      (if (and (list? tnames)
 			       (string? tname)
@@ -369,8 +369,8 @@ Misc
 	       (itemized (get-itemized-tests test-dats)))
 	  (for-each 
 	   (lambda (testdat)
-	     (let* ((tname (vector-ref testdat 0))  ;; db:test-get-testname testdat))
-		    (ipath (vector-ref testdat 1))) ;; db:test-get-item-path testdat)))
+	     (let* ((tname (safe-vector-ref testdat 0))  ;; db:test-get-testname testdat))
+		    (ipath (safe-vector-ref testdat 1))) ;; db:test-get-item-path testdat)))
 	       ;;   (seen  (hash-table-ref/default tests tname #f)))
 	       (if (not (member tname tnames))
 		   (if (or (and (eq? priority 'itempath)
@@ -415,7 +415,7 @@ Misc
     (for-each
      (lambda (rundat)
        (if (vector? rundat)
-	   (let* ((testdat   (vector-ref rundat 1))
+	   (let* ((testdat   (safe-vector-ref rundat 1))
 		  (testnames (map test:test-get-fullname testdat)))
 	     (if (not (and *hide-empty-runs*
 			   (null? testnames)))
@@ -437,9 +437,9 @@ Misc
        (if (not rundat) ;; handle padded runs
 	   ;;           ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration
 	   (set! rundat (vector (make-vector 20 #f) '() (map (lambda (x) "") *keys*))));; 3)))
-       (let* ((run      (vector-ref rundat 0))
-	      (testsdat (vector-ref rundat 1))
-	      (key-val-dat (vector-ref rundat 2))
+       (let* ((run      (safe-vector-ref rundat 0))
+	      (testsdat (safe-vector-ref rundat 1))
+	      (key-val-dat (safe-vector-ref rundat 2))
 	      (run-id   (db:get-value-by-header run *header* "id"))
 	      (key-vals (append key-val-dat
 				(list (let ((x (db:get-value-by-header run *header* "runname")))
@@ -448,17 +448,17 @@ Misc
 	 
 	 ;; fill in the run header key values
 	 (let ((rown      0)
-	       (headercol (vector-ref tableheader coln)))
+	       (headercol (safe-vector-ref tableheader coln)))
 	   (for-each (lambda (kval)
-		       (let* ((labl      (vector-ref headercol rown)))
+		       (let* ((labl      (safe-vector-ref headercol rown)))
 			 (if (not (equal? kval (iup:attribute labl "TITLE")))
-			     (iup:attribute-set! (vector-ref headercol rown) "TITLE" kval))
+			     (iup:attribute-set! (safe-vector-ref headercol rown) "TITLE" kval))
 			 (set! rown (+ rown 1))))
 		     key-vals))
 	 
 	 ;; For this run now fill in the buttons for each test
 	 (let ((rown 0)
-	       (columndat  (vector-ref table coln)))
+	       (columndat  (safe-vector-ref table coln)))
 	   (for-each
 	    (lambda (testname)
 	      (let ((buttondat  (hash-table-ref/default *buttondat* (mkstr coln rown) #f)))
@@ -483,10 +483,10 @@ Misc
 					 teststatus)
 					(else
 					 teststate)))
-			   (button     (vector-ref columndat rown))
+			   (button     (safe-vector-ref columndat rown))
 			   (color      (car (gutils:get-color-for-state-status teststate teststatus)))
-			   (curr-color (vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
-			   (curr-title (vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
+			   (curr-color (safe-vector-ref buttondat 1)) ;; (iup:attribute button "BGCOLOR"))
+			   (curr-title (safe-vector-ref buttondat 2))) ;; (iup:attribute button "TITLE")))
 		      (if (not (equal? curr-color color))
 			  (iup:attribute-set! button "BGCOLOR" color))
 		      (if (not (equal? curr-title buttontxt))
@@ -575,8 +575,8 @@ Misc
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
 	 (db-target-dat (db:get-targets *dbstruct-local*))
-	 (header        (vector-ref db-target-dat 0))
-	 (db-targets    (vector-ref db-target-dat 1))
+	 (header        (safe-vector-ref db-target-dat 0))
+	 (db-targets    (safe-vector-ref db-target-dat 1))
 	 (all-targets   (append db-targets
 				(map (lambda (x)
 				       (list->vector
@@ -807,8 +807,8 @@ Misc
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
 					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f))
-					    (runs-header   (vector-ref runs-for-targ 0))
-					    (runs-dat      (vector-ref runs-for-targ 1))
+					    (runs-header   (safe-vector-ref runs-for-targ 0))
+					    (runs-dat      (safe-vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
 								 (map (lambda (x)
 									(db:get-value-by-header x runs-header "runname"))
@@ -1051,7 +1051,7 @@ Misc
 			  (system cmd)))))
 	 (updater  (lambda ()
 		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
-			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
+			    (runs-header  (safe-vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
 			    (tests-dat    (let ((tdat (db:get-tests-for-run db run-id 
 									    (hash-table-ref/default *searchpatts* "test-name" "%/%")
@@ -1062,8 +1062,8 @@ Misc
 									    #f #f
 									    "id,testname,item_path,state,status"))) ;; get 'em all
 					    (sort tdat (lambda (a b)
-							 (let* ((aval (vector-ref a 2))
-								(bval (vector-ref b 2))
+							 (let* ((aval (safe-vector-ref a 2))
+								(bval (safe-vector-ref b 2))
 								(anum (string->number aval))
 								(bnum (string->number bval)))
 							   (if (and anum bnum)
@@ -1082,7 +1082,7 @@ Misc
 			    (runs-hash    (let ((ht (make-hash-table)))
 					    (for-each (lambda (run)
 							(hash-table-set! ht (db:get-value-by-header run runs-header "id") run))
-						      (vector-ref runs-dat 1))
+						      (safe-vector-ref runs-dat 1))
 					    ht))
 			    (run-ids      (sort (filter number? (hash-table-keys runs-hash))
 						(lambda (a b)
@@ -1224,7 +1224,7 @@ Misc
 		lb)
 	      ;; (iup:button "Sort -t"   #:action (lambda (obj)
 	      ;;   				 (next-sort-option)
-	      ;;   				 (iup:attribute-set! obj "TITLE" (vector-ref (vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
+	      ;;   				 (iup:attribute-set! obj "TITLE" (safe-vector-ref (safe-vector-ref *tests-sort-options* *tests-sort-reverse*) 0))
 	      ;;   				 (mark-for-update)))
 	      (iup:button "HideEmpty" #:action (lambda (obj)
 						 (set! *hide-empty-runs* (not *hide-empty-runs*))
@@ -1380,8 +1380,8 @@ Misc
 				       #:action (lambda (x)
 						  (let* ((toolpath (car (argv)))
 							 (buttndat (hash-table-ref *buttondat* button-key))
-							 (test-id  (db:test-get-id (vector-ref buttndat 3)))
-							 (run-id   (db:test-get-run_id (vector-ref buttndat 3)))
+							 (test-id  (db:test-get-id (safe-vector-ref buttndat 3)))
+							 (run-id   (db:test-get-run_id (safe-vector-ref buttndat 3)))
 							 (cmd  (conc toolpath " -test " run-id "," test-id "&")))
 					;(print "Launching " cmd)
 						    (system cmd))))))
