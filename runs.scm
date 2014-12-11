@@ -21,6 +21,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses mt))
+(declare (uses archive))
 ;; (declare (uses filedb))
 
 (include "common_records.scm")
@@ -1416,7 +1417,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f)(options '()))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (tdbdat       (tasks:open-db))
@@ -1450,7 +1451,8 @@
 		(tests     (if (not (equal? run-state "locked"))
 			       (proc-get-tests run-id)
 			       '()))
-		(lasttpath "/does/not/exist/I/hope"))
+		(lasttpath "/does/not/exist/I/hope")
+		(worker-thread #f))
 	   (debug:print-info 4 "runs:operate-on run=" run ", header=" header)
 	   (if (not (null? tests))
 	       (begin
@@ -1470,8 +1472,17 @@
 		    action)
 		   ((run-wait)
 		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
+		   ((archive)
+		    (debug:print 1 "Archiving data for run: " runkey " " (db:get-value-by-header run header "runname"))
+		    (set! worker-thread (make-thread (lambda ()
+						       (archive:run-bup (args:get-arg "-archive") run-name tests))
+						     "archive-bup-thread"))
+		    (thread-start! worker-thread))
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
+		 
+		 ;; actions that operate on one test at a time can be handled below
+		 ;;
 		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
 									 (db:test-get-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-get-rundir a)))
 									(dirb ;; (rmt:sdb-qry 'getstr 
@@ -1551,7 +1562,13 @@
 				(let ((new-tests (proc-get-tests run-id)))
 				  (if (null? new-tests)
 				      (debug:print-info 1 "Run completed according to zero tests matching provided criteria.")
-				      (loop (car new-tests)(cdr new-tests))))))))
+				      (loop (car new-tests)(cdr new-tests)))))
+			       ((archive)
+				(if (not toplevel-with-children)
+				    (begin
+				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
+				      (debug:print-info 0 "   " (common:get-disk-space-used run-dir)))))
+			       )))
 		       )))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)

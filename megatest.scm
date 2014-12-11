@@ -149,6 +149,7 @@ Utilities
   -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
                             formats: perl, ruby, sqlite3
   -o                      : output file for refdb2dat (defaults to stdout)
+  -archive targdir        : archive runs specified by selectors to targdir using bup
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -218,6 +219,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-setvars"
 			"-set-state-status"
 			"-set-run-status"
+			"-archive"
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
@@ -246,7 +248,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			;; misc
-			"-archive"
 			"-repl"
 			"-lock"
 			"-unlock"
@@ -976,46 +977,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Archive tests matching target, runname, and testpatt
 (if (args:get-arg "-archive")
-    ;; if we are in a test use the MT_CMDINFO data
-    (if (getenv "MT_CMDINFO")
-	(let* ((startingdir (current-directory))
-	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
-	       (transport (assoc/default 'transport cmdinfo))
-	       (testpath  (assoc/default 'testpath  cmdinfo))
-	       (test-name (assoc/default 'test-name cmdinfo))
-	       (runscript (assoc/default 'runscript cmdinfo))
-	       (db-host   (assoc/default 'db-host   cmdinfo))
-	       (run-id    (assoc/default 'run-id    cmdinfo))
-	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (state     (args:get-arg ":state"))
-	       (status    (args:get-arg ":status"))
-	       (target    (args:get-arg "-target")))
-	  (change-directory testpath)
-	  (if (not target)
-	      (begin
-		(debug:print 0 "ERROR: -target is required.")
-		(exit 1)))
-	  (if (not (launch:setup-for-run))
-	      (begin
-		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
-		(exit 1)))
-	  (let* ((keys     (rmt:get-keys))
-		 (paths    (tests:test-get-paths-matching keys target)))
-	    (set! *didsomething* #t)
-	    (for-each (lambda (path)
-			(print path))
-		      paths))
-	  ;; (if (sqlite3:database? db)(sqlite3:finalize! db))
-	  )
-	;; else do a general-run-call
-	(general-run-call 
-	 "-test-paths"
-	 "Get paths to tests"
-	 (lambda (target runname keys keyvals)
-	   (let* ((paths    (tests:test-get-paths-matching keys target)))
-	     (for-each (lambda (path)
-			 (print path))
-		       paths))))))
+    ;; else do a general-run-call
+    (general-run-call 
+     "-archive"
+     "Archive"
+     (lambda (target runname keys keyvals)
+       (operate-on 'archive))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database

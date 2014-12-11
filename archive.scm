@@ -16,6 +16,9 @@
 (declare (uses db))
 (declare (uses common))
 
+(include "common_records.scm")
+(include "db_records.scm")
+
 ;;======================================================================
 ;; 
 ;;======================================================================
@@ -84,4 +87,43 @@
 	      archive-path
 	      #f)))))
 
-	       
+;; archive - run bup
+;;
+;; 1. create the bup dir if not exists
+;; 2. start the du of each directory
+;; 3. gen index
+;; 4. save
+;;
+(define (archive:run-bup archive-dir run-name tests)
+  (let* ((bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
+	 (linktree   (configf:lookup *configdat* "setup" "linktree"))
+	 (test-paths (filter
+		      string?
+		      (map (lambda (test-dat)
+			     (let* ((item-path         (db:test-get-item-path test-dat))
+				    (test-name         (db:test-get-testname  test-dat))
+				    (run-id            (db:test-get-run_id    test-dat))
+				    (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
+				    
+				    (toplevel/children (and (db:test-get-is-toplevel test-dat)
+							    (> (rmt:test-toplevel-num-items run-id test-name) 0))))
+			       (if toplevel/children
+				   #f
+				   (conc linktree "/" target "/" run-name "/" (runs:make-full-test-name test-name item-path) "/")))) ;; note the trailing slash to get the dir inspite of it being a link
+			   tests)))
+	 ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
+	 (bup-init-params  (list "-d" archive-dir))
+	 (bup-index-params (append (list "-d" archive-dir "index") test-paths))
+	 (bup-save-params  (append (list "-d" archive-dir "save" "-n" (common:get-testsuite-name))
+				   test-paths)))
+    (if (not (file-exists? archive-dir))
+	(create-directory archive-dir #t))
+    (if (not (file-exists? (conc archive-dir "/HEAD")))
+	(begin
+	  ;; replace this with jobrunner stuff enventually
+	  (debug:print-info 0 "Init bup in " archive-dir)
+	  (run-n-wait bup-exe params: bup-init-params)))
+    (debug:print-info 0 "Indexing data to be archived")
+    (run-n-wait bup-exe params: bup-index-params)
+    (debug:print-info 0 "Archiving data with bup")
+    (run-n-wait bup-exe params: bup-save-params)))
