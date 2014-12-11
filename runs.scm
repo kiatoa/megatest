@@ -1475,7 +1475,7 @@
 		   ((archive)
 		    (debug:print 1 "Archiving data for run: " runkey " " (db:get-value-by-header run header "runname"))
 		    (set! worker-thread (make-thread (lambda ()
-						       (archive:run-bup (args:get-arg "-archive") run-name tests))
+						       (archive:run-bup (args:get-arg "-archive") run-id run-name tests))
 						     "archive-bup-thread"))
 		    (thread-start! worker-thread))
 		   (else
@@ -1569,7 +1569,8 @@
 				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
 				      (debug:print-info 0 "   " (common:get-disk-space-used run-dir)))))
 			       )))
-		       )))))
+		       )
+		     (if worker-thread (thread-join! worker-thread))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
 	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))

@@ -94,7 +94,7 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-dir run-name tests)
+(define (archive:run-bup archive-dir run-id run-name tests)
   (let* ((bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (linktree   (configf:lookup *configdat* "setup" "linktree"))
 	 (test-paths (filter
@@ -106,15 +106,19 @@
 				    (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
 				    
 				    (toplevel/children (and (db:test-get-is-toplevel test-dat)
-							    (> (rmt:test-toplevel-num-items run-id test-name) 0))))
-			       (if toplevel/children
+							    (> (rmt:test-toplevel-num-items run-id test-name) 0)))
+				    ;; note the trailing slash to get the dir inspite of it being a link
+				    (test-path         (conc linktree "/" target "/" run-name "/" (runs:make-full-test-name test-name item-path) "/")))
+			       (if (or toplevel/children
+				       (not (file-exists? test-path)))
 				   #f
-				   (conc linktree "/" target "/" run-name "/" (runs:make-full-test-name test-name item-path) "/")))) ;; note the trailing slash to get the dir inspite of it being a link
+				   test-path)))
 			   tests)))
 	 ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
-	 (bup-init-params  (list "-d" archive-dir))
+	 (bup-init-params  (list "-d" archive-dir "init"))
 	 (bup-index-params (append (list "-d" archive-dir "index") test-paths))
-	 (bup-save-params  (append (list "-d" archive-dir "save" "-n" (common:get-testsuite-name))
+	 (bup-save-params  (append (list "-d" archive-dir "save" "--strip-path" linktree "-n" 
+					 (conc (common:get-testsuite-name) "-" run-id))
 				   test-paths)))
     (if (not (file-exists? archive-dir))
 	(create-directory archive-dir #t))
@@ -126,4 +130,5 @@
     (debug:print-info 0 "Indexing data to be archived")
     (run-n-wait bup-exe params: bup-index-params)
     (debug:print-info 0 "Archiving data with bup")
-    (run-n-wait bup-exe params: bup-save-params)))
+    (run-n-wait bup-exe params: bup-save-params)
+    #t))

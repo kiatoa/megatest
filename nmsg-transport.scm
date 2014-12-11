@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-(use nanomsg)
+;; (use nanomsg)
 
 (declare (unit nmsg-transport))
 
