@@ -96,6 +96,7 @@
 ;;
 (define (archive:run-bup archive-dir run-id run-name tests)
   (let* ((bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
+	 (compress   (or (configf:lookup *configdat* "archive" "compress") "9"))
 	 (linktree   (configf:lookup *configdat* "setup" "linktree"))
 	 (test-paths (filter
 		      string?
@@ -117,7 +118,7 @@
 	 ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
 	 (bup-init-params  (list "-d" archive-dir "init"))
 	 (bup-index-params (append (list "-d" archive-dir "index") test-paths))
-	 (bup-save-params  (append (list "-d" archive-dir "save" "--strip-path" linktree "-n" 
+	 (bup-save-params  (append (list "-d" archive-dir "save" (conc "--strip-path=" linktree) "-n" ;; (conc "-" compress) or (conc "--compress=" compress)
 					 (conc (common:get-testsuite-name) "-" run-id))
 				   test-paths)))
     (if (not (file-exists? archive-dir))
@@ -126,9 +127,9 @@
 	(begin
 	  ;; replace this with jobrunner stuff enventually
 	  (debug:print-info 0 "Init bup in " archive-dir)
-	  (run-n-wait bup-exe params: bup-init-params)))
+	  (run-n-wait bup-exe params: bup-init-params))) ;;  print-cmd: "Running: ")))
     (debug:print-info 0 "Indexing data to be archived")
-    (run-n-wait bup-exe params: bup-index-params)
+    (run-n-wait bup-exe params: bup-index-params) ;;  print-cmd: "Running: ")
     (debug:print-info 0 "Archiving data with bup")
-    (run-n-wait bup-exe params: bup-save-params)
+    (run-n-wait bup-exe params: bup-save-params) ;;  print-cmd: "Running: ")
     #t))

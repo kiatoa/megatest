@@ -103,7 +103,16 @@
 
 ;; here is an example line where the shell is sh or bash
 ;; "find / -print 2&>1 > findall.log"
-(define (run-n-wait cmdline #!key (params #f))
+(define (run-n-wait cmdline #!key (params #f)(print-cmd #f))
+  (if print-cmd 
+      (debug:print 0 
+		   (if (string? print-cmd)
+		       print-cmd
+		       "")
+		   cmdline
+		   (if params
+		       (string-intersperse params " ")
+		       "")))
   (let ((pid (if params
 		 (process-run cmdline params)
 		 (process-run cmdline))))
