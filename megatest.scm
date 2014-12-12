@@ -331,8 +331,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (let delay-loop ((count 0))
 	       (if (and (not *time-to-exit*)
 			(< count 11)) ;; aprox 5-6 seconds
-		   (delay-loop (+ count 1))))
-	     (loop)))))
+		   (begin
+		     (thread-sleep! 1)
+		     (delay-loop (+ count 1))))
+	       (loop))))))
    "Watchdog thread"))
 
 (thread-start! *watchdog*)
