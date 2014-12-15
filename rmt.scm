@@ -22,7 +22,7 @@
 ;;
 
 ;; ;; For debugging add the following to ~/.megatestrc
-;;
+;;a
 ;; (require-library trace)
 ;; (import trace)
 ;; (trace
@@ -258,7 +258,7 @@
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
 ;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
-	res
+	(vector-ref res 1) ;;; YES!! THIS IS CORRECT!! CHANGE IT HERE, THEN CHANGE rmt:send-receive ALSO!!!
 	#f)))
 ;; 	(db:string->obj (vector-ref dat 1))
 ;; 	(begin

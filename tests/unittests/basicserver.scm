@@ -60,7 +60,7 @@
 (define keys    (rmt:get-keys))
 (define runinfo #f)
 (define keyvals '(("SYSTEM" "abc")("RELEASE" "def")))
-(define header  (vector "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
+(define header  (list "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
 
 ;; Setup
 ;;
@@ -69,8 +69,10 @@
 
 ;; Login
 ;;
-(test #f '(#t "successful login") (rmt:login-no-auto-client-setup (hash-table-ref/default *runremote* run-id #f) run-id))
-(test #f '(#t "successful login") (rmt:login run-id))
+(test #f'(#t "successful login")
+      (rmt:login-no-auto-client-setup (hash-table-ref/default *runremote* run-id #f) run-id))
+(test #f '(#t "successful login")
+      (rmt:login run-id))
 
 ;; Keys
 ;;
@@ -81,10 +83,9 @@
 (test #f '() (rmt:get-all-run-ids))
 (test #f #f  (rmt:get-run-name-from-id run-id))
 (test #f 
-      (let ((runrec (vector #f #f)))
-	(vector-set! runrec header 0)
-	(vector-set! runrec (vector #f       #f        #f   #f) 1)
-	runrec)
+      (vector
+       header
+       (vector #f #f #f #f))
       (rmt:get-run-info run-id))
 
 ;; Insert data into db
@@ -92,9 +93,18 @@
 (test #f 1 (rmt:register-run keyvals runname "new" "n/a" user))
 ;; (test #f #f (rmt:get-runs-by-patt keys runname))
 (test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
+(define test-one-id #f)
+(test #f 1  (let ((test-id (rmt:get-test-id run-id "test-one" "")))
+	      (set! test-one-id test-id)
+	      test-id))
+(define test-one-rec #f)
+(test #f "test-one" (let ((test-rec (rmt:get-test-info-by-id run-id test-one-id)))
+		      (set! test-one-rec test-rec)
+		      (vector-ref test-rec 2)))
 
 ;; With data in db
 ;;
+(print "Using runame=" runname)
 (test #f '(1)    (rmt:get-all-run-ids))
 (test #f runname (rmt:get-run-name-from-id run-id))
 (test #f 
@@ -104,8 +114,6 @@
 				(db:get-header run-info)
 				"runname")))
 
-      ;; (vector header (vector "abc" "def" 1 "mytestrun" "new" "n/a" "matt" 1416280640.0))
-
 (for-each (lambda (run-id)
 ;; test killing server
 ;;
@@ -114,6 +122,41 @@
 (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
 )
 (list 0 1))
+
+;; Tests to assess reading/writing while servers are starting/stopping
+(define start-time (current-seconds))
+(let loop ((test-state 'start))
+  (let* ((server-dats (tasks:get-server-records (db:delay-if-busy (tasks:open-db)) run-id))
+	 (first-dat   (if (not (null? server-dats))
+			  (car server-dats)
+			  #f)))
+    (map (lambda (dat)
+	   (apply print (intersperse (vector->list dat) ", ")))
+	 server-dats)
+    (test #f test-one-rec (rmt:get-test-info-by-id run-id test-one-id))
+    (thread-sleep! 1)
+    (case test-state
+      ((start)
+       (print "Trying to start server")
+       (server:kind-run run-id)
+       (loop 'server-started))
+      ((server-started)
+       (case (vector-ref first-dat)
+	 ((running)
+	  (print "Server appears to be running. Now ask it to shutdown")
+	  (rmt:kill-server run-id)
+	  (loop 'server-shutdown))
+	 ((shutting-down)
+	  (loop test-state))
+	 (else (print "Don't know what to do if get here"))))
+      ((server-shutdown)
+       (loop test-state)))))
+
+;;======================================================================
+;; END OF TESTS
+;;======================================================================
+
+
 ;; (test #f #f (client:setup run-id))
 
 ;; (set! *transport-type* 'http)
