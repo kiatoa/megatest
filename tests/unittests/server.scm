@@ -33,6 +33,13 @@
 		      (set! test-one-rec test-rec)
 		      (vector-ref test-rec 2)))
 
+(use trace)
+(import trace)
+(trace
+ rmt:send-receive
+ rmt:open-qry-close-locally
+)
+
 ;; Tests to assess reading/writing while servers are starting/stopping
 (define start-time (current-seconds))
 (let loop ((test-state 'start))
