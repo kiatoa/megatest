@@ -69,6 +69,9 @@
 	       #t)
 	     #f))))
 
+;; if a server is either running or in the process of starting call client:setup
+;; else return #f to let the calling proc know that there is no server available
+;;
 (define (rmt:get-connection-info run-id)
   (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
     (if cinfo
@@ -140,7 +143,11 @@
 		;; (if (eq? attemptnum 3)(tasks:kill-server-run-id run-id))
 		;; (thread-sleep! 2)
 		(rmt:send-receive cmd run-id params attemptnum: (+ attemptnum 1)))))
-	;; no connection info? try to start a server
+	;; no connection info? try to start a server, or access locally if no
+	;; server and the query is read-only
+	;;
+	;; Note: The tasks db was checked for a server in starting mode in the rmt:get-connection-info call
+	;;
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
 	    (begin

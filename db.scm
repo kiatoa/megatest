@@ -236,14 +236,15 @@
 		db)
 	      (begin
 		(dbr:dbstruct-set-inmem!  dbstruct inmem)
-		(sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
+		;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
+		;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
 		(db:sync-tables db:sync-tests-only db inmem)
-		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb))
+		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
 		(dbr:dbstruct-set-refdb!  dbstruct refdb)
-		(db:sync-tables db:sync-tests-only db refdb)
-		;; sync once more to deal with delays
-		(db:sync-tables db:sync-tests-only db inmem)
-		(db:sync-tables db:sync-tests-only db refdb)
+		(db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
+		;; sync once more to deal with delays?
+		;; (db:sync-tables db:sync-tests-only db inmem)
+		;; (db:sync-tables db:sync-tests-only inmem refdb)
 		inmem))))))
 
 ;; This routine creates the db. It is only called if the db is not already ls opened
@@ -552,6 +553,10 @@
 		     (set! totrecords (+ totrecords 1)))))
 	     (db:dbdat-get-db fromdb)
 	     full-sel)
+	    
+	    ;; tack on remaining records in fromdat
+	    (if (not (null? fromdat))
+		(set! fromdats (cons fromdat fromdats)))
 
 	    (debug:print-info 2 "found " totrecords " records to sync")
 
