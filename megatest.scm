@@ -13,6 +13,10 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
      http-client srfi-18) ;;  zmq extras)
 
+;; Added for csv stuff - will be removed
+;;
+(use sparse-vectors)
+
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 (import (prefix rpc rpc:))
@@ -321,10 +325,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (mutex-unlock! *db-multi-sync-mutex*))
 	    (hash-table-keys *db-local-sync*))
 	   (if (and debug-mode
-		    (> (- start-time last-time) 14))
+		    (> (- start-time last-time) 60))
 	       (begin
 		 (set! last-time start-time)
-		 (debug:print-info 0 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+		 (debug:print-info 1 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 	 
 	 ;; keep going unless time to exit
 	 ;;
@@ -431,12 +435,60 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	"\n"))
       (set! *didsomething* #t)))
 
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;; csv processing record
+(define (make-refdb:csv)
+  (make-vector 
+   (make-sparse-array)
+   (make-hash-table)
+   (make-hash-table)
+   0
+   0))
+(define-inline (refdb:csv-get-svec     vec)    (vector-ref  vec 0))
+(define-inline (refdb:csv-get-rows     vec)    (vector-ref  vec 1))
+(define-inline (refdb:csv-get-cols     vec)    (vector-ref  vec 2))
+(define-inline (refdb:csv-get-maxrow   vec)    (vector-ref  vec 3))
+(define-inline (refdb:csv-get-maxcol   vec)    (vector-ref  vec 4))
+(define-inline (refdb:csv-set-svec!    vec val)(vector-set! vec 0 val))
+(define-inline (refdb:csv-set-rows!    vec val)(vector-set! vec 1 val))
+(define-inline (refdb:csv-set-cols!    vec val)(vector-set! vec 2 val))
+(define-inline (refdb:csv-set-maxrow!  vec val)(vector-set! vec 3 val))
+(define-inline (refdb:csv-set-maxcol!  vec val)(vector-set! vec 4 val))
+
+(define (get-dat results sheetname)
+  (or (hash-table-ref/default results sheetname #f)
+      (let ((tmp-vec  (make-refdb:csv)))
+	(hash-table-set! results sheetname tmp-vec)
+	tmp-vec)))
+
 (if (args:get-arg "-refdb2dat")
     (let* ((input-db (args:get-arg "-refdb2dat"))
 	   (out-file (args:get-arg "-o"))
 	   (out-fmt  (or (args:get-arg "-dumpmode") "scheme"))
 	   (out-port (if (and out-file 
-			      (not (equal? out-fmt "sqlite3")))
+			      (not (member out-fmt '("sqlite3" "csv"))))
 			 (open-output-file out-file)
 			 (current-output-port)))
 	   (res-data (configf:read-refdb input-db))
@@ -470,6 +522,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  initproc2:
 		  (lambda (sheetname sectionname)
 		    (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}"))))
+		((csv)
+		 (let* ((results  (make-hash-table)) ;; (make-sparse-array)))
+			(row-cols (make-hash-table))) ;; hash of hashes where section => ht { row-<name> => num or col-<name> => num
+		   (configf:map-all-hier-alist
+		    data
+		    (lambda (sheetname sectionname varname val)
+		      (let* ((dat (get-dat results sheetname))
+			     (vec (refdb:
+			     
+			(sparse-array-set! vec 
+						       
+		    initproc1:
+		    (lambda (sheetname)
+		      (print "data[\"" sheetname "\"] = {}"))
+		    initproc2:
+		    (lambda (sheetname sectionname)
+		      (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}")))
+		   ))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
 			(db-exists (file-exists? db-file))
