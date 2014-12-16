@@ -95,43 +95,72 @@
 ;; 4. save
 ;;
 (define (archive:run-bup archive-dir run-id run-name tests)
-  (let* ((bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
+  (let* ((disk-groups (make-hash-table))
+	 (bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (compress   (or (configf:lookup *configdat* "archive" "compress") "9"))
-	 (linktree   (configf:lookup *configdat* "setup" "linktree"))
-	 (test-paths (filter
-		      string?
-		      (map (lambda (test-dat)
-			     (let* ((item-path         (db:test-get-item-path test-dat))
-				    (test-name         (db:test-get-testname  test-dat))
-				    (run-id            (db:test-get-run_id    test-dat))
-				    (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
-				    
-				    (toplevel/children (and (db:test-get-is-toplevel test-dat)
-							    (> (rmt:test-toplevel-num-items run-id test-name) 0)))
-				    ;; note the trailing slash to get the dir inspite of it being a link
-				    (test-path         (conc linktree "/" target "/" run-name "/" (runs:make-full-test-name test-name item-path) "/")))
-			       (if (or toplevel/children
-				       (not (file-exists? test-path)))
-				   #f
-				   test-path)))
-			   tests)))
-	 ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
-	 (bup-init-params  (list "-d" archive-dir "init"))
-	 (bup-index-params (append (list "-d" archive-dir "index") test-paths))
-	 (bup-save-params  (append (list "-d" archive-dir "save" (conc "--strip-path=" linktree)
-					 (conc "-" compress) ;; or (conc "--compress=" compress)
-					  "-n" (conc (common:get-testsuite-name) "-" run-id))
-				   test-paths))
-	 (print-prefix     #f)) ;; "Running: ")) ;; change to #f to turn off printing
-    (if (not (file-exists? archive-dir))
-	(create-directory archive-dir #t))
-    (if (not (file-exists? (conc archive-dir "/HEAD")))
-	(begin
-	  ;; replace this with jobrunner stuff enventually
-	  (debug:print-info 0 "Init bup in " archive-dir)
-	  (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)))
-    (debug:print-info 0 "Indexing data to be archived")
-    (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
-    (debug:print-info 0 "Archiving data with bup")
-    (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
+	 (linktree   (configf:lookup *configdat* "setup" "linktree")))
+
+    ;; from the test info bin the path to the test by stem
+    ;;
+    (for-each
+     (lambda (test-dat)
+       (let* ((item-path         (db:test-get-item-path test-dat))
+	      (test-name         (db:test-get-testname  test-dat))
+	      (run-id            (db:test-get-run_id    test-dat))
+	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
+	      
+	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
+				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
+	      (test-partial-path (conc target "/" run-name "/" (runs:make-full-test-name test-name item-path)))
+	      ;; note the trailing slash to get the dir inspite of it being a link
+	      (test-path         (conc linktree "/" test-partial-path))
+	      (test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
+	      (partial-path-index (if test-physical-path (substring-index test-partial-path test-physical-path) #f))
+	      (test-base         (if (and partial-path-index 
+					  test-physical-path )
+				     (substring test-physical-path
+						0
+						partial-path-index)
+				     #f)))
+	 
+ 	 (if (or toplevel/children
+		 (not (file-exists? test-path)))
+	     #f
+	     (begin
+	       (debug:print 0
+			    "From test-dat=" test-dat " derived the following:\n"
+			    "test-partial-path  = " test-partial-path "\n"
+			    "test-path          = " test-path "\n"
+			    "test-physical-path = " test-physical-path "\n"
+			    "partial-path-index = " partial-path-index "\n"
+			    "test-base          = " test-base)
+	       (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
+	       test-path))))
+     tests)
+    ;; for each disk-group
+    (for-each 
+     (lambda (disk-group)
+       (debug:print 0 "Processing disk-group " disk-group)
+       (let* ((test-paths (hash-table-ref disk-groups disk-group))
+	      ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
+	      (bup-init-params  (list "-d" archive-dir "init"))
+	      (bup-index-params (append (list "-d" archive-dir "index") test-paths))
+	      (bup-save-params  (append (list "-d" archive-dir "save" ;; (conc "--strip-path=" linktree)
+					      (conc "-" compress) ;; or (conc "--compress=" compress)
+					      "-n" (conc (common:get-testsuite-name) "-" run-id)
+					      "--strip" disk-group)
+					test-paths))
+	      (print-prefix      #f)) ;; "Running: ")) ;; change to #f to turn off printing
+	 (if (not (file-exists? archive-dir))
+	     (create-directory archive-dir #t))
+	 (if (not (file-exists? (conc archive-dir "/HEAD")))
+	     (begin
+	       ;; replace this with jobrunner stuff enventually
+	       (debug:print-info 0 "Init bup in " archive-dir)
+	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)))
+	 (debug:print-info 0 "Indexing data to be archived")
+	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
+	 (debug:print-info 0 "Archiving data with bup")
+	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)))
+     (hash-table-keys disk-groups))
     #t))

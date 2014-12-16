@@ -1567,7 +1567,9 @@
 				(if (not toplevel-with-children)
 				    (begin
 				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
-				      (debug:print-info 0 "   " (common:get-disk-space-used run-dir)))))
+				      (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/")))))
+				(if (not (null? tal))
+				    (loop (car tal)(cdr tal))))
 			       )))
 		       )
 		     (if worker-thread (thread-join! worker-thread))))))
