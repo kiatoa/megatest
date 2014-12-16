@@ -148,7 +148,7 @@
 	      (bup-save-params  (append (list "-d" archive-dir "save" ;; (conc "--strip-path=" linktree)
 					      (conc "-" compress) ;; or (conc "--compress=" compress)
 					      "-n" (conc (common:get-testsuite-name) "-" run-id)
-					      "--strip" disk-group)
+					      (conc "--strip-path=" disk-group))
 					test-paths))
 	      (print-prefix      #f)) ;; "Running: ")) ;; change to #f to turn off printing
 	 (if (not (file-exists? archive-dir))
