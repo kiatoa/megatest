@@ -151,7 +151,7 @@ Misc
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
   -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
-                            formats: perl, ruby, sqlite3
+                            formats: perl, ruby, sqlite3, csv
   -o                      : output file for refdb2dat (defaults to stdout)
   -archive targdir        : archive runs specified by selectors to targdir using bup
 
@@ -460,7 +460,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; csv processing record
 (define (make-refdb:csv)
-  (make-vector 
+  (vector 
    (make-sparse-array)
    (make-hash-table)
    (make-hash-table)
@@ -495,7 +495,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (data     (car res-data))
 	   (msg      (cadr res-data)))
       (if (not data)
-	  (debug:print 0 data) ;; some error occurred
+	  (debug:print 0 "Bad input? data=" data) ;; some error occurred
 	  (with-output-to-port out-port
 	    (lambda ()
 	      (case (string->symbol out-fmt)
@@ -525,21 +525,74 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		((csv)
 		 (let* ((results  (make-hash-table)) ;; (make-sparse-array)))
 			(row-cols (make-hash-table))) ;; hash of hashes where section => ht { row-<name> => num or col-<name> => num
+		   ;; (print "data=")
+		   ;; (pp data)
 		   (configf:map-all-hier-alist
 		    data
 		    (lambda (sheetname sectionname varname val)
-		      (let* ((dat (get-dat results sheetname))
-			     (vec (refdb:
-			     
-			(sparse-array-set! vec 
-						       
-		    initproc1:
+		      ;; (print "sheetname: " sheetname ", sectionname: " sectionname ", varname: " varname ", val: " val)
+		      (let* ((dat      (get-dat results sheetname))
+			     (vec      (refdb:csv-get-svec dat))
+			     (rownames (refdb:csv-get-rows dat))
+			     (colnames (refdb:csv-get-cols dat))
+			     (currrown (hash-table-ref/default rownames varname #f))
+			     (currcoln (hash-table-ref/default colnames sectionname #f))
+			     (rown     (or currrown 
+					   (let* ((lastn   (refdb:csv-get-maxrow dat))
+						  (newrown (+ lastn 1)))
+					     (refdb:csv-set-maxrow! dat newrown)
+					     newrown)))
+			     (coln     (or currcoln 
+					   (let* ((lastn   (refdb:csv-get-maxcol dat))
+						  (newcoln (+ lastn 1)))
+					     (refdb:csv-set-maxcol! dat newcoln)
+					     newcoln))))
+			(if (not (sparse-array-ref vec 0 coln)) ;; (eq? rown 0)
+			    (begin
+			      (sparse-array-set! vec 0 coln sectionname)
+			      ;; (print "sparse-array-ref " 0 "," coln "=" (sparse-array-ref vec 0 coln))
+			      ))
+			(if (not (sparse-array-ref vec rown 0)) ;; (eq? coln 0)
+			    (begin
+			      (sparse-array-set! vec rown 0 varname)
+			      ;; (print "sparse-array-ref " rown "," 0 "=" (sparse-array-ref vec rown 0))
+			      ))
+			(if (not currrown)(hash-table-set! rownames varname rown))
+			(if (not currcoln)(hash-table-set! colnames sectionname coln))
+			;; (print "dat=" dat ", rown=" rown ", coln=" coln)
+			(sparse-array-set! vec rown coln val)
+			;; (print "sparse-array-ref " rown "," coln "=" (sparse-array-ref vec rown coln))
+			)))
+		   (for-each
 		    (lambda (sheetname)
-		      (print "data[\"" sheetname "\"] = {}"))
-		    initproc2:
-		    (lambda (sheetname sectionname)
-		      (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}")))
-		   ))
+		      (let* ((sheetdat (get-dat results sheetname))
+			     (svec     (refdb:csv-get-svec sheetdat))
+			     (maxrow   (refdb:csv-get-maxrow sheetdat))
+			     (maxcol   (refdb:csv-get-maxcol sheetdat))
+			     (fname    (if out-file 
+					   (string-substitute "%s" sheetname out-file) ;; "/foo/bar/%s.csv")
+					   (conc sheetname ".csv"))))
+			(with-output-to-file fname
+			  (lambda ()
+			    ;; (print "Sheetname: " sheetname)
+			    (let loop ((row       0)
+				       (col       0)
+				       (curr-row '())
+				       (result   '()))
+			      (let* ((val (sparse-array-ref svec row col))
+				     (disp-val (if val
+						   (conc "\"" val "\"")
+						   "")))
+				(if (> col 0)(display ","))
+				(display disp-val)
+				(cond
+				 ((> row maxrow)(display "\n") result)
+				 ((>= col maxcol)
+				  (display "\n")
+				  (loop (+ row 1) 0 '() (append result (list curr-row))))
+				 (else
+				  (loop row (+ col 1) (append curr-row (list val)) result)))))))))
+		    (hash-table-keys results))))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
 			(db-exists (file-exists? db-file))
