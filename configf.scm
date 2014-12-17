@@ -467,7 +467,8 @@
 					  (list key (hash-table-ref ref-dat key)))
 					(hash-table-keys ref-dat))))
 				   ;; (hash-table->alist ref-dat)))
-		   (set! data (append data (list (list sheet-name ref-assoc))))))
+		   ;; (set! data (append data (list (list sheet-name ref-assoc))))))
+		   (set! data (cons (list sheet-name ref-assoc) data))))
 	       sheets)
 	      (list data "NO ERRORS"))))))
 
@@ -491,7 +492,8 @@
 		 (proc sheetname sectionname varname val)))
 	     (map car sectiondat))))
 	(map car sheetdat))))
-   (map car data)))
+   (map car data))
+  data)
 
 ;;======================================================================
 ;;  C O N F I G   T O / F R O M   A L I S T
