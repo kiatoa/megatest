@@ -160,7 +160,7 @@ minsetup :
 	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config
-	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
+	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1
 	cd ..;make -j;make install
 	rm -f */logging.db
 	touch cleanprep

@@ -9,7 +9,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit archive))
@@ -49,9 +49,9 @@
 ;; Get archive disks from megatest.config
 ;;
 (define (archive:get-archive-disks)
-  (let ((section (configf:get-section *configdat* "archivedisks")))
+  (let ((section (configf:get-section *configdat* "archive-disks")))
     (if section
-	(map cdr section)
+	section
 	'())))
 
 ;; look for the best candidate archive area, else create new 
@@ -72,20 +72,23 @@
 
 ;; allocate a new archive area
 ;;
-(define (archvie:allocate-new-archive-block testname itempath dneeded)
+(define (archive:allocate-new-archive-block run-area-home testsuite-name dneeded)
   (let* ((adisks    (archive:get-archive-disks))
 	 (best-disk (common:get-disk-with-most-free-space adisks dneeded)))
     (if best-disk
 	(let* ((bdisk-name    (car best-disk))
 	       (bdisk-path    (cdr best-disk))
 	       (bdisk-id      (rmt:archive-register-disk bdisk-name bdisk-path (get-df bdisk-path)))
-	       (archive-name  (time->string (seconds->local-time (current-seconds)) "ww%W.%u"))
+	       (archive-name  (conc (time->string (seconds->local-time (current-seconds)) "%Y")
+				    "_q" (seconds->quarter sec) "/"
+				    testsuite-name "_" (substring (message-digest-string (md5-primitive) (get-environment-variable "PATH")) 0 5)))
 	       (archive-path  (conc bdisk-path "/" archive-name))
 	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path))
 	       (allocation-id (rmt:archive-allocate-test-to-block block-id testname itempath)))
 	  (if (and block-id allocation-id)
 	      archive-path
-	      #f)))))
+	      #f))
+	#f)))
 
 ;; archive - run bup
 ;;
@@ -94,11 +97,23 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-dir run-id run-name tests)
-  (let* ((disk-groups (make-hash-table))
+(define (archive:run-bup archive-dir-in run-id run-name tests)
+  (let* ((min-space   (string->number (or (configf:lookup *configdat* "archive" "minspace") "1000")))
+	 (archive-dir (if (equal? archive-dir-in "-") ;; auto allocate an archive dir
+			  (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space)
+			  archive-dir-in))
+	 (disk-groups (make-hash-table))
 	 (bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (compress   (or (configf:lookup *configdat* "archive" "compress") "9"))
 	 (linktree   (configf:lookup *configdat* "setup" "linktree")))
+
+    (if (not archive-dir) ;; no archive disk found, this is fatal
+	(begin
+	  (debug:print 0 "FATAL: No archive disks found. Please add disks with at least " min-space " MB space to the [archive-disks] section of megatest.config")
+	  (debug:print 0 "       use [archive] minspace to specify minimum available space")
+	  (debug:print 0 "   disks: " (string-intersperse (map cadr (archive:get-archive-disks)) "\n         "))
+	  (exit 1))
+	(debug:print-info 0 "Using path " archive-dir " for archiving"))
 
     ;; from the test info bin the path to the test by stem
     ;;
