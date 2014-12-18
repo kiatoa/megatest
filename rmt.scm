@@ -660,3 +660,9 @@
 
 (define (rmt:archive-get-allocations  testname itempath dneeded)
   (rmt:send-receive 'archive-get-allocations #f (list testname itempath dneeded)))
+
+(define (rmt:archive-register-block-name bdisk-id archive-path)
+  (rmt:send-receive 'archive-register-block-name #f (list bdisk-id archive-path)))
+
+(define (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
+  (rmt:send-receive 'archive-allocate-test-to-block #f (list  block-id testsuite-name areakey)))
