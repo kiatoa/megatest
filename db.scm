@@ -819,7 +819,7 @@
                                 params TEXT,
                                 creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 execution_time TIMESTAMP);")
-       ;; archive disk areas, cached info from [archivedisks]
+       ;; archive disk areas, cached info from [archive-disks]
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_disks (
                                 id INTEGER PRIMARY KEY,
                                 archive_area_name TEXT,

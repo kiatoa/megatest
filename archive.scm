@@ -78,13 +78,14 @@
     (if best-disk
 	(let* ((bdisk-name    (car best-disk))
 	       (bdisk-path    (cdr best-disk))
+	       (area-key      (substring (message-digest-string (md5-primitive) run-area-home) 0 5))
 	       (bdisk-id      (rmt:archive-register-disk bdisk-name bdisk-path (get-df bdisk-path)))
 	       (archive-name  (conc (time->string (seconds->local-time (current-seconds)) "%Y")
 				    "_q" (seconds->quarter sec) "/"
-				    testsuite-name "_" (substring (message-digest-string (md5-primitive) (get-environment-variable "PATH")) 0 5)))
+				    testsuite-name "_" area-key))
 	       (archive-path  (conc bdisk-path "/" archive-name))
 	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path))
-	       (allocation-id (rmt:archive-allocate-test-to-block block-id testname itempath)))
+	       (allocation-id (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name area-key)))
 	  (if (and block-id allocation-id)
 	      archive-path
 	      #f))
