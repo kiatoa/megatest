@@ -85,10 +85,10 @@
 				      "_q" (seconds->quarter sec) "/"
 				      testsuite-name "_" area-key)))
 	       (archive-path  (conc bdisk-path "/" archive-name))
-	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path))
-	       (allocation-id (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name area-key)))
-	  (if (and block-id allocation-id)
-	      archive-path
+	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path)))
+	  ;;   (allocation-id (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name area-key)))
+	  (if block-id ;; (and block-id allocation-id)
+	      (cons block-id archive-path)
 	      #f))
 	#f)))
 
@@ -100,11 +100,17 @@
 ;; 4. save
 ;;
 (define (archive:run-bup archive-dir-in run-id run-name tests)
+  ;; move the getting of archive space down into the below block so that a single run can 
+  ;; allocate as needed should a disk fill up
+  ;;
   (let* ((min-space   (string->number (or (configf:lookup *configdat* "archive" "minspace") "1000")))
-	 (archive-dir (if (equal? archive-dir-in "-") ;; auto allocate an archive dir
-			  (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space)
-			  archive-dir-in))
+	 (archive-info (if (equal? archive-dir-in "-") ;; auto allocate an archive dir
+			   (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space)
+			   (cons archive-dir-in 0))) ;; THIS WONT WORK!!!
+	 (archive-dir (if archive-info (cdr archive-info) archive-disk-in))
+	 (archive-id  (if archive-info (car archive-info) -1))
 	 (disk-groups (make-hash-table))
+	 (test-groups (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
 	 (bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (compress   (or (configf:lookup *configdat* "archive" "compress") "9"))
 	 (linktree   (configf:lookup *configdat* "setup" "linktree")))
@@ -123,6 +129,7 @@
      (lambda (test-dat)
        (let* ((item-path         (db:test-get-item-path test-dat))
 	      (test-name         (db:test-get-testname  test-dat))
+	      (test-id           (db:test-get-id        test-dat))
 	      (run-id            (db:test-get-run_id    test-dat))
 	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
 	      
@@ -152,6 +159,7 @@
 			    "partial-path-index = " partial-path-index "\n"
 			    "test-base          = " test-base)
 	       (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
+	       (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
 	       test-path))))
      tests)
     ;; for each disk-group
@@ -178,6 +186,12 @@
 	 (debug:print-info 0 "Indexing data to be archived")
 	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
 	 (debug:print-info 0 "Archiving data with bup")
-	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)))
+	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
+	 (for-each
+	  (lambda (test-dat)
+	    (let ((test-id           (db:test-get-id        test-dat))
+		  (run-id            (db:test-get-run_id    test-dat)))
+	      (rmt:test-set-archive-block-id run-id test-id archive-id)))
+	  (hash-table-ref test-groups disk-group))))
      (hash-table-keys disk-groups))
     #t))

@@ -1040,7 +1040,7 @@
    #f
    (lambda (db)
      (sqlite3:execute db "UPDATE tests SET archived=? WHERE id=?;"
-		      pid test-id))))
+		      archive-block-id test-id))))
  
 
 ;; (define (db:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
