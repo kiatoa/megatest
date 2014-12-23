@@ -666,3 +666,6 @@
 
 (define (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
   (rmt:send-receive 'archive-allocate-test-to-block #f (list  block-id testsuite-name areakey)))
+
+(define (rmt:archive-register-disk bdisk-name bdisk-path df)
+  (rmt:send-receive 'archive-register-disk #f (list bdisk-name bdisk-path df)))

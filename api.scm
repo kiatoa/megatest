@@ -159,6 +159,12 @@
 	    ((tasks-add)                 (apply tasks:add dbstruct params))   
 	    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct params))
 
+	    ;; ARCHIVES
+	    ;; ((archive-get-allocations)   
+	    ((archive-register-disk)     (apply db:archive-register-disk dbstruct params))
+	    ((archive-register-block-name)(apply db:archive-register-block-name dbstruct params))
+	    ((archive-allocate-testsuite/area-to-block)(apply db:archive-allocate-testsuite/area-to-block dbstruct block-id testsuite-name areakey))
+
 	    ;;======================================================================
 	    ;; READ ONLY QUERIES
 	    ;;======================================================================

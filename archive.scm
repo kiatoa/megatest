@@ -80,9 +80,10 @@
 	       (bdisk-path    (cdr best-disk))
 	       (area-key      (substring (message-digest-string (md5-primitive) run-area-home) 0 5))
 	       (bdisk-id      (rmt:archive-register-disk bdisk-name bdisk-path (get-df bdisk-path)))
-	       (archive-name  (conc (time->string (seconds->local-time (current-seconds)) "%Y")
-				    "_q" (seconds->quarter sec) "/"
-				    testsuite-name "_" area-key))
+	       (archive-name  (let ((sec (current-seconds)))
+				(conc (time->string (seconds->local-time sec) "%Y")
+				      "_q" (seconds->quarter sec) "/"
+				      testsuite-name "_" area-key)))
 	       (archive-path  (conc bdisk-path "/" archive-name))
 	       (block-id      (rmt:archive-register-block-name bdisk-id archive-path))
 	       (allocation-id (rmt:archive-allocate-testsuite/area-to-block block-id testsuite-name area-key)))

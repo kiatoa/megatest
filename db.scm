@@ -836,6 +836,8 @@
                                 last_du_time TIMESTAMP DEFAULT (strftime('%s','now')),
                                 creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
        ;; tests allocated to what chunks. reusing a chunk for a test/item_path is very efficient
+       ;; NB// the per run/test recording of where the archive is stored is done in the test
+       ;;      record. 
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_allocations (
                                 id INTEGER PRIMARY KEY,
                                 archive_block_id INTEGER,
@@ -884,7 +886,7 @@
                      event_time   TIMESTAMP DEFAULT (strftime('%s','now')),
                      fail_count   INTEGER   DEFAULT 0,
                      pass_count   INTEGER   DEFAULT 0,
-                     archived     INTEGER   DEFAULT 0, -- 0=no, 1=in progress, 2=yes
+                     archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
      (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
@@ -974,6 +976,67 @@
 	 dneeded))
     blocks))
     
+;; returns id of the record, register a disk allocated to archiving and record it's last known
+;; available space
+;;
+(define (db:archive-register-disk dbstruct bdisk-name bdisk-path df)
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     db
+     "SELECT id FROM archive_disks WHERE archive_area_name=? AND disk_path=?;"
+     bdisk-name bdisk-path)
+    (if res ;; record exists, update df and return id
+	(begin
+	  (sqlite3:execute db "UPDATE archive_disks SET last_df=?,last_df_time=(strftime('%s','now'))
+                                  WHERE archive_area_name=? AND disk_path=?;"
+			   df bdisk-name bdisk-path)
+	  res)
+	(begin
+	  (sqlite3:execute
+	   db
+	   "INSERT OR REPLACE INTO archive_disks (archive_area_name,disk_path,last_df)
+                VALUES (?,?,?);"
+	   bdisk-name bdisk-path df)
+	  (db:archive-register-disk dbstruct bdisk-name bdisk-path df)))))
+
+;; record an archive path created on a given archive disk (identified by it's bdisk-id)
+;; if path starts with / then it is full, otherwise it is relative to the archive disk
+;; preference is to store the relative path.
+;;
+(define (db:archive-register-block-name dbstruct bdisk-id archive-path #!key (du #f))
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          #f))
+    ;; first look to see if this path is already registered
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     db
+     "SELECT id FROM archive_blocks WHERE archive_disk_id=? AND disk_path=?;"
+     bdisk-id archive-path)
+    (if res ;; record exists, update du if applicable and return res
+	(begin
+	  (if du (sqlite3:exectute db "UPDATE archive_blocks SET last_du=?,last_du_time=(strftime('%s','now'))
+                                          WHERE archive_disk_id=? AND disk_path=?;"
+				   bdisk-id archive-path du))
+	  res)
+	(begin
+	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
+                                                        VALUES (?,?,?);"
+			   bdisk-id archive-path (or du 0))
+	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
+       
+
+;; (define (db:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
+;;   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+;; 	 (db           (db:dbdat-get-db dbdat))
+;; 	 (res          '())
+;; 	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
+;;     (sqlite3:for-each-row  #f)
 
 ;;======================================================================
 ;; L O G G I N G    D B 
