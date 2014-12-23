@@ -669,3 +669,6 @@
 
 (define (rmt:archive-register-disk bdisk-name bdisk-path df)
   (rmt:send-receive 'archive-register-disk #f (list bdisk-name bdisk-path df)))
+
+(define (rmt:test-set-archive-block-id run-id test-id archive-block-id)
+  (rmt:send-receive 'test-set-archive-block-id run-id (list run-id test-id archive-block-id)))

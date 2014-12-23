@@ -1029,7 +1029,19 @@
                                                         VALUES (?,?,?);"
 			   bdisk-id archive-path (or du 0))
 	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
-       
+
+
+;; The "archived" field in tests is overloaded; 0 = not archived, > 0 archived in block with given id
+;;
+(define (db:test-set-archive-block-id dbstruct run-id test-id archive-block-id)
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tests SET archived=? WHERE id=?;"
+		      pid test-id))))
+ 
 
 ;; (define (db:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
 ;;   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db

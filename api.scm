@@ -131,6 +131,7 @@
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
 	    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))
 	    ((update-fail-pass-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
+	    ((test-set-archive-block-id)       (apply db:test-set-archive-block-id dbstruct params))
 
 	    ;; RUNS
 	    ((register-run)                 (apply db:register-run dbstruct params))
