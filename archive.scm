@@ -23,6 +23,8 @@
 ;; 
 ;;======================================================================
 
+;; NOT CURRENTLY USED
+;;
 (define (archive:main linktree target runname testname itempath options)
   (let ((testdir (conc linktree "/" target "/" runname "/" testname "/" itempatt))
 	(flavor  'plain) ;; type of machine to run jobs on
@@ -107,7 +109,7 @@
 	 (archive-info (if (equal? archive-dir-in "-") ;; auto allocate an archive dir
 			   (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space)
 			   (cons archive-dir-in 0))) ;; THIS WONT WORK!!!
-	 (archive-dir (if archive-info (cdr archive-info) archive-disk-in))
+	 (archive-dir (if archive-info (cdr archive-info) archive-dir-in))
 	 (archive-id  (if archive-info (car archive-info) -1))
 	 (disk-groups (make-hash-table))
 	 (test-groups (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
