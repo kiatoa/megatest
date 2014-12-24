@@ -179,7 +179,8 @@
     (4 "LAUNCHED")
     (5 "KILLED")
     (6 "KILLREQ")
-    (7 "STUCK")))
+    (7 "STUCK")
+    (8 "ARCHIVED")))
 
 (define *common:std-statuses*
   '((0 "PASS")
@@ -195,7 +196,7 @@
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT))
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT ARCHIVED))
 
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 

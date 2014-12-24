@@ -477,7 +477,7 @@ Misc
 			   ;;(teststart  (db:test-get-event_time test))
 			   ;;(runtime    (db:test-get-run_duration test))
 			   (buttontxt  (cond
-					((equal? teststate "COMPLETED") teststatus)
+					((member teststate '("COMPLETED" "ARCHIVED")) teststatus)
 					((and (equal? teststate "NOT_STARTED")
 					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "TIMED_OUT" "KEEP_TRYING" "TEN_STRIKES")))
 					 teststatus)

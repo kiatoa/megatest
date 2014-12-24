@@ -255,7 +255,7 @@
 				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
 						    (conc rownum ":" colnum)
-						    (if (string=? state "COMPLETED")
+						    (if (member state '("ARCHIVED" "COMPLETED"))
 							status
 							state))
 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)

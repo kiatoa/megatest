@@ -800,7 +800,7 @@
 	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	(begin
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
-	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
+	  (runs:remove-test-directory #f testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;

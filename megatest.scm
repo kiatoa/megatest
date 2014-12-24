@@ -151,9 +151,13 @@ Misc
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
   -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
-                            formats: perl, ruby, sqlite3, csv
+                            formats: perl, ruby, sqlite3, csv (for csv the -o param
+                            will substitute %s for the sheet name in generating 
+                            multiple sheets)
   -o                      : output file for refdb2dat (defaults to stdout)
-  -archive targdir        : archive runs specified by selectors to targdir using bup
+  -archive cmd            : archive runs specified by selectors to one of disks specified
+                            in the [archive-disks] section.
+                            cmd: keep-html, restore, save, save-remove
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -223,7 +227,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-setvars"
 			"-set-state-status"
 			"-set-run-status"
-			"-archive"
 			"-debug" ;; for *verbosity* > 2
 			"-gen-megatest-test"
 			"-override-timeout"
@@ -237,6 +240,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-refdb2dat"
 			"-o"
 			"-log"
+			"-archive"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"

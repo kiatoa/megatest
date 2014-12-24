@@ -1417,7 +1417,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f)(options '()))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(mode 'remove-all)(options '()))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (tdbdat       (tasks:open-db))
@@ -1548,7 +1548,7 @@
 						(loop new-test-dat tal)
 						(loop (car tal)(append tal (list new-test-dat)))))
 					  (begin
-					    (runs:remove-test-directory db new-test-dat remove-data-only)
+					    (runs:remove-test-directory new-test-dat mode) ;; 'remove-all)
 					    (if (not (null? tal))
 						(loop (car tal)(cdr tal))))))))
 			       ((set-state-status)
@@ -1597,14 +1597,15 @@
     )
   #t)
 
-(define (runs:remove-test-directory db test remove-data-only)
+(define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
 			    (resolve-pathname run-dir)
 			    #f)))
-    (if remove-data-only
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f)
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
+    (case mode
+      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))
+      ((remove-all)      (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVE_REMOVING" #f #f)))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
@@ -1637,9 +1638,10 @@
 		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
-    (if remove-data-only
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f)
-	(rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test)))))
+    (case mode
+      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVED" #f #f))
+      (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))))
 
 ;;======================================================================
 ;; Routines for manipulating runs

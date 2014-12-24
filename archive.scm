@@ -101,21 +101,19 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-dir-in run-id run-name tests)
+(define (archive:run-bup archive-command run-id run-name tests)
   ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
-  (let* ((min-space   (string->number (or (configf:lookup *configdat* "archive" "minspace") "1000")))
-	 (archive-info (if (equal? archive-dir-in "-") ;; auto allocate an archive dir
-			   (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space)
-			   (cons archive-dir-in 0))) ;; THIS WONT WORK!!!
-	 (archive-dir (if archive-info (cdr archive-info) archive-dir-in))
-	 (archive-id  (if archive-info (car archive-info) -1))
-	 (disk-groups (make-hash-table))
-	 (test-groups (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
-	 (bup-exe    (or (configf:lookup *configdat* "archive" "bup") "bup"))
-	 (compress   (or (configf:lookup *configdat* "archive" "compress") "9"))
-	 (linktree   (configf:lookup *configdat* "setup" "linktree")))
+  (let* ((min-space    (string->number (or (configf:lookup *configdat* "archive" "minspace") "1000")))
+	 (archive-info (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space))
+	 (archive-dir  (if archive-info (cdr archive-info) #f))
+	 (archive-id   (if archive-info (car archive-info) -1))
+	 (disk-groups  (make-hash-table))
+	 (test-groups  (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
+	 (bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
+	 (compress     (or (configf:lookup *configdat* "archive" "compress") "9"))
+	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
 
     (if (not archive-dir) ;; no archive disk found, this is fatal
 	(begin
@@ -193,7 +191,9 @@
 	  (lambda (test-dat)
 	    (let ((test-id           (db:test-get-id        test-dat))
 		  (run-id            (db:test-get-run_id    test-dat)))
-	      (rmt:test-set-archive-block-id run-id test-id archive-id)))
+	      (rmt:test-set-archive-block-id run-id test-id archive-id)
+	      (if (member archive-command '("save-remove"))
+		  (runs:remove-test-directory test-dat 'archive-remove))))
 	  (hash-table-ref test-groups disk-group))))
      (hash-table-keys disk-groups))
     #t))
