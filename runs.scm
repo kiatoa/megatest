@@ -1475,7 +1475,10 @@
 		   ((archive)
 		    (debug:print 1 "Archiving data for run: " runkey " " (db:get-value-by-header run header "runname"))
 		    (set! worker-thread (make-thread (lambda ()
-						       (archive:run-bup (args:get-arg "-archive") run-id run-name tests))
+						       (case (string->symbol (args:get-arg "-archive"))
+							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests))
+							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests))
+							 (else (debug:print 0 "ERROR: unrecognised sub command to -archive. Run \"megatest\" to see help"))))
 						     "archive-bup-thread"))
 		    (thread-start! worker-thread))
 		   (else
