@@ -138,8 +138,8 @@
 
 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
 	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
-
- 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data runname #f #f keypatts))
+	 ;; run-id is #f in next line to send the query to server 0
+ 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
 				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
 				   '()))
@@ -148,7 +148,12 @@
 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
 
-	 (test-changes (synchash:client-get 'db:get-tests-for-runs-mindata get-tests-sig 0 data run-ids testpatt states statuses #f))
+	 (all-test-changes (let ((res (make-hash-table)))
+			     (for-each (lambda (run-id)
+					 (if (> run-id 0)
+					     (hash-table-set! res run-id (synchash:client-get 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
+				       run-ids)
+			     res))
 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
 	 (header       (hash-table-ref/default runs-hash "header" #f))
 	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
@@ -194,6 +199,7 @@
     ;; Do this analysis in the order of the run-ids, the most recent run wins
     (for-each (lambda (run-id)
 		(let* ((run-path       (hash-table-ref (dboard:data-get-run-keys *data*) run-id))
+		       (test-changes   (hash-table-ref all-test-changes run-id))
 		       (new-test-dat   (car test-changes))
 		       (removed-tests  (cadr test-changes))
 		       (tests          (sort (map cadr (filter (lambda (testrec)
@@ -271,7 +277,7 @@
     (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
     ;; (debug:print 2 "run-changes: " run-changes)
     ;; (debug:print 2 "test-changes: " test-changes)
-    (list run-changes test-changes)))
+    (list run-changes all-test-changes)))
 
 ;;======================================================================
 ;; TESTS DATA

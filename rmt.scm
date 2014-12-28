@@ -383,6 +383,10 @@
 	(print-call-chain (current-error-port))
 	'())))
 
+;; get stuff via synchash 
+(define (rmt:synchash-get run-id proc synckey keynum params)
+  (rmt:send-receive 'synchash-get run-id (list run-id proc synckey keynum params)))
+
 ;; IDEA: Threadify these - they spend a lot of time waiting ...
 ;;
 (define (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)

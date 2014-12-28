@@ -49,6 +49,7 @@
     login
     testmeta-get-record
     have-incompletes?
+    synchash-get
     ))
 
 (define api:write-queries
@@ -190,6 +191,7 @@
 	    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new dbstruct params))
 	    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
 	    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
+	    ((synchash-get)                    (apply synchash:server-get dbstruct params))
 
 	    ;; RUNS
 	    ((get-run-info)                 (apply db:get-run-info dbstruct params))
