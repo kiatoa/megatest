@@ -453,7 +453,7 @@
   ;; special case
   (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
       (begin
-	(set! *configinfo* (or (if (get-environment-variable "MT_MDINFO") ;; we are inside a test - do not reprocess configs
+	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
 				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
 							    (get-environment-variable "MT_TARGET")   "/"
 							    (get-environment-variable "MT_RUNNAME")  "/"
