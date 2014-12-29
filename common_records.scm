@@ -104,15 +104,17 @@
 ;;======================================================================
 
 ;; make-vector-record common_records testsuite toppath linktree configdat envvars
-(define (make-common_records:testsuite)(make-vector 4))
+(define (make-common_records:testsuite)(make-vector 5))
 (define-inline (common_records:testsuite-get-toppath     vec)    (vector-ref  vec 0))
 (define-inline (common_records:testsuite-get-linktree    vec)    (vector-ref  vec 1))
 (define-inline (common_records:testsuite-get-configdat   vec)    (vector-ref  vec 2))
 (define-inline (common_records:testsuite-get-envvars     vec)    (vector-ref  vec 3))
+(define-inline (common_records:testsuite-get-dbstruct    vec)    (vector-ref  vec 4))
 (define-inline (common_records:testsuite-set-toppath!    vec val)(vector-set! vec 0 val))
 (define-inline (common_records:testsuite-set-linktree!   vec val)(vector-set! vec 1 val))
 (define-inline (common_records:testsuite-set-configdat!  vec val)(vector-set! vec 2 val))
 (define-inline (common_records:testsuite-set-envvars!    vec val)(vector-set! vec 3 val))
+(define-inline (common_records:testsuite-set-dbstruct!   vec val)(vector-set! vec 4 val))
 
 (define (common_records:testsuite-add-envvar! vec var val)
   (let ((envvars (cons (cons var val) 

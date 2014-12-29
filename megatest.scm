@@ -302,7 +302,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+     (let (;; (legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
 	   (debug-mode  (debug:debug-mode 1))
 	   (last-time   (current-seconds)))
        (let loop ()
@@ -310,24 +310,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 ;;
 	 (let ((start-time      (current-seconds))
 	       (servers-started (make-hash-table)))
-	   (for-each 
-	    (lambda (run-id)
-	      (mutex-lock! *db-multi-sync-mutex*)
-	      (if (and legacy-sync 
-		       (hash-table-ref/default *db-local-sync* run-id #f))
-		  ;; (if (> (- start-time last-write) 5) ;; every five seconds
-		  (begin ;; let ((sync-time (- (current-seconds) start-time)))
-		    (db:multi-db-sync (list run-id) 'new2old)
-		    (if (common:low-noise-print 30 "sync new to old")
-			(let ((sync-time (- (current-seconds) start-time)))
-			  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
-		    ;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
-		    ;;     (begin
-		    ;;       (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
-		    ;;       (server:kind-run run-id)))))
-		    (hash-table-delete! *db-local-sync* run-id)))
-	      (mutex-unlock! *db-multi-sync-mutex*))
-	    (hash-table-keys *db-local-sync*))
+	 ;;   (for-each 
+	 ;;    (lambda (run-id)
+	 ;;      (mutex-lock! *db-multi-sync-mutex*)
+	 ;;      (if (and legacy-sync 
+	 ;;               (hash-table-ref/default *db-local-sync* run-id #f))
+	 ;;          ;; (if (> (- start-time last-write) 5) ;; every five seconds
+	 ;;          (begin ;; let ((sync-time (- (current-seconds) start-time)))
+	 ;;            (db:multi-db-sync (list run-id) 'new2old)
+	 ;;            (if (common:low-noise-print 30 "sync new to old")
+	 ;;        	(let ((sync-time (- (current-seconds) start-time)))
+	 ;;        	  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
+	 ;;            ;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
+	 ;;            ;;     (begin
+	 ;;            ;;       (debug:print-info 0 "Sync is taking a long time, start up a server to assist for run " run-id)
+	 ;;            ;;       (server:kind-run run-id)))))
+	 ;;            (hash-table-delete! *db-local-sync* run-id)))
+	 ;;      (mutex-unlock! *db-multi-sync-mutex*))
+	 ;;    (hash-table-keys *db-local-sync*))
 	   (if (and debug-mode
 		    (> (- start-time last-time) 60))
 	       (begin
@@ -657,7 +657,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-show-cmdinfo"
 		       "-list-runs"
 		       "-ping")))
-	(if (launch:setup-for-run)
+	(let ((testsuite-data (common:multi-setup-for-run)))
+	(if testsuite-data ;; (launch:setup-for-run)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -670,7 +671,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;;     (client:launch run-id) 
 		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
 		    #t
-		    ))))))
+		    )))))))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))

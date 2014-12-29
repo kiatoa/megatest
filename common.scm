@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3)
+(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3 call-with-environment-variables)
 (require-extension sqlite3 regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
@@ -37,20 +37,23 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
-(define *db-keys* #f)
-(define *configinfo* #f)
-(define *configdat*  #f)
-(define *toppath*    #f)
-(define *already-seen-runconfig-info* #f)
-(define *waiting-queue*     (make-hash-table))
-(define *test-meta-updated* (make-hash-table))
-(define *globalexitstatus*  0) ;; attempt to work around possible thread issues
-(define *passnum*           0) ;; when running track calls to run-tests or similar
-(define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
-(define *alt-log-file* #f)  ;; used by -log
-(define *common:denoise*    (make-hash-table)) ;; for low noise printing
+;; (define *db-keys* #f)
+;; (define *configinfo* #f)
+;; (define *configdat*  #f)
+;; (define *toppath*    #f)
+;; (define *already-seen-runconfig-info* #f)
+;; (define *waiting-queue*     (make-hash-table))
+;; (define *test-meta-updated* (make-hash-table))
+;; (define *globalexitstatus*  0) ;; attempt to work around possible thread issues
+;; (define *passnum*           0) ;; when running track calls to run-tests or similar
+;; (define *write-frequency*   (make-hash-table)) ;; run-id => (vector (current-seconds) 0))
+;; (define *alt-log-file* #f)  ;; used by -log
+;; (define *common:denoise*    (make-hash-table)) ;; for low noise printing
 
-;; MULTI-TESTSUITE support
+;; All the above *theoretically* replaced by ...
+(define *testsuite-data* (make-hash-table)) ;; area-path => testsuite-vector < toppath linktree configdat envvars dbstruct >
+
+;; MULTI-TESTSUITE support, use when the env-vars are in use (set up and take down using call-with-environment-variables.)
 (define *testsuite-mutex* (make-mutex))
 
 ;; DATABASE
@@ -150,7 +153,8 @@
 			  pathenvvar: "MT_RUN_AREA_HOME")))
 	 (configdat  (if (car configinfo)(car configinfo) #f))
 	 (toppath    (if (car configinfo)(cadr configinfo) #f))
-	 (linktree   (configf:lookup configdat "setup" "linktree"))) ;; link tree is critical
+	 (linktree   (configf:lookup configdat "setup" "linktree")) ;; link tree is critical
+	 (failed     #f))
     (if linktree
 	(if (not (file-exists? linktree))
 	    (begin
@@ -158,11 +162,12 @@
 	       exn
 	       (begin
 		 (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
-		 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
+		 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+		 (set! failed #t))
 	       (create-directory linktree #t))))
 	(begin
 	  (debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
-	  (exit 1)))
+	  (set! failed #t)))
     (if linktree
 	(let ((dbdir (or (configf:lookup configdat "setup" "dbdir") ;; not really supported yet, placeholder only
 			 (conc linktree "/.db"))))
@@ -170,24 +175,38 @@
 	   exn
 	   (begin
 	     (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
-	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
+	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	     (set! failed #t))
 	   (if (not (directory-exists? dbdir))(create-directory dbdir))))
 	;; (setenv "MT_LINKTREE" linktree))
 	(begin
 	  (debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
-	  ;; (exit 1)
-	  )
-	)
+	  (set! failed #t)))
     (if (not (and toppath
 		  (directory-exists? toppath)))
-	;; (setenv "MT_RUN_AREA_HOME" *toppath*)
 	(begin
-	  (debug:print 0 "ERROR: failed to find the top path to your Megatest area.")))
-	;; (exit 1)))
+	  (debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
+	  (set! failed #t)))
     (mutex-unlock! *testsuite-mutex*)
-    (vector toppath linktree configinfo
-	    (list (cons "MT_LINKTREE" linktree)
-		  (cons "MT_RUN_AREA_HOME" toppath)))))
+    (let ((testsuite-data (vector toppath linktree configinfo
+				  (list (cons "MT_LINKTREE" linktree)
+					(cons "MT_RUN_AREA_HOME" toppath))
+				  #f)))
+      (if failed
+	  #f
+	  (begin
+	    (hash-table-set! *testsuite-data* toppath testsuite-data)
+	    testsuite-data)))))
+
+;; get the vars from the testsuite-data envvars store and run proc
+;;
+(define (common:with-vars testsuite-data proc . additional-vars)
+  (mutex-lock! *testsuite-mutex*)
+  (let* ((envvars (append (common_records:testsuite-get-envvars testsuite-data)
+			  additional-vars))
+	 (res (call-with-environment-variables envvars proc)))
+    (mutex-unlock! *testsuite-mutex*)
+    res))
 
 ;;======================================================================
 ;; L O C K E R S   A N D   B L O C K E R S 

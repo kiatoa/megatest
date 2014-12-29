@@ -1663,20 +1663,28 @@
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
-      (let (;; (db   #f)
-	    (keys #f))
-	(if (launch:setup-for-run)
-	    (launch:cache-config)
+      (let* ((keys #f)
+	     (testsuite-data (common:multi-setup-for-run))
+	     (configdat      (common_records:testsuite-get-configdat testsuite-data))
+	     (toppath        (common_records:testsuite-get-toppath   testsuite-data)))
+	(if testsuite-data
+	    (common:with-vars 
+	     testsuite-data
+	     (lambda ()
+	       (launch:cache-config testsuite-data)))
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
 	;; (if (args:get-arg "-server")
 	;;     (cdb:remote-run server:start db (args:get-arg "-server")))
-	(set! keys (keys:config-get-fields *configdat*))
+	(set! keys (keys:config-get-fields configdat))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
-	    (let* ((runconfigf (conc  *toppath* "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
-		   (runconfig  (read-config runconfigf #f #t environ-patt: #f)))
+	    (let* ((runconfigf (conc  toppath "/runconfigs.config")) ;; DO NOT EVALUATE ALL 
+		   (runconfig  (common:with-vars
+				testsuite-data
+				(lambda ()
+				  (read-config runconfigf #f #t environ-patt: #f)))))
 	      (if (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f)
 		  (keys:target-set-args keys (args:get-arg "-reqtarg") args:arg-hash)
 		    
@@ -1687,7 +1695,7 @@
 		    )))
 	    (if (args:get-arg "-target")
 		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
-	(if (not (car *configinfo*))
+	(if testsuite-data ;; (not (car *configinfo*))
 	    (begin
 	      (debug:print 0 "ERROR: Attempted to " action-desc " but run area config file not found")
 	      (exit 1))
@@ -1695,7 +1703,6 @@
 	    ;; here then call proc
 	    (let* ((keyvals    (keys:target->keyval keys target)))
 	      (proc target runname keys keyvals)))
-	;; (if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
 ;;======================================================================

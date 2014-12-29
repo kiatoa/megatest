@@ -569,10 +569,10 @@
     (mutex-unlock! *testsuite-mutex*)
     configinfo))
 
-(define (launch:cache-config)
+(define (launch:cache-config testsuite-data)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
-  (if (and *configdat* 
+  (if (and testsuite-data ;; *configdat* 
 	   (args:get-arg "-runtests"))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target))
@@ -592,7 +592,7 @@
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
 			(targfile (conc fulldir "/.megatest.cfg")))
 		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
-		    (configf:write-alist *configdat* tmpfile)
+		    (configf:write-alist testsuite-data tmpfile)
 		    (system (conc "ln -sf " tmpfile " " targfile))
 		    )))))))
 
