@@ -68,7 +68,7 @@
 ;; SERVER
 (define *my-client-signature* #f)
 (define *transport-type*    'http)
-(define *rpc:listener*      #f) ;; if set up for server communication this will hold the tcp port
+(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
@@ -179,7 +179,8 @@
     (4 "LAUNCHED")
     (5 "KILLED")
     (6 "KILLREQ")
-    (7 "STUCK")))
+    (7 "STUCK")
+    (8 "ARCHIVED")))
 
 (define *common:std-statuses*
   '((0 "PASS")
@@ -195,7 +196,7 @@
 
 ;; These are stopping conditions that prevent a test from being run
 (define *common:cant-run-states-sym* 
-  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT))
+  '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE ABORT ARCHIVED))
 
 ;;======================================================================
 ;; D E B U G G I N G   S T U F F 
@@ -228,6 +229,7 @@
 	     (configf:lookup *configdat* "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
   (if *dbstruct-db* (db:close-all *dbstruct-db*))
+  (if *inmemdb*     (db:close-all *inmemdb*))
   (if (and *megatest-db*
 	   (sqlite3:database? *megatest-db*))
       (begin
@@ -444,20 +446,6 @@
 			  dir
 			  (conc (current-directory) "/" dir))))
 
-(define (get-df path)
-  (let* ((df-results (cmd-run->list (conc "df " path)))
-	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
-	 (freespc    #f))
-    ;; (write df-results)
-    (for-each (lambda (l)
-		(let ((match (string-search space-rx l)))
-		  (if match 
-		      (let ((newval (string->number (cadr match))))
-			(if (number? newval)
-			    (set! freespc newval))))))
-	      (car df-results))
-    freespc))
-  
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
 ;;   (let* ((load-res (cmd-run->list "uptime"))
@@ -514,6 +502,63 @@
     (if (null? (car uname-res))
 	"unknown"
 	(caar uname-res))))
+
+;;======================================================================
+;; D I S K   S P A C E 
+;;======================================================================
+
+(define (common:get-disk-space-used fpath)
+  (with-input-from-pipe (conc "/usr/bin/du -s " fpath) read))
+
+(define (get-df path)
+  (let* ((df-results (cmd-run->list (conc "df " path)))
+	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
+	 (freespc    #f))
+    ;; (write df-results)
+    (for-each (lambda (l)
+		(let ((match (string-search space-rx l)))
+		  (if match 
+		      (let ((newval (string->number (cadr match))))
+			(if (number? newval)
+			    (set! freespc newval))))))
+	      (car df-results))
+    freespc))
+  
+;; paths is list of lists ((name path) ... )
+;;
+(define (common:get-disk-with-most-free-space disks minsize)
+  (let ((best     #f)
+	(bestsize 0))
+    (for-each 
+     (lambda (disk-num)
+       (let* ((dirpath    (cadr (assoc disk-num disks)))
+	      (freespc    (cond
+			   ((not (directory? dirpath))
+			    (if (common:low-noise-print 50 "disks not a dir " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
+			    -1)
+			   ((not (file-write-access? dirpath))
+			    (if (common:low-noise-print 50 "disks not writeable " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
+			    -1)
+			   ((not (eq? (string-ref dirpath 0) #\/))
+			    (if (common:low-noise-print 50 "disks not a proper path " disk-num)
+				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
+			    -1)
+			   (else
+			    (get-df dirpath)))))
+	 (if (> freespc bestsize)
+	     (begin
+	       (set! best     (cons disk-num dirpath))
+	       (set! bestsize freespc)))))
+     (map car disks))
+    (if (and best (> bestsize minsize))
+	best
+	#f))) ;; #f means no disk candidate found
+
+;;======================================================================
+;; E N V I R O N M E N T   V A R S
+;;======================================================================
 	      
 (define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF")))
   (let ((envvars (get-environment-variables))

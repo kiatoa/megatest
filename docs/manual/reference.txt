@@ -2,12 +2,6 @@
 Reference
 =========
 
-The First Chapter of the Second Part
-------------------------------------
-
-Chapters grouped into book parts are at level 1 and can contain
-sub-sections.
-
 The testconfig File
 -------------------
 
@@ -180,6 +174,29 @@ COMPLETED/ xterm -e bash -s --
 -----------------
 
 NOTE: There is a trailing space after the --
+
+Programming API
+---------------
+
+These routines can be called from the megatest repl. 
+
+.API Server Management Calls
+[width="70%",cols="^,2m,2m,2m",frame="topbot",options="header,footer"]
+|======================
+|API Call                  | Purpose comments   | Returns                 | Comments
+|(rmt:start-server run-id) |                    | #( success/fail   n/a ) | 
+|(rmt:kill-server  run-id) |                    | #( success/fail   n/a ) | Works only if the server is still reachable
+|(rmt:login        run-id) | Verify the the version, testsuite area etc. are correct. | #( #t "successful login" ) |
+|======================
+
+.API Keys Related Calls
+[width="70%",cols="^,2m,2m,2m",frame="topbot",options="header,footer"]
+|======================
+|API Call                        | Purpose comments   | Returns                 | Comments
+|(rmt:get-keys run-id)           |                    | ( key1 key2 ... )       | 
+| (rmt:get-key-val-pairs run-id) |                    | #t=success/#f=fail      | Works only if the server is still reachable
+|======================
+
 
 :numbered!:
 

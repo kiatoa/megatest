@@ -10,11 +10,16 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json 
-     http-client directory-utils z3 srfi-18) ;;  extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+     http-client srfi-18) ;;  zmq extras)
+
+;; Added for csv stuff - will be removed
+;;
+(use sparse-vectors)
 
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(import (prefix rpc rpc:))
 
 ;; (use zmq)
 
@@ -29,8 +34,7 @@
 (declare (uses genexample))
 (declare (uses daemon))
 (declare (uses db))
-;; (declare (uses sdb))
-;; (declare (uses filedb))
+
 (declare (uses tdb))
 (declare (uses mt))
 (declare (uses api))
@@ -133,6 +137,7 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
+  -transport http|zmq     : use http or zmq for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -146,8 +151,13 @@ Misc
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
   -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
-                            formats: perl, ruby, sqlite3
+                            formats: perl, ruby, sqlite3, csv (for csv the -o param
+                            will substitute %s for the sheet name in generating 
+                            multiple sheets)
   -o                      : output file for refdb2dat (defaults to stdout)
+  -archive cmd            : archive runs specified by selectors to one of disks specified
+                            in the [archive-disks] section.
+                            cmd: keep-html, restore, save, save-remove
 
 Spreadsheet generation
   -extract-ods fname.ods  : extract an open document spreadsheet from the database
@@ -208,6 +218,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-start-dir"
 			"-server"
 			"-stop-server"
+			"-transport"
+			"-kill-server"
 			"-port"
 			"-extract-ods"
 			"-pathmod"
@@ -228,6 +240,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-refdb2dat"
 			"-o"
 			"-log"
+			"-archive"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -243,7 +256,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-daemonize"
 			"-preclean"
 			;; misc
-			"-archive"
 			"-repl"
 			"-lock"
 			"-unlock"
@@ -285,11 +297,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
+(define *time-zero* (current-seconds))
 (define *watchdog*
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db")))
+     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+	   (debug-mode  (debug:debug-mode 1))
+	   (last-time   (current-seconds)))
        (let loop ()
 	 ;; sync for filesystem local db writes
 	 ;;
@@ -312,15 +327,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ;;       (server:kind-run run-id)))))
 		    (hash-table-delete! *db-local-sync* run-id)))
 	      (mutex-unlock! *db-multi-sync-mutex*))
-	    (hash-table-keys *db-local-sync*)))
-
+	    (hash-table-keys *db-local-sync*))
+	   (if (and debug-mode
+		    (> (- start-time last-time) 60))
+	       (begin
+		 (set! last-time start-time)
+		 (debug:print-info 1 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+	 
 	 ;; keep going unless time to exit
 	 ;;
 	 (if (not *time-to-exit*)
-	     (begin
-	       (thread-sleep! 1) ;; wait one second before syncing again
-	       (loop)))))
-     "Watchdog thread")))
+	     (let delay-loop ((count 0))
+	       (if (and (not *time-to-exit*)
+			(< count 11)) ;; aprox 5-6 seconds
+		   (begin
+		     (thread-sleep! 1)
+		     (delay-loop (+ count 1))))
+	       (loop))))))
+   "Watchdog thread"))
 
 (thread-start! *watchdog*)
 
@@ -415,19 +439,67 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	"\n"))
       (set! *didsomething* #t)))
 
+(define (make-sparse-array)
+  (let ((a (make-sparse-vector)))
+    (sparse-vector-set! a 0 (make-sparse-vector))
+    a))
+
+(define (sparse-array? a)
+  (and (sparse-vector? a)
+       (sparse-vector? (sparse-vector-ref a 0))))
+
+(define (sparse-array-ref a x y)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-ref row y)
+	#f)))
+
+(define (sparse-array-set! a x y val)
+  (let ((row (sparse-vector-ref a x)))
+    (if row
+	(sparse-vector-set! row y val)
+	(let ((new-row (make-sparse-vector)))
+	  (sparse-vector-set! a x new-row)
+	  (sparse-vector-set! new-row y val)))))
+
+;; csv processing record
+(define (make-refdb:csv)
+  (vector 
+   (make-sparse-array)
+   (make-hash-table)
+   (make-hash-table)
+   0
+   0))
+(define-inline (refdb:csv-get-svec     vec)    (vector-ref  vec 0))
+(define-inline (refdb:csv-get-rows     vec)    (vector-ref  vec 1))
+(define-inline (refdb:csv-get-cols     vec)    (vector-ref  vec 2))
+(define-inline (refdb:csv-get-maxrow   vec)    (vector-ref  vec 3))
+(define-inline (refdb:csv-get-maxcol   vec)    (vector-ref  vec 4))
+(define-inline (refdb:csv-set-svec!    vec val)(vector-set! vec 0 val))
+(define-inline (refdb:csv-set-rows!    vec val)(vector-set! vec 1 val))
+(define-inline (refdb:csv-set-cols!    vec val)(vector-set! vec 2 val))
+(define-inline (refdb:csv-set-maxrow!  vec val)(vector-set! vec 3 val))
+(define-inline (refdb:csv-set-maxcol!  vec val)(vector-set! vec 4 val))
+
+(define (get-dat results sheetname)
+  (or (hash-table-ref/default results sheetname #f)
+      (let ((tmp-vec  (make-refdb:csv)))
+	(hash-table-set! results sheetname tmp-vec)
+	tmp-vec)))
+
 (if (args:get-arg "-refdb2dat")
     (let* ((input-db (args:get-arg "-refdb2dat"))
 	   (out-file (args:get-arg "-o"))
 	   (out-fmt  (or (args:get-arg "-dumpmode") "scheme"))
 	   (out-port (if (and out-file 
-			      (not (equal? out-fmt "sqlite3")))
+			      (not (member out-fmt '("sqlite3" "csv"))))
 			 (open-output-file out-file)
 			 (current-output-port)))
 	   (res-data (configf:read-refdb input-db))
 	   (data     (car res-data))
 	   (msg      (cadr res-data)))
       (if (not data)
-	  (debug:print 0 data) ;; some error occurred
+	  (debug:print 0 "Bad input? data=" data) ;; some error occurred
 	  (with-output-to-port out-port
 	    (lambda ()
 	      (case (string->symbol out-fmt)
@@ -454,6 +526,77 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  initproc2:
 		  (lambda (sheetname sectionname)
 		    (print "data[\"" sheetname "\"][\"" sectionname "\"] = {}"))))
+		((csv)
+		 (let* ((results  (make-hash-table)) ;; (make-sparse-array)))
+			(row-cols (make-hash-table))) ;; hash of hashes where section => ht { row-<name> => num or col-<name> => num
+		   ;; (print "data=")
+		   ;; (pp data)
+		   (configf:map-all-hier-alist
+		    data
+		    (lambda (sheetname sectionname varname val)
+		      ;; (print "sheetname: " sheetname ", sectionname: " sectionname ", varname: " varname ", val: " val)
+		      (let* ((dat      (get-dat results sheetname))
+			     (vec      (refdb:csv-get-svec dat))
+			     (rownames (refdb:csv-get-rows dat))
+			     (colnames (refdb:csv-get-cols dat))
+			     (currrown (hash-table-ref/default rownames varname #f))
+			     (currcoln (hash-table-ref/default colnames sectionname #f))
+			     (rown     (or currrown 
+					   (let* ((lastn   (refdb:csv-get-maxrow dat))
+						  (newrown (+ lastn 1)))
+					     (refdb:csv-set-maxrow! dat newrown)
+					     newrown)))
+			     (coln     (or currcoln 
+					   (let* ((lastn   (refdb:csv-get-maxcol dat))
+						  (newcoln (+ lastn 1)))
+					     (refdb:csv-set-maxcol! dat newcoln)
+					     newcoln))))
+			(if (not (sparse-array-ref vec 0 coln)) ;; (eq? rown 0)
+			    (begin
+			      (sparse-array-set! vec 0 coln sectionname)
+			      ;; (print "sparse-array-ref " 0 "," coln "=" (sparse-array-ref vec 0 coln))
+			      ))
+			(if (not (sparse-array-ref vec rown 0)) ;; (eq? coln 0)
+			    (begin
+			      (sparse-array-set! vec rown 0 varname)
+			      ;; (print "sparse-array-ref " rown "," 0 "=" (sparse-array-ref vec rown 0))
+			      ))
+			(if (not currrown)(hash-table-set! rownames varname rown))
+			(if (not currcoln)(hash-table-set! colnames sectionname coln))
+			;; (print "dat=" dat ", rown=" rown ", coln=" coln)
+			(sparse-array-set! vec rown coln val)
+			;; (print "sparse-array-ref " rown "," coln "=" (sparse-array-ref vec rown coln))
+			)))
+		   (for-each
+		    (lambda (sheetname)
+		      (let* ((sheetdat (get-dat results sheetname))
+			     (svec     (refdb:csv-get-svec sheetdat))
+			     (maxrow   (refdb:csv-get-maxrow sheetdat))
+			     (maxcol   (refdb:csv-get-maxcol sheetdat))
+			     (fname    (if out-file 
+					   (string-substitute "%s" sheetname out-file) ;; "/foo/bar/%s.csv")
+					   (conc sheetname ".csv"))))
+			(with-output-to-file fname
+			  (lambda ()
+			    ;; (print "Sheetname: " sheetname)
+			    (let loop ((row       0)
+				       (col       0)
+				       (curr-row '())
+				       (result   '()))
+			      (let* ((val (sparse-array-ref svec row col))
+				     (disp-val (if val
+						   (conc "\"" val "\"")
+						   "")))
+				(if (> col 0)(display ","))
+				(display disp-val)
+				(cond
+				 ((> row maxrow)(display "\n") result)
+				 ((>= col maxcol)
+				  (display "\n")
+				  (loop (+ row 1) 0 '() (append result (list curr-row))))
+				 (else
+				  (loop row (+ col 1) (append curr-row (list val)) result)))))))))
+		    (hash-table-keys results))))
 		((sqlite3)
 		 (let* ((db-file   (or out-file (pathname-file input-db)))
 			(db-exists (file-exists? db-file))
@@ -476,6 +619,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (let* ((run-id        (string->number (args:get-arg "-run-id")))
 	   (host:port     (args:get-arg "-ping")))
       (server:ping run-id host:port)))
+
+;;       (set! *did-something* #t)
+;; 	      (begin
+;; 		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
+;; 		(case (server:get-transport)
+;; 		  ((http)(http:ping run-id host-port))
+;; 		  ((rpc) (rpc:procedure 'server:login (car host-port)(cadr host-port));;  *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
+;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
@@ -504,7 +655,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     '("-list-servers"
 		       "-stop-server"
 		       "-show-cmdinfo"
-		       "-list-runs")))
+		       "-list-runs"
+		       "-ping")))
 	(if (launch:setup-for-run)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
@@ -910,6 +1062,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (getenv "MT_CMDINFO")
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))
@@ -953,45 +1106,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 ;; Archive tests matching target, runname, and testpatt
 (if (args:get-arg "-archive")
-    ;; if we are in a test use the MT_CMDINFO data
-    (if (getenv "MT_CMDINFO")
-	(let* ((startingdir (current-directory))
-	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
-	       (testpath  (assoc/default 'testpath  cmdinfo))
-	       (test-name (assoc/default 'test-name cmdinfo))
-	       (runscript (assoc/default 'runscript cmdinfo))
-	       (db-host   (assoc/default 'db-host   cmdinfo))
-	       (run-id    (assoc/default 'run-id    cmdinfo))
-	       (itemdat   (assoc/default 'itemdat   cmdinfo))
-	       (state     (args:get-arg ":state"))
-	       (status    (args:get-arg ":status"))
-	       (target    (args:get-arg "-target")))
-	  (change-directory testpath)
-	  (if (not target)
-	      (begin
-		(debug:print 0 "ERROR: -target is required.")
-		(exit 1)))
-	  (if (not (launch:setup-for-run))
-	      (begin
-		(debug:print 0 "Failed to setup, giving up on -archive, exiting")
-		(exit 1)))
-	  (let* ((keys     (rmt:get-keys))
-		 (paths    (tests:test-get-paths-matching keys target)))
-	    (set! *didsomething* #t)
-	    (for-each (lambda (path)
-			(print path))
-		      paths))
-	  ;; (if (sqlite3:database? db)(sqlite3:finalize! db))
-	  )
-	;; else do a general-run-call
-	(general-run-call 
-	 "-test-paths"
-	 "Get paths to tests"
-	 (lambda (target runname keys keyvals)
-	   (let* ((paths    (tests:test-get-paths-matching keys target)))
-	     (for-each (lambda (path)
-			 (print path))
-		       paths))))))
+    ;; else do a general-run-call
+    (general-run-call 
+     "-archive"
+     "Archive"
+     (lambda (target runname keys keyvals)
+       (operate-on 'archive))))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -1035,6 +1155,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(debug:print 0 "ERROR: MT_CMDINFO env var not set, -step must be called *inside* a megatest invoked environment!")
 	(exit 5))
       (let* ((cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	     (transport (assoc/default 'transport cmdinfo))
 	     (testpath  (assoc/default 'testpath  cmdinfo))
 	     (test-name (assoc/default 'test-name cmdinfo))
 	     (runscript (assoc/default 'runscript cmdinfo))
@@ -1059,8 +1180,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (megatest:step 
        (args:get-arg "-step")
-       (args:get-arg ":state")
-       (args:get-arg ":status")
+       (or (args:get-arg "-state")(args:get-arg ":state"))
+       (or (args:get-arg "-status")(args:get-arg ":status"))
        (args:get-arg "-setlog")
        (args:get-arg "-m"))
       ;; (if db (sqlite3:finalize! db))
@@ -1081,6 +1202,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (exit 5))
 	(let* ((startingdir (current-directory))
 	       (cmdinfo   (common:read-encoded-string (getenv "MT_CMDINFO")))
+	       (transport (assoc/default 'transport cmdinfo))
 	       (testpath  (assoc/default 'testpath  cmdinfo))
 	       (test-name (assoc/default 'test-name cmdinfo))
 	       (runscript (assoc/default 'runscript cmdinfo))

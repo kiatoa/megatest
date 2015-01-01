@@ -36,7 +36,7 @@ stopserver :
 
 repl :
 	cd ..;make -j && make install
-	cd fullrun;$(MEGATEST) -repl
+	cd fullrun;$(MEGATEST) -:b -repl
 
 test0 : cleanprep
 	cd simplerun ; $(MEGATEST) -server - -debug $(DEBUG)
@@ -71,6 +71,7 @@ test4a : cleanprep
 
 # NOTE: Only one instance can be a server
 test5 : cleanprep
+	rm -f fullrun/a*.log fullrun/logs/*
 	@echo "WARNING: No longer running fullprep, test converage may be lessened"
 	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_aa -debug $(DEBUG) $(LOGGING) > aa.log 2> aa.log &
 	cd fullrun;sleep 0;$(MEGATEST) -preclean -runtests % -target $(TARGET) :runname $(RUNNAME)_ab -debug $(DEBUG) $(LOGGING) > ab.log 2> ab.log &
@@ -118,23 +119,23 @@ test9 : minsetup test9a test9b test9c test9d test9e
 test9a :
 	@echo Run super-simple mintest e, no waitons.
 	cd mintest;$(DASHBOARD)&
-	cd mintest;$(MEGATEST) -preclean -runtests e -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests e -target $(VER) -runname $(shell date +%H.%M.%S) -debug $(DEBUG)
 
 test9b :
 	@echo Run simple mintest d with one waiton c
-	cd mintest;$(MEGATEST) -preclean -runtests d -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests d -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9c :
 	@echo Run mintest a with full waiton chain a -> b -> c -> d -> e
-	cd mintest;$(MEGATEST) -preclean -runtests a -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9d :
 	@echo Run an itemized test with no items
-	cd mintest;$(MEGATEST) -preclean -runtests g -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests g -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test9e :
 	@echo Run mintest a1 with full waiton chain with d1fail: a1 -> b1 -> c1 -> d1fail -> e1
-	cd mintest;$(MEGATEST) -preclean -runtests a1 -target $(VER) :runname `date +%H.%M.%S` -debug $(DEBUG)
+	cd mintest;$(MEGATEST) -preclean -runtests a1 -target $(VER) -runname `date +%H.%M.%S` -debug $(DEBUG)
 
 test10 :
 	@echo Run a bunch of different targets simultaneously
@@ -159,7 +160,7 @@ minsetup :
 	cd mintest;$(DASHBOARD) -rows 18 &
 
 cleanprep : ../*.scm Makefile */*.config
-	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links
+	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1
 	cd ..;make -j;make install
 	rm -f */logging.db
 	touch cleanprep

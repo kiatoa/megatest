@@ -477,7 +477,7 @@ Misc
 			   ;;(teststart  (db:test-get-event_time test))
 			   ;;(runtime    (db:test-get-run_duration test))
 			   (buttontxt  (cond
-					((equal? teststate "COMPLETED") teststatus)
+					((member teststate '("COMPLETED" "ARCHIVED")) teststatus)
 					((and (equal? teststate "NOT_STARTED")
 					      (member teststatus '("ZERO_ITEMS" "BLOCKED" "PREQ_FAIL" "PREQ_DISCARDED" "TIMED_OUT" "KEEP_TRYING" "TEN_STRIKES")))
 					 teststatus)
@@ -1475,9 +1475,10 @@ Misc
 	 (run-update-time (current-seconds))
 	 (recalc          (dashboard:recalc modtime *please-update-buttons* *last-db-update-time*)))
     (if (and (eq? *current-tab-number* 0)
-	     (> monitor-modtime *last-monitor-update-time*))
+	     (or (> monitor-modtime *last-monitor-update-time*)
+		 (> (- run-update-time *last-monitor-update-time*) 5))) ;; update every 1/2 minute just in case
 	(begin
-	  (set! *last-monitor-update-time* monitor-modtime)
+	  (set! *last-monitor-update-time* run-update-time) ;; monitor-modtime)
 	  (if dashboard:update-servers-table (dashboard:update-servers-table))))
     (if recalc
 	(begin	

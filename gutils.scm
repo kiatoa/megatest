@@ -25,7 +25,7 @@
 (define (gutils:get-color-for-state-status state status);; #!key (get-label #f))
   ;; ((if get-label cadr car)
    (case (string->symbol state)
-     ((COMPLETED)
+     ((COMPLETED ARCHIVED)
       (case (string->symbol status)
 	((PASS)        (list "70  249 73" status))
 	((WARN WAIVED) (list "255 172 13" status))

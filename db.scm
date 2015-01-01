@@ -236,14 +236,15 @@
 		db)
 	      (begin
 		(dbr:dbstruct-set-inmem!  dbstruct inmem)
-		(sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
+		;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
+		;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
 		(db:sync-tables db:sync-tests-only db inmem)
-		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb))
+		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
 		(dbr:dbstruct-set-refdb!  dbstruct refdb)
-		(db:sync-tables db:sync-tests-only db refdb)
-		;; sync once more to deal with delays
-		(db:sync-tables db:sync-tests-only db inmem)
-		(db:sync-tables db:sync-tests-only db refdb)
+		(db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
+		;; sync once more to deal with delays?
+		;; (db:sync-tables db:sync-tests-only db inmem)
+		;; (db:sync-tables db:sync-tests-only inmem refdb)
 		inmem))))))
 
 ;; This routine creates the db. It is only called if the db is not already ls opened
@@ -298,7 +299,7 @@
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
     (debug:print-info 4 "Syncing for run-id: " run-id)
-    (mutex-lock! *http-mutex*)
+    ;; (mutex-lock! *http-mutex*)
     (if (eq? run-id 0)
 	;; runid equal to 0 is main.db
 	(if maindb
@@ -327,12 +328,12 @@
 	    (begin
 	      (db:delay-if-busy rundb)
 	      (db:delay-if-busy olddb)
+	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-		(dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
-		(mutex-unlock! *http-mutex*)
+		;; (mutex-unlock! *http-mutex*)
 		0))))))
 
 (define (db:close-main dbstruct)
@@ -495,9 +496,14 @@
      (for-each (lambda (dbdat)
 		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
 	       (cons todb slave-dbs))
-     (if *server-run* ;; we are inside a server
-	 (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
-	 (exit 1)))
+     (if *server-run* ;; we are inside a server, throw a sync-failed error
+	 (signal (make-composite-condition
+		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))))
+
+	 ;; (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
+	 ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
+	 ;; (portlogger:open-run-close portlogger:set-port port "released")
+	 ;; (exit 1)))
    (cond
     ((not fromdb) (debug:print 3 "WARNING: db:sync-tables called with fromdb missing") -1)
     ((not todb)   (debug:print 3 "WARNING: db:sync-tables called with todb missing") -2)
@@ -547,6 +553,10 @@
 		     (set! totrecords (+ totrecords 1)))))
 	     (db:dbdat-get-db fromdb)
 	     full-sel)
+	    
+	    ;; tack on remaining records in fromdat
+	    (if (not (null? fromdat))
+		(set! fromdats (cons fromdat fromdats)))
 
 	    (debug:print-info 2 "found " totrecords " records to sync")
 
@@ -619,6 +629,7 @@
   (let* ((toppath  (launch:setup-for-run))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	 (mtdb     (if toppath (db:open-megatest-db)))
+	 (allow-cleanup (if run-ids #f #t))
 	 (run-ids  (if run-ids 
 		       run-ids
 		       (if toppath (begin
@@ -665,17 +676,43 @@
 	   run-ids)))
 
     ;; now ensure all newdb data are synced to megatest.db
+    ;; do not use the run-ids list passed in to the function
+    ;;
     (if (member 'new2old options)
-	(for-each
-	 (lambda (run-id)
-	   (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-		  (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
-	     ;; (db:delay-if-busy frundb)
-	     ;; (db:delay-if-busy mtdb)
-	     (if (eq? run-id 0)
-		 (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-		 (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb))))
-	 (cons 0 run-ids)))
+	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
+	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0))))
+	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
+	       (count       1)
+	       (total       (length all-run-ids))
+	       (dead-runs  '()))
+	  (for-each
+	   (lambda (run-id)
+	     (debug:print 0 "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
+	     (set! count (+ count 1))
+	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+	       ;; (db:delay-if-busy frundb)
+	       ;; (db:delay-if-busy mtdb)
+	       ;; (db:clean-up frundb)
+	       (if (eq? run-id 0)
+		   (begin
+		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+		   (begin
+		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
+		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+		     (db:clean-up-rundb (db:get-db fromdb run-id))
+		     ))))
+	   all-run-ids)
+	  ;; removed deleted runs
+	  (let ((dbdir (tasks:get-task-db-path)))
+	    (for-each (lambda (run-id)
+			(let ((fullname (conc dbdir "/" run-id ".db")))
+			  (if (file-exists? fullname)
+			      (begin
+				(debug:print 0 "Removing database file for deleted run " fullname)
+				(delete-file fullname)))))
+		      dead-runs))))
     ;; (db:close-all dbstruct)
     ;; (sqlite3:finalize! mdb)
     ))
@@ -771,6 +808,44 @@
                                      tags        TEXT DEFAULT '',
                                      jobgroup    TEXT DEFAULT 'default',
                                 CONSTRAINT test_meta_constraint UNIQUE (testname));")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+                                action TEXT DEFAULT '',
+                                owner TEXT,
+                                state TEXT DEFAULT 'new',
+                                target TEXT DEFAULT '',
+                                name TEXT DEFAULT '',
+                                testpatt TEXT DEFAULT '',
+                                keylock TEXT,
+                                params TEXT,
+                                creation_time TIMESTAMP DEFAULT (strftime('%s','now')),
+                                execution_time TIMESTAMP);")
+       ;; archive disk areas, cached info from [archive-disks]
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_disks (
+                                id INTEGER PRIMARY KEY,
+                                archive_area_name TEXT,
+                                disk_path TEXT,
+                                last_df INTEGER DEFAULT -1,
+                                last_df_time TIMESTAMP DEFAULT (strftime('%s','now')),
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
+       ;; individual bup (or tar) data chunks
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_blocks (
+                                id INTEGER PRIMARY KEY,
+                                archive_disk_id INTEGER,
+                                disk_path TEXT,
+                                last_du INTEGER DEFAULT -1,
+                                last_du_time TIMESTAMP DEFAULT (strftime('%s','now')),
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
+       ;; tests allocated to what chunks. reusing a chunk for a test/item_path is very efficient
+       ;; NB// the per run/test recording of where the archive is stored is done in the test
+       ;;      record. 
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archive_allocations (
+                                id INTEGER PRIMARY KEY,
+                                archive_block_id INTEGER,
+                                testname TEXT,
+                                item_path TEXT,
+                                creation_time TIMESTAMP DEFAULT (strftime('%','now')));")
+       ;; move this clean up call somewhere else
+       (sqlite3:execute db "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
        (sqlite3:execute db (conc "CREATE INDEX IF NOT EXISTS runs_index ON runs (runname" (if havekeys "," "") keystr ");"))
        ;; (sqlite3:execute db "CREATE VIEW runs_tests AS SELECT * FROM runs INNER JOIN tests ON runs.id=tests.run_id;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS extradat (id INTEGER PRIMARY KEY, run_id INTEGER, key TEXT, val TEXT);")
@@ -811,7 +886,7 @@
                      event_time   TIMESTAMP DEFAULT (strftime('%s','now')),
                      fail_count   INTEGER   DEFAULT 0,
                      pass_count   INTEGER   DEFAULT 0,
-                     archived     INTEGER   DEFAULT 0, -- 0=no, 1=in progress, 2=yes
+                     archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
      (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
@@ -854,8 +929,126 @@
                               cpuload      INTEGER DEFAULT -1,
                               diskfree     INTEGER DEFAULT -1,
                               diskusage    INTGER DEFAULT -1,
-                              run_duration INTEGER DEFAULT 0);")))
+                              run_duration INTEGER DEFAULT 0);")
+     (sqlite3:execute db "CREATE TABLE IF NOT EXISTS archives (
+                              id           INTEGER PRIMARY KEY,
+                              test_id      INTEGER,
+                              state        TEXT DEFAULT 'new',
+                              status       TEXT DEFAULT 'n/a',
+                              archive_type TEXT DEFAULT 'bup',
+                              du           INTEGER,
+                              archive_path TEXT);")))
   db)
+
+;;======================================================================
+;; A R C H I V E S
+;;======================================================================
+
+;; dneeded is minimum space needed, scan for existing archives that 
+;; are on disks with adequate space and already have this test/itempath
+;; archived
+;;
+(define (db:archive-get-allocations dbstruct testname itempath dneeded)
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          '())
+	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
+    (sqlite3:for-each-row
+     (lambda (id archive-disk-id disk-path last-du last-du-time)
+       (set! res (cons (vector id archive-disk-id disk-path last-du last-du-time) res)))
+     db
+     "SELECT b.id,b.archive_disk_id,b.disk_path,b.last_du,b.last_du_time FROM archive_blocks AS b
+        INNER JOIN archive_allocations AS a ON a.archive_block_id=b.id
+        WHERE a.testname=? AND a.item_path=?;" 
+     testname itempath)
+    ;; Now res has list of candidate paths, look in archive_disks for candidate with potential free space
+    (if (null? res)
+	'()
+	(sqlite3:for-each-row
+	 (lambda (id archive-area-name disk-path last-df last-df-time)
+	   (set! blocks (cons (vector id archive-area-name disk-path last-df last-df-time) blocks)))
+	 db 
+	 (conc
+	  "SELECT d.id,d.archive_area_name,disk_path,last_df,last_df_time FROM archive_disks AS d
+             INNER JOIN archive_blocks AS b ON d.id=b.archive_disk_id
+             WHERE b.id IN (" (string-intersperse (map conc res) ",") ") AND
+         last_df > ?;")
+	 dneeded))
+    blocks))
+    
+;; returns id of the record, register a disk allocated to archiving and record it's last known
+;; available space
+;;
+(define (db:archive-register-disk dbstruct bdisk-name bdisk-path df)
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          #f))
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     db
+     "SELECT id FROM archive_disks WHERE archive_area_name=? AND disk_path=?;"
+     bdisk-name bdisk-path)
+    (if res ;; record exists, update df and return id
+	(begin
+	  (sqlite3:execute db "UPDATE archive_disks SET last_df=?,last_df_time=(strftime('%s','now'))
+                                  WHERE archive_area_name=? AND disk_path=?;"
+			   df bdisk-name bdisk-path)
+	  res)
+	(begin
+	  (sqlite3:execute
+	   db
+	   "INSERT OR REPLACE INTO archive_disks (archive_area_name,disk_path,last_df)
+                VALUES (?,?,?);"
+	   bdisk-name bdisk-path df)
+	  (db:archive-register-disk dbstruct bdisk-name bdisk-path df)))))
+
+;; record an archive path created on a given archive disk (identified by it's bdisk-id)
+;; if path starts with / then it is full, otherwise it is relative to the archive disk
+;; preference is to store the relative path.
+;;
+(define (db:archive-register-block-name dbstruct bdisk-id archive-path #!key (du #f))
+  (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+	 (db           (db:dbdat-get-db dbdat))
+	 (res          #f))
+    ;; first look to see if this path is already registered
+    (sqlite3:for-each-row
+     (lambda (id)
+       (set! res id))
+     db
+     "SELECT id FROM archive_blocks WHERE archive_disk_id=? AND disk_path=?;"
+     bdisk-id archive-path)
+    (if res ;; record exists, update du if applicable and return res
+	(begin
+	  (if du (sqlite3:exectute db "UPDATE archive_blocks SET last_du=?,last_du_time=(strftime('%s','now'))
+                                          WHERE archive_disk_id=? AND disk_path=?;"
+				   bdisk-id archive-path du))
+	  res)
+	(begin
+	  (sqlite3:execute db "INSERT OR REPLACE INTO archive_blocks (archive_disk_id,disk_path,last_du)
+                                                        VALUES (?,?,?);"
+			   bdisk-id archive-path (or du 0))
+	  (db:archive-register-block-name dbstruct bdisk-id archive-path du: du)))))
+
+
+;; The "archived" field in tests is overloaded; 0 = not archived, > 0 archived in block with given id
+;;
+(define (db:test-set-archive-block-id dbstruct run-id test-id archive-block-id)
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tests SET archived=? WHERE id=?;"
+		      archive-block-id test-id))))
+ 
+
+;; (define (db:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
+;;   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
+;; 	 (db           (db:dbdat-get-db dbdat))
+;; 	 (res          '())
+;; 	 (blocks       '())) ;; a block is an archive chunck that can be added too if there is space
+;;     (sqlite3:for-each-row  #f)
 
 ;;======================================================================
 ;; L O G G I N G    D B 
@@ -897,6 +1090,60 @@
 ;;======================================================================
 ;; M A I N T E N A N C E
 ;;======================================================================
+
+(define (db:have-incompletes? dbstruct run-id ovr-deadtime)
+  (let* ((dbdat        (db:get-db dbstruct run-id))
+	 (db           (db:dbdat-get-db dbdat))
+	 (incompleted '())
+	 (oldlaunched '())
+	 (toplevels   '())
+	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime     (if (and deadtime-str
+				(string->number deadtime-str))
+			   (string->number deadtime-str)
+			   7200))) ;; two hours
+    (if (number? ovr-deadtime)(set! deadtime ovr-deadtime))
+    
+    ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
+    ;;
+    ;; HOWEVER: this code in run:test seems to work fine
+    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
+    ;;                     (db:test-get-run_duration testdat)))
+    ;;                    600) 
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row 
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (begin
+	     (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	     (debug:print-info 0 "Found old toplevel test in RUNNING state, test-id=" test-id))
+	   (set! incompleted (cons (list test-id run-dir uname testname item-path run-id) incompleted))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > (run_duration + ?) AND state IN ('RUNNING','REMOTEHOSTSTART');"
+     run-id deadtime)
+
+    ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
+    ;;
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row
+     (lambda (test-id run-dir uname testname item-path)
+       (if (and (equal? uname "n/a")
+		(equal? item-path "")) ;; this is a toplevel test
+	   ;; what to do with toplevel? call rollup?
+	   (set! toplevels   (cons (list test-id run-dir uname testname item-path run-id) toplevels))
+	   (set! oldlaunched (cons (list test-id run-dir uname testname item-path run-id) oldlaunched))))
+     db
+     "SELECT id,rundir,uname,testname,item_path FROM tests WHERE run_id=? AND (strftime('%s','now') - event_time) > 86400 AND state IN ('LAUNCHED');"
+     run-id)
+    
+    (debug:print-info 18 "Found " (length oldlaunched) " old LAUNCHED items, " (length toplevels) " old LAUNCHED toplevel tests and " (length incompleted) " tests marked RUNNING but apparently dead.")
+    (if (and (null? incompleted)
+	     (null? oldlaunched)
+	     (null? toplevels))
+	#f
+	#t)))
 
 ;;  select end_time-now from
 ;;      (select testname,item_path,event_time+run_duration as
@@ -995,7 +1242,7 @@
 ;;    b. ....
 ;;
 (define (db:clean-up dbdat)
-  (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests)+(SELECT count(id) FROM runs);"))
 	(statements
@@ -1029,6 +1276,95 @@
     ;; (db:find-and-mark-incomplete db)
     (db:delay-if-busy dbdat)
     (sqlite3:execute db "VACUUM;")))
+
+;; Clean out old junk and vacuum the database
+;;
+;; Ultimately do something like this:
+;;
+;; 1. Look at test records either deleted or part of deleted run:
+;;    a. If test dir exists, set the the test to state='UNKNOWN', Set the run to 'unknown'
+;;    b. If test dir gone, delete the test record
+;; 2. Look at run records
+;;    a. If have tests that are not deleted, set state='unknown'
+;;    b. ....
+;;
+(define (db:clean-up-rundb dbdat)
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  (let* ((db         (db:dbdat-get-db dbdat))
+	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests);"))
+	(statements
+	 (map (lambda (stmt)
+		(sqlite3:prepare db stmt))
+	      (list
+	       ;; delete all tests that belong to runs that are 'deleted'
+	       ;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
+	       ;; delete all tests that are 'DELETED'
+	       "DELETE FROM tests WHERE state='DELETED';"
+	       ))))
+    (db:delay-if-busy dbdat)
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count before clean: " tot))
+			     count-stmt)
+       (map sqlite3:execute statements)
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count after  clean: " tot))
+			     count-stmt)))
+    (map sqlite3:finalize! statements)
+    (sqlite3:finalize! count-stmt)
+    ;; (db:find-and-mark-incomplete db)
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "VACUUM;")))
+
+;; Clean out old junk and vacuum the database
+;;
+;; Ultimately do something like this:
+;;
+;; 1. Look at test records either deleted or part of deleted run:
+;;    a. If test dir exists, set the the test to state='UNKNOWN', Set the run to 'unknown'
+;;    b. If test dir gone, delete the test record
+;; 2. Look at run records
+;;    a. If have tests that are not deleted, set state='unknown'
+;;    b. ....
+;;
+(define (db:clean-up-maindb dbdat)
+  ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
+  (let* ((db         (db:dbdat-get-db dbdat))
+	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM runs);"))
+	 (statements
+	  (map (lambda (stmt)
+		 (sqlite3:prepare db stmt))
+	       (list
+		;; delete all tests that belong to runs that are 'deleted'
+		;; (conc "DELETE FROM tests WHERE run_id NOT IN (" (string-intersperse (map conc valid-runs) ",") ");")
+		;; delete all tests that are 'DELETED'
+		"DELETE FROM runs WHERE state='deleted';"
+		)))
+	 (dead-runs '()))
+    (sqlite3:for-each-row
+     (lambda (run-id)
+       (set! dead-runs (cons run-id dead-runs)))
+       db
+       "SELECT id FROM runs WHERE state='deleted';")
+    (db:delay-if-busy dbdat)
+    (sqlite3:with-transaction 
+     db
+     (lambda ()
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count before clean: " tot))
+			     count-stmt)
+       (map sqlite3:execute statements)
+       (sqlite3:for-each-row (lambda (tot)
+			       (debug:print-info 0 "Records count after  clean: " tot))
+			     count-stmt)))
+    (map sqlite3:finalize! statements)
+    (sqlite3:finalize! count-stmt)
+    ;; (db:find-and-mark-incomplete db)
+    (db:delay-if-busy dbdat)
+    (sqlite3:execute db "VACUUM;")
+    dead-runs))
 
 ;;======================================================================
 ;; M E T A   G E T   A N D   S E T   V A R S
@@ -2298,8 +2634,8 @@
 ;;======================================================================
 
 ;; NOTE: Can remove the regex and base64 encoding for zmq
-(define (db:obj->string obj)
-  (case *transport-type*
+(define (db:obj->string obj #!key (transport 'http))
+  (case transport
     ;; ((fs) obj)
     ((http fs)
      (string-substitute
@@ -2309,11 +2645,11 @@
 	(with-output-to-string
 	  (lambda ()(serialize obj)))))
       #t))
-    ((zmq)(with-output-to-string (lambda ()(serialize obj))))
+    ((zmq nmsg)(with-output-to-string (lambda ()(serialize obj))))
     (else obj)))
 
-(define (db:string->obj msg)
-  (case *transport-type*
+(define (db:string->obj msg #!key (transport 'http))
+  (case transport
     ;; ((fs) msg)
     ((http fs)
      (if (string? msg)
@@ -2325,8 +2661,8 @@
 	   (lambda ()(deserialize)))
 	 (begin
 	   (debug:print 0 "ERROR: reception failed. Received " msg " but cannot translate it.")
-	   #f))) ;; crude reply for when things go awry
-    ((zmq)(with-input-from-string msg (lambda ()(deserialize))))
+	   msg))) ;; crude reply for when things go awry
+    ((zmq nmsg)(with-input-from-string msg (lambda ()(deserialize))))
     (else msg)))
 
 (define (db:test-set-status-state dbstruct run-id test-id status state msg)
@@ -2349,14 +2685,6 @@
 		(db:general-call dbdat 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
 	#f)
       #f))
-
-(define (db:tests-register-test dbstruct run-id test-name item-path)
-  (db:with-db
-   dbstruct
-   run-id
-   #t
-   (lambda (db)
-     (sqlite3:execute db 'register-test run-id test-name item-path))))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db

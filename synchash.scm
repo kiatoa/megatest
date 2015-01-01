@@ -64,9 +64,8 @@
 ;;
 ;; keynum => the field to use as the unique key (usually 0 but can be other field)
 ;;
-(define (synchash:client-get proc synckey keynum synchash . params)
-  (let* ((data   ;; (apply cdb:remote-run synchash:server-get #f proc synckey keynum params))
-	  (apply synchash:server-get #f proc synckey keynum params))
+(define (synchash:client-get proc synckey keynum synchash run-id . params)
+  (let* ((data   (rmt:synchash-get run-id proc synckey keynum params))
 	 (newdat (car data))
 	 (removs (cadr data))
 	 (myhash (hash-table-ref/default synchash synckey #f)))
@@ -91,13 +90,14 @@
 
 (define *synchashes* (make-hash-table))
 
-(define (synchash:server-get indb proc synckey keynum . params)
+(define (synchash:server-get dbstruct run-id proc synckey keynum params)
   ;; (debug:print-info 2 "synckey: " synckey ", keynum: " keynum ", params: " params)
-  (let* ((db        (if indb indb (db:open-megatest-db)))
+  (let* ((dbdat     (db:get-db dbstruct run-id))
+	 (db        (db:dbdat-get-db dbdat))
 	 (synchash  (hash-table-ref/default *synchashes* synckey #f))
 	 (newdat    (apply (case proc
 			     ((db:get-runs)                   db:get-runs)
-			     ((db:get-tests-for-runs-mindata) db:get-tests-for-runs-mindata)
+			     ((db:get-tests-for-run-mindata)  db:get-tests-for-run-mindata)
 			     ((db:get-test-info-by-ids)       db:get-test-info-by-ids)
 			     (else
 			      (print "ERROR: sync for hash " proc " not setup! Edits needed in synchash.scm")

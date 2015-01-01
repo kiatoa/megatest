@@ -453,13 +453,30 @@
   ;; special case
   (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
       (begin
-	(set! *configinfo* (find-and-read-config 
-			    (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-			    environ-patt: "env-override"
-			    given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-			    pathenvvar: "MT_RUN_AREA_HOME"))
+	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
+				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
+							    (get-environment-variable "MT_TARGET")   "/"
+							    (get-environment-variable "MT_RUNNAME")  "/"
+							    ".megatest.cfg")))
+				     (if (file-exists? alistconfig)
+					 (list (configf:read-alist alistconfig)
+					       (get-environment-variable "MT_RUN_AREA_HOME"))
+					 #f))
+				   #f) ;; no config cached - give up
+			       (find-and-read-config 
+				(if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+				environ-patt: "env-override"
+				given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+				pathenvvar: "MT_RUN_AREA_HOME")))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
+	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
+	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
+	  (if (member transport '(http rpc nmsg))
+	      (set! *transport-type* transport)
+	      (begin
+		(debug:print 0 "ERROR: Unrecognised transport " transport)
+		(exit))))
 	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
 	  (if linktree
 	      (if (not (file-exists? linktree))
@@ -491,43 +508,49 @@
 	      (setenv "MT_RUN_AREA_HOME" *toppath*)
 	      (begin
 		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
-		(exit 1))))))
+		(exit 1)))
+	  )))
   *toppath*)
+
+(define (launch:cache-config)
+  ;; if we have a linktree and -runtests and -target and the directory exists dump the config
+  ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
+  (if (and *configdat* 
+	   (args:get-arg "-runtests"))
+      (let* ((linktree (get-environment-variable "MT_LINKTREE"))
+	     (target   (common:args-get-target))
+	     (runname  (or (args:get-arg "-runname")
+			   (args:get-arg ":runname")))
+	     (fulldir  (conc linktree "/"
+			     target "/"
+			     runname)))
+	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
+	(if (file-exists? linktree) ;; can't proceed without linktree
+	    (begin
+	      (if (not (file-exists? fulldir))
+		  (create-directory fulldir #t)) ;; need to protect with exception handler 
+	      (if (and target
+		       runname
+		       (file-exists? fulldir))
+		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
+			(targfile (conc fulldir "/.megatest.cfg")))
+		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
+		    (configf:write-alist *configdat* tmpfile)
+		    (system (conc "ln -sf " tmpfile " " targfile))
+		    )))))))
 
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))
-	 (best     #f)
-	 (bestsize 0))
+	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
+		     (string->number (or m "10000")))))
     (if disks 
-	(for-each 
-	 (lambda (disk-num)
-	   (let* ((dirpath    (cadr (assoc disk-num disks)))
-		  (freespc    (cond
-			       ((not (directory? dirpath))
-				(if (common:low-noise-print 50 "disks not a dir " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
-				-1)
-			       ((not (file-write-access? dirpath))
-				(if (common:low-noise-print 50 "disks not writeable " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
-				-1)
-			       ((not (eq? (string-ref dirpath 0) #\/))
-				(if (common:low-noise-print 50 "disks not a proper path " disk-num)
-				    (debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
-				-1)
-			       (else
-				(get-df dirpath)))))
-	     (if (> freespc bestsize)
-		 (begin
-		   (set! best     dirpath)
-		   (set! bestsize freespc)))))
-	 (map car disks)))
-    (if (and best (> bestsize 0))
-	best
-	(begin
-	  (if (common:low-noise-print 20 "no valid disks")
-	      (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
-	  (exit 1)))))
+	(let ((res (common:get-disk-with-most-free-space disks minspace))) ;; min size of 1000, seems tad dumb
+	  (if res
+	      (cdr res)
+	      (begin
+		(if (common:low-noise-print 20 "no valid disks")
+		    (debug:print 0 "ERROR: No valid disks found in megatest.config. Please add some to your [disks] section and ensure the directory exists!"))
+		(exit 1)))))))
 
 ;; Desired directory structure:
 ;;
@@ -583,7 +606,12 @@
     ;; create the directory for the tests dir links, this is needed no matter what...
     (if (and (not (directory-exists? lnkbase))
 	     (not (file-exists? lnkbase)))
-	(create-directory lnkbase #t))
+	(handle-exceptions
+	 exn
+	 (begin
+	   (debug:print "ERROR: Problem creating linktree base at " lnkbase)
+	   (print-error-message exn (current-error-port)))
+	 (create-directory lnkbase #t)))
     
     ;; update the toptest record with its location rundir, cache the path
     ;; This wass highly inefficient, one db write for every subtest, potentially
@@ -646,7 +674,10 @@
 		  (not (directory-exists? toptest-path)))
 	      (begin
 		(debug:print-info 2 "Creating " toptest-path " and link " lnkpath)
-		(create-directory toptest-path #t)
+		(handle-exceptions
+		 exn
+		 #f ;; don't care to catch and deal with errors here for now.
+		 (create-directory toptest-path #t))
 		(hash-table-set! *toptest-paths* testname toptest-path)))))
 
     ;; The toptest path has been created, the link to the test in the linktree has
@@ -769,7 +800,7 @@
 	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	(begin
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
-	  (runs:remove-test-directory #f testinfo #t))) ;; remove data only, do not perturb the record
+	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;

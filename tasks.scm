@@ -14,6 +14,7 @@
 
 (declare (unit tasks))
 (declare (uses db))
+(declare (uses rmt))
 (declare (uses common))
 
 (include "task_records.scm")
@@ -105,17 +106,20 @@
 	 ;; 	      (file-write-access? *toppath*))
 	 ;; 	 (not (file-read-access? dbpath)))
 	 ;;      (begin
-	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
-                                action TEXT DEFAULT '',
-                                owner TEXT,
-                                state TEXT DEFAULT 'new',
-                                target TEXT DEFAULT '',
-                                name TEXT DEFAULT '',
-                                testpatt TEXT DEFAULT '',
-                                keylock TEXT,
-                                params TEXT,
-                                creation_time TIMESTAMP,
-                                execution_time TIMESTAMP);")
+	 ;; 
+	 ;; TASKS QUEUE MOVED TO main.db
+	 ;;
+	 ;; (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS tasks_queue (id INTEGER PRIMARY KEY,
+         ;;                        action TEXT DEFAULT '',
+         ;;                        owner TEXT,
+         ;;                        state TEXT DEFAULT 'new',
+         ;;                        target TEXT DEFAULT '',
+         ;;                        name TEXT DEFAULT '',
+         ;;                        testpatt TEXT DEFAULT '',
+         ;;                        keylock TEXT,
+         ;;                        params TEXT,
+         ;;                        creation_time TIMESTAMP,
+         ;;                        execution_time TIMESTAMP);")
 	 (sqlite3:execute mdb "CREATE TABLE IF NOT EXISTS monitors (id INTEGER PRIMARY KEY,
                                 pid INTEGER,
                                 start_time TIMESTAMP,
@@ -147,7 +151,6 @@
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
 	       
 	       ;))
-	 (sqlite3:execute mdb "DELETE FROM tasks_queue WHERE state='done' AND creation_time < ?;" (- (current-seconds)(* 24 60 60))) ;; remove older than 24 hrs
 	 (set! *task-db* (cons mdb dbpath))
 	 *task-db*))))
 
@@ -169,7 +172,7 @@
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
 	(tasks:server-set-available mdb run-id)
-	;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
+	(thread-sleep! (/ (random 1500) 1000)) ;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
@@ -179,15 +182,16 @@
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
                    VALUES(?, ?,       ?,   ?, strftime('%s','now'), ?,       ?,    ?,-1,?,        ?,        ?);"
-   (current-process-id)       ;; pid
-   (get-host-name)            ;; hostname
-   -1                         ;; port
-   -1                         ;; pubport
-   (random 1000)              ;; priority (used a tiebreaker on get-available)
-   "available"                ;; state
-   (common:version-signature) ;; mt_version
-   -1                         ;; interface
-   "http"                     ;; transport
+   (current-process-id)          ;; pid
+   (get-host-name)               ;; hostname
+   -1                            ;; port
+   -1                            ;; pubport
+   (random 1000)                 ;; priority (used a tiebreaker on get-available)
+   "available"                   ;; state
+   (common:version-signature)    ;; mt_version
+   -1                            ;; interface
+   ;; (conc (server:get-transport)) ;; transport
+   (conc *transport-type*)    ;; transport
    run-id
    ))
 
@@ -279,20 +283,22 @@
 (define (tasks:server-am-i-the-server? mdb run-id)
   (let* ((all    (tasks:server-get-servers-vying-for-run-id mdb run-id))
 	 (first  (if (null? all)
-		     (begin (debug:print 0 "ERROR: no servers listed, should be at least one by now.") 
-			    (sqlite3:finalize! mdb)
-			    (exit 1))
-		     (car (db:get-rows all))))
-	 (header   (db:get-header all))
-	 (id       (db:get-value-by-header first header "id"))
-	 (hostname (db:get-value-by-header first header "hostname"))
-	 (pid      (db:get-value-by-header first header "pid"))
-	 (priority (db:get-value-by-header first header "priority")))
-    (debug:print 0 "INFO: am-i-the-server got record " first)
-    ;; for now a basic check. add tiebreaking by priority later
-    (if (and (equal? hostname (get-host-name))
-	     (equal? pid      (current-process-id)))
-	id
+		     #f;; (begin (debug:print 0 "ERROR: no servers listed, should be at least one by now.") 
+		       ;;      (sqlite3:finalize! mdb)
+		       ;;      (exit 1))
+		     (car (db:get-rows all)))))
+    (if first
+	(let* ((header   (db:get-header all))
+	       (id       (db:get-value-by-header first header "id"))
+	       (hostname (db:get-value-by-header first header "hostname"))
+	       (pid      (db:get-value-by-header first header "pid"))
+	       (priority (db:get-value-by-header first header "priority")))
+	  ;; (debug:print 0 "INFO: am-i-the-server got record " first)
+	  ;; for now a basic check. add tiebreaking by priority later
+	  (if (and (equal? hostname (get-host-name))
+		   (equal? pid      (current-process-id)))
+	      id
+	      #f))
 	#f)))
 	     
 ;; Use: (db:get-value-by-header (car (db:get-rows dat)) (db:get-header dat) "fieldname")
@@ -357,20 +363,21 @@
     res))
 
 (define (tasks:need-server run-id)
-  (let ((forced (configf:lookup *configdat* "server" "required"))
-	(maxqry (cdr (rmt:get-max-query-average run-id)))
-	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
-    (cond
-     (forced 
-      (if (common:low-noise-print 60 run-id "server required is set")
-	  (debug:print-info 0 "Server required is set, starting server."))
-      #t)
-     ((> maxqry threshold)
-      (if (common:low-noise-print 60 run-id "Max query time execeeded")
-	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, starting server."))
-      #t)
-     (else
-      #f))))
+  (configf:lookup *configdat* "server" "required"))
+
+;; 	(maxqry (cdr (rmt:get-max-query-average run-id)))
+;; 	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
+;;     (cond
+;;      (forced 
+;;       (if (common:low-noise-print 60 run-id "server required is set")
+;; 	  (debug:print-info 0 "Server required is set, starting server for run-id " run-id "."))
+;;       #t)
+;;      ((> maxqry threshold)
+;;       (if (common:low-noise-print 60 run-id "Max query time execeeded")
+;; 	  (debug:print-info 0 "Max avg query time of " maxqry "ms exceeds limit of " threshold "ms, server needed for run-id " run-id "."))
+;;       #t)
+;;      (else
+;;       #f))))
 
 ;; try to start a server and wait for it to be available
 ;;
@@ -383,8 +390,9 @@
 	  (begin
 	    (if (common:low-noise-print 60 "tasks:start-and-wait-for-server" run-id)
 		(debug:print 0 "Try starting server for run-id " run-id))
+	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
-	    (thread-sleep! (min delay-time 5))
+	    (thread-sleep! (min delay-time 1))
 	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
@@ -394,8 +402,21 @@
        ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
        (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
      mdb
-     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id 
+        FROM servers WHERE state NOT LIKE 'defunct%' ORDER BY start_time DESC;")
     res))
+
+(define (tasks:get-server-records mdb run-id)
+  (let ((res '()))
+    (sqlite3:for-each-row
+     (lambda (id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id)
+       ;;                       0  1     2         3      4     5          6        7     8          9          10        11     12
+       (set! res (cons (vector id pid hostname interface port pubport start-time priority state mt-version last-update transport run-id) res)))
+     mdb
+     "SELECT id,pid,hostname,interface,port,pubport,start_time,priority,state,mt_version,strftime('%s','now')-heartbeat AS last_update,transport,run_id 
+        FROM servers WHERE run_id=? AND state NOT LIKE 'defunct%' ORDER BY start_time DESC;"
+     run-id)
+    (reverse res)))
 
 ;; no elegance here ...
 ;;
@@ -424,163 +445,14 @@
     ;; (sqlite3:finalize! tdb)
     ))
     
-
 ;;======================================================================
-;; Tasks and Task monitors
-;;======================================================================
-
-
-;;======================================================================
-;; Tasks
+;; M O N I T O R S
 ;;======================================================================
 
-
-
-;;======================================================================
-;; Task Monitors
-;;======================================================================
-
-(define (tasks:register-monitor db mdb)
-  (let* ((pid (current-process-id))
-	 (hostname (get-host-name))
-	 (userinfo (user-information (current-user-id)))
-	 (username (car userinfo)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", username: " username)
-    (sqlite3:execute mdb "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
-		     pid hostname username)))
-
-(define (tasks:get-num-alive-monitors mdb)
-  (let ((res 0))
-    (sqlite3:for-each-row 
-     (lambda (count)
-       (set! res count))
-     mdb
-     "SELECT count(id) FROM monitors WHERE last_update < (strftime('%s','now') - 300) AND username=?;"
-     (car (user-information (current-user-id))))
-    res))
-
-;; register a task
-(define (tasks:add mdb action owner target runname testpatt params)
-  (sqlite3:execute mdb "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
-                       VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
-		   action
-		   owner
-		   target
-		   runname
-		   testpatt
-		   (if params params "")))
-
-(define (keys:key-vals-hash->target keys key-params)
-  (let ((tmp (hash-table-ref/default key-params (vector-ref (car keys) 0) "")))
-    (if (> (length keys) 1)
-	(for-each (lambda (key)
-		    (set! tmp (conc tmp "/" (hash-table-ref/default key-params (vector-ref key 0) ""))))
-		  (cdr keys)))
-    tmp))
-								
-;; for use from the gui
-(define (tasks:add-from-params mdb action keys key-params var-params)
-  (let ((target    (keys:key-vals-hash->target keys key-params))
-	(owner     (car (user-information (current-user-id))))
-	(runname   (hash-table-ref/default var-params "runname" #f))
-	(testpatts (hash-table-ref/default var-params "testpatts" "%"))
-	(params    (hash-table-ref/default var-params "params"    "")))
-    (tasks:add mdb action owner target runname testpatts params)))
-
-;; return one task from those who are 'new' OR 'waiting' AND more than 10sec old
-;;
-(define (tasks:snag-a-task mdb)
-  (let ((res    #f)
-	(keytxt (conc (current-process-id) "-" (get-host-name) "-" (car (user-information (current-user-id))))))
-
-    ;; first randomly set a new to pid-hostname-hostname
-    (sqlite3:execute
-     mdb 
-     "UPDATE tasks_queue SET keylock=? WHERE id IN
-        (SELECT id FROM tasks_queue 
-           WHERE state='new' OR 
-                 (state='waiting' AND (strftime('%s','now')-execution_time) > 10) OR
-                 state='reset'
-           ORDER BY RANDOM() LIMIT 1);" keytxt)
-
-    (sqlite3:for-each-row
-     (lambda (id . rem)
-       (set! res (apply vector id rem)))
-     mdb
-     "SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time FROM tasks_queue WHERE keylock=? ORDER BY execution_time ASC LIMIT 1;" keytxt)
-    (if res ;; yep, have work to be done
-	(begin
-	  (sqlite3:execute mdb "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
-			   (tasks:task-get-id res))
-	  res)
-	#f)))
-
-(define (tasks:reset-stuck-tasks mdb)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (id delta)
-       (set! res (cons id res)))
-     mdb
-     "SELECT id,strftime('%s','now')-execution_time AS delta FROM tasks_queue WHERE state='inprogress' AND delta>700 ORDER BY delta DESC LIMIT 2;")
-    (sqlite3:execute 
-     mdb 
-     (conc "UPDATE tasks_queue SET state='reset' WHERE id IN ('" (string-intersperse (map conc res) "','") "');"))))
-
-;; return all tasks in the tasks_queue table
-;;
-(define (tasks:get-tasks mdb types states)
-  (let ((res '()))
-    (sqlite3:for-each-row
-     (lambda (id . rem)
-       (set! res (cons (apply vector id rem) res)))
-     mdb
-     (conc "SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time 
-               FROM tasks_queue "
-               ;; WHERE  
-               ;;   state IN " statesstr " AND 
-	       ;;   action IN " actionsstr 
-	   " ORDER BY creation_time DESC;"))
-    res))
-
-;; remove tasks given by a string of numbers comma separated
-(define (tasks:remove-queue-entries mdb task-ids)
-  (sqlite3:execute mdb (conc "DELETE FROM tasks_queue WHERE id IN (" task-ids ");")))
-
-;; 
-(define (tasks:start-monitor db mdb)
-  (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
-      (debug:print-info 1 "Not starting monitor, already have more than two running")
-      (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc (configf:lookup *configdat* "setup" "linktree") "/.db/monitor.db"))
-	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
-	(task:register-monitor mdb)
-	(let loop ((count      0)
-		   (next-touch 0)) ;; next-touch is the time where we need to update last_update
-	  ;; if the db has been modified we'd best look at the task queue
-	  (let ((modtime (file-modification-time megatestdbpath )))
-	    (if (> modtime last-db-update)
-		(tasks:process-queue db mdb last-db-update megatestdb next-touch))
-	    ;; WARNING: Possible race conditon here!!
-	    ;; should this update be immediately after the task-get-action call above?
-	    (if (> (current-seconds) next-touch)
-		(begin
-		  (tasks:monitors-update mdb)
-		  (loop (+ count 1)(+ (current-seconds) 240)))
-		(loop (+ count 1) next-touch)))))))
-      
-(define (tasks:process-queue db mdb)
-  (let* ((task   (tasks:snag-a-task mdb))
-	 (action (if task (tasks:task-get-action task) #f)))
-    (if action (print "tasks:process-queue task: " task))
-    (if action
-	(case (string->symbol action)
-	  ((run)       (tasks:start-run   db mdb task))
-	  ((remove)    (tasks:remove-runs db mdb task))
-	  ((lock)      (tasks:lock-runs   db mdb task))
-	  ;; ((monitor)   (tasks:start-monitor db task))
-	  ((rollup)    (tasks:rollup-runs db mdb task))
-	  ((updatemeta)(tasks:update-meta db mdb task))
-	  ((kill)      (tasks:kill-monitors db mdb task))))))
+(define (tasks:remove-monitor-record mdb)
+  (sqlite3:execute mdb "DELETE FROM monitors WHERE pid=? AND hostname=?;"
+		   (current-process-id)
+		   (get-host-name)))
 
 (define (tasks:get-monitors mdb)
   (let ((res '()))
@@ -592,23 +464,6 @@
     (reverse res)
     ))
 
-(define (tasks:tasks->text tasks)
-  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~10a"))
-    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "params") "\n"
-	  (string-intersperse 
-	   (map (lambda (task)
-		  (format #f fmtstr
-			  (tasks:task-get-id     task)
-			  (tasks:task-get-action task)
-			  (tasks:task-get-owner  task)
-			  (tasks:task-get-state  task)
-			  (tasks:task-get-target task)
-			  (tasks:task-get-name   task)
-			  (tasks:task-get-test   task)
-			  ;; (tasks:task-get-item   task)
-			  (tasks:task-get-params task)))
-		tasks) "\n"))))
-   
 (define (tasks:monitors->text-table monitors)
   (let ((fmtstr "~4a~8a~20a~20a~10a~10a"))
     (conc (format #f fmtstr "id" "pid" "start time" "last update" "hostname" "user") "\n"
@@ -639,61 +494,255 @@
      "SELECT id,pid,hostname,last_update,strftime('%s','now')-last_update AS delta FROM monitors WHERE delta > 700;")
     (sqlite3:execute mdb (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
   )
+(define (tasks:register-monitor db mdb)
+  (let* ((pid (current-process-id))
+	 (hostname (get-host-name))
+	 (userinfo (user-information (current-user-id)))
+	 (username (car userinfo)))
+    (print "Register monitor, pid: " pid ", hostname: " hostname ", username: " username)
+    (sqlite3:execute mdb "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
+		     pid hostname username)))
 
-(define (tasks:remove-monitor-record mdb)
-  (sqlite3:execute mdb "DELETE FROM monitors WHERE pid=? AND hostname=?;"
-		   (current-process-id)
-		   (get-host-name)))
+(define (tasks:get-num-alive-monitors mdb)
+  (let ((res 0))
+    (sqlite3:for-each-row 
+     (lambda (count)
+       (set! res count))
+     mdb
+     "SELECT count(id) FROM monitors WHERE last_update < (strftime('%s','now') - 300) AND username=?;"
+     (car (user-information (current-user-id))))
+    res))
 
-(define (tasks:set-state mdb task-id state)
-  (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE id=?;" 
-		   state 
-		   task-id))
+;; 
+(define (tasks:start-monitor db mdb)
+  (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
+      (debug:print-info 1 "Not starting monitor, already have more than two running")
+      (let* ((megatestdb     (conc *toppath* "/megatest.db"))
+	     (monitordbf     (conc (configf:lookup *configdat* "setup" "linktree") "/.db/monitor.db"))
+	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
+	(task:register-monitor mdb)
+	(let loop ((count      0)
+		   (next-touch 0)) ;; next-touch is the time where we need to update last_update
+	  ;; if the db has been modified we'd best look at the task queue
+	  (let ((modtime (file-modification-time megatestdbpath )))
+	    (if (> modtime last-db-update)
+		(tasks:process-queue db mdb last-db-update megatestdb next-touch))
+	    ;; WARNING: Possible race conditon here!!
+	    ;; should this update be immediately after the task-get-action call above?
+	    (if (> (current-seconds) next-touch)
+		(begin
+		  (tasks:monitors-update mdb)
+		  (loop (+ count 1)(+ (current-seconds) 240)))
+		(loop (+ count 1) next-touch)))))))
+      
+;;======================================================================
+;; T A S K S   Q U E U E
+;;
+;;   NOTE:: These operate on task_queue which is in main.db
+;;
+;;======================================================================
+
+;; NOTE: It might be good to add one more layer of checking to ensure
+;;       that no task gets run in parallel.
+
+
+
+;; register a task
+(define (tasks:add dbstruct action owner target runname testpatt params)
+  (db:with-db 
+   dbstruct #f #t
+   (lambda (db)
+     (sqlite3:execute db "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
+                             VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
+		      action
+		      owner
+		      target
+		      runname
+		      testpatt
+		      (if params params "")))))
+
+(define (keys:key-vals-hash->target keys key-params)
+  (let ((tmp (hash-table-ref/default key-params (vector-ref (car keys) 0) "")))
+    (if (> (length keys) 1)
+	(for-each (lambda (key)
+		    (set! tmp (conc tmp "/" (hash-table-ref/default key-params (vector-ref key 0) ""))))
+		  (cdr keys)))
+    tmp))
+								
+;; for use from the gui, not ported
+;;
+;; (define (tasks:add-from-params mdb action keys key-params var-params)
+;;   (let ((target    (keys:key-vals-hash->target keys key-params))
+;; 	(owner     (car (user-information (current-user-id))))
+;; 	(runname   (hash-table-ref/default var-params "runname" #f))
+;; 	(testpatts (hash-table-ref/default var-params "testpatts" "%"))
+;; 	(params    (hash-table-ref/default var-params "params"    "")))
+;;     (tasks:add mdb action owner target runname testpatts params)))
+
+;; return one task from those who are 'new' OR 'waiting' AND more than 10sec old
+;;
+(define (tasks:snag-a-task dbstruct)
+  (let ((res    #f)
+	(keytxt (conc (current-process-id) "-" (get-host-name) "-" (car (user-information (current-user-id))))))
+    (db:with-db
+     dbstruct #f #t
+     (lambda (db)
+       ;; first randomly set a new to pid-hostname-hostname
+       (sqlite3:execute
+	db 
+	"UPDATE tasks_queue SET keylock=? WHERE id IN
+           (SELECT id FROM tasks_queue 
+              WHERE state='new' OR 
+                    (state='waiting' AND (strftime('%s','now')-execution_time) > 10) OR
+                    state='reset'
+              ORDER BY RANDOM() LIMIT 1);" keytxt)
+
+       (sqlite3:for-each-row
+	(lambda (id . rem)
+	  (set! res (apply vector id rem)))
+	db
+	"SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time FROM tasks_queue WHERE keylock=? ORDER BY execution_time ASC LIMIT 1;" keytxt)
+       (if res ;; yep, have work to be done
+	   (begin
+	     (sqlite3:execute db "UPDATE tasks_queue SET state='inprogress',execution_time=strftime('%s','now') WHERE id=?;"
+			      (tasks:task-get-id res))
+	     res)
+	   #f)))))
+
+(define (tasks:reset-stuck-tasks dbstruct)
+  (let ((res '()))
+    (db:with-db
+     dbstruct #f #t
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (id delta)
+	  (set! res (cons id res)))
+	db
+	"SELECT id,strftime('%s','now')-execution_time AS delta FROM tasks_queue WHERE state='inprogress' AND delta>700 ORDER BY delta DESC LIMIT 2;")
+       (sqlite3:execute 
+	db 
+	(conc "UPDATE tasks_queue SET state='reset' WHERE id IN ('" (string-intersperse (map conc res) "','") "');")
+	)))))
+
+;; return all tasks in the tasks_queue table
+;;
+(define (tasks:get-tasks dbstruct types states)
+  (let ((res '()))
+    (db:with-db
+     dbstruct #f #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (id . rem)
+	  (set! res (cons (apply vector id rem) res)))
+	db
+	(conc "SELECT id,action,owner,state,target,name,test,item,params,creation_time,execution_time 
+                  FROM tasks_queue "
+	      ;; WHERE  
+	      ;;   state IN " statesstr " AND 
+	      ;;   action IN " actionsstr 
+	      " ORDER BY creation_time DESC;"))
+       res))))
+
+;; remove tasks given by a string of numbers comma separated
+(define (tasks:remove-queue-entries dbstruct task-ids)
+  (db:with-db
+   dbstruct #f #t
+   (lambda (db)
+     (sqlite3:execute db (conc "DELETE FROM tasks_queue WHERE id IN (" task-ids ");")))))
+
+(define (tasks:process-queue dbstruct)
+  (let* ((task   (tasks:snag-a-task dbstruct))
+	 (action (if task (tasks:task-get-action task) #f)))
+    (if action (print "tasks:process-queue task: " task))
+    (if action
+	(case (string->symbol action)
+	  ((run)       (tasks:start-run     dbstruct task))
+	  ((remove)    (tasks:remove-runs   dbstruct task))
+	  ((lock)      (tasks:lock-runs     dbstruct task))
+	  ;; ((monitor)   (tasks:start-monitor db task))
+	  ((rollup)    (tasks:rollup-runs   dbstruct task))
+	  ((updatemeta)(tasks:update-meta   dbstruct task))
+	  ((kill)      (tasks:kill-monitors dbstruct task))))))
+
+(define (tasks:tasks->text tasks)
+  (let ((fmtstr "~10a~10a~10a~12a~20a~12a~12a~10a"))
+    (conc (format #f fmtstr "id" "action" "owner" "state" "target" "runname" "testpatts" "params") "\n"
+	  (string-intersperse 
+	   (map (lambda (task)
+		  (format #f fmtstr
+			  (tasks:task-get-id     task)
+			  (tasks:task-get-action task)
+			  (tasks:task-get-owner  task)
+			  (tasks:task-get-state  task)
+			  (tasks:task-get-target task)
+			  (tasks:task-get-name   task)
+			  (tasks:task-get-test   task)
+			  ;; (tasks:task-get-item   task)
+			  (tasks:task-get-params task)))
+		tasks) "\n"))))
+   
+(define (tasks:set-state dbstruct task-id state)
+  (db:with-db 
+   dbstruct #f #t
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE id=?;" 
+		      state 
+		      task-id))))
 
 ;;======================================================================
 ;; Access using task key (stored in params; (hash-table->alist flags) hostname pid
 ;;======================================================================
 
-(define (tasks:param-key->id mdb task-params)
-  (handle-exceptions
-   exn
-   #f
-   (sqlite3:first-result mdb "SELECT id FROM tasks_queue WHERE params LIKE ?;" task-params)))
+(define (tasks:param-key->id dbstruct task-params)
+  (db:with-db
+   dbstruct #f #f
+   (lambda (db)
+     (handle-exceptions
+      exn
+      #f
+      (sqlite3:first-result db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
+			    task-params)))))
 
-(define (tasks:set-state-given-param-key mdb param-key new-state)
-  (sqlite3:execute mdb "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))
+(define (tasks:set-state-given-param-key dbstruct param-key new-state)
+  (db:with-db
+   dbstruct #f #t
+   (lambda (db)
+     (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))))
 
-(define (tasks:get-records-given-param-key mdb param-key state-patt action-patt test-patt)
-  (handle-exceptions
-   exn
-   '()
-   (sqlite3:first-row mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
-         params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
-		      param-key state-patt action-patt test-patt)))
+(define (tasks:get-records-given-param-key dbstruct param-key state-patt action-patt test-patt)
+  (db:with-db
+   dbstruct #f #f
+   (lambda (db)
+     (handle-exceptions
+      exn
+      '()
+      (sqlite3:first-row db "SELECT id,action,owner,state,target,name,testpatt,keylock,params WHERE
+                               params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+			 param-key state-patt action-patt test-patt)))))
 
 
-;;======================================================================
-;; Rogue items, no place to put these yet
-;;======================================================================
-
-(define (tasks:find-task-queue-records mdb target run-name test-patt state-patt action-patt)
+(define (tasks:find-task-queue-records dbstruct target run-name test-patt state-patt action-patt)
   ;; (handle-exceptions
   ;;  exn
   ;;  '()
   ;;  (sqlite3:first-row
-  (let ((res '()))
+  (let ((db (db:delay-if-busy (db:get-db dbstruct #f)))
+	(res '()))
     (sqlite3:for-each-row 
      (lambda (a . b)
        (set! res (cons (cons a b) res)))
-     mdb "SELECT id,action,owner,state,target,name,testpatt,keylock,params FROM tasks_queue 
-       WHERE
-         target = ? AND name = ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
+     db "SELECT id,action,owner,state,target,name,testpatt,keylock,params FROM tasks_queue 
+           WHERE
+              target = ? AND name = ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
      target run-name state-patt action-patt test-patt)
     res)) ;; )
 
-
-(define (tasks:kill-runner mdb target run-name)
-  (let ((records    (tasks:find-task-queue-records mdb target run-name "%" "running" "run-tests"))
+;; kill any runner processes (i.e. processes handling -runtests) that match target/runname
+;; 
+;; do a remote call to get the task queue info but do the killing as self here.
+;;
+(define (tasks:kill-runner target run-name)
+  (let ((records    (rmt:tasks-find-task-queue-records target run-name "%" "running" "run-tests"))
 	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
     (if (null? records)
 	(debug:print 0 "No run launching processes found for " target " / " run-name)
@@ -727,43 +776,36 @@
 		     (if old-targethost (setenv "TARGETHOST" old-targethost))
 		     (unsetenv "TARGETHOST")
 		     (unsetenv "TARGETHOST_LOGF"))))
-	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in monitor.db"))))
+	     (debug:print 0 "ERROR: no record or improper record for " target "/" run-name " in tasks_queue in main.db"))))
      records)))
 
+;; (define (tasks:start-run dbstruct mdb task)
+;;   (let ((flags (make-hash-table)))
+;;     (hash-table-set! flags "-rerun" "NOT_STARTED")
+;;     (if (not (string=? (tasks:task-get-params task) ""))
+;; 	(hash-table-set! flags "-setvars" (tasks:task-get-params task)))
+;;     (print "Starting run " task)
+;;     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
+;;     (runs:run-tests db
+;; 		    (tasks:task-get-target task)
+;; 		    (tasks:task-get-name   task)
+;; 		    (tasks:task-get-test   task)
+;; 		    (tasks:task-get-item   task)
+;; 		    (tasks:task-get-owner  task)
+;; 		    flags)
+;;     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
+;; 
+;; (define (tasks:rollup-runs db mdb task)
+;;   (let* ((flags (make-hash-table)) 
+;; 	 (keys  (db:get-keys db))
+;; 	 (keyvals (keys:target-keyval keys (tasks:task-get-target task))))
+;;     ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
+;;     (print "Starting rollup " task)
+;;     ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
+;;     (runs:rollup-run db
+;; 		     keys 
+;; 		     keyvals
+;; 		     (tasks:task-get-name  task)
+;; 		     (tasks:task-get-owner  task))
+;;     (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
 
-;;======================================================================
-;; The routines to process tasks
-;;======================================================================
-
-;; NOTE: It might be good to add one more layer of checking to ensure
-;;       that no task gets run in parallel.
-
-(define (tasks:start-run db mdb task)
-  (let ((flags (make-hash-table)))
-    (hash-table-set! flags "-rerun" "NOT_STARTED")
-    (if (not (string=? (tasks:task-get-params task) ""))
-	(hash-table-set! flags "-setvars" (tasks:task-get-params task)))
-    (print "Starting run " task)
-    ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
-    (runs:run-tests db
-		    (tasks:task-get-target task)
-		    (tasks:task-get-name   task)
-		    (tasks:task-get-test   task)
-		    (tasks:task-get-item   task)
-		    (tasks:task-get-owner  task)
-		    flags)
-    (tasks:set-state mdb (tasks:task-get-id task) "waiting")))
-
-(define (tasks:rollup-runs db mdb task)
-  (let* ((flags (make-hash-table)) 
-	 (keys  (db:get-keys db))
-	 (keyvals (keys:target-keyval keys (tasks:task-get-target task))))
-    ;; (hash-table-set! flags "-rerun" "NOT_STARTED")
-    (print "Starting rollup " task)
-    ;; sillyness, just call the damn routine with the task vector and be done with it. FIXME SOMEDAY
-    (runs:rollup-run db
-		     keys 
-		     keyvals
-		     (tasks:task-get-name  task)
-		     (tasks:task-get-owner  task))
-    (tasks:set-state mdb (tasks:task-get-id task) "waiting")))

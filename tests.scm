@@ -38,7 +38,7 @@
 
 (define (tests:get-tests-search-path cfgdat)
   (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
-    (cons (conc *toppath* "/tests") paths)))
+    (append paths (list (conc *toppath* "/tests")))))
 
 (define (tests:get-valid-tests test-registry tests-paths)
   (if (null? tests-paths) 

@@ -21,6 +21,7 @@
 (declare (uses tests))
 (declare (uses server))
 (declare (uses mt))
+(declare (uses archive))
 ;; (declare (uses filedb))
 
 (include "common_records.scm")
@@ -162,9 +163,9 @@
 	#f)))
 
 (define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
-  ;;(thread-sleep! (cond
-  ;;      	  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
-  ;;      	  (else 0)))
+  (thread-sleep! (cond
+        	  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
+        	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
 	 (job-group-limit         (let ((jobg-count (config-lookup *configdat* "jobgroups" jobgroup)))
@@ -225,13 +226,13 @@
 			   (signal-mask! signum)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((tdbdat (tasks:open-db)))
-			     (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "killed"))
+			     (rmt:tasks-set-state-given-param-key task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
 
     ;; register this run in monitor.db
-    (tasks:add (db:delay-if-busy tdbdat) "run-tests" user target runname test-patts task-key) ;; params)
-    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "running")
+    (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
+    (rmt:tasks-set-state-given-param-key task-key "running")
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -369,16 +370,29 @@
     (debug:print-info 4 "test-records=" (hash-table->alist test-records))
     (let ((reglen (configf:lookup *configdat* "setup" "runqueue")))
       (if (> (length (hash-table-keys test-records)) 0)
-	  (let* ((keep-going #t)
+	  (let* ((keep-going        #t)
+		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+					    (handle-exceptions
+					     exn
+					     (begin
+					       (print-call-chain (current-error-port))
+					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+					       (if (> run-queue-retries 0)
+						   (begin
+						     (set! run-queue-retries (- run-queue-retries 1))
+						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
+					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
 					    (let ((run-ids (rmt:get-all-run-ids)))
 					      (for-each (lambda (run-id)
 							  (if keep-going
-							      (rmt:find-and-mark-incomplete run-id #f))) ;; ovr-deadtime)))
+							      (handle-exceptions
+							       exn
+							       (debug:print 0 "error in calling find-and-mark-incomplete for run-id " run-id)
+							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
 							run-ids)))
 					  "runs: mark-incompletes")))
 	    (thread-start! th1)
@@ -396,7 +410,7 @@
 		  (runs:run-tests target runname test-patts user flags run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (tasks:set-state-given-param-key (db:delay-if-busy tdbdat) task-key "done")
+    (rmt:tasks-set-state-given-param-key task-key "done")
     ;; (sqlite3:finalize! tasks-db)
     ))
 
@@ -946,7 +960,7 @@
 	;; every couple minutes verify the server is there for this run
 	(if (and (common:low-noise-print 60 "try start server"  run-id)
 		 (tasks:need-server run-id))
-	    (tasks:start-and-wait-for-server tdbdat run-id 10))
+	    (tasks:start-and-wait-for-server tdbdat run-id 10)) ;; NOTE: delay and wait is done under the hood
 	
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
@@ -1403,7 +1417,7 @@
 ;;
 ;; NB// should pass in keys?
 ;;
-(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(remove-data-only #f))
+(define (runs:operate-on action target runnamepatt testpatt #!key (state #f)(status #f)(new-state-status #f)(mode 'remove-all)(options '()))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
 	 (tdbdat       (tasks:open-db))
@@ -1437,7 +1451,8 @@
 		(tests     (if (not (equal? run-state "locked"))
 			       (proc-get-tests run-id)
 			       '()))
-		(lasttpath "/does/not/exist/I/hope"))
+		(lasttpath "/does/not/exist/I/hope")
+		(worker-thread #f))
 	   (debug:print-info 4 "runs:operate-on run=" run ", header=" header)
 	   (if (not (null? tests))
 	       (begin
@@ -1446,7 +1461,7 @@
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
-			(tasks:kill-runner (db:delay-if-busy tdbdat) target run-name)
+			(tasks:kill-runner target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
@@ -1457,8 +1472,20 @@
 		    action)
 		   ((run-wait)
 		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
+		   ((archive)
+		    (debug:print 1 "Archiving data for run: " runkey " " (db:get-value-by-header run header "runname"))
+		    (set! worker-thread (make-thread (lambda ()
+						       (case (string->symbol (args:get-arg "-archive"))
+							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests))
+							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests))
+							 (else (debug:print 0 "ERROR: unrecognised sub command to -archive. Run \"megatest\" to see help"))))
+						     "archive-bup-thread"))
+		    (thread-start! worker-thread))
 		   (else
 		    (debug:print-info 0 "action not recognised " action)))
+		 
+		 ;; actions that operate on one test at a time can be handled below
+		 ;;
 		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
 									 (db:test-get-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-get-rundir a)))
 									(dirb ;; (rmt:sdb-qry 'getstr 
@@ -1524,7 +1551,7 @@
 						(loop new-test-dat tal)
 						(loop (car tal)(append tal (list new-test-dat)))))
 					  (begin
-					    (runs:remove-test-directory db new-test-dat remove-data-only)
+					    (runs:remove-test-directory new-test-dat mode) ;; 'remove-all)
 					    (if (not (null? tal))
 						(loop (car tal)(cdr tal))))))))
 			       ((set-state-status)
@@ -1538,8 +1565,17 @@
 				(let ((new-tests (proc-get-tests run-id)))
 				  (if (null? new-tests)
 				      (debug:print-info 1 "Run completed according to zero tests matching provided criteria.")
-				      (loop (car new-tests)(cdr new-tests))))))))
-		       )))))
+				      (loop (car new-tests)(cdr new-tests)))))
+			       ((archive)
+				(if (not toplevel-with-children)
+				    (begin
+				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
+				      (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/")))))
+				(if (not (null? tal))
+				    (loop (car tal)(cdr tal))))
+			       )))
+		       )
+		     (if worker-thread (thread-join! worker-thread))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
 	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
@@ -1564,14 +1600,15 @@
     )
   #t)
 
-(define (runs:remove-test-directory db test remove-data-only)
+(define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
 			    (resolve-pathname run-dir)
 			    #f)))
-    (if remove-data-only
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f)
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
+    (case mode
+      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))
+      ((remove-all)      (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "REMOVING" "LOCKED" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVE_REMOVING" #f #f)))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
@@ -1604,9 +1641,10 @@
 		(debug:print 0 "NOTE: the run dir for this test is undefined. Test may have already been deleted."))
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
-    (if remove-data-only
-	(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f)
-	(rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test)))))
+    (case mode
+      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "NOT_STARTED" "n/a" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "ARCHIVED" #f #f))
+      (else (rmt:delete-test-records (db:test-get-run_id test) (db:test-get-id test))))))
 
 ;;======================================================================
 ;; Routines for manipulating runs
@@ -1625,9 +1663,10 @@
       (debug:print 0 "ERROR: Missing required parameter for " switchname ", you must specify the run name with -runname runname")
       (exit 3))
      (else
-      (let ((db   #f)
+      (let (;; (db   #f)
 	    (keys #f))
-	(if (not (launch:setup-for-run))
+	(if (launch:setup-for-run)
+	    (launch:cache-config)
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1643,8 +1682,9 @@
 		    
 		  (begin
 		    (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
-		    (if db (sqlite3:finalize! db))
-		    (exit 1))))
+		    ;; (if db (sqlite3:finalize! db))
+		    (exit 1)
+		    )))
 	    (if (args:get-arg "-target")
 		(keys:target-set-args keys (args:get-arg "-target" args:arg-hash) args:arg-hash)))
 	(if (not (car *configinfo*))
@@ -1655,7 +1695,7 @@
 	    ;; here then call proc
 	    (let* ((keyvals    (keys:target->keyval keys target)))
 	      (proc target runname keys keyvals)))
-	(if db (sqlite3:finalize! db))
+	;; (if db (sqlite3:finalize! db))
 	(set! *didsomething* #t))))))
 
 ;;======================================================================

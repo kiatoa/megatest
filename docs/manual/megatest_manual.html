@@ -1015,13 +1015,6 @@ sudo netstat -tulpn</code></pre>
 </div>
 <h1 id="_reference">Reference</h1>
 <div class="sect1">
-<h2 id="_the_first_chapter_of_the_second_part_2">The First Chapter of the Second Part</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>Chapters grouped into book parts are at level 1 and can contain
-sub-sections.</p></div>
-</div>
-</div>
-<div class="sect1">
 <h2 id="_the_testconfig_file">The testconfig File</h2>
 <div class="sectionbody">
 <div class="sect2">
@@ -1186,6 +1179,90 @@ COMPLETED/ xterm -e bash -s --</code></pre>
 </tr></table>
 </div>
 </div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_programming_api">Programming API</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>These routines can be called from the megatest repl.</p></div>
+<div class="tableblock">
+<table rules="all"
+width="70%"
+frame="hsides"
+cellspacing="0" cellpadding="4">
+<caption class="title">Table 2. API Server Management Calls</caption>
+<col width="14%" />
+<col width="28%" />
+<col width="28%" />
+<col width="28%" />
+<thead>
+<tr>
+<th align="center" valign="top">API Call                  </th>
+<th align="left" valign="top"> Purpose comments   </th>
+<th align="left" valign="top"> Returns                 </th>
+<th align="left" valign="top"> Comments</th>
+</tr>
+</thead>
+<tfoot>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:login        run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code>Verify the the version, testsuite area etc. are correct.</code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( #t "successful login" )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+</tr>
+</tfoot>
+<tbody>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:start-server run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+</tr>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:kill-server  run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
+<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="tableblock">
+<table rules="all"
+width="70%"
+frame="hsides"
+cellspacing="0" cellpadding="4">
+<caption class="title">Table 3. API Keys Related Calls</caption>
+<col width="14%" />
+<col width="28%" />
+<col width="28%" />
+<col width="28%" />
+<thead>
+<tr>
+<th align="center" valign="top">API Call                        </th>
+<th align="left" valign="top"> Purpose comments   </th>
+<th align="left" valign="top"> Returns                 </th>
+<th align="left" valign="top"> Comments</th>
+</tr>
+</thead>
+<tfoot>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:get-key-val-pairs run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>#t=success/#f=fail</code></p></td>
+<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+</tr>
+</tfoot>
+<tbody>
+<tr>
+<td align="center" valign="top"><p class="table">(rmt:get-keys run-id)</p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><code>( key1 key2 &#8230; )</code></p></td>
+<td align="left" valign="top"><p class="table"><code></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <div class="sect2">
 <h3 id="_megatest_internals">Megatest Internals</h3>
 <div class="imageblock graphviz">
@@ -1277,7 +1354,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2014-10-08 23:02:21 MST
+Last updated 2014-11-25 21:11:28 MST
 </div>
 </div>
 </body>
