@@ -228,7 +228,9 @@
 	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
 	      (archive-block-id        (db:test-get-archived test-dat))
 	      (archive-block-info      (rmt:test-get-archive-block-info archive-block-id))
-	      (archive-path            (vector-ref archive-block-info 2)) ;; look in db.scm for test-get-archive-block-info for the vector record info
+	      (archive-path            (if (vector? archive-block-info)
+					   (vector-ref archive-block-info 2) ;; look in db.scm for test-get-archive-block-info for the vector record info
+					   #f)) ;; no archive found?
 	      (archive-internal-path   (conc (common:get-testsuite-name) "-" run-id "/latest/" test-partial-path)))
 	 
 	 ;; some sanity checks 
@@ -236,23 +238,30 @@
 		  (file-exists? prev-test-physical-path)) ;; what to do? abort or clean up or link it in?
 	     (debug:print 0 "ERROR: the old directory " prev-test-physical-path ", still exists! This should not be."))
 
-	 ;; CREATE WORK AREA
-	 ;; test-src-path == #f     ==> don't copy in data from tests directory
-	 ;; itemdat       == string ==> use directly
-	 (create-work-area run-id run-name keyvals test-id #f best-disk test-name item-path) ;; #!key (remtries 2))
+	 (if archive-path ;; no point in proceeding if there is no actual archive
+	     (begin
+	       ;; CREATE WORK AREA
+	       ;; test-src-path == #f     ==> don't copy in data from tests directory
+	       ;; itemdat       == string ==> use directly
+	       (create-work-area run-id run-name keyvals test-id #f best-disk test-name item-path) ;; #!key (remtries 2))
 
-	 ;; 1. Get the block id from the test info
-	 ;; 2. Get the block data given the block id
-	 ;; 3. Construct the paths etc. for the following command:
-	 ;; 
-	 ;; bup -d /tmp/matt/adisk1/2015_q1/fullrun_e1a40/ restore -C /tmp/seeme fullrun-30/latest/ubuntu/nfs/none/w02.1.20.54_b/
+	       ;; 1. Get the block id from the test info
+	       ;; 2. Get the block data given the block id
+	       ;; 3. Construct the paths etc. for the following command:
+	       ;; 
+	       ;; bup -d /tmp/matt/adisk1/2015_q1/fullrun_e1a40/ restore -C /tmp/seeme fullrun-30/latest/ubuntu/nfs/none/w02.1.20.54_b/
 
-	 ;; DO BUP RESTORE
-	 (let* ((new-test-dat        (rmt:get-test-info-by-id run-id test-id))
-		(new-test-path       (db:test-get-rundir new-test-dat))
-		;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
-		(bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
-	   (debug:print-info 0 "Restoring archived data to " new-test-physical-path "; params: " bup-restore-params)
-	   (run-n-wait bup-exe params: bup-restore-params print-cmd: #f))))
-     tests)))
+	       ;; DO BUP RESTORE
+	       (let* ((new-test-dat        (rmt:get-test-info-by-id run-id test-id))
+		      (new-test-path       (if (vector? new-test-dat )
+					       (db:test-get-rundir new-test-dat)
+					       (begin
+						 (debug:print 0 "ERROR: unable to get data for run-id=" run-id ", test-id=" test-id)
+						 (exit 1))))
+		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
+		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
+		 (debug:print-info 0 "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
+		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)))
+	     (debug:print 0 "ERROR: No archive path in the record for run-id=" run-id " test-id=" test-id))))
+     (filter vector? tests))))
 	 
