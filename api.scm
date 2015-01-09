@@ -175,6 +175,9 @@
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct params))
 	    ((get-keys)                        (db:get-keys dbstruct))
 
+	    ;; ARCHIVES
+	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct params))
+	    
 	    ;; TESTS
 	    ((test-toplevel-num-items)         (apply db:test-toplevel-num-items dbstruct params))
 	    ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))

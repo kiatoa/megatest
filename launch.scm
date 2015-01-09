@@ -568,10 +568,12 @@
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
 (define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat #!key (remtries 2))
-  (let* ((item-path (item-list->path itemdat))
-	 (runname  (db:get-value-by-header (db:get-rows run-info)
-					   (db:get-header run-info)
-					   "runname"))
+  (let* ((item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
+	 (runname   (if (string? run-info) ;; if we pass in a string as run-info use it as run-name.
+			run-info
+			(db:get-value-by-header (db:get-rows run-info)
+						(db:get-header run-info)
+						"runname")))
 	 ;; convert back to db: from rdb: - this is always run at server end
 	 (target   (string-intersperse (map cadr keyvals) "/"))
 
@@ -708,7 +710,7 @@
     (if (not (directory? test-path))
 	(create-directory test-path #t)) ;; this is a hack, I don't know why out of the blue this path does not exist sometimes
 
-    (if (directory? test-path)
+    (if (and test-src-path (directory? test-path))
 	(begin
 	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
 			   (if cmd
@@ -724,7 +726,7 @@
 	    (if (not (eq? status 0))
 		(debug:print 2 "ERROR: problem with running \"" cmd "\"")))
 	  (list lnkpathf lnkpath ))
-	(if (> remtries 0)
+	(if (and test-src-path (> remtries 0))
 	    (begin
 	      (debug:print 0 "ERROR: Failed to create work area at " test-path " with link at " lnktarget ", remaining attempts " remtries)
 	      ;; 

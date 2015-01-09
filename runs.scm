@@ -1568,9 +1568,10 @@
 				      (loop (car new-tests)(cdr new-tests)))))
 			       ((archive)
 				(if (not toplevel-with-children)
-				    (begin
-				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
-				      (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/")))))
+				    (case (string->symbol (args:get-arg "-archive"))
+				      ((save save-remove keep-html)
+				       (debug:print-info 0 "Estimating disk space usage for " test-fulln)
+				       (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/"))))))
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       )))
