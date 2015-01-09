@@ -36,10 +36,7 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 ARCHSTR=$(shell lsb_release -sr)
 # ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard txtdb
-
-refdb : txtdb/txtdb.scm
-	csc -I txtdb txtdb/txtdb.scm -o refdb
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
 mtest: $(OFILES) megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
