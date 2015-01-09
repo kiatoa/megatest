@@ -676,3 +676,6 @@
 
 (define (rmt:test-set-archive-block-id run-id test-id archive-block-id)
   (rmt:send-receive 'test-set-archive-block-id run-id (list run-id test-id archive-block-id)))
+
+(define (rmt:test-get-archive-block-info archive-block-id)
+  (rmt:send-receive 'test-get-archive-block-info #f (list archive-block-id)))

@@ -1473,7 +1473,7 @@
 		   ((run-wait)
 		    (debug:print 1 "Waiting for run " runkey ", run=" runnamepatt " to complete"))
 		   ((archive)
-		    (debug:print 1 "Archiving data for run: " runkey " " (db:get-value-by-header run header "runname"))
+		    (debug:print 1 "Archiving/restoring (" (args:get-arg "-archive") ") data for run: " runkey " " (db:get-value-by-header run header "runname"))
 		    (set! worker-thread (make-thread (lambda ()
 						       (case (string->symbol (args:get-arg "-archive"))
 							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests))
@@ -1486,13 +1486,15 @@
 		 
 		 ;; actions that operate on one test at a time can be handled below
 		 ;;
-		 (let ((sorted-tests     (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
-									 (db:test-get-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-get-rundir a)))
-									(dirb ;; (rmt:sdb-qry 'getstr 
-									 (db:test-get-rundir b))) ;; ) ;; ((filedb:get-path *fdb* (db:test-get-rundir b))))
-								    (if (and (string? dira)(string? dirb))
-									(> (string-length dira)(string-length dirb))
-									#f)))))
+		 (let ((sorted-tests     (filter 
+					  vector?
+					  (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
+									  (db:test-get-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-get-rundir a)))
+									 (dirb ;; (rmt:sdb-qry 'getstr 
+									  (db:test-get-rundir b))) ;; ) ;; ((filedb:get-path *fdb* (db:test-get-rundir b))))
+								     (if (and (string? dira)(string? dirb))
+									 (> (string-length dira)(string-length dirb))
+									 #f))))))
 		       (toplevel-retries (make-hash-table)) ;; try three times to loop through and remove top level tests
 		       (test-retry-time  (make-hash-table))
 		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
@@ -1568,9 +1570,10 @@
 				      (loop (car new-tests)(cdr new-tests)))))
 			       ((archive)
 				(if (not toplevel-with-children)
-				    (begin
-				      (debug:print-info 0 "Estimating disk space usage for " test-fulln)
-				      (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/")))))
+				    (case (string->symbol (args:get-arg "-archive"))
+				      ((save save-remove keep-html)
+				       (debug:print-info 0 "Estimating disk space usage for " test-fulln)
+				       (debug:print-info 0 "   " (common:get-disk-space-used (conc run-dir "/"))))))
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       )))

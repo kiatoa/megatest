@@ -55,7 +55,8 @@ ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 #	csc utils/revtagfsl.scm -o $(PREFIX)/bin/revtagfsl
 
 # Special dependencies for the includes
-tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o megatest.o : db_records.scm
+tests.o db.o launch.o runs.o dashboard-tests.o dashboard-guimonitor.o dashboard-main.o monitor.o dashboard.o  \
+  archive.o megatest.o : db_records.scm
 tests.o runs.o dashboard.o dashboard-tests.o dashboard-main.o  : run_records.scm
 db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.o : key_records.scm
 tests.o tasks.o dashboard-tasks.o : task_records.scm

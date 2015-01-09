@@ -1042,6 +1042,23 @@
      (sqlite3:execute db "UPDATE tests SET archived=? WHERE id=?;"
 		      archive-block-id test-id))))
  
+;; Look up the archive block info given a block-id
+;;
+(define (db:test-get-archive-block-info dbstruct archive-block-id)
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     (let ((res #f))
+       (sqlite3:for-each-row 
+	;;        0         1           2        3          4           5
+	(lambda (id archive-disk-id disk-path last-du last-du-time creation-time)
+	  (set! res (vector id archive-disk-id disk-path last-du last-du-time creation-time)))
+	db
+	"SELECT id,archive_disk_id,disk_path,last_du,last_du_time,creation_time FROM archive_blocks WHERE id=?;"
+	archive-block-id)
+       res))))
 
 ;; (define (db:archive-allocate-testsuite/area-to-block block-id testsuite-name areakey)
 ;;   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
@@ -2278,7 +2295,7 @@
 
 (define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
-                                "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"))
+                                "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"))
 
 ;; fields *must* be a non-empty list
 ;;
@@ -2307,9 +2324,9 @@
 	 (res '()))
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row
-     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
-       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15
-       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum)
+     (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
+       ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
+       (set! res (cons (vector id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
 		       res)))
      db
      (conc "SELECT " db:test-record-qry-selector " FROM tests WHERE state != 'DELETED' AND run_id=?;")
@@ -2384,9 +2401,9 @@
    (lambda (db)
      (let ((res #f))
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
-	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)
+	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum)))
+	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)

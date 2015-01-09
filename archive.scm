@@ -201,89 +201,67 @@
 (define (archive:bup-restore archive-command run-id run-name tests)  ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
-  (let* ((disk-groups  (make-hash-table))
-	 (test-groups  (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
-	 (bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
+  (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
 	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
 
     ;; from the test info bin the path to the test by stem
     ;;
     (for-each
      (lambda (test-dat)
-       (let* ((item-path         (db:test-get-item-path test-dat))
+       ;; When restoring test-dat will initially contain an old and invalid path to the test
+       (let* ((best-disk         (get-best-disk *configdat*))
+	      (item-path         (db:test-get-item-path test-dat))
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))
 	      (run-id            (db:test-get-run_id    test-dat))
-	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
+	      (keyvals           (rmt:get-key-val-pairs run-id))
+	      (target            (string-intersperse (map cadr keyvals) "/"))
 	      
 	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
 				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
 	      (test-partial-path (conc target "/" run-name "/" (runs:make-full-test-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
-	      (test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
-	      (partial-path-index (if test-physical-path (substring-index test-partial-path test-physical-path) #f))
-	      (test-base         (if (and partial-path-index 
-					  test-physical-path )
-				     (substring test-physical-path
-						0
-						partial-path-index)
-				     #f)))
+	      ;; if the old path was not deleted then prev-test-physical-path will end up pointing to a real directory
+	      (prev-test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
+
+	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
+	      (archive-block-id        (db:test-get-archived test-dat))
+	      (archive-block-info      (rmt:test-get-archive-block-info archive-block-id))
+	      (archive-path            (if (vector? archive-block-info)
+					   (vector-ref archive-block-info 2) ;; look in db.scm for test-get-archive-block-info for the vector record info
+					   #f)) ;; no archive found?
+	      (archive-internal-path   (conc (common:get-testsuite-name) "-" run-id "/latest/" test-partial-path)))
 	 
-	 ;; CREATE WORK AREA
-	 (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat #!key (remtries 2))
+	 ;; some sanity checks 
+	 (if (and prev-test-physical-path
+		  (file-exists? prev-test-physical-path)) ;; what to do? abort or clean up or link it in?
+	     (debug:print 0 "ERROR: the old directory " prev-test-physical-path ", still exists! This should not be."))
+
+	 (if archive-path ;; no point in proceeding if there is no actual archive
+	     (begin
+	       ;; CREATE WORK AREA
+	       ;; test-src-path == #f     ==> don't copy in data from tests directory
+	       ;; itemdat       == string ==> use directly
+	       (create-work-area run-id run-name keyvals test-id #f best-disk test-name item-path) ;; #!key (remtries 2))
+
+	       ;; 1. Get the block id from the test info
+	       ;; 2. Get the block data given the block id
+	       ;; 3. Construct the paths etc. for the following command:
+	       ;; 
+	       ;; bup -d /tmp/matt/adisk1/2015_q1/fullrun_e1a40/ restore -C /tmp/seeme fullrun-30/latest/ubuntu/nfs/none/w02.1.20.54_b/
+
+	       ;; DO BUP RESTORE
+	       (let* ((new-test-dat        (rmt:get-test-info-by-id run-id test-id))
+		      (new-test-path       (if (vector? new-test-dat )
+					       (db:test-get-rundir new-test-dat)
+					       (begin
+						 (debug:print 0 "ERROR: unable to get data for run-id=" run-id ", test-id=" test-id)
+						 (exit 1))))
+		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
+		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
+		 (debug:print-info 0 "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
+		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)))
+	     (debug:print 0 "ERROR: No archive path in the record for run-id=" run-id " test-id=" test-id))))
+     (filter vector? tests))))
 	 
-	 ;; DO BUP RESTORE
-
-
-
- 	 (if (or toplevel/children
-		 (not (file-exists? test-path)))
-	     #f
-	     (begin
-	       (debug:print 0
-			    "From test-dat=" test-dat " derived the following:\n"
-			    "test-partial-path  = " test-partial-path "\n"
-			    "test-path          = " test-path "\n"
-			    "test-physical-path = " test-physical-path "\n"
-			    "partial-path-index = " partial-path-index "\n"
-			    "test-base          = " test-base)
-	       (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
-	       (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
-	       test-path))))
-     tests)
-    ;; for each disk-group
-    (for-each 
-     (lambda (disk-group)
-       (debug:print 0 "Processing disk-group " disk-group)
-       (let* ((test-paths (hash-table-ref disk-groups disk-group))
-	      ;; ((string-intersperse (map cadr (rmt:get-key-val-pairs 1)) "-")
-	      (bup-init-params  (list "-d" archive-dir "init"))
-	      (bup-index-params (append (list "-d" archive-dir "index") test-paths))
-	      (bup-save-params  (append (list "-d" archive-dir "save" ;; (conc "--strip-path=" linktree)
-					      (conc "-" compress) ;; or (conc "--compress=" compress)
-					      "-n" (conc (common:get-testsuite-name) "-" run-id)
-					      (conc "--strip-path=" disk-group))
-					test-paths))
-	      (print-prefix      #f)) ;; "Running: ")) ;; change to #f to turn off printing
-	 (if (not (file-exists? archive-dir))
-	     (create-directory archive-dir #t))
-	 (if (not (file-exists? (conc archive-dir "/HEAD")))
-	     (begin
-	       ;; replace this with jobrunner stuff enventually
-	       (debug:print-info 0 "Init bup in " archive-dir)
-	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)))
-	 (debug:print-info 0 "Indexing data to be archived")
-	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
-	 (debug:print-info 0 "Archiving data with bup")
-	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
-	 (for-each
-	  (lambda (test-dat)
-	    (let ((test-id           (db:test-get-id        test-dat))
-		  (run-id            (db:test-get-run_id    test-dat)))
-	      (rmt:test-set-archive-block-id run-id test-id archive-id)
-	      (if (member archive-command '("save-remove"))
-		  (runs:remove-test-directory test-dat 'archive-remove))))
-	  (hash-table-ref test-groups disk-group))))
-     (hash-table-keys disk-groups))
-    #t))
