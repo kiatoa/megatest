@@ -11,7 +11,7 @@
 ;; (include "megatest-version.scm")
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
-     http-client srfi-18) ;;  zmq extras)
+     http-client srfi-18 extras) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
 ;;
@@ -1405,6 +1405,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Start a repl
 ;;======================================================================
 
+;; fakeout readline
+(define (toplevel-command . a) #f)
+
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup-for-run))
@@ -1413,6 +1416,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* dbstruct)
 	    (set! *client-non-blocking-mode* #t)
+	    (import extras) ;; might not be needed
+	    ;; (import csi)
 	    (import readline)
 	    (import apropos)
 	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...

@@ -21,6 +21,8 @@ else
 fi
 
 echo "#!/bin/bash" > $target
-echo "source $prefix/bin/.\$(lsb_release -sr)/cfg.sh" >> $target
+if [ "$LD_LIBRARY_PATH" != "" ];then
+  echo "source $prefix/bin/.\$(lsb_release -sr)/cfg.sh" >> $target
+fi
 echo "exec $prefix/bin/.\$(lsb_release -sr)/$cmd \"\$@\"" >> $target
 

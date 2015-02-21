@@ -23,6 +23,10 @@ help :
 	@echo   PROX=$(PROX)
 	@echo 
 	@echo To make all do: make all
+	@echo 
+	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
+
+# FPIC=-C "-fPIC"
 
 # Put the installation here
 ifeq ($(PREFIX),)
@@ -45,7 +49,7 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
-     srfi-19 refdb ini-file sparse-vectors
+     srfi-19 refdb ini-file sparse-vectors z3
 
 #
 # Derived variables
@@ -82,7 +86,7 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
-CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
 all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs
@@ -91,7 +95,8 @@ chkn : $(CHICKEN_INSTALL)
 
 eggs : $(EGGSOFILES)
 
-libiup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+# libiup : $(PREFIX)/lib/libavcall.a 
+libiup : $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
 
 logprobin : $(PREFIX)/bin/logpro
 
