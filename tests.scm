@@ -15,6 +15,7 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp directory-utils)
 (import (prefix sqlite3 sqlite3:))
+(require-library stml)
 
 (declare (unit tests))
 (declare (uses lock-queue))
@@ -390,6 +391,17 @@
 		  ;; NB// tests:test-set-toplog! is remote internal...
 		  (tests:test-set-toplog! run-id test-name outputfilename)
 		  )))))))
+
+;; summarize test
+(define (tests:summarize-test run-id test-id)
+  (let ((test-dat  (rmt:get-test-info-by-id run-id test-id))
+	(steps-dat (rmt:get-steps-for-test run-id test-id))
+	(test-name (db:test-get-testname test-dat)))
+    (with-output-to-file "test-summary.html"
+      (lambda ()
+	(print "<html><title>Summary: " test-name
+	       "</title><body><h2>Summary for " test-name "</h2>")
+	(print "<table>
 
 ;; MUST BE CALLED local!
 ;;
