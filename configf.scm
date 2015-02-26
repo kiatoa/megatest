@@ -153,6 +153,7 @@
 ;; sections: #f => get all, else list of sections to gather
 (define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
   (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
+  (debug:print 9 "START: " path)
   (if (not (file-exists? path))
       (begin 
 	(debug:print-info 1 "read-config - file not found " path " current path: " (current-directory))
@@ -169,6 +170,7 @@
 	      (begin
 		(close-input-port inp)
 		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
+		(debug:print 9 "END: " path)
 		res)
 	      (regex-case 
 	       inl 
@@ -185,11 +187,12 @@
 							(if (file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)
+							      (debug:print 9 "Including: " full-conf)
 							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
 							      ;; (pop-directory)
 							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
 							    (begin
-							      (debug:print 2 "INFO: include file " include-file " not found (called from " path ")")
+							      (debug:print '(2 9) "INFO: include file " include-file " not found (called from " path ")")
 							      (debug:print 2 "        " full-conf)
 							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))))
 	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system)
@@ -229,10 +232,12 @@
 									       val)))
 							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
 							     (if envar (safe-setenv key realval))
+							     (debug:print 10 "   setting: [" curr-section-name "] " key " = " val)
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval))
 							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
 	       (configf:key-no-val ( x key val)             (let* ((alist   (hash-table-ref/default res curr-section-name '())))
+							      (debug:print 10 "   setting: [" curr-section-name "] " key " = #t")
 							      (hash-table-set! res curr-section-name 
 									       (config:assoc-safe-add alist key #t))
 							      (loop (configf:read-line inp res allow-system) curr-section-name key #f)))

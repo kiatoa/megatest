@@ -54,11 +54,20 @@
       #t))
 
 (define (debug:debug-mode n)
-  (or (and (number? *verbosity*)
-	   (<= n *verbosity*))
-      (and (list? *verbosity*)
-	   (member n *verbosity*))))
-
+  (cond
+   ((and (number? *verbosity*)   ;; number number
+	 (number? n))
+    (<= n *verbosity*))
+   ((and (list? *verbosity*)     ;; list   number
+	 (number? n))
+    (member n *verbosity*))
+   ((and (list? *verbosity*)     ;; list   list
+	 (list? n))
+    (not (null? (lset-intersection! eq? *verbosity* n))))
+   ((and (number? *verbosity*)
+	 (list? n))
+    (member *verbosity* n))))
+      
 (define (debug:setup)
   (let ((debugstr (or (args:get-arg "-debug")
 		      (getenv "MT_DEBUG_MODE"))))
@@ -87,7 +96,7 @@
   (if (debug:debug-mode n)
       (with-output-to-port (current-error-port)
 	(lambda ()
-	  (let ((res (format#format #f "INFO: (~2d) ~a" n (apply conc params))))
+	  (let ((res (format#format #f "INFO: (~a) ~a" n (apply conc params))))
 	    (if *logging*
 		(db:log-event res)
 		;; (apply print "pid:" (current-process-id) " " "INFO: (" n ") " params) ;; res)
