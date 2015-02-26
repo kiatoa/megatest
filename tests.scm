@@ -394,15 +394,20 @@
 
 ;; summarize test
 (define (tests:summarize-test run-id test-id)
-  (let ((test-dat  (rmt:get-test-info-by-id run-id test-id))
-	(steps-dat (rmt:get-steps-for-test run-id test-id))
-	(test-name (db:test-get-testname test-dat)))
-    (with-output-to-file "test-summary.html"
-      (lambda ()
-	(print "<html><title>Summary: " test-name
-	       "</title><body><h2>Summary for " test-name "</h2>")
-	(print "<table>
-
+  (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
+	 (steps-dat (rmt:get-steps-for-test run-id test-id))
+	 (test-name (db:test-get-testname test-dat))
+	 (oup       (open-output-file "test-summary.html")))
+    (s:output-new
+     oup
+     (s:html
+      (s:title "Summary: " test-name)
+      (s:body 
+       (s:h2 "Summary for " test-name)
+       )))
+    (close-output-port oup)))
+	  
+	  
 ;; MUST BE CALLED local!
 ;;
 (define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))
