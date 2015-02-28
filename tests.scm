@@ -404,6 +404,8 @@
       (s:title "Summary: " test-name)
       (s:body 
        (s:h2 "Summary for " test-name)
+       (s:table
+	(s:tr (s:td 
        )))
     (close-output-port oup)))
 	  
