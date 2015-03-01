@@ -405,7 +405,13 @@
       (s:body 
        (s:h2 "Summary for " test-name)
        (s:table
-	(s:tr (s:td 
+	(s:tr (s:td "id")       (s:td (db:test-get-id       test-dat)))
+	(s:tr (s:td "run-id")   (s:td (db:test-get-run_id   test-dat)))
+	(s:tr (s:td "testname") (s:td (db:test-get-testname test-dat)))
+	(s:tr (s:td "state")    (s:td (db:test-get-state    test-dat)))
+	(s:tr (s:td "status")   (s:td (db:test-get-status   test-dat)))
+	(s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
+				       (db:test-get-event_time test-dat)))))
        )))
     (close-output-port oup)))
 	  
