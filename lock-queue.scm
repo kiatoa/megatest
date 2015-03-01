@@ -141,6 +141,7 @@
 
 (define (lock-queue:release-lock fname test-id #!key (count 10))
   (let* ((dbdat (lock-queue:open-db fname)))
+    (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 "lock-queue:release-lock; waiting on journal")
     (handle-exceptions
      exn
      (begin
@@ -169,7 +170,7 @@
   (handle-exceptions
    exn
    (begin
-     (debug:print 0 "WARNING: Failed to steal queue lock. Will try again in few seconds")
+     (tadebug:print 0 "WARNING: Failed to steal queue lock. Will try again in few seconds")
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
      (thread-sleep! 10)
      (if (> count 0)
@@ -186,6 +187,7 @@
   (let* ((dbdat   (lock-queue:open-db fname))
 	 (mystart (current-seconds))
 	 (db      (lock-queue:db-dat-get-db dbdat)))
+    (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
     (handle-exceptions
      exn
      (begin
