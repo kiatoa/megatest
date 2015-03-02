@@ -426,7 +426,7 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dcommon:get-compressed-steps dbstruct run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
@@ -483,7 +483,7 @@
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dcommon:get-compressed-steps dbstruct run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps dbstruct run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )

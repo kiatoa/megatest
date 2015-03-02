@@ -712,37 +712,6 @@
 		      (else #f)))))
       res))
 
-;; temporarily passing in dbstruct to support direct access (i.e. bypassing servers)
-;;
-(define (dcommon:get-compressed-steps dbstruct run-id test-id)
-  (let* ((steps-data  (if dbstruct 
-			  (db:get-steps-for-test dbstruct run-id test-id)
-			  (rmt:get-steps-for-test run-id test-id))) 
-	 (comprsteps  (dcommon:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
-    (map (lambda (x)
-	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
-	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
-	 (sort (hash-table-values comprsteps)
-	       (lambda (a b)
-		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
-		   (if (and (number? time-a)(number? time-b))
-		       (if (< time-a time-b)
-			   #t
-			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
-			       #f))
-		       (string<? (conc time-a)(conc time-b)))))))))
-
 (define (dcommon:populate-steps teststeps steps-matrix)
   (let ((max-row 0))
     (if (null? teststeps)
