@@ -483,9 +483,9 @@
      ;; or, if it is a 'toplevel test and all prereqs not met are COMPLETED then launch
 
      ((and (not (member 'toplevel testmode))
-	   (member (hash-table-ref/default test-registry (runs:make-full-test-name hed item-path) 'n/a)
+	   (member (hash-table-ref/default test-registry (db:test-make-full-name hed item-path) 'n/a)
 		   '(DONOTRUN removed CANNOTRUN))) ;; *common:cant-run-states-sym*) ;; '(COMPLETED KILLED WAIVED UNKNOWN INCOMPLETE)) ;; try to catch repeat processing of COMPLETED tests here
-      (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (runs:make-full-test-name hed item-path)) "\". Removing it from the queue")
+      (debug:print-info 1 "Test " hed " set to \"" (hash-table-ref test-registry (db:test-make-full-name hed item-path)) "\". Removing it from the queue")
       (if (or (not (null? tal))
 	      (not (null? reg)))
 	  (list (runs:queue-next-hed tal reg reglen regfull)
@@ -688,22 +688,22 @@
      
      ;; Register tests 
      ;;
-     ((not (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f))
+     ((not (hash-table-ref/default test-registry (db:test-make-full-name test-name item-path) #f))
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (let register-loop ((numtries 15))
 	(rmt:general-call 'register-test run-id run-id test-name item-path)
 	(thread-sleep! 0.5)
 	(if (rmt:get-test-id run-id test-name item-path)
-	    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'done)
+	    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'done)
 	    (if (> numtries 0)
 		(register-loop (- numtries 1))
-		(debug:print 0 "ERROR: failed to register test " (runs:make-full-test-name test-name item-path)))))
-      (if (not (eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f) 'done))
+		(debug:print 0 "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
+      (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
 	    (rmt:general-call 'register-test run-id run-id test-name "")
 	    (if (rmt:get-test-id run-id test-name "")
-		(hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done))))
+		(hash-table-set! test-registry (db:test-make-full-name test-name "") 'done))))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
       (if (and (null? tal)(null? reg))
 	  (list hed tal (append reg (list hed)) reruns)
@@ -718,7 +718,7 @@
      
      ;; At this point hed test registration must be completed.
      ;;
-     ((eq? (hash-table-ref/default test-registry (runs:make-full-test-name test-name item-path) #f)
+     ((eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name item-path) #f)
 	   'start)
       (debug:print-info 0 "Waiting on test registration(s): "
 			(string-intersperse 
@@ -746,7 +746,7 @@
 	   (or (null? prereqs-not-met)
 	       (and (eq? testmode 'toplevel)
 		    (null? non-completed))))
-      ;; (hash-table-delete! *max-tries-hash* (runs:make-full-test-name test-name item-path))
+      ;; (hash-table-delete! *max-tries-hash* (db:test-make-full-name test-name item-path))
       ;; we are going to reset all the counters for test retries by setting a new hash table
       ;; this means they will increment only when nothing can be run
       (set! *max-tries-hash* (make-hash-table))
@@ -755,7 +755,7 @@
       (if (configf:lookup *configdat* "jobtools" "maxload") ;; only gate if maxload is specified
 	  (common:wait-for-cpuload maxload numcpus waitdelay))
       (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
-      (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'running)
+      (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
       (if (or (not (null? tal))(not (null? reg)))
@@ -796,7 +796,7 @@
 		    ;; (thread-sleep! *global-delta*)
 		    ;; This next is for the items
 		    (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "BLOCKED" #f)
-		    (hash-table-set! test-registry (runs:make-full-test-name test-name item-path) 'removed)
+		    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'removed)
 		    (list (runs:queue-next-hed tal reg reglen regfull)
 			  (runs:queue-next-tal tal reg reglen regfull)
 			  (runs:queue-next-reg tal reg reglen regfull)
@@ -919,7 +919,7 @@
 		      (ip (db:test-get-item-path trec))
 		      (st (db:test-get-state     trec)))
 		  (if (not (equal? st "DELETED"))
-		      (hash-table-set! test-registry (runs:make-full-test-name tn ip) (string->symbol st)))))
+		      (hash-table-set! test-registry (db:test-make-full-name tn ip) (string->symbol st)))))
 	      tests-info)
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
@@ -952,7 +952,7 @@
 	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
 	     (items       (tests:testqueue-get-items      test-record))
 	     (item-path   (item-list->path itemdat))
-	     (tfullname   (runs:make-full-test-name test-name item-path))
+	     (tfullname   (db:test-make-full-name test-name item-path))
 	     (newtal      (append tal (list hed)))
 	     (regfull     (>= (length reg) reglen))
 	     (num-running (rmt:get-count-tests-running-for-run-id run-id)))
@@ -971,10 +971,10 @@
 
 	;; Ensure all top level tests get registered. This way they show up as "NOT_STARTED" on the dashboard
 	;; and it is clear they *should* have run but did not.
-	(if (not (hash-table-ref/default test-registry (runs:make-full-test-name test-name "") #f))
+	(if (not (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f))
 	    (begin
 	      (rmt:general-call 'register-test run-id run-id test-name "")
-	      (hash-table-set! test-registry (runs:make-full-test-name test-name "") 'done)))
+	      (hash-table-set! test-registry (db:test-make-full-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
 	;;
@@ -1067,7 +1067,7 @@
 				       newrec))
 		    (my-item-path (item-list->path my-itemdat)))
 	       (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
-		   (let ((newtestname (runs:make-full-test-name hed my-item-path)))    ;; test names are unique on testname/item-path
+		   (let ((newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
 		     (tests:testqueue-set-items!     new-test-record #f)
 		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
 		     (tests:testqueue-set-item_path! new-test-record my-item-path)
@@ -1193,9 +1193,6 @@
 	     (conc (db:test-get-testname t) ":" (db:test-get-state t) "/" (db:test-get-status t))))
        lst))
 
-(define (runs:make-full-test-name testname itempath)
-  (if (equal? itempath "") testname (conc testname "/" itempath)))
-
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
 (define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry)
   ;; All these vars might be referenced by the testconfig file reader
@@ -1215,7 +1212,7 @@
     ;; setting itemdat to a list if it is #f
     (if (not itemdat)(set! itemdat '()))
     (set! item-path (item-list->path itemdat))
-    (set! full-test-name (runs:make-full-test-name test-name item-path))
+    (set! full-test-name (db:test-make-full-name test-name item-path))
     (debug:print-info 4
 		      "\nTESTNAME: " full-test-name 
 		      "\n   test-config: " (hash-table->alist test-conf)
@@ -1351,7 +1348,7 @@
 			   (process-signal (current-process-id) signal/kill))))))))
 	((KILLED) 
 	 (debug:print 1 "NOTE: " full-test-name " is already running or was explictly killed, use -force to launch it.")
-	 (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN)) ;; KILLED))
+	 (hash-table-set! test-registry (db:test-make-full-name test-name test-path) 'DONOTRUN)) ;; KILLED))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (debug:print 2 "NOTE: " test-name " is already running"))
 	;; (if (> (- (current-seconds)(+ (db:test-get-event_time testdat)
@@ -1367,9 +1364,9 @@
 	 (debug:print 0 "ERROR: Failed to launch test " full-test-name ". Unrecognised state " (test:get-state testdat))
 	 (case (string->symbol (test:get-state testdat)) 
 	   ((COMPLETED INCOMPLETE)
-	    (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN))
+	    (hash-table-set! test-registry (db:test-make-full-name test-name test-path) 'DONOTRUN))
 	   (else
-	    (hash-table-set! test-registry (runs:make-full-test-name test-name test-path) 'DONOTRUN))))))))
+	    (hash-table-set! test-registry (db:test-make-full-name test-name test-path) 'DONOTRUN))))))))
 
 ;;======================================================================
 ;; END OF NEW STUFF

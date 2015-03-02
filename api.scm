@@ -46,6 +46,7 @@
     get-run-ids-matching-target
     get-runs-by-patt
     get-steps-data
+    get-steps-for-test
     login
     testmeta-get-record
     have-incompletes?
@@ -212,6 +213,7 @@
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
+	    ((get-steps-for-test)           (apply db:get-steps-for-test dbstruct params))
 
 	    ;; MISC
 	    ((have-incompletes?)            (apply db:have-incompletes? dbstruct params))

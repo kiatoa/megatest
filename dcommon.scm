@@ -712,8 +712,12 @@
 		      (else #f)))))
       res))
 
+;; temporarily passing in dbstruct to support direct access (i.e. bypassing servers)
+;;
 (define (dcommon:get-compressed-steps dbstruct run-id test-id)
-  (let* ((steps-data  (db:get-steps-for-test dbstruct run-id test-id))
+  (let* ((steps-data  (if dbstruct 
+			  (db:get-steps-for-test dbstruct run-id test-id)
+			  (rmt:get-steps-for-test run-id test-id))) 
 	 (comprsteps  (dcommon:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
     (map (lambda (x)
 	   ;; take advantage of the \n on time->string

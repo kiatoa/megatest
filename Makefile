@@ -106,9 +106,9 @@ $(PREFIX)/bin/loadrunner : utils/loadrunner
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-$(PREFIX)/bin/refdb : refdb
-	$(INSTALL) $< $@
-	chmod a+x $@
+# $(PREFIX)/bin/refdb : refdb
+# 	$(INSTALL) $< $@
+# 	chmod a+x $@
 
 deploytarg/nbfake : utils/nbfake
 	$(INSTALL) $< $@
@@ -127,7 +127,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
           $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
