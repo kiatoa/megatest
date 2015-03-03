@@ -83,7 +83,8 @@
 		    test-id)))
 
 (define (lock-queue:any-younger? dbdat mystart test-id #!key (remtries 10))
-  (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200)
+  ;; no need to wait on journal on read only queries
+  ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200)
   (handle-exceptions
    exn
    (if (> remtries 0)
@@ -187,7 +188,7 @@
   (let* ((dbdat   (lock-queue:open-db fname))
 	 (mystart (current-seconds))
 	 (db      (lock-queue:db-dat-get-db dbdat)))
-    (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
+    ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
     (handle-exceptions
      exn
      (begin
@@ -203,28 +204,34 @@
 	     (debug:print 0 "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
 	     (print-call-chain (current-error-port))
 	     #f)))
-     ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
-     (sqlite3:execute
-      db
-      "INSERT OR REPLACE INTO queue (test_id,start_time,state) VALUES (?,?,'waiting');"
-      test-id mystart)
-     ;; (thread-sleep! 1) ;; give other tests a chance to register
-     (let ((result 
-	    (let loop ((younger-waiting (lock-queue:any-younger? dbdat mystart test-id)))
-	      (if younger-waiting
-		  (begin
-		    ;; no need for us to wait. mark in the lock queue db as skipping
-		    (lock-queue:set-state dbdat test-id "skipping")
-		    #f) ;; let the calling process know that nothing needs to be done
-		  (if (lock-queue:get-lock dbdat test-id)
-		      #t
-		      (if (> (- (current-seconds) mystart) 36000) ;; waited too long, steal the lock
-			  (lock-queue:steal-lock dbdat test-id)
-			  (begin
-			    (thread-sleep! 1)
-			    (loop (lock-queue:any-younger? dbdat mystart test-id)))))))))
-       (sqlite3:finalize! db)
-       result))))
+     ;; wait 10 seconds and then check to see if someone is already updating the html
+     (thread-sleep! 10)
+     (if (not (lock-queue:any-younger? dbdat mystart test-id)) ;; no processing in flight, must try to start processing
+	 (begin
+	   (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
+	   (sqlite3:execute
+	    db
+	    "INSERT OR REPLACE INTO queue (test_id,start_time,state) VALUES (?,?,'waiting');"
+	    test-id mystart)
+	   ;; (thread-sleep! 1) ;; give other tests a chance to register
+	   (let ((result 
+		  (let loop ((younger-waiting (lock-queue:any-younger? dbdat mystart test-id)))
+		    (if younger-waiting
+			(begin
+			  ;; no need for us to wait. mark in the lock queue db as skipping
+			  ;; no point in marking anything in the queue - simply never register this
+			  ;; test as it is *covered* by a previously started update to the html file
+			  ;; (lock-queue:set-state dbdat test-id "skipping")
+			  #f) ;; let the calling process know that nothing needs to be done
+			(if (lock-queue:get-lock dbdat test-id)
+			    #t
+			    (if (> (- (current-seconds) mystart) 36000) ;; waited too long, steal the lock
+				(lock-queue:steal-lock dbdat test-id)
+				(begin
+				  (thread-sleep! 1)
+				  (loop (lock-queue:any-younger? dbdat mystart test-id)))))))))
+	     (sqlite3:finalize! db)
+	     result))))))
 	  
             
 ;; (use trace)
