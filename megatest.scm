@@ -332,7 +332,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (> (- start-time last-time) 60))
 	       (begin
 		 (set! last-time start-time)
-		 (debug:print-info 1 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+		 (debug:print-info 4 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 	 
 	 ;; keep going unless time to exit
 	 ;;

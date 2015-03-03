@@ -203,12 +203,12 @@
 	     (debug:print 0 "Giving up calls to lock-queue:wait-turn for test-id " test-id " at path " fname ", printing call chain")
 	     (print-call-chain (current-error-port))
 	     #f)))
-     (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
+     ;; (tasks:wait-on-journal (lock-queue:db-dat-get-path dbdat) 1200 waiting-msg: "lock-queue:wait-turn; waiting on journal file")
      (sqlite3:execute
       db
       "INSERT OR REPLACE INTO queue (test_id,start_time,state) VALUES (?,?,'waiting');"
       test-id mystart)
-     (thread-sleep! 1) ;; give other tests a chance to register
+     ;; (thread-sleep! 1) ;; give other tests a chance to register
      (let ((result 
 	    (let loop ((younger-waiting (lock-queue:any-younger? dbdat mystart test-id)))
 	      (if younger-waiting

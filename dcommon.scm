@@ -650,68 +650,6 @@
 ;;  S T E P S
 ;;======================================================================
 
-;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
-;;
-;; get a pretty table to summarize steps
-;;
-(define (dcommon:process-steps-table steps);; db test-id #!key (work-area #f))
-;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))
-	   (case (string->symbol (tdb:step-get-state step))
-	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(tdb:step-get-status step)))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (tdb:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (tdb:step-get-state step))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (tdb:step-get-event_time step))))
-	   (hash-table-set! res (tdb:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (tdb:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (tdb:step-get-event_time a)(tdb:step-get-event_time b)) #t)
-		      ((eq? (tdb:step-get-event_time a)(tdb:step-get-event_time b)) 
-		       (<   (tdb:step-get-id a)        (tdb:step-get-id b)))
-		      (else #f)))))
-      res))
-
 (define (dcommon:populate-steps teststeps steps-matrix)
   (let ((max-row 0))
     (if (null? teststeps)
