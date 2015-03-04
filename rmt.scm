@@ -494,6 +494,9 @@
 (define (rmt:get-count-tests-running run-id)
   (rmt:send-receive 'get-count-tests-running run-id (list run-id)))
 
+(define (rmt:get-count-tests-running-for-testname run-id testname)
+  (rmt:send-receive 'get-count-tests-running-for-testname run-id (list run-id testname)))
+
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup)))
 
