@@ -184,7 +184,7 @@
 	    ((test-toplevel-num-items)         (apply db:test-toplevel-num-items dbstruct params))
 	    ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
 	    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
-	    ((get-count-tests-running-for-testname (apply db:get-count-tests-running-for-testname dbstruct params)))
+	    ((get-count-tests-running-for-testname) (apply db:get-count-tests-running-for-testname dbstruct params))
 	    ((get-count-tests-running)         (apply db:get-count-tests-running dbstruct params))
 	    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
 	    ;; ((delete-test-step-records)        (apply db:delete-test-step-records dbstruct params))
