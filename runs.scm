@@ -164,7 +164,10 @@
 
 (define (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)
   (thread-sleep! (cond
-        	  ((> *runs:can-run-more-tests-count* 20) 2);; obviously haven't had any work to do for a while
+        	  ((> *runs:can-run-more-tests-count* 20)
+		   (if (runs:lownoise "waiting on tasks" 60)
+		       (debug:print-info 2 "waiting for tasks to complete, sleeping briefly ..."))
+		   2);; obviously haven't had any work to do for a while
         	  (else 0)))
   (let* ((num-running             (rmt:get-count-tests-running run-id))
 	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
@@ -693,11 +696,12 @@
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (let register-loop ((numtries 15))
 	(rmt:general-call 'register-test run-id run-id test-name item-path)
-	(thread-sleep! 0.5)
 	(if (rmt:get-test-id run-id test-name item-path)
 	    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'done)
 	    (if (> numtries 0)
-		(register-loop (- numtries 1))
+		(begin
+		  (thread-sleep! 0.5)
+		  (register-loop (- numtries 1)))
 		(debug:print 0 "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
@@ -726,7 +730,7 @@
 				   (eq? (hash-table-ref/default test-registry x #f) 'start))
 				 (hash-table-keys test-registry))
 			 ", "))
-      (thread-sleep! 0.1)
+      (thread-sleep! 0.051)
       (list hed tal reg reruns))
      
      ;; If no resources are available just kill time and loop again
