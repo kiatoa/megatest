@@ -472,7 +472,7 @@ Misc
 						   '()))
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
 	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
-	     (steps-dat    (dcommon:get-compressed-steps *dbstruct-local* run-id test-id)))
+	     (steps-dat    (tests:get-compressed-steps *dbstruct-local* run-id test-id)))
 				
 	(if test-data
 	    (begin
