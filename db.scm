@@ -2213,6 +2213,19 @@
       db
       "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))))
 
+;; For a given testname how many items are running? Used to determine
+;; probability for regenerating html
+;; 
+(define (db:get-count-tests-running-for-testname dbstruct run-id testname)
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result
+      db
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '') AND testname=?;" run-id testname))))
+
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
   (let* ((dbdat (db:get-db dbstruct #f))
 	 (db    (db:dbdat-get-db dbdat)))
