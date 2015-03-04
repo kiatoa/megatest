@@ -91,6 +91,10 @@
 (define-inline (db:test-get-fullname     vec)
   (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
 
+;; replace runs:make-full-test-name with this routine
+(define (db:test-make-full-name testname itempath)
+  (if (equal? itempath "") testname (conc testname "/" itempath)))
+
 (define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
 (define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
 
@@ -200,6 +204,8 @@
 (define-inline (tdb:steps-table-get-end        vec)    (vector-ref  vec 2))
 (define-inline (tdb:steps-table-get-status     vec)    (vector-ref  vec 3))
 (define-inline (tdb:steps-table-get-runtime    vec)    (vector-ref  vec 4))
+(define-inline (tdb:steps-table-get-log-file   vec)    (vector-ref  vec 5))
+
 (define-inline (tdb:step-stable-set-stepname!  vec val)(vector-set! vec 0 val))
 (define-inline (tdb:step-stable-set-start!     vec val)(vector-set! vec 1 val))
 (define-inline (tdb:step-stable-set-end!       vec val)(vector-set! vec 2 val))

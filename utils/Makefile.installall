@@ -172,6 +172,8 @@ $(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
 # M A T T S   U T I L S
 #======================================================================
 
+# opensrc
+
 opensrc.fossil :
 	fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
 
@@ -184,6 +186,17 @@ opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/s
 
 $(PREFIX)/bin/hs : opensrc/histstore/hs 
 	cp -f opensrc/histstore/hs $(PREFIX)/bin/hs
+
+# stml
+stml.fossil :
+	fossil clone http://www.kiatoa.com/fossils/stml stml.fossil
+
+stml/stml.scm : stml.fossil
+	mkdir -p stml
+	cd stml;fossil open ../stml.fossil
+
+$(PREFIX)/lib/stml.so
+	cd stml;chicken-install
 
 #======================================================================
 # I U P 

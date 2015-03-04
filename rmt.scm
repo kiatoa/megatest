@@ -494,6 +494,9 @@
 (define (rmt:get-count-tests-running run-id)
   (rmt:send-receive 'get-count-tests-running run-id (list run-id)))
 
+(define (rmt:get-count-tests-running-for-testname run-id testname)
+  (rmt:send-receive 'get-count-tests-running-for-testname run-id (list run-id testname)))
+
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup)))
 
@@ -606,8 +609,8 @@
 ;;  1. Do a remote call to get the test path
 ;;  2. Continue as above
 ;; 
-(define (rmt:get-steps-for-test run-id test-id)
-  (rmt:send-receive 'get-steps-data run-id (list test-id)))
+;;(define (rmt:get-steps-for-test run-id test-id)
+;;  (rmt:send-receive 'get-steps-data run-id (list test-id)))
 
 (define (rmt:teststep-set-status! run-id test-id teststep-name state-in status-in comment logfile)
   (let* ((state     (items:check-valid-items "state" state-in))
@@ -618,7 +621,7 @@
     (rmt:send-receive 'teststep-set-status! run-id (list run-id test-id teststep-name state-in status-in comment logfile))))
 
 (define (rmt:get-steps-for-test run-id test-id)
-  (rmt:send-receive 'get-steps-for-test run-id (list test-id)))
+  (rmt:send-receive 'get-steps-for-test run-id (list run-id test-id)))
 
 ;;======================================================================
 ;;  T E S T   D A T A 

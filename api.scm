@@ -22,6 +22,7 @@
     test-toplevel-num-items
     get-test-info-by-id
     test-get-rundir-from-test-id
+    get-count-tests-running-for-testname
     get-count-tests-running
     get-count-tests-running-in-jobgroup
     get-previous-test-run-record
@@ -46,6 +47,7 @@
     get-run-ids-matching-target
     get-runs-by-patt
     get-steps-data
+    get-steps-for-test
     login
     testmeta-get-record
     have-incompletes?
@@ -182,6 +184,7 @@
 	    ((test-toplevel-num-items)         (apply db:test-toplevel-num-items dbstruct params))
 	    ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
 	    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
+	    ((get-count-tests-running-for-testname) (apply db:get-count-tests-running-for-testname dbstruct params))
 	    ((get-count-tests-running)         (apply db:get-count-tests-running dbstruct params))
 	    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
 	    ;; ((delete-test-step-records)        (apply db:delete-test-step-records dbstruct params))
@@ -212,6 +215,7 @@
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
+	    ((get-steps-for-test)           (apply db:get-steps-for-test dbstruct params))
 
 	    ;; MISC
 	    ((have-incompletes?)            (apply db:have-incompletes? dbstruct params))
