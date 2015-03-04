@@ -29,6 +29,10 @@
 (define-inline (lock-queue:db-dat-set-db!       vec val)(vector-set! vec 0 val))
 (define-inline (lock-queue:db-dat-set-path!     vec val)(vector-set! vec 1 val))
 
+(define (lock-queue:delete-lock-db dbdat)
+  (let ((fname (lock-queue:db-dat-get-path dbdat)))
+    (system (conc "rm -f " fname "*"))))
+
 (define (lock-queue:open-db fname #!key (count 10))
   (let* ((actualfname (conc fname ".lockdb"))
 	 (dbexists (file-exists? actualfname))
@@ -89,9 +93,10 @@
    exn
    (if (> remtries 0)
        (begin
-	 (debug:print 0 "WARNING: exception on lock-queue:any-younger. Trying again in 30 seconds.")
+	 (debug:print 0 "WARNING: exception on lock-queue:any-younger. Removing lockdb and trying again in 5 seconds.")
 	 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-	 (thread-sleep! 30)
+	 (thread-sleep! 5)
+         (lock-queue:delete-lock-db dbdat)
 	 (lock-queue:any-younger? dbdat mystart test-id remtries: (- remtries 1)))
        (begin
 	 (debug:print 0 "ERROR:  Failed to find younger locks for test with id " test-id ", error: " ((condition-property-accessor 'exn 'message) exn) ", giving up.")
@@ -120,8 +125,10 @@
 	      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	      (thread-sleep! 10)
 	      (if (> count 0)
-		  (lock-queue:get-lock dbdat test-id count: (- count 1)))
-	      #f)
+		  (lock-queue:get-lock dbdat test-id count: (- count 1))
+		  (begin ;; never recovered, remote the lock file and return #f, no lock obtained
+		    (lock-queue:delete-lock-db dbdat)
+		    #f)))
 	    (sqlite3:with-transaction
 	     db
 	     (lambda ()
