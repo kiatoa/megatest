@@ -167,6 +167,29 @@
     (read (open-input-string (base64:base64-decode instr))))
    (read (open-input-string (z3:decode-buffer (base64:base64-decode instr))))))
 
+;; dot-locking egg seems not to work, using this for now
+;; if lock is older than expire-time then remove it and try again
+;; to get the lock
+;;
+(define (common:simple-file-lock fname #!key (expire-time 300))
+  (if (file-exists? fname)
+      (if (> (- (current-seconds)(file-modification-time fname)) expire-time)
+	  (begin
+	    (delete-file* fname)
+	    (common:simple-file-lock fname expire-time: expire-time))
+	  #f)
+      (let ((key-string (conc (get-host-name) "-" (current-process-id))))
+	(with-output-to-file fname
+	  (lambda ()
+	    (print key-string)))
+	(thread-sleep! 0.25)
+	(with-input-from-file fname
+	  (lambda ()
+	    (equal? key-string (read-line)))))))
+	
+(define (common:simple-file-release-lock fname)
+  (delete-file* fname))
+
 ;;======================================================================
 ;; S T A T E S   A N D   S T A T U S E S
 ;;======================================================================
