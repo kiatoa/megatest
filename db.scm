@@ -144,8 +144,11 @@
 (define (db:dbfile-path run-id)
   (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
+	 (dbpath          (configf:lookup *configdat* "setup" "dbdir"))
 	 (fname           (if (eq? run-id 0) "main.db" (conc run-id ".db")))
-	 (dbdir           (conc link-tree-path "/.db/")))
+	 (dbdir           (if dbpath
+			      dbpath
+			      (conc link-tree-path "/.db/"))))
     (handle-exceptions
      exn
      (begin
