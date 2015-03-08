@@ -318,81 +318,89 @@
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
-	(begin
-	  (if (not (lock-queue:wait-turn outputfilename test-id))
-	      (print "Not updating " outputfilename " as another test item has signed up for the job")
-	      (begin
-		(print "Obtained lock for " outputfilename)
-		(let ((oup    (open-output-file outputfilename))
-		      (counts (make-hash-table))
-		      (statecounts (make-hash-table))
-		      (outtxt "")
-		      (tot    0)
-		      (testdat (rmt:test-get-records-for-index-file run-id test-name)))
-		  (with-output-to-port
-		      oup
-		    (lambda ()
-		      (set! outtxt (conc outtxt "<html><title>Summary: " test-name 
-					 "</title><body><h2>Summary for " test-name "</h2>"))
-		      (for-each
-		       (lambda (testrecord)
-			 (let ((id             (vector-ref testrecord 0))
-			       (itempath       (vector-ref testrecord 1))
-			       (state          (vector-ref testrecord 2))
-			       (status         (vector-ref testrecord 3))
-			       (run_duration   (vector-ref testrecord 4))
-			       (logf           (vector-ref testrecord 5))
-			       (comment        (vector-ref testrecord 6)))
-			   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-			   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-			   (set! outtxt (conc outtxt "<tr>"
-					      ;; "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-					      "<td><a href=\"" itempath "/test-summary.html\"> " itempath "</a></td>" 
-					      "<td>" state    "</td>" 
-					      "<td><font color=" (common:get-color-from-status status)
-					      ">"   status   "</font></td>"
-					      "<td>" (if (equal? comment "")
-							 "&nbsp;"
-							 comment) "</td>"
-							 "</tr>"))))
-		       (if (list? testdat)
-			   testdat
-			   (begin
-			     (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
-			     '())))
-			   
-		      (print "<table><tr><td valign=\"top\">")
-		      ;; Print out stats for status
-		      (set! tot 0)
-		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
-		      (for-each (lambda (state)
-				  (set! tot (+ tot (hash-table-ref statecounts state)))
-				  (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
-				(hash-table-keys statecounts))
-		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		      (print "</td><td valign=\"top\">")
-		      ;; Print out stats for state
-		      (set! tot 0)
-		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
-		      (for-each (lambda (status)
-				  (set! tot (+ tot (hash-table-ref counts status)))
-				  (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
-					 "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
-				(hash-table-keys counts))
-		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		      (print "</td></td></tr></table>")
-		      
-		      (print "<table cellspacing=\"0\" border=\"1\">" 
-			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
-			     outtxt "</table></body></html>")
-		      ;; (release-dot-lock outputfilename)
-		      ))
-		  (close-output-port oup)
-		  (lock-queue:release-lock outputfilename test-id)
+	(let ((my-start-time (current-seconds))
+	      (lockf         (conc outputfilename ".lock")))
+	  (let loop ((have-lock  (common:simple-file-lock lockf)))
+	    (if have-lock
+		(begin
+		  (print "Obtained lock for " outputfilename)
+		  (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+		  (common:simple-file-release-lock lockf)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! run-id test-name outputfilename)
-		  )))))))
+		  (tests:test-set-toplog! run-id test-name outputfilename))
+		;; didn't get the lock, check to see if current update started later than this 
+		;; update, if so we can exit without doing any work
+		(if (> my-start-time (file-modification-time lockf))
+		    ;; we started since current re-gen in flight, delay a little and try again
+		    (begin
+		      (debug:print-info 1 "Waiting to update " outputfilename ", another test currently updating it")
+		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
+		      (loop (common:simple-file-lock lockf))))))))))
+
+(define (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+  (let ((counts (make-hash-table))
+	(statecounts (make-hash-table))
+	(outtxt "")
+	(tot    0)
+	(testdat (rmt:test-get-records-for-index-file run-id test-name)))
+    (with-output-to-file outputfilename
+      (lambda ()
+	(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
+			   "</title><body><h2>Summary for " test-name "</h2>"))
+	(for-each
+	 (lambda (testrecord)
+	   (let ((id             (vector-ref testrecord 0))
+		 (itempath       (vector-ref testrecord 1))
+		 (state          (vector-ref testrecord 2))
+		 (status         (vector-ref testrecord 3))
+		 (run_duration   (vector-ref testrecord 4))
+		 (logf           (vector-ref testrecord 5))
+		 (comment        (vector-ref testrecord 6)))
+	     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+	     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+	     (set! outtxt (conc outtxt "<tr>"
+				;; "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+				"<td><a href=\"" itempath "/test-summary.html\"> " itempath "</a></td>" 
+				"<td>" state    "</td>" 
+				"<td><font color=" (common:get-color-from-status status)
+				">"   status   "</font></td>"
+				"<td>" (if (equal? comment "")
+					   "&nbsp;"
+					   comment) "</td>"
+					   "</tr>"))))
+	 (if (list? testdat)
+	     testdat
+	     (begin
+	       (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
+	       '())))
+	
+	(print "<table><tr><td valign=\"top\">")
+	;; Print out stats for status
+	(set! tot 0)
+	(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
+	(for-each (lambda (state)
+		    (set! tot (+ tot (hash-table-ref statecounts state)))
+		    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
+		  (hash-table-keys statecounts))
+	(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+	(print "</td><td valign=\"top\">")
+	;; Print out stats for state
+	(set! tot 0)
+	(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
+	(for-each (lambda (status)
+		    (set! tot (+ tot (hash-table-ref counts status)))
+		    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
+			   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
+		  (hash-table-keys counts))
+	(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+	(print "</td></td></tr></table>")
+	
+	(print "<table cellspacing=\"0\" border=\"1\">" 
+	       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
+	       outtxt "</table></body></html>")
+	;; (release-dot-lock outputfilename)
+	))))
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
 ;;
