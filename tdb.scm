@@ -47,22 +47,30 @@
   (if (and work-area 
 	   (directory? work-area)
 	   (file-read-access? work-area))
-      (let* ((dbpath    (conc work-area "/testdat.db"))
-	     (tdb-writeable (file-write-access? dbpath))
-	     (dbexists  (file-exists? dbpath))
+      (let* ((dbpath              (conc work-area "/testdat.db"))
+	     (dbexists            (file-exists? dbpath))
+	     (work-area-writeable (file-write-access? work-area))
+	     (db                  (handle-exceptions  ;; open the db if area writeable or db pre-existing. open in-mem otherwise. if exception, open in-mem
+				   exn
+				   (begin
+				     (print-call-chain (current-error-port))
+				     (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
+						  ((condition-property-accessor 'exn 'message) exn))
+				     (set! dbexists #f) ;; must force re-creation of tables, more tom-foolery
+				     (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
+				   (if (or work-area-writeable
+					   dbexists)
+				       (sqlite3:open-database dbpath)
+				       (sqlite3:open-database ":memory:"))))
+	     (tdb-writeable       (and (file-write-access? work-area)
+				       (file-write-access? dbpath)))
 	     (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
 					       (string->number (args:get-arg "-override-timeout"))
 					       136000))))
-	(handle-exceptions
-	 exn
-	 (begin
-	   (print-call-chain (current-error-port))
-	   (debug:print 2 "ERROR: problem accessing test db " work-area ", you probably should clean and re-run this test"
-			((condition-property-accessor 'exn 'message) exn))
-	   (set! db (sqlite3:open-database ":memory:")) ;; open an in-memory db to allow readonly access 
-	   (set! dbexists #f)) ;; must force re-creation of tables, more tom-foolery
-	 (set! db (sqlite3:open-database dbpath)))
-	(if *db-write-access* (sqlite3:set-busy-handler! db handler))
+	
+	(if (and tdb-writeable
+		 *db-write-access*)
+	    (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
 	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
@@ -82,12 +90,13 @@
 	 ;; Is there a cheaper single line operation that will check for existance of a table
 	 ;; and raise an exception ?
 	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
-	db)
-      (let ((baddb (sqlite3:open-database ":memory:")))
-	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
-	;; provide an in-mem db (this is dangerous!)
-	(tdb:testdb-initialize baddb)
-	baddb)))
+	db)))
+
+;;       (let ((baddb (sqlite3:open-database ":memory:")))
+;; 	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
+;; 	;; provide an in-mem db (this is dangerous!)
+;; 	(tdb:testdb-initialize baddb)
+;; 	baddb)))
 
 ;; find and open the testdat.db file for an existing test
 (define (tdb:open-test-db-by-test-id test-id #!key (work-area #f))

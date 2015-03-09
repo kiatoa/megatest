@@ -224,7 +224,7 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
 				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))

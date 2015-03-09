@@ -518,7 +518,7 @@
   (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
       (debug:print-info 1 "Not starting monitor, already have more than two running")
       (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc (configf:lookup *configdat* "setup" "linktree") "/.db/monitor.db"))
+	     (monitordbf     (conc (db:dbfile-path #f) "/monitor.db"))
 	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
 	(task:register-monitor mdb)
 	(let loop ((count      0)
