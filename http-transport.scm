@@ -274,7 +274,13 @@
 					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
-					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+
+					     ;; could try to start server here, if sucessful, retry the call to with-input-from-request
+					     ;; otherwise - raise the error
+
+					     ;; (rmt:start-server run-id)
+					     
 					     (mutex-unlock! *http-mutex*)
 					     (signal (make-composite-condition
 						      (make-property-condition 'commfail 'message "failed to connect to server")))

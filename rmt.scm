@@ -110,7 +110,15 @@
 	(let* ((dat     (case *transport-type*
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
-				  ((commfail)(vector #f "communications fail"))
+				  ((commfail)
+				   (if (< attemptnum 5)
+				       (begin
+					 (debug:print 0 "Trying again, try number " attemptnum)
+					 (hash-table-delete! *runremote* run-id)
+					 (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+				       (begin
+					 (debug:print 0 "Giving up, try number " attemptnum)
+					 (vector #f "communications fail"))))
 				  ((exn)(vector #f "other fail"))))
 			  ((nmsg)(condition-case
 				  (nmsg-transport:client-api-send-receive run-id connection-info cmd params)
@@ -261,7 +269,9 @@
 	 ;; (jparams  (db:obj->string params)) ;; (rmt:dat->json-str params))
 	 (res  	   (handle-exceptions
 		    exn
-		    #f
+		    (begin
+		      (debug:print 0 "Failed in rmt:send-receive-no-auto-client-setup, cmd=" cmd ", run-id=" run-id ", params=" params)
+		       #f)
 		    (http-transport:client-api-send-receive run-id connection-info cmd params))))
 ;;		    ((commfail) (vector #f "communications fail")))))
     (if (and res (vector-ref res 0))
