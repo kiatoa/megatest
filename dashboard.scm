@@ -87,7 +87,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
 (define *db-file-path* (db:dbfile-path 0))

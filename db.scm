@@ -139,20 +139,28 @@
 ;;   (let ((fdb (db:get-filedb dbstruct)))
 ;;     (filedb:get-path db id)))
 
-;; NB// #f => zeroth db with name=main.db
+;; NB// #f => return dbdir only
+;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id)
   (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
 	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	 (fname           (if (eq? run-id 0) "main.db" (conc run-id ".db")))
-	 (dbdir           (conc link-tree-path "/.db/")))
+	 (dbpath          (configf:lookup *configdat* "setup" "dbdir"))
+	 (fname           (if run-id
+			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
+			      #f))
+	 (dbdir           (if dbpath
+			      dbpath
+			      (conc link-tree-path "/.db/"))))
     (handle-exceptions
      exn
      (begin
        (debug:print 0 "ERROR: Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
-    (conc dbdir fname)))
+    (if fname
+	(conc dbdir fname)
+	dbdir)))
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
@@ -268,7 +276,7 @@
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 (define (db:setup run-id #!key (local #f))
-  (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 

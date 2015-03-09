@@ -94,7 +94,7 @@
 ;; (test #f #f (rmt:get-runs-by-patt keys runname))
 (test #f #t (rmt:general-call 'register-test run-id run-id "test-one" ""))
 (define test-one-id #f)
-(test #f 1  (let ((test-id (rmt:get-test-id run-id "test-one" "")))
+(test #f 30001  (let ((test-id (rmt:get-test-id run-id "test-one" "")))
 	      (set! test-one-id test-id)
 	      test-id))
 (define test-one-rec #f)
