@@ -121,14 +121,14 @@
 	   (handle-exceptions
 	    exn
 	    (begin
-	      (debug:print 0 "WARNING: failed to get queue lock. Will try again in a few seconds")
+	      (debug:print 0 "WARNING: failed to get queue lock. Removing lock db and returning fail") ;; Will try again in a few seconds")
 	      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	      (thread-sleep! 10)
-	      (if (> count 0)
-		  (lock-queue:get-lock dbdat test-id count: (- count 1))
-		  (begin ;; never recovered, remote the lock file and return #f, no lock obtained
-		    (lock-queue:delete-lock-db dbdat)
-		    #f)))
+	      ;; (if (> count 0)	
+	      ;;  #f ;; (lock-queue:get-lock dbdat test-id count: (- count 1)) - give up on retries 
+	      ;; (begin ;; never recovered, remote the lock file and return #f, no lock obtained
+	      (lock-queue:delete-lock-db dbdat)
+	      #f)
 	    (sqlite3:with-transaction
 	     db
 	     (lambda ()
