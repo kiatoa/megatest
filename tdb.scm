@@ -90,13 +90,13 @@
 	 ;; Is there a cheaper single line operation that will check for existance of a table
 	 ;; and raise an exception ?
 	 (sqlite3:execute db "SELECT id FROM test_data LIMIT 1;"))
-	db)))
-
-;;       (let ((baddb (sqlite3:open-database ":memory:")))
-;; 	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
-;; 	;; provide an in-mem db (this is dangerous!)
-;; 	(tdb:testdb-initialize baddb)
-;; 	baddb)))
+	db)
+      ;; no work-area or not readable - create a placeholder to fake rest of world out
+      (let ((baddb (sqlite3:open-database ":memory:")))
+ 	(debug:print-info 11 "open-test-db END (unsucessful)" work-area)
+ 	;; provide an in-mem db (this is dangerous!)
+ 	(tdb:testdb-initialize baddb)
+ 	baddb)))
 
 ;; find and open the testdat.db file for an existing test
 (define (tdb:open-test-db-by-test-id test-id #!key (work-area #f))
