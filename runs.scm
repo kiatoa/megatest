@@ -516,13 +516,17 @@
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
 	(runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
-	(let ((items-list (items:get-items-from-config tconfig)))
+
+	(let ((items-list (items:get-items-from-config tconfig))
+	      (test-id    (rmt:get-test-id run-id test-name "")))
+	  (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ITEM_CALC" "")
 	  (if (list? items-list)
 	      (begin
 		(if (null? items-list)
-		    (let ((test-id (rmt:get-test-id run-id test-name "")))
-		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites"))))
+		    ;; (let ((test-id (rmt:get-test-id run-id test-name "")))
+		    (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites")));; )
 		(tests:testqueue-set-items! test-record items-list)
+		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "QUEUED" "")
 		(list hed tal reg reruns))
 	      (begin
 		(debug:print 0 "ERROR: The proc from reading the items table did not yield a list - please report this")
