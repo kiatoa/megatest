@@ -10,8 +10,8 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
-     http-client srfi-18 extras) ;;  zmq extras)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+     http-client srfi-18 extras format) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
 ;;
@@ -914,17 +914,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    " run-id: " run-id ", number tests: " (length tests))
 		     (for-each 
 		      (lambda (test)
-			(format #t
-				"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-				(conc (db:test-get-testname test)
-				      (if (equal? (db:test-get-item-path test) "")
-					  "" 
-					  (conc "(" (db:test-get-item-path test) ")")))
-				(db:test-get-state test)
-				(db:test-get-status test)
-				(db:test-get-run_duration test)
-				(db:test-get-event_time test)
-				(db:test-get-host test))
+			(handle-exceptions
+			 exn
+			 (debug:print 0 "ERROR: Bad data in test record? " test)
+			 (format #t
+				 "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+				 (conc (db:test-get-testname test)
+				       (if (equal? (db:test-get-item-path test) "")
+					   "" 
+					   (conc "(" (db:test-get-item-path test) ")")))
+				 (db:test-get-state test)
+				 (db:test-get-status test)
+				 (db:test-get-run_duration test)
+				 (db:test-get-event_time test)
+				 (db:test-get-host test)))
 			(if (not (or (equal? (db:test-get-status test) "PASS")
 			   	     (equal? (db:test-get-status test) "WARN")
 				     (equal? (db:test-get-state test)  "NOT_STARTED")))
