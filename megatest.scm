@@ -13,6 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils) ;; (srfi 18) extras)
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
+(require-library mutils)
 
 ;; (use zmq)
 
@@ -682,7 +683,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (db-targets (args:get-arg "-list-db-targets"))
-	       (seen     (make-hash-table)))
+	       (seen     (make-hash-table))
+	       (dmode    (let ((d (args:get-arg "-dumpmode")))
+			   (if d (string->symbol d) #f)))
+	       (data     (make-hash-table)))
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
@@ -694,50 +698,67 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (begin
 			 (hash-table-set! seen targetstr #t)
 			 ;; (print "[" targetstr "]"))))
-			 (print targetstr))))
-	       (if (not db-targets)
-		   (let* ((run-id (db:get-value-by-header run header "id"))
-			  (tests  (mt:get-tests-for-run run-id testpatt '() '())))
-		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
-			    " status: " (db:get-value-by-header run header "state")
-			    " run-id: " run-id ", number tests: " (length tests))
+			 (if (not dmode)(print targetstr))))
+		   (let* ((run-id  (db:get-value-by-header run header "id"))
+			  (runname (db:get-value-by-header run header "runname")) 
+			  (tests   (mt:get-tests-for-run run-id testpatt '() '())))
+		     (case dmode
+		       ((json)
+			(mutils:hierhash-set! data targetstr runname "meta" "status" (db:get-value-by-header run header "status"))
+			(mutils:hierhash-set! data targetstr runname "meta" "state"  (db:get-value-by-header run header "state"))
+			(mutils:hierhash-set! data targetstr runname "meta" "id"     (conc (db:get-value-by-header run header "id"))))
+		       (else
+			(print "Run: " targetstr "/" runname 
+			       " status: " (db:get-value-by-header run header "state")
+			       " run-id: " run-id ", number tests: " (length tests))))
 		     (for-each 
 		      (lambda (test)
-			(format #t
-				"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-				(conc (db:test-get-testname test)
-				      (if (equal? (db:test-get-item-path test) "")
-					  "" 
-					  (conc "(" (db:test-get-item-path test) ")")))
-				(db:test-get-state test)
-				(db:test-get-status test)
-				(db:test-get-run_duration test)
-				(db:test-get-event_time test)
-				(db:test-get-host test))
-			(if (not (or (equal? (db:test-get-status test) "PASS")
-				     (equal? (db:test-get-status test) "WARN")
-				     (equal? (db:test-get-state test)  "NOT_STARTED")))
-			    (begin
-			      (print "         cpuload:  " (db:test-get-cpuload test)
-				     "\n         diskfree: " (db:test-get-diskfree test)
-				     "\n         uname:    " (db:test-get-uname test)
-				     "\n         rundir:   " (db:test-get-rundir test)
-				     )
-			      ;; Each test
-			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test #f (db:test-get-id test))))
-				(for-each 
-				 (lambda (step)
-				   (format #t 
-					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-					   (db:step-get-stepname step)
-					   (db:step-get-state step)
-					   (db:step-get-status step)
-					   (db:step-get-event_time step)))
-				 steps)))))
+			(let ((test-id  (db:test-get-id test))
+			      (fullname (conc (db:test-get-testname test)
+					      (if (equal? (db:test-get-item-path test) "")
+						  "" 
+						  (conc "(" (db:test-get-item-path test) ")"))))
+			      (tstate   (db:test-get-state test))
+			      (tstatus  (db:test-get-status test)))
+			  (case dmode
+			    ((json)
+			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "tname" fullname)
+			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "state" tstate)
+			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "status" tstatus))
+			    (else
+			     (format #t
+				     "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+				     fullname
+				     tstate
+				     tstatus
+				     (db:test-get-run_duration test)
+				     (db:test-get-event_time test)
+				     (db:test-get-host test))
+			     (if (not (or (equal? (db:test-get-status test) "PASS")
+					  (equal? (db:test-get-status test) "WARN")
+					  (equal? (db:test-get-state test)  "NOT_STARTED")))
+				 (begin
+				   (print "         cpuload:  " (db:test-get-cpuload test)
+					  "\n         diskfree: " (db:test-get-diskfree test)
+					  "\n         uname:    " (db:test-get-uname test)
+					  "\n         rundir:   " (db:test-get-rundir test)
+					  )
+				   ;; Each test
+				   ;; DO NOT remote run
+				   (let ((steps (db:get-steps-for-test #f (db:test-get-id test))))
+				     (for-each 
+				      (lambda (step)
+					(format #t 
+						"    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+						(db:step-get-stepname step)
+						(db:step-get-state step)
+						(db:step-get-status step)
+						(db:step-get-event_time step)))
+				      steps))))))))
 		      tests)))))
 	     runs)
-	   (set! *didsomething* #t))))
+	  (if (eq? dmode 'json)(json-write data))
+	  (set! *didsomething* #t))))
 
 ;;======================================================================
 ;; full run
