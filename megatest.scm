@@ -704,9 +704,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (tests   (mt:get-tests-for-run run-id testpatt '() '())))
 		     (case dmode
 		       ((json)
-			(mutils:hierhash-set! data targetstr runname "meta" "status" (db:get-value-by-header run header "status"))
-			(mutils:hierhash-set! data targetstr runname "meta" "state"  (db:get-value-by-header run header "state"))
-			(mutils:hierhash-set! data targetstr runname "meta" "id"     (conc (db:get-value-by-header run header "id"))))
+			(mutils:hierhash-set! data (db:get-value-by-header run header "status"  ) targetstr runname "meta" "status")
+			(mutils:hierhash-set! data (db:get-value-by-header run header "state"   ) targetstr runname "meta" "state" )
+			(mutils:hierhash-set! data (conc (db:get-value-by-header run header "id") targetstr runname "meta" "id"    )))
 		       (else
 			(print "Run: " targetstr "/" runname 
 			       " status: " (db:get-value-by-header run header "state")
@@ -722,9 +722,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (tstatus  (db:test-get-status test)))
 			  (case dmode
 			    ((json)
-			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "tname" fullname)
-			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "state" tstate)
-			     (mutils:hierhash-set! data targetstr runname "data" (conc test-id) "status" tstatus))
+			     (mutils:hierhash-set! data fullname targetstr runname "data" (conc test-id) "tname")
+			     (mutils:hierhash-set! data tstate   targetstr runname "data" (conc test-id) "state")
+			     (mutils:hierhash-set! data tstatus  targetstr runname "data" (conc test-id) "status"))
 			    (else
 			     (format #t
 				     "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
