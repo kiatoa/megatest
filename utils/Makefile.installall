@@ -89,7 +89,7 @@ CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs
+all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs $(PREFIX)/lib/chicken/7/mutils.so
 
 chkn : $(CHICKEN_INSTALL)
 
@@ -180,6 +180,9 @@ opensrc.fossil :
 opensrc/histstore/histstore.scm : opensrc.fossil
 	mkdir -p opensrc
 	cd opensrc;fossil open ../opensrc.fossil
+
+$(PREFIX)/lib/chicken/7/mutils.so : opensrc/histstore/histstore.scm
+	cd opensrc/mutils;chicken-install
 
 opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/sqlite3.so 
 	cd opensrc/histstore;$(PREFIX)/bin/csc histstore.scm -o hs
