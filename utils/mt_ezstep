@@ -2,8 +2,8 @@
 
 usage="mt_ezstep stepname prevstepname command [args ...]"
 
-if [ "$MT_CMDINFO" == "" ];then
-  if [ -e megatest.sh ];then
+if [[ "$MT_CMDINFO" == "" ]];then
+  if [[ -e megatest.sh ]];then
     source megatest.sh
   else
     echo "ERROR: $0 should be run within a megatest test environment"
@@ -18,7 +18,7 @@ fi
 # Call like this:
 # mt_ezstep stepname prevstepname command ....
 # 
-if [ "x$1" == "x" ];then
+if [[ "x$1" == "x" ]];then
   echo "Usage: $usage"
   exit
 fi
@@ -36,15 +36,15 @@ allstatus=99
 runstatus=99
 logpropstatus=99
 
-prev_env=.ezsteps/${prevstepname}.sh
-if [ -e $prev_env ];then
+prev_env=".ezsteps/${prevstepname}.sh"
+if [[ -e $prev_env ]];then
     source $prev_env
 fi
 
 # source the environment from the previous step if it exists
 
 # if a logpro file exists then use it otherwise just run the command, nb// was using 2>&1
-if [ -e ${stepname}.logpro ];then
+if [[ -e ${stepname}.logpro ]];then
    # could do:
    $command 2>&1| tee ${stepname}.log | logpro ${stepname}.logpro ${stepname}.html &> /dev/null
    logprostatus=$?
@@ -62,13 +62,13 @@ fi
 # If the test exits with non-zero, we will record FAIL even if logpro
 # says it is a PASS
 
-if [ $runstatus -ne 0 ]; then
+if [[ $runstatus -ne 0 ]]; then
     exitstatus=$runstatus
-elif [ $logprostatus -eq 0 ]; then
+elif [[ $logprostatus -eq 0 ]]; then
     exitstatus=$logprostatus
-elif [ $logprostatus -eq 2 ]; then
+elif [[ $logprostatus -eq 2 ]]; then
     exitstatus=2
-elif [ $logprostatus -eq 1 ]; then
+elif [[ $logprostatus -eq 1 ]]; then
     exitstatus=1
 else 
     exitstatus=0
