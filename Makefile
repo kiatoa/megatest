@@ -86,7 +86,19 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-$(HELPERS) : utils/mt_* 
+# $(HELPERS) : utils/%
+# 	$(INSTALL) $< $@
+# 	chmod a+x $@
+
+$(PREFIX)/bin/mt_laststep : utils/mt_laststep
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+$(PREFIX)/bin/mt_runstep : utils/mt_runstep
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+$(PREFIX)/bin/mt_ezstep : utils/mt_ezstep
 	$(INSTALL) $< $@
 	chmod a+x $@
 

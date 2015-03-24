@@ -36,10 +36,11 @@ allstatus=99
 runstatus=99
 logpropstatus=99
 
-prev_env=".ezsteps/${prevstepname}.sh"
-if [[ -e $prev_env ]];then
-    source $prev_env
-fi
+# prev_env=".ezsteps/${prevstepname}.sh"
+# echo "prev_env=$prev_env"
+# if [[ -e "${prev_env}" ]];then
+#     source $prev_env
+# fi
 
 # source the environment from the previous step if it exists
 
