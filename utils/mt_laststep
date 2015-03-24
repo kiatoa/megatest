@@ -22,8 +22,9 @@ fi
 # Use a copy_files.logpro file like this:
 # (expect:error in "LogFileBody" = 0 "Any err/error/warn/warning" #/(err|warn)/)
 # 
-stepname=$1;shift
+stepname=$1;shifttepname"
 
+echo "stepname=$s
 # Theoretically could call megatest directly like the following line but
 # we'll do each individual step so folks can see what is going on.
 #
