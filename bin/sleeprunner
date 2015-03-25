@@ -1,0 +1,7 @@
+#!/bin/bash 
+
+if [[ $SLEEPRUNNER == "" ]];then
+SLEEPRUNNER=1
+fi
+  
+echo "nbfake $@ &> /dev/null" | at now + $SLEEPRUNNER minutes &> /dev/null
