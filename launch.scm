@@ -270,7 +270,7 @@
 						   ;;       (set! script (conc script "source " prev-env))))
 						   
 						   ;; call the command using mt_ezstep
-						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
+						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
 
 						   (debug:print 4 "script: " script)
 						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
