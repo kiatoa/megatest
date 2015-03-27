@@ -1,6 +1,6 @@
 ;; run sim for four hours
 ;;
-(define *end-time* (* 60 40))
+(define *end-time* (* 60 50))
 
 ;; create the cpus
 ;;
@@ -34,20 +34,38 @@
 
 ;; every minute user j runs ten jobs
 ;;
-(define *user-j-jobs* 500)
+(define *user-j-jobs* 300)
 (event (+ 600 *start-time*)
        (lambda ()
 	 (let f ()
 	   (schedule 60)
 	   (if (> *user-j-jobs* 0)
 	       (begin
-		 (let loop ((count 10)) ;; add 100 jobs
+		 (let loop ((count 5)) ;; add 100 jobs
 		   (add-job "quick" "j" 600 1 1)
 		   (if (> count 0)(loop (- count 1))))
-		 (set! *user-j-jobs* (- *user-j-jobs* 10))))
+		 (set! *user-j-jobs* (- *user-j-jobs* 5))))
 	   (if (and (not *done*)
 		    (> *user-j-jobs* 0))
 	       (f))))) ;; Megatest user running 200 jobs
+
+;; every minute user j runs ten jobs
+;;
+(define *user-j-jobs* 300)
+(event (+ 630 *start-time*)
+       (lambda ()
+	 (let f ()
+	   (schedule 60)
+	   (if (> *user-j-jobs* 0)
+	       (begin
+		 (let loop ((count 5)) ;; add 100 jobs
+		   (add-job "quick" "n" 600 1 1)
+		   (if (> count 0)(loop (- count 1))))
+		 (set! *user-j-jobs* (- *user-j-jobs* 5))))
+	   (if (and (not *done*)
+		    (> *user-j-jobs* 0))
+	       (f))))) ;; Megatest user running 200 jobs
+
 ;; ;;
 ;; (event *start-time*
 ;;        (lambda ()
@@ -64,7 +82,7 @@
        (lambda ()
 	 (let f ()
 	   (schedule 3)
-	   (let ((queue-names (hash-table-keys *queues*)))
+	   (let ((queue-names (random-sort (hash-table-keys *queues*))))
 	     (let loop ((cpu   (get-cpu))
 			(count (+ (length queue-names) 4))
 			(qname (car queue-names))

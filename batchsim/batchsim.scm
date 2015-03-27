@@ -48,7 +48,7 @@
 ;; System spec (to be moved into loaded file)
 ;;
 ;;                           x  y  w gap  x-min x-max
-(define *cpu-grid* (vector  500 50 15  2  500   645))
+(define *cpu-grid* (vector  500 50 15  2  500   600))
 (define (make-cpu:grid)(make-vector 6))
 (define *queues* (make-hash-table)) ;; name -> (list (list user duration num-cpus num-gigs) ... )
 (define *cpus* (make-hash-table)) ;; cpu-name => (vector user job-len num-cpu mem x-loc y-loc)
@@ -340,14 +340,12 @@
 					 numjobs)))
 			     (x1   (- x2  bar-width))
 			     (y2   (- origin-y h)))
-			(print "x1 " x1 ", origin-y " origin-y ", x2 " x2 ", y2 " y2)
+			;; (print "x1 " x1 ", origin-y " origin-y ", x2 " x2 ", y2 " y2)
 			(ezx-fillrect-2d *ezx* x1 y2 x2 origin-y (get-user-color user))
 			(if (not (null? tal))
 			    (loop (car tal)(cdr tal) x1)))))
 		(ezx-redraw *ezx*)))))))
 	  
-
-
 ;; (let* ((args  (argv))
 ;;        (fname (if (> (length args) 1)
 ;; 		  (cadr args)
