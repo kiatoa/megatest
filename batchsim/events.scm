@@ -10,6 +10,11 @@
 (define *now*        *start-time*)
 (define *done*       #f)
 
+(define (random-sort l)
+  (sort l
+        (lambda (x y)
+          (equal? 0 (random 2))))) 
+				    
 ;; Each item in the event list is a list of a scheduled time and the thunk
 ;; (time thunk). Sort the list so that the next event is the earliest.
 ;;
