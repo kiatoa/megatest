@@ -141,7 +141,7 @@
        (server:kind-run run-id)
        (loop 'server-started))
       ((server-started)
-       (case (vector-ref first-dat)
+       (case (if first-dat (vector-ref first-dat 0) 'blah)
 	 ((running)
 	  (print "Server appears to be running. Now ask it to shutdown")
 	  (rmt:kill-server run-id)
