@@ -1,6 +1,6 @@
 (use ezxdisp srfi-18)
 
-(define *ezx* (ezx-init 650 650 "Test Critter"))
+(define *ezx* (ezx-init 650 650 "Batch simulator"))
 (require-library ezxgui)
 (define *green*  (make-ezx-color 0 1 0)) 
 (define *black*  (make-ezx-color 0 0 0))
@@ -346,9 +346,8 @@
 			    (loop (car tal)(cdr tal) x1)))))
 		(ezx-redraw *ezx*)))))))
 	  
-;; (let* ((args  (argv))
-;;        (fname (if (> (length args) 1)
-;; 		  (cadr args)
-;; 		  "default.scm")))
-
-(load "default.scm")
+(let* ((args  (argv))
+       (fname (if (> (length args) 1)
+		  (cadr args)
+ 		  "default.scm")))
+  (load (if (file-exists? fname) fname "default.scm")))
