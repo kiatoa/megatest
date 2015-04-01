@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# (export DISPLAY=:0;xterm) 
+
 # megatest -step wasting_time :state start :status n/a -m "This is a test step comment"
 # sleep 20
 # megatest -step wasting_time :state end :status $?

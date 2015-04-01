@@ -13,6 +13,7 @@
 ;; Process convience utils
 ;;======================================================================
 
+(use regex)
 (declare (unit process))
 (declare (uses common))
 
@@ -149,3 +150,15 @@
        (and (number? rpid)
 	    (equal? rpid pid)))))
 	 
+(define (process:get-sub-pids pid)
+  (with-input-from-pipe
+   (conc "pstree -A -p " pid) ;; | tr 'a-z\\-+`()\\.' ' ' " pid)
+   (lambda ()
+     (let loop ((inl (read-line))
+		(res '()))
+       (if (eof-object? inl)
+	   (reverse res)
+	   (let ((nums (map string->number
+			    (string-split-fields "\\d+" inl))))
+	     (loop (read-line)
+		   (append res nums))))))))
