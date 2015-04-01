@@ -404,12 +404,21 @@
 							   (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
 							   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
 							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-							 (if (process:alive? pid)
-							     (begin
-							       (process-signal pid signal/int)
-							       (thread-sleep! 5)
-							       (if (process:process-alive? pid)
-								   (process-signal pid signal/kill))))))
+							 (debug:print-info 0 "Signal mask=" (signal-mask))
+							 ;; (if (process:alive? pid)
+							 ;;     (begin
+							 (map (lambda (pid-num)
+								(process-signal pid-num signal/term))
+							      (process:get-sub-pids pid))
+							 (thread-sleep! 5)
+							 ;; (if (process:process-alive? pid)
+							 (map (lambda (pid-num)
+								(handle-exceptions
+								 exn
+								 #f
+								 (process-signal pid-num signal/kill)))
+							      (process:get-sub-pids pid))))
+							 ;;    (debug:print-info 0 "not killing process " pid " as it is not alive"))))
 						      pids)
 						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 						   (begin
