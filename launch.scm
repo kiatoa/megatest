@@ -13,7 +13,8 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
+
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -255,14 +256,14 @@
 							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
 							(stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
 							(stepcmd   (list-ref stepparts 3))
-							(script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!
-							(logpro-used #f))
+							(script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
+							(logpro-file (conc stepname ".logpro"))
+							(html-file   (conc stepname ".html"))
+							(logpro-used (file-exists? logpro-file)))
 						   ;; NB// can safely assume we are in test-area directory
 						   (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 								" stepparms: " stepparms " stepcmd: " stepcmd)
 						   
-						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
-
 						   ;; ;; first source the previous environment
 						   ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
 						   ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
@@ -270,12 +271,13 @@
 						   ;;       (set! script (conc script "source " prev-env))))
 						   
 						   ;; call the command using mt_ezstep
-						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
-
+						   ;; (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
+						   
 						   (debug:print 4 "script: " script)
 						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
-						   ;; now launch
-						   (let ((pid (process-run script)))
+						   ;; now launch the actual process
+						   (let* ((cmd (conc stepcmd " > " stepname ".log"))
+							  (pid (process-run cmd)))
 						     (rmt:test-set-top-process-pid run-id test-id pid)
 						     (let processloop ((i 0))
 						       (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
@@ -288,52 +290,70 @@
 								       (begin
 									 (thread-sleep! 2)
 									 (processloop (+ i 1))))
-								   ))
-                                                     (let ((exinfo (vector-ref exit-info 2))
-                                                           (logfna (if logpro-used (conc stepname ".html") "")))
-						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
-						     (if logpro-used
-							 (rmt:test-set-log! run-id test-id (conc stepname ".html")))
-						     ;; set the test final status
-						     (let* ((this-step-status (cond
-									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-									       ((eq? (vector-ref exit-info 2) 0)                   'pass)
-									       (else 'fail)))
-							    (overall-status   (cond
-									       ((eq? rollup-status 2) 'warn)
-									       ((eq? rollup-status 0) 'pass)
-									       (else 'fail)))
-							    (next-status      (cond 
-									       ((eq? overall-status 'pass) this-step-status)
-									       ((eq? overall-status 'warn)
-										(if (eq? this-step-status 'fail) 'fail 'warn))
-									       (else 'fail)))
-							    (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
-							                       (cond
-									       ((null? tal) ;; more to run?
-									        "COMPLETED")
-									       (else "RUNNING")))
-							    )
-						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
-								    " this-step-status: " this-step-status " overall-status: " overall-status 
-								    " next-status: " next-status " rollup-status: " rollup-status)
-						       (case next-status
-							 ((warn)
-							  (set! rollup-status 2)
-							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! run-id test-id next-state "WARN" 
-									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
-									  #f))
-							 ((pass)
-							  (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
-							 (else ;; 'fail
-							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
-							  (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
-							  ))))
-						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
-							    (not (null? tal)))
-						       (loop (car tal) (cdr tal) stepname)))
-						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
+								   )))
+						   (debug:print-info 0 "step " stepname " completed with exit code " (vector-ref exit-info 2))
+						   ;; now run logpro if needed
+						   (if logpro-used
+						       (let ((pid (process-run (conc "logpro " logpro-file " " (conc stepname ".html") " < " stepname ".log"))))
+							 (let processloop ((i 0))
+							   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
+								       (mutex-lock! m)
+								       ;; (vector-set! exit-info 0 pid)
+								       (vector-set! exit-info 1 exit-status)
+								       (vector-set! exit-info 2 exit-code)
+								       (mutex-unlock! m)
+								       (if (eq? pid-val 0)
+									   (begin
+									     (thread-sleep! 2)
+									     (processloop (+ i 1))))
+								       )
+							   (debug:print-info 0 "logpro for step " stepname " exited with code " (vector-ref exit-info 2)))))
+						   
+						   (let ((exinfo (vector-ref exit-info 2))
+							 (logfna (if logpro-used (conc stepname ".html") "")))
+						     (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
+						   (if logpro-used
+						       (rmt:test-set-log! run-id test-id (conc stepname ".html")))
+						   ;; set the test final status
+						   (let* ((this-step-status (cond
+									     ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
+									     ((eq? (vector-ref exit-info 2) 0)                   'pass)
+									     (else 'fail)))
+							  (overall-status   (cond
+									     ((eq? rollup-status 2) 'warn)
+									     ((eq? rollup-status 0) 'pass)
+									     (else 'fail)))
+							  (next-status      (cond 
+									     ((eq? overall-status 'pass) this-step-status)
+									     ((eq? overall-status 'warn)
+									      (if (eq? this-step-status 'fail) 'fail 'warn))
+									     (else 'fail)))
+							  (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
+							   (cond
+							    ((null? tal) ;; more to run?
+							     "COMPLETED")
+							    (else "RUNNING")))
+							  )
+						     (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+								  " this-step-status: " this-step-status " overall-status: " overall-status 
+								  " next-status: " next-status " rollup-status: " rollup-status)
+						     (case next-status
+						       ((warn)
+							(set! rollup-status 2)
+							;; NB// test-set-status! does rdb calls under the hood
+							(tests:test-set-status! run-id test-id next-state "WARN" 
+										(if (eq? this-step-status 'warn) "Logpro warning found" #f)
+										#f))
+						       ((pass)
+							(tests:test-set-status! run-id test-id next-state "PASS" #f #f))
+						       (else ;; 'fail
+							(set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
+							(tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
+							))))
+						 (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
+							  (not (null? tal)))
+						     (loop (car tal) (cdr tal) stepname)))
+					     (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep)))))))
 		 (monitorjob   (lambda ()
 				 (let* ((start-seconds (current-seconds))
 					(calc-minutes  (lambda ()
