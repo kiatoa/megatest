@@ -502,11 +502,13 @@
 					       (get-environment-variable "MT_RUN_AREA_HOME"))
 					 #f))
 				   #f) ;; no config cached - give up
-			       (find-and-read-config 
-				(if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-				environ-patt: "env-override"
-				given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				pathenvvar: "MT_RUN_AREA_HOME")))
+			       (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
+				 (if runname (setenv "MT_RUNNAME" runname))
+				 (find-and-read-config 
+				  (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+				  environ-patt: "env-override"
+				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+				  pathenvvar: "MT_RUN_AREA_HOME"))))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
