@@ -150,13 +150,17 @@
 	;;
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
-	    (begin
+	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	      ;; (client:setup run-id) ;; client setup happens in rmt:get-connection-info
-	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
-	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+	      (if (and faststart (equal? faststart "no"))
+		  (begin
+		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+		  (begin
+		    (server:kind-run run-id)
+		    (rmt:open-qry-close-locally cmd run-id params))))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
