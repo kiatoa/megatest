@@ -44,8 +44,8 @@ mtest: $(OFILES) megatest.o
 dboard : $(OFILES) $(GOFILES) dashboard.scm
 	csc $(OFILES) dashboard.scm $(GOFILES) -o dboard
 
-ndboard : newdashboard.scm $(OFILES) $(GOFILES)
-	csc $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+odboard : olddashboard.scm $(OFILES) $(GOFILES)
+	csc $(OFILES) $(GOFILES) olddashboard.scm -o odboard
 
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
@@ -59,7 +59,7 @@ db.o ezsteps.o keys.o launch.o megatest.o monitor.o runs-for-ref.o runs.o tests.
 tests.o tasks.o dashboard-tasks.o : task_records.scm
 runs.o : test_records.scm
 megatest.o : megatest-fossil-hash.scm
-client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm newdashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm zmq-transport.scm : common_records.scm rpc-transport.scm
+client.scm common.scm configf.scm dashboard-guimonitor.scm dashboard-tests.scm dashboard.scm db.scm dcommon.scm ezsteps.scm fs-transport.scm http-transport.scm index-tree.scm items.scm keys.scm launch.scm megatest.scm monitor.scm mt.scm olddashboard.scm runconfig.scm runs.scm server.scm tdb.scm tests.scm tree.scm zmq-transport.scm : common_records.scm rpc-transport.scm
 
 # Temporary while transitioning to new routine
 # runs.o : run-tests-queue-classic.scm  run-tests-queue-new.scm
@@ -79,12 +79,12 @@ $(PREFIX)/bin/.$(ARCHSTR)/mtest : mtest
 	utils/mk_wrapper $(PREFIX) mtest $(PREFIX)/bin/megatest
 	chmod a+x $(PREFIX)/bin/megatest
 
-$(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
-	$(INSTALL) ndboard $(PREFIX)/bin/.$(ARCHSTR)/ndboard
+$(PREFIX)/bin/.$(ARCHSTR)/odboard : odboard
+	$(INSTALL) odboard $(PREFIX)/bin/.$(ARCHSTR)/odboard
 
-$(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
-	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
-	chmod a+x $(PREFIX)/bin/newdashboard
+$(PREFIX)/bin/olddashboard : $(PREFIX)/bin/.$(ARCHSTR)/odboard
+	utils/mk_wrapper $(PREFIX) odboard $(PREFIX)/bin/olddashboard
+	chmod a+x $(PREFIX)/bin/olddashboard
 
 # $(HELPERS) : utils/%
 # 	$(INSTALL) $< $@
@@ -140,7 +140,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
-          $(PREFIX)/bin/newdashboard
+          $(PREFIX)/bin/olddashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
