@@ -38,7 +38,7 @@
 ;; Share this structure between newdashboard and dashboard with the 
 ;; intent of converging on a single app.
 ;;
-(define *data* (make-vector 25 #f))
+;; (define *data* (make-vector 25 #f))
 (define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
 (define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
@@ -100,6 +100,15 @@
 
 ;; Look up run-ids by ??
 (dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+;;======================================================================
+;; D O T F I L E
+;;======================================================================
+
+(define (dcommon:write-dotfile fname dat)
+  (with-output-to-file fname
+    (lambda ()
+      (pp dat))))
 
 ;;======================================================================
 ;; TARGET AND PATTERN MANIPULATIONS
@@ -545,21 +554,28 @@
 (define (dcommon:main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
    (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
-		       (iup:menu-item "Open"  action: (lambda (obj)
-							(iup:show (iup:file-dialog))
-							(print "File->open " obj)))
-		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
-		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
+			   (iup:menu-item "Open"  action: (lambda (obj)
+							    (let* ((area-name (iup:textbox #:expand "HORIZONTAL"))
+								   (fd        (iup:file-dialog #:dialogtype "DIR"))
+								   (top       (iup:show fd #:modal? "YES")))
+							      (iup:attribute-set! source-tb "VALUE"
+										  (iup:attribute fd "VALUE"))
+							      (iup:destroy! fd))))
+			   ;; (lambda (obj)
+			   ;;  (iup:show (iup:file-dialog))
+			   ;;  (print "File->open " obj)))
+			   (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
+			   (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
    (iup:menu-item "Tools" (iup:menu
-		       (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
-		       ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
-		       ;;  					   (show message-window
-		       ;;  					     #:modal? #t
-		       ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
-		       ;;  					     ;; #:x 'mouse
-		       ;;  					     ;; #:y 'mouse
-		       ;;  )					     
-		       ))))
+			   (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
+			   ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
+			   ;;  					   (show message-window
+			   ;;  					     #:modal? #t
+			   ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
+			   ;;  					     ;; #:x 'mouse
+			   ;;  					     ;; #:y 'mouse
+			   ;;  )					     
+			   ))))
 
 ;;======================================================================
 ;; CANVAS STUFF FOR TESTS
