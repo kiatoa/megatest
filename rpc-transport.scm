@@ -31,7 +31,7 @@
    (begin
      (debug:print 1 "Remote failed for " proc " " params)
      (apply (eval (string->symbol procstr)) params))
-   ;; (if *runremote*
+   ;; (if (common:get-remote remote)
    ;;    (apply (eval (string->symbol (conc "remote:" procstr))) params)
    (apply (eval (string->symbol procstr)) params)))
 
@@ -162,18 +162,18 @@
 	   (exit 1))))))
 
 (define (rpc-transport:client-setup run-id #!key (remtries 10))
-  (if *runremote*
+  (if (common:get-remote remote run-id)
       (begin
 	(debug:print 0 "ERROR: Attempt to connect to server but already connected")
 	#f)
-      (let* ((host-info (hash-table-ref/default *runremote* run-id #f))) ;; (open-run-close db:get-var #f "SERVER"))
+      (let* ((host-info (common:get-remote remote run-id))) ;; (open-run-close db:get-var #f "SERVER"))
 	(if host-info
 	    (let ((iface    (car host-info))
 		  (port     (cadr host-info))
 		  (ping-res ((rpc:procedure 'server:login host port) *toppath*)))
 	      (if ping-res
 		  (let ((server-dat (list iface port #f #f #f)))
-		    (hash-table-set! *runremote* run-id server-dat)
+		    (common:set-remote! remote run-id server-dat)
 		    server-dat)
 		  (begin
 		    (server:try-running run-id)
@@ -188,7 +188,7 @@
  			 (ping-res  ((rpc:procedure 'server:login host port) *toppath*)))
  		    (if start-res
  			(begin
- 			  (hash-table-set! *runremote* run-id server-dat)
+ 			  (common:set-remote! remote run-id server-dat)
 			  server-dat)
 			(begin
 			  (server:try-running run-id)
@@ -213,14 +213,14 @@
 ;; 		 ;;  (lambda (db . param) 
 ;; 		 ;;    (sqlite3:execute db "DELETE FROM metadat WHERE var='SERVER'"))
 ;; 		 ;;  #f)
-;; 		 (set! *runremote* #f))
+;; 		 (set! (common:get-remote remote) #f))
 ;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
 ;; 			((rpc:procedure 'server:login host portn) *toppath*))
 ;; 		   (begin
 ;; 		     (debug:print-info 2 "Logged in and connected to " host ":" port)
-;; 		     (set! *runremote* (vector host portn)))
+;; 		     (set! (common:get-remote remote) (vector host portn)))
 ;; 		   (begin
 ;; 		     (debug:print-info 2 "Failed to login or connect to " host ":" port)
-;; 		     (set! *runremote* #f)))))
+;; 		     (set! (common:get-remote remote) #f)))))
 ;; 	    (debug:print-info 2 "no server available")))))
 

@@ -37,7 +37,7 @@
 
 ;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
 ;;
-(define (runs:create-run-record)
+(define (runs:create-run-record #!key (remote #f))
   (let* ((mconfig      (if *configdat*
 		           *configdat*
 		           (if (launch:setup-for-run)
@@ -56,9 +56,6 @@
 	  (toppath     *toppath*)
 	  (envdat      keyvals) ;; initial values start with keyvals
 	  (runconfig   #f)
-	  (serverdat   (if (args:get-arg "-server")
-			   *runremote*
-			   #f)) ;; to be used later
 	  (transport   (or (args:get-arg "-transport") 'http))
 	  (run-id      #f))
     ;; Set all the environment vars we know so far, start with keys
@@ -90,7 +87,7 @@
 			    (safe-setenv (car varval)(cadr varval)))
 			  (configf:get-section runconfig section)))
 	      (list "default" target))
-    (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
+    (vector target runname testpatt keys keyvals envdat mconfig runconfig (common:get-remote remote run-id) transport db toppath run-id)))
 
 (define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((target    (or (common:args-get-target)

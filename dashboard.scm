@@ -76,7 +76,7 @@ Misc
 
 ;; (if (args:get-arg "-host")
 ;;     (begin
-;;       (set! *runremote* (string-split (args:get-arg "-host" ":")))
+;;       (set! (common:get-remote remote) (string-split (args:get-arg "-host" ":")))
 ;;       (client:launch))
 ;;     (client:launch))
 
@@ -602,9 +602,8 @@ Misc
 
 (define *current-window-id* 0)
 
-(define (newdashboard dbstruct)
-  (let* ((data     (make-hash-table))
-	 (keys     (db:get-keys dbstruct))
+(define (newdashboard data)
+  (let* ((keys     (db:get-keys dbstruct))
 	 (runname  "%")
 	 (testpatt "%")
 	 (keypatts (map (lambda (k)(list k "%")) keys))
@@ -629,7 +628,8 @@ Misc
 			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
 			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
 			     (debug:print-info 11 "Server overloaded"))))))
-
-(dboard:data-set-updaters! *data* (make-hash-table))
-(newdashboard *dbstruct-local*)    
-(iup:main-loop)
+;;; main
+;;;
+(let ((data (make-hash-table))) ;; data will have "areaname" => "area record" entries
+  (newdashboard data)
+  (iup:main-loop))

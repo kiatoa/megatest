@@ -72,24 +72,24 @@
 ;; if a server is either running or in the process of starting call client:setup
 ;; else return #f to let the calling proc know that there is no server available
 ;;
-(define (rmt:get-connection-info run-id)
-  (let ((cinfo (hash-table-ref/default *runremote* run-id #f)))
+(define (rmt:get-connection-info run-id #!key (remote #f))
+  (let ((cinfo (common:get-remote remote run-id)))
     (if cinfo
 	cinfo
 	;; NB// can cache the answer for server running for 10 seconds ...
 	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
 	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
-	    (client:setup run-id)
+	    (client:setup run-id remote: remote)
 	    #f))))
 
 (define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
-(define (rmt:send-receive cmd rid params #!key (attemptnum 1)) ;; start attemptnum at 1 so the modulo below works as expected
+(define (rmt:send-receive cmd rid params #!key (attemptnum 1)(remote #f)) ;; start attemptnum at 1 so the modulo below works as expected
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
     (for-each 
      (lambda (run-id)
-       (let ((connection (hash-table-ref/default *runremote* run-id #f)))
+       (let ((connection (common:get-remote remote run-id)))
          (if (and (vector? connection)
         	  (< (http-transport:server-dat-get-last-access connection) expire-time))
              (begin
@@ -97,9 +97,9 @@
                ;; SHOULD CLOSE THE CONNECTION HERE
 	       (case *transport-type*
 		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
-				   (hash-table-ref *runremote* run-id)))))
-               (hash-table-delete! *runremote* run-id)))))
-     (hash-table-keys *runremote*)))
+				   (common:get-remote remote run-id)))))
+               (common:del-remote! remote run-id)))))
+     (common:get-remote-all remote)))
   (mutex-unlock! *db-multi-sync-mutex*)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
@@ -129,7 +129,7 @@
 		(debug:print 0 "WARNING: Communication failed, trying call to rmt:send-receive again.")
 		;; (case *transport-type*
 		;;   ((nmsg)(nn-close (http-transport:server-dat-get-socket connection-info))))
-		(hash-table-delete! *runremote* run-id) ;; don't keep using the same connection
+		(common:del-remote! remote run-id) ;; don't keep using the same connection
 		;; NOTE: killing server causes this process to block forever. No idea why. Dec 2. 
 		;; (if (eq? (modulo attemptnum 5) 0)
 		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
@@ -151,7 +151,7 @@
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
 	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
-	      (hash-table-delete! *runremote* run-id)
+	      (common:del-remote! remote run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      (if (and faststart (equal? faststart "no"))
 		  (begin

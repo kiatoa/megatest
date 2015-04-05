@@ -653,7 +653,7 @@
 	      (waitons     (tests:testqueue-get-waitons   test-record))
 	      (keep-test   #t)
 	      (test-id     (rmt:get-test-id run-id test-name item-path))
-	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+	      (tdat        (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id (common:get-remote remote) test-id)))
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
@@ -670,7 +670,7 @@
 		   (for-each (lambda (waiton)
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
-				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
+				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id (common:get-remote remote) test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
 					      (member (db:test-get-status wtdat) '("FAIL")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))

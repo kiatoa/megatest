@@ -1525,7 +1525,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Exit and clean up
 ;;======================================================================
 
-(if *runremote* (close-all-connections!))
+;; if *runremote* is defined, close connections, otherwise - trust that it was
+;; taken care of.
+;;
+(if (common:get-remote #f #f)(close-all-connections!))
 
 (if (not *didsomething*)
     (debug:print 0 help))

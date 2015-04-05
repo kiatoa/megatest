@@ -76,7 +76,7 @@ Misc
 
 ;; (if (args:get-arg "-host")
 ;;     (begin
-;;       (set! *runremote* (string-split (args:get-arg "-host" ":")))
+;;       (set! (common:get-remote remote) (string-split (args:get-arg "-host" ":")))
 ;;       (client:launch))
 ;;     (client:launch))
 

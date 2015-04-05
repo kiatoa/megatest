@@ -223,7 +223,7 @@
 
 ;; Send "cmd" with json payload "params" to serverdat and receive result
 ;;
-(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3))
+(define (http-transport:client-api-send-receive run-id serverdat cmd params #!key (numretries 3)(remote #f))
   (let* ((fullurl    (if (vector? serverdat)
 			 (http-transport:server-dat-get-api-req serverdat)
 			 (begin
@@ -272,7 +272,7 @@
 					     (set! success #f)
 					     (debug:print 0 "WARNING: failure in with-input-from-request to " fullurl ".")
 					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-					     (hash-table-delete! *runremote* run-id)
+					     (common:del-remote! remote run-id)
 					     ;; Killing associated server to allow clean retry.")
 					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
@@ -316,10 +316,10 @@
 		       'timeout
 		       'message "nmsg-transport:client-api-send-receive-raw timed out talking to server")))))))
 
-;; careful closing of connections stored in *runremote*
+;; careful closing of connections stored in (common:get-remote remote)
 ;;
 (define (http-transport:close-connections run-id)
-  (let* ((server-dat (hash-table-ref/default *runremote* run-id #f)))
+  (let* ((server-dat (common:get-remote remote run-id)))
     (if (vector? server-dat)
 	(let ((api-dat (http-transport:server-dat-get-api-uri server-dat)))
 	  (close-connection! api-dat)

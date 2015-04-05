@@ -84,7 +84,7 @@
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
-(define (server:reply return-addr query-sig success/fail result)
+(define (server:reply return-addr query-sig success/fail result #!key (remote #f))
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
@@ -92,7 +92,7 @@
     ((rpc)  (db:obj->string (vector success/fail query-sig result)))
     ((http) (db:obj->string (vector success/fail query-sig result)))
     ((zmq)
-     (let ((pub-socket (vector-ref *runremote* 1)))
+     (let ((pub-socket (vector-ref (common:get-remote remote #f) 1)))
        (send-message pub-socket return-addr send-more: #t)
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
@@ -162,7 +162,7 @@
     (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
 	       (trycount 0))
     (if server
-	;; note: client:start will set *runremote*. this needs to be changed
+	;; note: client:start will set (common:get-remote remote). this needs to be changed
 	;;       also, client:start will login to the server, also need to change that.
 	;;
 	;; client:start returns #t if login was successful.

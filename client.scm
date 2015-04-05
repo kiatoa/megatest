@@ -68,7 +68,7 @@
 ;;       (begin
 ;; 	(debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 ;; 	(exit 1))
-;;       (let ((host-info (hash-table-ref/default *runremote* run-id #f)))
+;;       (let ((host-info (hash-table-ref/default (common:get-remote remote) run-id #f)))
 ;; 	(debug:print-info 0 "client:setup host-info=" host-info ", remaining-tries=" remaining-tries)
 ;; 	(if host-info
 ;; 	    (let* ((iface     (car  host-info))
@@ -78,12 +78,12 @@
 ;; 		   (ping-res  (client:login-no-auto-setup start-res run-id)))
 ;; 	      (if ping-res   ;; sucessful login?
 ;; 		  (begin
-;; 		    (hash-table-set! *runremote* run-id start-res)
+;; 		    (hash-table-set! (common:get-remote remote) run-id start-res)
 ;; 		    start-res)  ;; return the server info
 ;; 		  (if (member remaining-tries '(3 4 6))
 ;; 		      (begin    ;; login failed
 ;; 			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
-;; 			(hash-table-delete! *runremote* run-id)
+;; 			(hash-table-delete! (common:get-remote remote) run-id)
 ;; 			(open-run-close tasks:server-force-clean-run-record
 ;; 			 		tasks:open-db
 ;; 			 		run-id 
@@ -107,12 +107,12 @@
 ;; 			 (ping-res  (rmt:login-no-auto-client-setup start-res run-id)))
 ;; 		    (if start-res
 ;; 			(begin
-;; 			  (hash-table-set! *runremote* run-id start-res)
+;; 			  (hash-table-set! (common:get-remote remote) run-id start-res)
 ;; 			  start-res)
 ;; 			(if (member remaining-tries '(2 5))
 ;; 			    (begin    ;; login failed
 ;; 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
-;; 			      (hash-table-delete! *runremote* run-id)
+;; 			      (hash-table-delete! (common:get-remote remote) run-id)
 ;; 			      (open-run-close tasks:server-force-clean-run-record
 ;; 					      tasks:open-db
 ;; 					      run-id 
@@ -146,15 +146,15 @@
 ;; connection if required.
 ;;
 ;; There are two scenarios. 
-;;   1. We are a test manager and we received *transport-type* and *runremote* via cmdline
+;;   1. We are a test manager and we received *transport-type* and (common:get-remote remote) via cmdline
 ;;   2. We are a run tests, list runs or other interactive process and we must figure out
-;;      *transport-type* and *runremote* from the monitor.db
+;;      *transport-type* and (common:get-remote remote) from the monitor.db
 ;;
 ;; client:setup
 ;;
-;; lookup_server, need to remove *runremote* stuff
+;; lookup_server, need to remove (common:get-remote remote) stuff
 ;;
-(define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0))
+(define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0)(remote #f))
   (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)
@@ -179,14 +179,14 @@
 		(if (and start-res
 			 ping-res)
 		    (begin
-		      (hash-table-set! *runremote* run-id start-res)
+		      (common:set-remote! remote run-id start-res)
 		      (debug:print-info 2 "connected to " (http-transport:server-dat-make-url start-res))
 		      start-res)
 		    (begin    ;; login failed but have a server record, clean out the record and try again
 		      (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 		      (case *transport-type* 
 			((http)(http-transport:close-connections run-id)))
-		      (hash-table-delete! *runremote* run-id)
+		      (common:del-remote! remote run-id)
 		      (tasks:kill-server-run-id run-id)
 		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
 							   run-id 

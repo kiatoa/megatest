@@ -70,6 +70,29 @@
 (define *transport-type*    'http)
 (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
+
+(define (common:get-remote remote run-id)
+  (let ((ht (or remote *runremote*)))
+    (if ht
+	(hash-table-ref/default ht run-id #f)
+	#f)))
+
+(define (common:set-remote! remote run-id value)
+  (let ((ht (or remote *runremote*)))
+    (if ht
+	(hash-table-set! ht run-id value))))
+
+(define (common:del-remote! remote run-id)
+  (let ((ht (or remote *runremote*)))
+    (if ht
+	(hash-table-delete! ht run-id))))
+
+(define (common:get-remote-all remote)
+  (let ((ht (or remote *runremote*)))
+    (if ht
+	(hash-table-keys ht)
+	'())))
+
 (define *max-cache-size*    0)
 (define *logged-in-clients* (make-hash-table))
 (define *client-non-blocking-mode* #f)

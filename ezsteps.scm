@@ -166,7 +166,7 @@
 					  (args:get-arg "-m") #f)
 		  ;; need to update the top test record if PASS or FAIL and this is a subtest
 		  (if (not (equal? item-path ""))
-		      (cdb:roll-up-pass-fail-counts *runremote* run-id test-name item-path new-status))))
+		      (cdb:roll-up-pass-fail-counts (common:get-remote remote run-id) run-id test-name item-path new-status))))
 	    ;; for automated creation of the rollup html file this is a good place...
 	    (if (not (equal? item-path ""))
 		(tests:summarize-items #f run-id test-id test-name #f)) ;; don't force - just update if no

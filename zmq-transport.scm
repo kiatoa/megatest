@@ -106,7 +106,7 @@
 
     (set! *cache-on* #t)
 
-    (set! *runremote* (vector pull-socket pub-socket)) ;; overloading the use of *runremote* BUG!?
+    (set! *runremote* (vector pull-socket pub-socket)) ;; overloading the use of (common:get-remote remote) BUG!?
 
     ;; what to do when we quit
     ;;
@@ -479,7 +479,7 @@
 ;;     (zmq-transport:client-connect iface pullport pubport)
 ;;     (let loop ()
 ;;       (thread-sleep! 2)
-;;       (cdb:client-call *runremote* 'ping #t)
+;;       (cdb:client-call (common:get-remote remote) 'ping #t)
 ;;       (debug:print 4 "zmq-transport:self-ping - I'm alive on " iface ":" pullport "/" pubport "!")
 ;;       (mutex-lock! *heartbeat-mutex*)
 ;;       (set! *server-loop-heart-beat* (current-seconds))

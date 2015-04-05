@@ -34,7 +34,9 @@
 ;; C O M M O N   D A T A   S T R U C T U R E
 ;;======================================================================
 ;; 
-;; A single data structure for all the data used in a dashboard.
+;; A single data structure for all the data used in a dashboard for
+;; a given area.
+;;
 ;; Share this structure between newdashboard and dashboard with the 
 ;; intent of converging on a single app.
 ;;
@@ -65,6 +67,7 @@
     (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
 (define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
 (define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
+(define (dboard:data-get-area-path     vec)    (vector-ref vec 21))
 
 (define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
 (define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
@@ -89,6 +92,7 @@
 (define (dboard:data-set-target!        vec val)(vector-set! vec 18 val))
 (define (dboard:data-set-run-name!      vec val)(vector-set! vec 19 val))
 (define (dboard:data-set-runs-listbox!  vec val)(vector-set! vec 20 val))
+(define (dboard:data-set-area-path!     vec val)(vector-set! vec 21 val))
 
 (dboard:data-set-run-keys! *data* (make-hash-table))
 
@@ -105,10 +109,59 @@
 ;; D O T F I L E
 ;;======================================================================
 
+;; write a sexp list to fname
+;;
 (define (dcommon:write-dotfile fname dat)
   (with-output-to-file fname
     (lambda ()
       (pp dat))))
+
+(define (dcommon:read-dotfile fname)
+  (if (file-exists? fname)
+      (with-input-from-file fname
+	(lambda ()
+	  (read)))
+      '()))       
+
+;; gets the name for the file ~/.megatest/<name>
+;; creates .megatest dir if not there
+;;
+(define (dcommon:get-dot-file-pathn name)
+  (let* ((dot-dir (conc (get-environment-variable "HOME") "/.megatest"))
+	 (dfile   (conc dot-dir "/" name)))
+    (if (not (file-exists? dot-dir))
+	(create-directory dot-dir))
+    dfile))
+
+;; dat is the top level data stucture that contains all the info being 
+;; displayed in all runs etc.
+;;
+(define (dcommon:dotfiles-save-areas data)
+  (let* ((areas-dat   (dcommon:data-get-areas data))
+	 (areas-dfile (dcommon:get-dot-file-pathn "areas")))
+    (dcommon:write-dotfile areas-dfile areas-dat)))
+
+;; returns alist of area => path
+;;
+(define (dcommon:data-get-areas data)
+  (let ((area-names (hash-table-keys data)))
+    (map (lambda (area-name)
+	   (cons area-name 
+		 (dboard:data-get-area-path (hash-table-ref data area-name))))
+	 area-names)))
+
+;; Fill the hash table data with area => area-record
+;;
+(define (dcommon:read-areas-init-data data)
+  (let* ((dfile       (dcommon:get-dot-file-pathn "areas"))
+	 (areas-dfile (dcommon:read-dotfile dfile)))
+    (for-each
+     (lambda (area)
+       (let ((rec (vector 25 #f)))
+	 (dboard:data-set-area-path! rec (cdr area))
+	 (dboard:data-set-updaters!  rec (make-hash-table))
+	 (hash-table-set! data (car area) rec)))
+     areas-dfile)))
 
 ;;======================================================================
 ;; TARGET AND PATTERN MANIPULATIONS
@@ -121,7 +174,6 @@
 
 (define (dboard:lines->test-patt lines)
   (string-substitute (regexp "\n") "," lines #t))
-
 
 ;;======================================================================
 ;; P R O C E S S   R U N S
@@ -551,7 +603,7 @@
     ))
 
 ;; The main menu
-(define (dcommon:main-menu)
+(define (dcommon:main-menu data)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
    (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
 			   (iup:menu-item "Open"  action: (lambda (obj)

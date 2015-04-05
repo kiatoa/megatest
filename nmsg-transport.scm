@@ -344,7 +344,7 @@
    (debug:print " ... exiting ...")
    (let ((th1 (make-thread (lambda ()
 			     (if (not *received-response*)
-				 (receive-message* *runremote*))) ;; flush out last call if applicable
+				 (receive-message* (common:get-remote remote #f)))) ;; flush out last call if applicable
 			   "eat response"))
 	 (th2 (make-thread (lambda ()
 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
