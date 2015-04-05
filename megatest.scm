@@ -10,6 +10,9 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
+;; fakeout readline
+(define (toplevel-command . a) #f)
+
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
      http-client srfi-18 extras format) ;;  zmq extras)
 
@@ -64,6 +67,7 @@
 		    #f                ;; remote connections
 		    ))
 
+(define *runremote* #f) ;; BUG: Remove this ASAP and update common:*remote* to not refer to *runremote*
 
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
@@ -854,14 +858,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-remove-runs"
      "remove runs"
      (lambda (target runname keys keyvals)
-       (operate-on 'remove-runs))))
+       (operate-on 'remove-runs))
+     *area-dat*))
 
 (if (args:get-arg "-set-state-status")
     (general-run-call 
      "-set-state-status"
      "set state and status"
      (lambda (target runname keys keyvals)
-       (operate-on 'set-state-status))))
+       (operate-on 'set-state-status))
+     *area-dat*))
 
 (if (or (args:get-arg "-set-run-status")
 	(args:get-arg "-get-run-status"))
@@ -883,7 +889,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (if (args:get-arg "-set-run-status")
 		   (rmt:set-run-status run-id (args:get-arg "-set-run-status") msg: (args:get-arg "-m"))
 		   (print (rmt:get-run-status run-id))
-		   )))))))
+		   )))))
+     *area-dat*))
 
 ;;======================================================================
 ;; Query runs
@@ -1020,7 +1027,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       runname
 		       (args:get-arg "-testpatt")
 		       user
-		       args:arg-hash))))
+		       args:arg-hash
+		       *area-dat*))
+     *area-dat*))
 
 ;;======================================================================
 ;; run one test
@@ -1059,7 +1068,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		     runname
 		     (args:get-arg "-runtests")
 		     user
-		     args:arg-hash))))
+		     args:arg-hash
+		     *area-dat*))
+   *area-dat*))
 
 ;;======================================================================
 ;; Rollup into a run
@@ -1073,7 +1084,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        (runs:rollup-run keys
 			keyvals
 			(or (args:get-arg "-runname")(args:get-arg ":runname") )
-			user))))
+			user))
+     *area-dat*))
 
 ;;======================================================================
 ;; Lock or unlock a run
@@ -1090,7 +1102,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (or (args:get-arg "-runname")(args:get-arg ":runname") )
 		  (args:get-arg "-lock")
 		  (args:get-arg "-unlock")
-		  user))))
+		  user))
+     *area-dat*))
 
 ;;======================================================================
 ;; Get paths to tests
@@ -1138,7 +1151,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		  (paths    (tests:test-get-paths-matching keys target (args:get-arg "-test-files"))))
 	     (for-each (lambda (path)
 			 (print path))
-		       paths))))))
+		       paths)))
+	*area-dat*)))
 
 ;;======================================================================
 ;; Archive tests
@@ -1150,7 +1164,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-archive"
      "Archive"
      (lambda (target runname keys keyvals)
-       (operate-on 'archive))))
+       (operate-on 'archive))
+     *area-dat*))
 
 ;;======================================================================
 ;; Extract a spreadsheet from the runs database
@@ -1169,7 +1184,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (debug:print 2 "Extract ods, outputfile: " outputfile " runspatt: " runspatt " keyvals: " keyvals)
 	 (db:extract-ods-file dbstruct outputfile keyvals (if runspatt runspatt "%") pathmod)
 	 (db:close-all dbstruct)
-	 (set! *didsomething* #t)))))
+	 (set! *didsomething* #t)))
+     *area-dat*))
 
 ;;======================================================================
 ;; execute the test
@@ -1444,9 +1460,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Start a repl
 ;;======================================================================
 
-;; fakeout readline
-(define (toplevel-command . a) #f)
-
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup-for-run *area-dat*))
@@ -1458,11 +1471,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (import extras) ;; might not be needed
 	    ;; (import csi)
 	    (import readline)
+            (use-legacy-bindings)
 	    (import apropos)
 	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
 	    (gnu-history-install-file-manager
-	     (string-append
-	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))
+	     (let ((d (string-append
+		       (or (get-environment-variable "HOME") ".") "/.megatest")))
+	       (if (not (file-exists? d))
+		   (create-directory d #t))
+	       d))
 	    (current-input-port (make-gnu-readline-port "megatest> "))
 	    (if (args:get-arg "-repl")
 		(repl)
@@ -1541,7 +1558,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; if *runremote* is defined, close connections, otherwise - trust that it was
 ;; taken care of.
 ;;
-(if (common:get-remote #f #f)(close-all-connections!))
+(if (common:get-remote (megatest:area-remote *area-dat*) #f)
+    (close-all-connections!))
 
 (if (not *didsomething*)
     (debug:print 0 help))

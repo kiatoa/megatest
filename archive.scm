@@ -45,13 +45,13 @@
 	   flavor
 	   maxload
 	   '()
-	   archive:run-bup
+	   archive:run-bup ;; this will break!!! need area-dat
 	   (list testdir apath))))))
 	  
 ;; Get archive disks from megatest.config
 ;;
-(define (archive:get-archive-disks)
-  (let ((section (configf:get-section *configdat* "archive-disks")))
+(define (archive:get-archive-disks area-dat)
+  (let ((section (configf:get-section (megatest:area-configdat area-dat) "archive-disks")))
     (if section
 	section
 	'())))
@@ -101,19 +101,21 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-command run-id run-name tests)
+(define (archive:run-bup archive-command run-id run-name tests area-dat)
   ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
-  (let* ((min-space    (string->number (or (configf:lookup *configdat* "archive" "minspace") "1000")))
-	 (archive-info (archive:allocate-new-archive-block *toppath* (common:get-testsuite-name) min-space))
+  (let* ((configdat    (megatest:area-configdat area-dat))
+	 (toppath      (megatest:area-path      area-dat))
+	 (min-space    (string->number (or (configf:lookup configdat "archive" "minspace") "1000")))
+	 (archive-info (archive:allocate-new-archive-block toppath (common:get-testsuite-name) min-space))
 	 (archive-dir  (if archive-info (cdr archive-info) #f))
 	 (archive-id   (if archive-info (car archive-info) -1))
 	 (disk-groups  (make-hash-table))
 	 (test-groups  (make-hash-table)) ;; these two (disk and test groups) could be combined nicely
-	 (bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
-	 (compress     (or (configf:lookup *configdat* "archive" "compress") "9"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+	 (bup-exe      (or (configf:lookup configdat "archive" "bup") "bup"))
+	 (compress     (or (configf:lookup configdat "archive" "compress") "9"))
+	 (linktree     (configf:lookup configdat "setup" "linktree")))
 
     (if (not archive-dir) ;; no archive disk found, this is fatal
 	(begin
@@ -198,18 +200,19 @@
      (hash-table-keys disk-groups))
     #t))
 
-(define (archive:bup-restore archive-command run-id run-name tests)  ;; move the getting of archive space down into the below block so that a single run can 
+(define (archive:bup-restore archive-command run-id run-name tests area-dat)  ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
-  (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
-	 (linktree     (configf:lookup *configdat* "setup" "linktree")))
+  (let* ((configdat    (megatest:area-configdat area-dat))
+	 (bup-exe      (or (configf:lookup configdat "archive" "bup") "bup"))
+	 (linktree     (configf:lookup configdat "setup" "linktree")))
 
     ;; from the test info bin the path to the test by stem
     ;;
     (for-each
      (lambda (test-dat)
        ;; When restoring test-dat will initially contain an old and invalid path to the test
-       (let* ((best-disk         (get-best-disk *configdat*))
+       (let* ((best-disk         (get-best-disk configdat))
 	      (item-path         (db:test-get-item-path test-dat))
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))

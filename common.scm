@@ -48,9 +48,6 @@
   remote
   )
 
-;; (define *configinfo* #f)
-;; (define *configdat*  #f)
-;; (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
 (define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
@@ -268,20 +265,21 @@
   (let ((res (assoc key lst)))
     (if res (cadr res)(if (null? default) #f (car default)))))
 
-(define (common:get-testsuite-name)
-  (or (configf:lookup *configdat* "setup" "testsuite" )
-       (pathname-file *toppath*)))
+(define (common:get-testsuite-name area-dat)
+  (or (configf:lookup (megatest:area-configdat area-dat) "setup" "testsuite" )
+       (pathname-file (megatest:area-path      area-dat))))
 
 ;;======================================================================
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
-(define (std-exit-procedure)
+(define (std-exit-procedure area-dat)
   (debug:print-info 2 "starting exit process, finalizing databases.")
-  (rmt:print-db-stats)
-  (let ((run-ids (hash-table-keys *db-local-sync*)))
+  (rmt:print-db-stats area-dat)
+  (let* ((configdat (megatest:area-configdat area-dat))
+	 (run-ids (hash-table-keys *db-local-sync*)))
     (if (and (not (null? run-ids))
-	     (configf:lookup *configdat* "setup" "megatest-db"))
+	     (configf:lookup configdat "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
   (if *dbstruct-db* (db:close-all *dbstruct-db*))
   (if *inmemdb*     (db:close-all *inmemdb*))

@@ -54,8 +54,8 @@
 		       #f)))
 	       #t))))))
 
-(define (tasks:get-task-db-path)
-  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
+(define (tasks:get-task-db-path area-dat)
+  (let* ((linktree     (configf:lookup (megatest:area-configdat area-dat) "setup" "linktree"))
 	 (dbpath       (conc linktree "/.db")))
     dbpath))
 
@@ -70,7 +70,7 @@
 ;; If file NOT exists
 ;;    ==> open in-mem version
 ;;
-(define (tasks:open-db #!key (numretries 4))
+(define (tasks:open-db area-dat #!key (numretries 4))
   (if *task-db*
       *task-db*
       (handle-exceptions
@@ -81,18 +81,19 @@
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 " exn=" (condition->list exn))
 	     (thread-sleep! 1)
-	     (tasks:open-db numretries (- numretries 1)))
+	     (tasks:open-db area-dat numretries: (- numretries 1)))
 	   (begin
 	     (print-call-chain (current-error-port))
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 " exn=" (condition->list exn))))
-       (let* ((dbpath       (tasks:get-task-db-path))
+       (let* ((toppath      (megatest:area-path area-dat))
+	      (dbpath       (tasks:get-task-db-path area-dat))
 	      (dbfile       (conc dbpath "/monitor.db"))
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
 	      (mdb          (cond ;; what the hek is *toppath* doing here?
-			     ((and (string? *toppath*)(file-write-access? *toppath*))
+			     ((and (string? toppath)(file-write-access? toppath))
 			      (sqlite3:open-database dbfile))
 			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
 			     (else (sqlite3:open-database ":memory:")))) ;; (never-give-up-open-db dbpath))
@@ -151,7 +152,7 @@
                                 CONSTRAINT clients_constraint UNIQUE (pid,hostname));")
 	       
 	       ;))
-	 (set! *task-db* (cons mdb dbpath))
+	 (set! *task-db* (cons mdb dbpath)) ;; Move into area-dat !!!!
 	 *task-db*))))
 
 ;;======================================================================
@@ -430,8 +431,8 @@
  
 ;; look up a server by run-id and send it a kill, also delete the record for that server
 ;;
-(define (tasks:kill-server-run-id run-id #!key (tag "default"))
-  (let* ((tdbdat  (tasks:open-db))
+(define (tasks:kill-server-run-id run-id area-dat #!key (tag "default"))
+  (let* ((tdbdat  (tasks:open-db area-dat))
 	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
     (if sdat
 	(let ((hostname (vector-ref sdat 6))
@@ -741,8 +742,8 @@
 ;; 
 ;; do a remote call to get the task queue info but do the killing as self here.
 ;;
-(define (tasks:kill-runner target run-name)
-  (let ((records    (rmt:tasks-find-task-queue-records target run-name "%" "running" "run-tests"))
+(define (tasks:kill-runner target run-name area-dat)
+  (let ((records    (rmt:tasks-find-task-queue-records target run-name "%" "running" "run-tests" area-dat))
 	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
     (if (null? records)
 	(debug:print 0 "No run launching processes found for " target " / " run-name)

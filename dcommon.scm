@@ -40,7 +40,7 @@
 ;; Share this structure between newdashboard and dashboard with the 
 ;; intent of converging on a single app.
 ;;
-;; (define *data* (make-vector 25 #f))
+(define *data* (make-vector 25 #f))
 (define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
 (define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
 (define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))

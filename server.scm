@@ -63,14 +63,14 @@
 ;;======================================================================
 
 ;; Get the transport
-(define (server:get-transport)
-  (if *transport-type*
-      *transport-type*
+(define (server:get-transport area-dat)
+  (if (megatest:area-transport area-dat)
+      (megatest-area-transport area-dat)
       (let ((ttype (string->symbol
 		    (or (args:get-arg "-transport")
-			(configf:lookup *configdat* "server" "transport")
+			(configf:lookup (megatest:area-configdat area-dat) "server" "transport")
 			"rpc"))))
-	(set! *transport-type* ttype)
+	(megatest:area-transport-set! area-dat ttype)
 	ttype)))
 	    
 ;; Generate a unique signature for this server
@@ -104,19 +104,21 @@
 ;; if the run-id is zero and the target-host is set 
 ;; try running on that host
 ;;
-(define  (server:run run-id)
-  (let* ((curr-host   (get-host-name))
+(define  (server:run run-id area-dat)
+  (let* ((configdat   (megatest:area-configdat area-dat))
+	 (toppath     (megatest:area-path      area-dat))
+	 (curr-host   (get-host-name))
 	 (curr-ip     (server:get-best-guess-address curr-host))
-	 (target-host (configf:lookup *configdat* "server" "homehost" ))
+	 (target-host (configf:lookup configdat "server" "homehost" ))
 	 (testsuite   (common:get-testsuite-name))
-	 (logfile     (conc *toppath* "/logs/" run-id ".log"))
+	 (logfile     (conc toppath "/logs/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
-		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
+		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup configdat "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
 									      "")
 		      " -debug 4 testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
-    (push-directory *toppath*)
+    (push-directory toppath)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
     ;; host.domain.tld match host?
     (if (and target-host 
@@ -243,8 +245,8 @@
 	  ;; (debug:print-info 2 "login failed")
 	  #f))))
 
-(define (server:get-timeout)
-  (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+(define (server:get-timeout area-dat)
+  (let ((tmo (configf:lookup  (megatest:area-configdat area-dat) "server" "timeout")))
     (if (and (string? tmo)
 	     (string->number tmo))
 	(* 60 60 (string->number tmo))

@@ -100,12 +100,12 @@
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
-(define (db:with-db dbstruct run-id r/w proc . params)
+(define (db:with-db dbstruct area-dat run-id r/w proc . params)
   (let* ((dbdat (if (vector? dbstruct)
 		    (db:get-db dbstruct run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+	 (db    (db:dbdat-get-db dbdat area-dat)))
+    (db:delay-if-busy dbdat area-dat)
     (handle-exceptions
      exn
      (begin
@@ -142,10 +142,12 @@
 ;; NB// #f => return dbdir only
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
-(define (db:dbfile-path run-id)
+(define (db:dbfile-path run-id area-dat)
   (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	 (dbpath          (configf:lookup *configdat* "setup" "dbdir"))
+	 (configdat       (megatest:area-configdat area-dat))
+	 (toppath         (megatest:area-path      area-dat))
+	 (link-tree-path  (configf:lookup configdat "setup" "linktree"))
+	 (dbpath          (configf:lookup configdat "setup" "dbdir"))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f))
@@ -162,8 +164,8 @@
 	(conc dbdir fname)
 	dbdir)))
 	       
-(define (db:set-sync db)
-  (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
+(define (db:set-sync db area-dat)
+  (let ((syncprag (configf:lookup (megatest:area-configdat area-dat) "setup" "sychronous")))
     (sqlite3:execute db (conc "PRAGMA synchronous = " (or syncprag 1) ";"))))
 
 ;; open an sql database inside a file lock
@@ -246,10 +248,10 @@
 		(dbr:dbstruct-set-inmem!  dbstruct inmem)
 		;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
 		;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
-		(db:sync-tables db:sync-tests-only db inmem)
-		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
+		(db:sync-tables area-dat db:sync-tests-only db inmem)
+		(db:delay-if-busy refdb area-dat) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
 		(dbr:dbstruct-set-refdb!  dbstruct refdb)
-		(db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
+		(db:sync-tables area-dat db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
 		;; sync once more to deal with delays?
 		;; (db:sync-tables db:sync-tests-only db inmem)
 		;; (db:sync-tables db:sync-tests-only inmem refdb)
@@ -316,9 +318,9 @@
 		    (> mtime stime)
 		    force-sync)
 		(begin
-		  (db:delay-if-busy maindb)
-		  (db:delay-if-busy olddb)
-		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+		  (db:delay-if-busy maindb area-dat)
+		  (db:delay-if-busy olddb area-dat)
+		  (let ((num-synced (db:sync-tables area-dat (db:sync-main-list maindb) maindb olddb)))
 		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 		    num-synced)
 		  0))
@@ -334,10 +336,10 @@
 		(> mtime stime)
 		force-sync)
 	    (begin
-	      (db:delay-if-busy rundb)
-	      (db:delay-if-busy olddb)
+	      (db:delay-if-busy rundb area-dat)
+	      (db:delay-if-busy olddb area-dat)
 	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+	      (let ((num-synced (db:sync-tables area-dat db:sync-tests-only inmem refdb rundb olddb)))
 		;; (mutex-unlock! *http-mutex*)
 		num-synced)
 	      (begin
@@ -490,7 +492,7 @@
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 ;; db's are dbdat's
 ;;
-(define (db:sync-tables tbls fromdb todb . slave-dbs)
+(define (db:sync-tables area-dat tbls fromdb todb . slave-dbs)
   (mutex-lock! *db-sync-mutex*)
   (handle-exceptions
    exn
@@ -539,7 +541,7 @@
 		 (fromdat    '())
 		 (fromdats   '())
 		 (totrecords 0)
-		 (batch-len  (string->number (or (configf:lookup *configdat* "sync" "batchsize") "10")))
+		 (batch-len  (string->number (or (configf:lookup configdat "sync" "batchsize") "10")))
 		 (todat      (make-hash-table))
 		 (count      0))
 
@@ -641,16 +643,16 @@
 	 (run-ids  (if run-ids 
 		       run-ids
 		       (if toppath (begin
-				     (db:delay-if-busy mtdb)
+				     (db:delay-if-busy mtdb area-dat)
 				     (db:get-all-run-ids mtdb)))))
 	 (tdbdat  (tasks:open-db))
-	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
+	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat area-dat))))
     
     ;; kill servers
     (if (member 'killservers options)
 	(for-each
 	 (lambda (server)
-	   (tasks:server-delete-record (db:delay-if-busy tdbdat) (vector-ref server 0) "dbmigration")
+	   (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) (vector-ref server 0) "dbmigration")
 	   (tasks:kill-server (vector-ref server 2)(vector-ref server 1)))
 	 servers))
 
@@ -658,24 +660,24 @@
     ;;
     (if (member 'dejunk options)
 	(begin
-	  (db:delay-if-busy mtdb)
+	  (db:delay-if-busy mtdb area-dat)
 	  (db:clean-up mtdb)))
 
     ;; adjust test-ids to fit into proper range
     ;;
     (if (member 'adj-testids options)
 	(begin
-	  (db:delay-if-busy mtdb)
+	  (db:delay-if-busy mtdb area-dat)
 	  (db:prep-megatest.db-for-migration mtdb)))
 
     ;; sync runs, test_meta etc.
     ;;
     (if (member 'old2new options)
 	(begin
-	  (db:sync-tables (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
+	  (db:sync-tables area-dat (db:sync-main-list mtdb) mtdb (db:get-db dbstruct #f))
 	  (for-each 
 	   (lambda (run-id)
-	     (db:delay-if-busy mtdb)
+	     (db:delay-if-busy mtdb area-dat)
 	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
 		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
 	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
@@ -704,11 +706,11 @@
 	       ;; (db:clean-up frundb)
 	       (if (eq? run-id 0)
 		   (begin
-		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
+		     (db:sync-tables area-dat (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
 		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
+		     (db:sync-tables area-dat db:sync-tests-only (db:get-db fromdb run-id) mtdb)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
 		     ))))
 	   all-run-ids)
@@ -768,8 +770,8 @@
 ;;			   open-run-close-exception-handling)
 ;;)
 
-(define (db:initialize-main-db dbdat)
-  (let* ((configdat (car *configinfo*))  ;; tut tut, global warning...
+(define (db:initialize-main-db dbdat area-dat)
+  (let* ((configdat (megatest:area-configdat area-dat)) ;; (car *configinfo*))  ;; tut tut, global warning...
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
@@ -1116,13 +1118,13 @@
 ;; M A I N T E N A N C E
 ;;======================================================================
 
-(define (db:have-incompletes? dbstruct run-id ovr-deadtime)
+(define (db:have-incompletes? dbstruct run-id ovr-deadtime area-dat)
   (let* ((dbdat        (db:get-db dbstruct run-id))
 	 (db           (db:dbdat-get-db dbdat))
 	 (incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup (megatest:area-configdat area-dat) "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
@@ -1135,7 +1137,7 @@
     ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat) 
     (sqlite3:for-each-row 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -1151,7 +1153,7 @@
 
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -1175,13 +1177,13 @@
 ;;                          end_time,strftime('%s','now') as now from tests where state in
 ;;      ('RUNNING','REMOTEHOSTSTART','LAUNCED'));
 
-(define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime)
+(define (db:find-and-mark-incomplete dbstruct run-id ovr-deadtime area-dat)
   (let* ((dbdat        (db:get-db dbstruct run-id))
 	 (db           (db:dbdat-get-db dbdat))
 	 (incompleted '())
 	 (oldlaunched '())
 	 (toplevels   '())
-	 (deadtime-str (configf:lookup *configdat* "setup" "deadtime"))
+	 (deadtime-str (configf:lookup (megatest:area-configdat area-dat) "setup" "deadtime"))
 	 (deadtime     (if (and deadtime-str
 				(string->number deadtime-str))
 			   (string->number deadtime-str)
@@ -1194,7 +1196,7 @@
     ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
     ;;                     (db:test-get-run_duration testdat)))
     ;;                    600) 
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row 
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -1210,7 +1212,7 @@
 
     ;; in LAUNCHED for more than one day. Could be long due to job queues TODO/BUG: Need override for this in config
     ;;
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (test-id run-dir uname testname item-path)
        (if (and (equal? uname "n/a")
@@ -1226,7 +1228,7 @@
 
     ;; These are defunct tests, do not do all the overhead of set-state-status. Force them to INCOMPLETE.
     ;;
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (let* (;; (min-incompleted (filter (lambda (x)
 	   ;;      		      (let* ((testpath (cadr x))
 	   ;;      			     (tdatpath (conc testpath "/testdat.db"))
@@ -1247,7 +1249,7 @@
 
     ;; Now do rollups for the toplevel tests
     ;;
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (for-each
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
@@ -1285,7 +1287,7 @@
 	       ;; delete empty runs
 	       "DELETE FROM runs WHERE id NOT IN (SELECT DISTINCT r.id FROM runs AS r INNER JOIN tests AS t ON t.run_id=r.id);"
 	       ))))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:with-transaction 
      db
      (lambda ()
@@ -1299,7 +1301,7 @@
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
     ;; (db:find-and-mark-incomplete db)
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:execute db "VACUUM;")))
 
 ;; Clean out old junk and vacuum the database
@@ -1326,7 +1328,7 @@
 	       ;; delete all tests that are 'DELETED'
 	       "DELETE FROM tests WHERE state='DELETED';"
 	       ))))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:with-transaction 
      db
      (lambda ()
@@ -1340,7 +1342,7 @@
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
     ;; (db:find-and-mark-incomplete db)
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:execute db "VACUUM;")))
 
 ;; Clean out old junk and vacuum the database
@@ -1373,7 +1375,7 @@
        (set! dead-runs (cons run-id dead-runs)))
        db
        "SELECT id FROM runs WHERE state='deleted';")
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:with-transaction 
      db
      (lambda ()
@@ -1387,7 +1389,7 @@
     (map sqlite3:finalize! statements)
     (sqlite3:finalize! count-stmt)
     ;; (db:find-and-mark-incomplete db)
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:execute db "VACUUM;")
     dead-runs))
 
@@ -1400,14 +1402,14 @@
 ;;
 ;; Operates on megatestdb
 ;;
-(define (db:get-var dbstruct var)
+(define (db:get-var dbstruct var area-dat)
   (let* ((start-ms (current-milliseconds))
-         (throttle (let ((t  (config-lookup *configdat* "setup" "throttle")))
+         (throttle (let ((t  (config-lookup (megatest:area-configdat area-dat) "setup" "throttle")))
 		     (if t (string->number t) t)))
 	 (res      #f)
 	 (dbdat    (db:get-db dbstruct #f))
 	 (db       (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (val)
        (set! res val))
@@ -1430,7 +1432,7 @@
 (define (db:set-var dbstruct var val)
   (let ((dbdat (db:get-db dbstruct #f))
 	(db    (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:execute db "INSERT OR REPLACE INTO metadat (var,val) VALUES (?,?);" var val)))
 
 (define (db:del-var dbstruct var)
@@ -1545,10 +1547,10 @@
     (debug:print 2 "NOTE: using target " (string-intersperse (map cadr keyvals) "/") " for this run")
     (if (and runname (null? (filter (lambda (x)(not x)) keyvals))) ;; there must be a better way to "apply and"
 	(let ((res #f))
-	  (db:delay-if-busy dbdat)
+	  (db:delay-if-busy dbdat area-dat)
 	  (apply sqlite3:execute db (conc "INSERT OR IGNORE INTO runs (runname,state,status,owner,event_time" comma keystr ") VALUES (?,?,?,?,strftime('%s','now')" comma valslots ");")
 		 allvals)
-	  (db:delay-if-busy dbdat)
+	  (db:delay-if-busy dbdat area-dat)
 	  (apply sqlite3:for-each-row 
 		 (lambda (id)
 		   (set! res id))
@@ -1557,7 +1559,7 @@
 					;(debug:print 4 "qry: " qry) 
 		   qry)
 		 qryvals)
-	  (db:delay-if-busy dbdat)
+	  (db:delay-if-busy dbdat area-dat)
 	  (sqlite3:execute db "UPDATE runs SET state=?,status=?,event_time=strftime('%s','now') WHERE id=? AND state='deleted';" state status res)
 	  res) 
 	(begin
@@ -1721,7 +1723,7 @@
 	 (res          '())
 	 (runs-info    '()))
     ;; First get all the runname/run-ids
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
@@ -1813,7 +1815,7 @@
 	 (keystr    (conc (keys->keystr keys) ","
 			  (string-intersperse remfields ","))))
     (debug:print-info 11 "db:get-run-info run-id: " run-id " header: " header " keystr: " keystr)
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (a . x)
        (set! res (apply vector a x)))
@@ -1841,11 +1843,11 @@
 	 (rdb    (db:dbdat-get-db rdbdat))
 	 (dbdat  (db:get-db dbstruct #f))
 	 (db     (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy rdbdat)
+    (db:delay-if-busy rdbdat area-dat)
     (sqlite3:execute rdb "UPDATE tests SET state='DELETED',comment='';")
     (sqlite3:execute rdb "DELETE FROM test_steps;")
     (sqlite3:execute rdb "DELETE FROM test_data;")
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:execute db "UPDATE runs SET state='deleted',comment='' WHERE id=?;" run-id)))
 
 (define (db:update-run-event_time dbstruct run-id)
@@ -1874,7 +1876,7 @@
 (define (db:set-run-status dbstruct run-id status msg)
   (let* ((dbdat (db:get-db dbstruct #f))
 	 (db    (db:dbdat-get-db dbdat)))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (if msg
 	(sqlite3:execute db "UPDATE runs SET status=?,comment=? WHERE id=?;" status msg run-id)
 	(sqlite3:execute db "UPDATE runs SET status=? WHERE id=?;" status run-id))))
@@ -1908,7 +1910,7 @@
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
-	 (db:delay-if-busy dbdat)
+	 (db:delay-if-busy dbdat area-dat)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons (list key key-val) res)))
@@ -1925,7 +1927,7 @@
     (for-each 
      (lambda (key)
        (let ((qry (conc "SELECT " key " FROM runs WHERE id=?;")))
-	 (db:delay-if-busy dbdat)
+	 (db:delay-if-busy dbdat area-dat)
 	 (sqlite3:for-each-row 
 	  (lambda (key-val)
 	    (set! res (cons key-val res)))
@@ -2239,7 +2241,7 @@
       0 ;; 
       (let ((testnames '()))
 	;; get the testnames
-	(db:delay-if-busy dbdat)
+	(db:delay-if-busy dbdat area-dat)
 	(sqlite3:for-each-row
 	 (lambda (testname)
 	   (set! testnames (cons testname testnames)))
@@ -2341,7 +2343,7 @@
 		    dbstruct)) ;; still settling on when to use dbstruct or dbdat
 	 (db    (db:dbdat-get-db dbdat))
 	 (res '()))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment shortdir attemptnum archived)
        ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14     15        16
@@ -2536,7 +2538,7 @@
 	 (db         (db:dbdat-get-db dbdat))
 	 (fail-count 0)
 	 (pass-count 0))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row
      (lambda (fcount pcount)
        (set! fail-count fcount)
@@ -2605,7 +2607,7 @@
 			 (else (conc "ERROR: bad tol comparator " tol))))))
 	 (debug:print 4 "AFTER2: category: " category " variable: " variable " value: " value 
 		      ", expected: " expected " tol: " tol " units: " units " status: " status " comment: " comment)
-	 (db:delay-if-busy dbdat)
+	 (db:delay-if-busy dbdat area-dat)
 	 (sqlite3:execute db "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment,status,type) VALUES (?,?,?,?,?,?,?,?,?,?);"
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
@@ -2848,7 +2850,7 @@
 				       stmtname)
 				   db:queries)))
  		 (if q (car q) #f))))
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
     #t)) ;; BUG or Sillyness, why do I return #t instead of the query result?
 
@@ -2867,7 +2869,7 @@
 	 (keyvals #f)
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
-    (db:delay-if-busy dbdat)
+    (db:delay-if-busy dbdat area-dat)
     (sqlite3:for-each-row 
      (lambda (a . b)
        (set! keyvals (cons a b)))
@@ -2906,8 +2908,8 @@
 		      (map cdr (hash-table->alist tests-hash)) ;; return a list of the most recent tests
 		      (loop (car tal)(cdr tal))))))))))
 
-(define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy"))
+(define (db:delay-if-busy dbdat area-dat #!key (count 6))
+  (if (not (configf:lookup (megatest:area-configdat area-dat) "server" "delay-on-busy"))
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))
@@ -2918,27 +2920,27 @@
 		 (begin
 		   (debug:print-info 0 "WARNING: failed to test for existance of " dbfj)
 		   (thread-sleep! 1)
-		   (db:delay-if-busy count (- count 1)))
+		   (db:delay-if-busy dbdat area-dat count: (- count 1)))
 		 (file-exists? dbfj))
 		(case count
 		  ((6)
 		   (thread-sleep! 0.2)
-		   (db:delay-if-busy count: 5))
+		   (db:delay-if-busy dbdat area-dat count: 5))
 		  ((5)
 		   (thread-sleep! 0.4)
-		   (db:delay-if-busy count: 4))
+		   (db:delay-if-busy dbdat area-dat count: 4))
 		  ((4)
 		   (thread-sleep! 0.8)
-		   (db:delay-if-busy count: 3))
+		   (db:delay-if-busy dbdat area-dat count: 3))
 		  ((3)
 		   (thread-sleep! 1.6)
-		   (db:delay-if-busy count: 2))
+		   (db:delay-if-busy dbdat area-dat count: 2))
 		  ((2)
 		   (thread-sleep! 3.2)
-		   (db:delay-if-busy count: 1))
+		   (db:delay-if-busy dbdat area-dat count: 1))
 		  ((1)
 		   (thread-sleep! 6.4)
-		   (db:delay-if-busy count: 0))
+		   (db:delay-if-busy dbdat area-dat count: 0))
 		  (else
 		   (debug:print-info 0 "delaying db access due to high database load.")
 		   (thread-sleep! 12.8))))

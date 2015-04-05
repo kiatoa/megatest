@@ -79,14 +79,14 @@
     ;; (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
     
     (debug:print 4 "script: " script)
-    (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
+    (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f area-dat)
     ;; now launch the actual process
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
      (lambda ()
        (let* ((cmd (conc stepcmd " > " stepname ".log"))
 	      (pid (process-run cmd)))
-	 (rmt:test-set-top-process-pid run-id test-id pid)
+	 (rmt:test-set-top-process-pid run-id test-id pid area-dat)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
 		       (mutex-lock! m)
@@ -118,9 +118,9 @@
     
     (let ((exinfo (vector-ref exit-info 2))
 	  (logfna (if logpro-used (conc stepname ".html") "")))
-      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
+      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna area-dat))
     (if logpro-used
-	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
+	(rmt:test-set-log! run-id test-id (conc stepname ".html") area-dat))
     ;; set the test final status
     (let* ((this-step-status (cond
 			      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
@@ -159,7 +159,7 @@
 	 )))
     logpro-used))
 
-(define (launch:execute encoded-cmd)
+(define (launch:execute encoded-cmd area-dat)
   (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
@@ -205,7 +205,7 @@
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
-	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
+	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id area-dat)))
 	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 		(begin
@@ -213,10 +213,10 @@
 		  (exit))))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
-	  (set! keys       (rmt:get-keys))
+	  (set! keys       (rmt:get-keys area-dat))
 	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
-	  (if (not (launch:setup-for-run force: #t))
+	  (if (not (launch:setup-for-run area-dat force: #t))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting") 
 		;; (sqlite3:finalize! db)
@@ -321,13 +321,13 @@
 
 				 ;; (thread-sleep! 0.3)
 				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING")
+				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING" area-dat)
 				 ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
 				     (let ((pid (process-run fullrunscript)))
-				       (rmt:test-set-top-process-pid run-id test-id pid)
+				       (rmt:test-set-top-process-pid run-id test-id pid area-dat)
 				       (let loop ((i 0))
 					 (let-values
 					  (((pid-val exit-status exit-code) (process-wait pid #t)))
@@ -392,7 +392,7 @@
 					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
 					     ;;       between tries?
 					     (let* ((pid1 (vector-ref exit-info 0))
-						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
+						    (pid2 (rmt:test-get-top-process-pid run-id test-id area-dat))
 						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
 					       (if (not (null? pids))
 						   (begin
@@ -447,7 +447,7 @@
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
-		   (testinfo  (rmt:get-testinfo-state-status run-id test-id)))
+		   (testinfo  (rmt:get-testinfo-state-status run-id test-id area-dat)))
 	      ;; Am I completed?
 	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
@@ -649,7 +649,7 @@
 
     ;; Update the rundir path in the test record for all, rundir=physical, shortdir=logical
     ;;                                                 rundir   shortdir
-    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path)
+    (rmt:general-call 'test-set-rundir-shortdir run-id lnkpathf test-path testname item-path area-dat)
 
     (debug:print 2 "INFO:\n       lnkbase=" lnkbase "\n       lnkpath=" lnkpath "\n  toptest-path=" toptest-path "\n     test-path=" test-path)
     (if (not (file-exists? linktree))
@@ -709,7 +709,7 @@
     ;; tree is damaged or lost.
     ;; 
     (if (not (hash-table-ref/default *toptest-paths* testname #f))
-	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id)) ;;  run-id testname item-path))
+	(let* ((testinfo       (rmt:get-test-info-by-id run-id test-id area-dat)) ;;  run-id testname item-path))
 	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
 							     ;; (db:get-path dbstruct
 				   ;; (rmt:sdb-qry 'getstr 
@@ -721,7 +721,7 @@
 			    (if (file-exists? lnkpath)
 				(resolve-pathname lnkpath)
 				lnkpath)
-			    testname "")
+			    testname "" area-dat)
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)
 	  (if (or (not curr-test-path)
 		  (not (directory-exists? toptest-path)))
@@ -840,7 +840,7 @@
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
 	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
-	 (testinfo   (rmt:get-test-info-by-id run-id test-id))
+	 (testinfo   (rmt:get-test-info-by-id run-id test-id area-dat))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
@@ -860,7 +860,7 @@
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED")
+    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED" area-dat)
     (set! diskpath (get-best-disk configdat))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
