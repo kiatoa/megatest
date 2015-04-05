@@ -53,6 +53,18 @@
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
+(define *area-dat* (make-megatest:area
+		    "default"         ;; area name
+		    #f                ;; area path
+		    'http             ;; transport
+		    #f                ;; configinfo
+		    #f                ;; configdat
+		    (make-hash-table) ;; denoise
+		    #f                ;; client signature
+		    #f                ;; remote connections
+		    ))
+
+
 ;; Disabled help items
 ;;  -rollup                 : (currently disabled) fill run (set by :runname)  with latest test(s)
 ;;                            from prior runs with same keys
@@ -60,7 +72,7 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2012
+  license GPL, Copyright Matt Welland 2006-2015
 
 Usage: megatest [options]
   -h                      : this help
@@ -303,7 +315,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+     ;; the query to get megatest-db setting might not work, forcing it to be default on. Use "no" to turn off
+     (let ((legacy-sync (configf:lookup (megatest:area-configdat *area-dat*) "setup" "megatest-db"))
 	   (debug-mode  (debug:debug-mode 1))
 	   (last-time   (current-seconds)))
        (let loop ()
@@ -314,7 +327,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (for-each 
 	    (lambda (run-id)
 	      (mutex-lock! *db-multi-sync-mutex*)
-	      (if (and legacy-sync 
+	      (if (and (not (equal? legacy-sync "no"))
 		       (hash-table-ref/default *db-local-sync* run-id #f))
 		  ;; (if (> (- start-time last-write) 5) ;; every five seconds
 		  (begin ;; let ((sync-time (- (current-seconds) start-time)))
@@ -429,7 +442,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (set! *didsomething* #t)))
 
 (if (args:get-arg "-list-disks")
-    (let ((toppath (launch:setup-for-run)))
+    (let ((toppath (launch:setup-for-run *area-dat*)))
       (print 
        (string-intersperse 
 	(map (lambda (x)
@@ -638,7 +651,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
     ;; Server? Start up here.
     ;;
-    (let ((tl        (launch:setup-for-run))
+    (let ((tl        (launch:setup-for-run *area-dat*))
 	  (run-id    (and (args:get-arg "-run-id")
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
@@ -658,7 +671,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       "-show-cmdinfo"
 		       "-list-runs"
 		       "-ping")))
-	(if (launch:setup-for-run)
+	(if (launch:setup-for-run *area-dat*)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
 	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
@@ -678,7 +691,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup-for-run *area-dat*)))
       (if tl 
 	  (let* ((tdbdat  (tasks:open-db))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
@@ -755,7 +768,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 
 (if (args:get-arg "-show-runconfig")
-    (let ((tl (launch:setup-for-run)))
+    (let ((tl (launch:setup-for-run *area-dat*)))
       (push-directory *toppath*)
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
@@ -774,7 +787,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-config")
-    (let ((tl   (launch:setup-for-run))
+    (let ((tl   (launch:setup-for-run *area-dat*))
 	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
       (push-directory *toppath*)
       ;; keep this one local
@@ -880,7 +893,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
-    (if (launch:setup-for-run)
+    (if (launch:setup-for-run *area-dat*)
 	(let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
@@ -1104,7 +1117,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      (begin
 		(debug:print 0 "ERROR: -target is required.")
 		(exit 1)))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup-for-run *area-dat*))
 	      (begin
 		(debug:print 0 "Failed to setup, giving up on -test-paths or -test-files, exiting")
 		(exit 1)))
@@ -1192,7 +1205,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (work-area (assoc/default 'work-area cmdinfo))
 	     (db        #f))
 	(change-directory testpath)
-	(if (not (launch:setup-for-run))
+	(if (not (launch:setup-for-run *area-dat*))
 	    (begin
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
@@ -1240,7 +1253,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (db        #f) ;; (open-db))
 	       (state     (args:get-arg ":state"))
 	       (status    (args:get-arg ":status")))
-	  (if (not (launch:setup-for-run))
+	  (if (not (launch:setup-for-run *area-dat*))
 	      (begin
 		(debug:print 0 "Failed to setup, exiting")
 		(exit 1)))
@@ -1345,7 +1358,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
         (args:get-arg "-show-keys"))
     (let ((db #f)
 	  (keys #f))
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
@@ -1376,7 +1389,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-rebuild-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1386,7 +1399,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-cleanup-db")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1405,7 +1418,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-mark-incompletes")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") b
 	    (exit 1)))
@@ -1418,7 +1431,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-update-meta")
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))
@@ -1436,7 +1449,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
-    (let* ((toppath (launch:setup-for-run))
+    (let* ((toppath (launch:setup-for-run *area-dat*))
 	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
       (if dbstruct
 	  (begin
@@ -1465,7 +1478,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (and (args:get-arg "-run-wait")
 	 (not (args:get-arg "-runtests"))) ;; run-wait is built into runtests now
     (begin
-      (if (not (launch:setup-for-run))
+      (if (not (launch:setup-for-run *area-dat*))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting") 
 	    (exit 1)))

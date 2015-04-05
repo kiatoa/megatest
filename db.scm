@@ -1447,17 +1447,15 @@
 ;; using keys:config-get-fields?
 
 (define (db:get-keys dbstruct)
-  (if *db-keys* *db-keys* 
-      (let ((res '()))
-	(db:with-db dbstruct #f #f
-		    (lambda (db)
-		      (sqlite3:for-each-row 
-		       (lambda (key)
-			 (set! res (cons key res)))
-		       db
-		       "SELECT fieldname FROM keys ORDER BY id DESC;")))
-	(set! *db-keys* res)
-	res)))
+  (let ((res '()))
+    (db:with-db dbstruct #f #f
+		(lambda (db)
+		  (sqlite3:for-each-row 
+		   (lambda (key)
+		     (set! res (cons key res)))
+		   db
+		   "SELECT fieldname FROM keys ORDER BY id DESC;")))
+    res))
 
 ;; look up values in a header/data structure
 (define (db:get-value-by-header row header field)

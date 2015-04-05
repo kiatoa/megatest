@@ -82,8 +82,7 @@
 	    (client:setup run-id remote: remote)
 	    #f))))
 
-(define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
-(define (rmt:send-receive cmd rid params #!key (attemptnum 1)(remote #f)) ;; start attemptnum at 1 so the modulo below works as expected
+(define (rmt:discard-old-connections)
   ;; clean out old connections
   (mutex-lock! *db-multi-sync-mutex*)
   (let ((expire-time (- (current-seconds) (server:get-timeout) 10))) ;; don't forget the 10 second margin
@@ -100,7 +99,12 @@
 				   (common:get-remote remote run-id)))))
                (common:del-remote! remote run-id)))))
      (common:get-remote-all remote)))
-  (mutex-unlock! *db-multi-sync-mutex*)
+  (mutex-unlock! *db-multi-sync-mutex*))
+
+(define *send-receive-mutex* (make-mutex)) ;; should have separate mutex per run-id
+
+(define (rmt:send-receive cmd rid params #!key (attemptnum 1)(remote #f)) ;; start attemptnum at 1 so the modulo below works as expected
+  (rmt:discard-old-connections)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
 	 (connection-info (rmt:get-connection-info run-id)))

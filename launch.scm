@@ -484,101 +484,110 @@
 	    (if (not (vector-ref exit-info 1))
 		(exit 4)))))))
 
+(define (launch:read-cached-config)
+  (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
+      (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
+			       (get-environment-variable "MT_TARGET")   "/"
+			       (get-environment-variable "MT_RUNNAME")  "/"
+			       ".megatest.cfg")))
+	(if (file-exists? alistconfig)
+	    (list (configf:read-alist alistconfig)
+		  (get-environment-variable "MT_RUN_AREA_HOME"))
+	    #f))
+      #f)) 
+
+(define (launch:read-megatest-config toppath)
+  (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
+    (if runname (setenv "MT_RUNNAME" runname))
+    (find-and-read-config 
+     (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+     environ-patt: "env-override"
+     given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+     pathenvvar: "MT_RUN_AREA_HOME")))
+
 ;; set up the very basics needed for doing anything here.
-(define (launch:setup-for-run #!key (force #f))
+(define (launch:setup-for-run area-dat #!key (force #f))
   ;; would set values for KEYS in the environment here for better support of env-override but 
   ;; have chicken/egg scenario. need to read megatest.config then read it again. Going to 
   ;; pass on that idea for now
   ;; special case
-  (if (or force (not (hash-table? *configdat*)))  ;; no need to re-open on every call
-      (begin
-	(set! *configinfo* (or (if (get-environment-variable "MT_CMDINFO") ;; we are inside a test - do not reprocess configs
-				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
-							    (get-environment-variable "MT_TARGET")   "/"
-							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg")))
-				     (if (file-exists? alistconfig)
-					 (list (configf:read-alist alistconfig)
-					       (get-environment-variable "MT_RUN_AREA_HOME"))
-					 #f))
-				   #f) ;; no config cached - give up
-			       (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
-				 (if runname (setenv "MT_RUNNAME" runname))
-				 (find-and-read-config 
-				  (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-				  environ-patt: "env-override"
-				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				  pathenvvar: "MT_RUN_AREA_HOME"))))
-	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
-	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
-	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
-	  (if (member transport '(http rpc nmsg))
-	      (set! *transport-type* transport)
-	      (begin
-		(debug:print 0 "ERROR: Unrecognised transport " transport)
-		(exit))))
-	(let ((linktree (configf:lookup *configdat* "setup" "linktree"))) ;; link tree is critical
-	  (if linktree
-	      (if (not (file-exists? linktree))
-		  (begin
-		    (handle-exceptions
-		     exn
-		     (begin
-		       (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
-		       (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
-		       (exit 1))
-		     (create-directory linktree #t))))
-	      (begin
-		(debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
-		(exit 1)))
-	  (if linktree
-	      (let ((dbdir (conc linktree "/.db")))
-		(handle-exceptions
-		 exn
-		 (begin
-		   (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
-		   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
-		 (if (not (directory-exists? dbdir))(create-directory dbdir)))
-		(setenv "MT_LINKTREE" linktree))
-	      (begin
-		(debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
-		(exit 1)))
-	  (if (and *toppath*
-		   (directory-exists? *toppath*))
-	      (setenv "MT_RUN_AREA_HOME" *toppath*)
+  (let ((configdat (megatest:area-configdat area-dat)))
+    (if (or force (not (hash-table? configdat)))  ;; no need to re-open on every call
+	(let* ((newconfiginfo (or (launch:read-cached-config) ;; no config cached - give up
+				  (launch:read-megatest-config (megatest:area-path area-dat))))
+	       (configdat     (car  newconfiginfo))
+	       (toppath       (cadr newconfiginfo)))
+	  (megatest:area-configinfo-set! area-dat newconfiginfo)
+	  (megatest:area-configdat-set!  area-dat configdat)
+	  (megatest:area-path-set!       area-dat toppath)
+	  (let* ((tmptransport (configf:lookup configdat "server" "transport"))
+		 (transport    (if tmptransport (string->symbol tmptransport) 'http)))
+	    (if (member transport '(http rpc nmsg))
+		(megatest:area-transport-set! area-dat transport)
+		(begin
+		  (debug:print 0 "ERROR: Unrecognised transport " transport)
+		  (exit))))
+	  (let ((linktree (configf:lookup configdat "setup" "linktree"))) ;; link tree is critical
+	    (if linktree
+		(if (not (file-exists? linktree))
+		    (begin
+		      (handle-exceptions
+		       exn
+		       (begin
+			 (debug:print 0 "ERROR: Something went wrong when trying to create linktree dir at " linktree)
+			 (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			 (exit 1))
+		       (create-directory linktree #t))))
+		(begin
+		  (debug:print 0 "ERROR: linktree not defined in [setup] section of megatest.config")
+		  (exit 1)))
+	    (if linktree
+		(let ((dbdir (conc linktree "/.db")))
+		  (handle-exceptions
+		   exn
+		   (begin
+		     (debug:print 0 "ERROR: failed to create the " dbdir " area for your database files")
+		     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
+		   (if (not (directory-exists? dbdir))(create-directory dbdir)))
+		  (setenv "MT_LINKTREE" linktree))
+		(begin
+		  (debug:print 0 "ERROR: linktree is required in your megatest.config [setup] section")
+		  (exit 1)))
+	    (if (and toppath
+		   (directory-exists? toppath))
+	      (setenv "MT_RUN_AREA_HOME" toppath)
 	      (begin
 		(debug:print 0 "ERROR: failed to find the top path to your Megatest area.")
-		(exit 1)))
-	  )))
-  *toppath*)
+		(exit 1))))
+	  toppath))))
 
-(define (launch:cache-config)
+(define (launch:cache-config area-dat)
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
-  (if (and *configdat* 
-	   (args:get-arg "-runtests"))
-      (let* ((linktree (get-environment-variable "MT_LINKTREE"))
-	     (target   (common:args-get-target))
-	     (runname  (or (args:get-arg "-runname")
-			   (args:get-arg ":runname")))
-	     (fulldir  (conc linktree "/"
-			     target "/"
-			     runname)))
-	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
-	(if (file-exists? linktree) ;; can't proceed without linktree
-	    (begin
-	      (if (not (file-exists? fulldir))
-		  (create-directory fulldir #t)) ;; need to protect with exception handler 
-	      (if (and target
-		       runname
-		       (file-exists? fulldir))
-		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg")))
-		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
-		    (configf:write-alist *configdat* tmpfile)
-		    (system (conc "ln -sf " tmpfile " " targfile))
-		    )))))))
+  (let ((configdat (megatest:area-configdat area-dat)))
+    (if (and configdat 
+	     (args:get-arg "-runtests"))
+	(let* ((linktree (get-environment-variable "MT_LINKTREE"))
+	       (target   (common:args-get-target))
+	       (runname  (or (args:get-arg "-runname")
+			     (args:get-arg ":runname")))
+	       (fulldir  (conc linktree "/"
+			       target "/"
+			       runname)))
+	  (debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
+	  (if (file-exists? linktree) ;; can't proceed without linktree
+	      (begin
+		(if (not (file-exists? fulldir))
+		    (create-directory fulldir #t)) ;; need to protect with exception handler 
+		(if (and target
+			 runname
+			 (file-exists? fulldir))
+		    (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
+			  (targfile (conc fulldir "/.megatest.cfg")))
+		      (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
+		      (configf:write-alist configdat tmpfile)
+		      (system (conc "ln -sf " tmpfile " " targfile))
+		      ))))))))
 
 (define (get-best-disk confdat)
   (let* ((disks    (hash-table-ref/default confdat "disks" #f))
@@ -608,8 +617,9 @@
 ;;  
 ;; <target> - <testname> [ - <itempath> ] 
 ;;
-(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat #!key (remtries 2))
-  (let* ((item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
+(define (create-work-area run-id run-info keyvals test-id test-src-path disk-path testname itemdat area-dat #!key (remtries 2))
+  (let* ((configdat (megatest:area-configdat area-dat))
+	 (item-path (if (string? itemdat) itemdat (item-list->path itemdat))) ;; if pass in string - just use it
 	 (runname   (if (string? run-info) ;; if we pass in a string as run-info use it as run-name.
 			run-info
 			(db:get-value-by-header (db:get-rows run-info)
@@ -629,8 +639,8 @@
 	 (test-path    (conc disk-path "/" test-base))
 
 	 ;; ensure this exists first as links to subtests must be created there
-	 (linktree  (let ((rd (config-lookup *configdat* "setup" "linktree")))
-		      (if rd rd (conc *toppath* "/runs"))))
+	 (linktree  (let ((rd (config-lookup configdat "setup" "linktree")))
+		      (if rd rd (conc (megatest:area-path area-dat) "/runs"))))
 
 	 (lnkbase   (conc linktree "/" target "/" runname))
 	 (lnkpath   (conc lnkbase "/" testname))
@@ -753,7 +763,7 @@
 
     (if (and test-src-path (directory? test-path))
 	(begin
-	  (let* ((ovrcmd (let ((cmd (config-lookup *configdat* "setup" "testcopycmd")))
+	  (let* ((ovrcmd (let ((cmd (config-lookup configdat "setup" "testcopycmd")))
 			   (if cmd
 			       ;; substitute the TEST_SRC_PATH and TEST_TARG_PATH
 			       (string-substitute "TEST_TARG_PATH" test-path
@@ -781,31 +791,33 @@
 ;;    - could be ssh to host from hosts table (update regularly with load)
 ;;    - could be netbatch
 ;;      (launch-test db (cadr status) test-conf))
-(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
-  (change-directory *toppath*)
+(define (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params area-dat)
+  (let ((toppath   (megatest:area-path      area-dat))
+	(configdat (megatest:area-configdat area-dat)))
+  (change-directory toppath)
   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
    (list ;; (list "MT_TEST_RUN_DIR" work-area)
-    (list "MT_RUN_AREA_HOME" *toppath*)
+    (list "MT_RUN_AREA_HOME" toppath)
     (list "MT_TEST_NAME" test-name)
     ;; (list "MT_ITEM_INFO" (conc itemdat)) 
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+  (let* ((useshell        (let ((ush (config-lookup configdat "jobtools"     "useshell")))
 			    (if ush 
 				(if (equal? ush "no") ;; must use "no" to NOT use shell
 				    #f
 				    ush)
 				#t)))     ;; default is yes
-	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
+	 (launcher        (config-lookup configdat "jobtools"     "launcher"))
 	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
 	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
 	 (diskspace       (config-lookup test-conf   "requirements" "diskspace"))
 	 (memory          (config-lookup test-conf   "requirements" "memory"))
-	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
-	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
+	 (hosts           (config-lookup configdat "jobtools"     "workhosts"))
+	 (remote-megatest (config-lookup configdat "setup" "executable"))
 	 (run-time-limit  (or (configf:lookup  test-conf   "requirements" "runtimelim")
-			      (configf:lookup  *configdat* "setup" "runtimelim")))
+			      (configf:lookup  configdat "setup" "runtimelim")))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
 	 ;;                from the called megatest and convert dashboard
@@ -844,12 +856,12 @@
 	(begin
 	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
-
+    
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED")
-    (set! diskpath (get-best-disk *configdat*))
+    (set! diskpath (get-best-disk configdat))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
@@ -864,9 +876,9 @@
 		     (with-output-to-string
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc *transport-type*))
+				      (list 'transport (conc (megatest:area-transport area-dat))) ;;; *transport-type*))
 				      ;; (list 'serverinf *server-info*)
-				      (list 'toppath   *toppath*)
+				      (list 'toppath   toppath)
 				      (list 'work-area work-area)
 				      (list 'test-name test-name) 
 				      (list 'runscript runscript) 
@@ -878,7 +890,7 @@
 				      (list 'ezsteps   ezsteps) 
 				      (list 'target    mt_target)
 				      (list 'runtlim   (if run-time-limit (common:hms-string->seconds run-time-limit) #f))
-				      (list 'env-ovrd  (hash-table-ref/default *configdat* "env-override" '())) 
+				      (list 'env-ovrd  (hash-table-ref/default configdat "env-override" '())) 
 				      (list 'set-vars  (if params (hash-table-ref/default params "-setvars" #f)))
 				      (list 'runname   runname)
 				      (list 'mt-bindir-path mt-bindir-path))))))))
@@ -902,7 +914,7 @@
     ;; set pre-launch-env-vars before launching, keep the vars in prevvals and put the envionment back when done
     (debug:print 4 "fullcmd: " fullcmd)
     (let* ((commonprevvals (alist->env-vars
-			    (hash-table-ref/default *configdat* "env-override" '())))
+			    (hash-table-ref/default configdat "env-override" '())))
 	   (testprevvals   (alist->env-vars
 			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
 	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
@@ -915,7 +927,7 @@
 					  )
 				    itemdat)))
 	   ;; Launchwait defaults to true, must override it to turn off wait
-	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
+	   (launchwait     (if (equal? (configf:lookup configdat "setup" "launchwait") "no") #f #t))
 	   (launch-results (apply (if launchwait
 				      cmd-run-with-stderr->list
 				      process-run)
@@ -952,5 +964,7 @@
       (alist->env-vars testprevvals)
       (alist->env-vars commonprevvals)
       launch-results))
-  (change-directory *toppath*))
+  (change-directory toppath))
+  ;; added paren below after refactoring above routine. must have missed something?
+  )
 

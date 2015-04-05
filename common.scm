@@ -37,10 +37,20 @@
 (define user (getenv "USER"))
 
 ;; GLOBAL GLETCHES
-(define *db-keys* #f)
-(define *configinfo* #f)
-(define *configdat*  #f)
-(define *toppath*    #f)
+(define-record megatest:area
+  name
+  path
+  transport
+  configinfo
+  configdat
+  denoise
+  client-signature
+  remote
+  )
+
+;; (define *configinfo* #f)
+;; (define *configdat*  #f)
+;; (define *toppath*    #f)
 (define *already-seen-runconfig-info* #f)
 (define *waiting-queue*     (make-hash-table))
 (define *test-meta-updated* (make-hash-table))
@@ -66,10 +76,9 @@
 (define *db-access-mutex*     (make-mutex))
 
 ;; SERVER
-(define *my-client-signature* #f)
-(define *transport-type*    'http)
-(define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
-(define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
+;; (define *my-client-signature* #f)
+;; (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
+;; (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 
 (define (common:get-remote remote run-id)
   (let ((ht (or remote *runremote*)))
