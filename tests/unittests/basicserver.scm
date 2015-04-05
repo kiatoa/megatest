@@ -9,12 +9,12 @@
 (delete-file* "logs/1.log")
 (define run-id 1)
 
-(test "setup for run" #t (begin (launch:setup-for-run)
+(test "setup for run" #t (begin (launch:setup-for-run *area-dat*)
  				(string? (getenv "MT_RUN_AREA_HOME"))))
 
 ;; NON Server tests go here
 
-(test #f #f (db:dbdat-get-path *db*))
+(test #f #f (db:dbdat-get-path *db* *area-dat*))
 (test #f #f (db:get-run-name-from-id *db* run-id))
 ;; (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 

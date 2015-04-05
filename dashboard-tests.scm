@@ -41,8 +41,8 @@
 
 (define *dashboard-comment-share-slot* #f)
 
-(define (dtests:get-pre-command #!key (default-override #f))
-  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "pre-command")))
+(define (dtests:get-pre-command area-dat #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup (megatest:area-configdat area-dat) "dashboard" "pre-command")))
     (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
 
 (define (dtests:get-post-command #!key (default-override #f))
