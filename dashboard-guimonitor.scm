@@ -33,8 +33,9 @@
 (include "run_records.scm")
 (include "task_records.scm")
 
-(define (control-panel db tdb keys)
-  (let* ((var-params (make-hash-table)) ;; register all the widgets here for querying on run, rollup, remove?
+(define (control-panel db tdb keys area-dat)
+  (let* ((toppath    (megatest:area-path area-dat))
+	 (var-params (make-hash-table)) ;; register all the widgets here for querying on run, rollup, remove?
 	 (key-params (make-hash-table))
 	 (monitordat '()) ;; list of monitor records
 	 (keyentries (iup:frame 
@@ -102,8 +103,8 @@
 	 (lastmodtime 0)
 	 (next-touch  0) ;; the last time the "last_update" field was updated
 	 (refreshdat (lambda ()
-		       (let* ((monitordbpath  (conc *toppath* "/monitor.db"))
-			      (megatestdbpath (conc *toppath* "/megatest.db"))
+		       (let* ((monitordbpath  (conc toppath "/monitor.db"))
+			      (megatestdbpath (conc toppath "/megatest.db"))
 			      (modtime        (max (file-modification-time megatestdbpath)
 						   (file-modification-time monitordbpath))))
 			 ;; do stuff here when the db is updated by some other process

@@ -24,7 +24,7 @@
 (for-each
  (lambda (run-id)
    (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
-   (server:kind-run run-id)
+   (server:kind-run run-id *area-dat*)
    (test "did server start within 20 seconds?"
 	 #t
 	 (let loop ((remtries 20)

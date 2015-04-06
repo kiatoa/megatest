@@ -110,7 +110,7 @@
 	 (curr-host   (get-host-name))
 	 (curr-ip     (server:get-best-guess-address curr-host))
 	 (target-host (configf:lookup configdat "server" "homehost" ))
-	 (testsuite   (common:get-testsuite-name))
+	 (testsuite   (common:get-testsuite-name area-dat))
 	 (logfile     (conc toppath "/logs/" run-id ".log"))
 	 (cmdln (conc (common:get-megatest-exe)
 		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup configdat "server" "daemonize") "yes")
@@ -144,19 +144,19 @@
 
 ;; kind start up of servers, wait 40 seconds before allowing another server for a given
 ;; run-id to be launched
-(define (server:kind-run run-id)
+(define (server:kind-run run-id area-dat)
   (let ((last-run-time (hash-table-ref/default *server-kind-run* run-id #f)))
     (if (or (not last-run-time)
 	    (> (- (current-seconds) last-run-time) 30))
 	(begin
-	  (server:run run-id)
+	  (server:run run-id area-dat)
 	  (hash-table-set! *server-kind-run* run-id (current-seconds))))))
 
 ;; The generic run a server command. Dispatches the call to server 0 if run-id != 0
 ;; 
-(define (server:try-running run-id)
+(define (server:try-running run-id area-dat)
   (if (eq? run-id 0)
-      (server:run run-id)
+      (server:run run-id area-dat)
       (rmt:start-server run-id)))
 
 (define (server:check-if-running run-id)

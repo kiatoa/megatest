@@ -38,9 +38,9 @@
 	*my-client-signature*)))
 
 ;; Not currently used! But, I think it *should* be used!!!
-(define (client:logout serverdat)
+(define (client:logout serverdat area-dat)
   (let ((ok (and (socket? serverdat)
-		 (cdb:logout serverdat *toppath* (client:get-signature)))))
+		 (cdb:logout serverdat (megatest:area-path area-dat) (client:get-signature)))))
     ok))
 
 (define (client:connect iface port)
