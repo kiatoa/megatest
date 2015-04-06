@@ -420,7 +420,7 @@
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
-	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
+	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct area-dat run-id test-id))
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
@@ -697,7 +697,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id #f tdb:read-test-data test-id "%")))
+										    (tdb:open-run-close-db-by-test-id-local dbstruct area-dat run-id test-id #f tdb:read-test-data test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))

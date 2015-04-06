@@ -78,8 +78,8 @@
 	cinfo
 	;; NB// can cache the answer for server running for 10 seconds ...
 	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id)
-	    (client:setup run-id remote: remote)
+	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db area-dat)) run-id)
+	    (client:setup run-id area-dat remote: remote)
 	    #f))))
 
 (define (rmt:discard-old-connections area-dat)
@@ -107,13 +107,14 @@
 (define (rmt:send-receive cmd rid params area-dat #!key (attemptnum 1)(remote #f)) ;; start attemptnum at 1 so the modulo below works as expected
   (rmt:discard-old-connections area-dat)
   ;; (mutex-lock! *send-receive-mutex*)
-  (let* ((run-id          (if rid rid 0))
+  (let* ((transport-type  (megatest:area-transport area-dat))
+	 (run-id          (if rid rid 0))
 	 (configdat       (megatest:area-configdat area-dat))
 	 (connection-info (rmt:get-connection-info run-id area-dat)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
 	;; use the server if have connection info
-	(let* ((dat     (case *transport-type*
+	(let* ((dat     (case transport-type
 			  ((http)(condition-case
 				  (http-transport:client-api-send-receive run-id connection-info cmd params)
 				  ((commfail)(vector #f "communications fail"))
@@ -128,7 +129,7 @@
 	  (if success
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
-		(case *transport-type* 
+		(case 
 		  ((http) res) ;; (db:string->obj res))
 		  ((nmsg) res))) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
@@ -140,7 +141,7 @@
 		;; (if (eq? (modulo attemptnum 5) 0)
 		;;     (tasks:kill-server-run-id run-id tag: "api-send-receive-failed"))
 		;; (mutex-unlock! *send-receive-mutex*) ;; close the mutex here to allow other threads access to communications
-		(tasks:start-and-wait-for-server (tasks:open-db) run-id 15)
+		(tasks:start-and-wait-for-server (tasks:open-db area-dat) run-id 15)
 		;; (nmsg-transport:client-api-send-receive run-id connection-info cmd param remtries: (- remtries 1))))))
 
 		;; no longer killing the server in http-transport:client-api-send-receive
@@ -161,7 +162,7 @@
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      (if (and faststart (equal? faststart "no"))
 		  (begin
-		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db area-dat)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 		    (rmt:send-receive cmd rid params area-dat attemptnum: (+ attemptnum 1)))
 		  (begin
@@ -378,7 +379,7 @@
 			work-area
 			(rmt:test-get-rundir-from-test-id run-id test-id area-dat))))
     (debug:print 3 "TEST PATH: " test-path)
-    (open-test-db test-path)))
+    (open-test-db test-path area-dat)))
 
 ;; WARNING: This currently bypasses the transaction wrapped writes system
 (define (rmt:test-set-state-status-by-id run-id test-id newstate newstatus newcomment area-dat)

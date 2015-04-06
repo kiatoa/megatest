@@ -39,26 +39,26 @@
 ;;
 ;; start_server? 
 ;;
-(define (rpc-transport:launch run-id)
+(define (rpc-transport:launch run-id area-dat)
   (set! *run-id*   run-id)
   (if (args:get-arg "-daemonize")
       (daemon:ize))
-  (if (server:check-if-running run-id)
+  (if (server:check-if-running run-id area-dat)
       (begin
 	(debug:print 0 "INFO: Server for run-id " run-id " already running")
 	(exit 0)))
-  (let loop ((server-id (open-run-close tasks:server-lock-slot tasks:open-db run-id))
+  (let loop ((server-id (open-run-close tasks:server-lock-slot (lambda ()(tasks:open-db area-dat))run-id))
 	     (remtries  4))
     (if (not server-id)
 	(if (> remtries 0)
 	    (begin
 	      (thread-sleep! 2)
-	      (loop (open-run-close tasks:server-lock-slot tasks:open-db run-id)
+	      (loop (open-run-close tasks:server-lock-slot (lambda ()(tasks:open-db area-dat)) run-id)
 		    (- remtries 1)))
 	    (begin
 	      ;; since we didn't get the server lock we are going to clean up and bail out
 	      (debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-	      (open-run-close tasks:server-delete-records-for-this-pid tasks:open-db " rpc-transport:launch")))
+	      (open-run-close tasks:server-delete-records-for-this-pid (lambda ()(tasks:open-db area-dat)) " rpc-transport:launch")))
 	(begin
 	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
 	  (exit)))))
@@ -78,7 +78,7 @@
 					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
+	 (start-port      (open-run-close tasks:server-get-next-port (lambda ()(tasks:open-db area-dat))))
 	 (link-tree-path  (configf:lookup configdat "setup" "linktree"))
 	 (rpc:listener    (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
 	 (th1             (make-thread
@@ -95,11 +95,11 @@
 			      #f))
 	 (portnum         (rpc:default-server-port))
 	 (host:port       (conc (if ipaddrstr ipaddrstr hostname) ":" portnum))
-	 (tdb             (tasks:open-db)))
+	 (tdb             (tasks:open-db area-dat)))
     (thread-start! th1)
     (set! db *inmemdb*)
     (open-run-close tasks:server-set-interface-port 
-		    tasks:open-db 
+		    (lambda ()(tasks:open-db area-dat))
 		    server-id 
 		    ipaddrstr portnum)
     (debug:print 0 "Server started on " host:port)
@@ -113,7 +113,7 @@
     ;;======================================================================
     ;;
     (on-exit (lambda ()
-	       (open-run-close tasks:server-set-state! tasks:open-db server-id "stopped")))
+	       (open-run-close tasks:server-set-state! (lambda ()(tasks:open-db area-dat)) server-id "stopped")))
 
     (set! *rpc:listener* rpc:listener)
     (tasks:server-set-state! tdb server-id "running")
@@ -130,7 +130,7 @@
 	      (loop (+ 1 count)))
 	    (begin
 	      (debug:print-info 0 "Starting to shutdown the server side")
-	      (open-run-close tasks:server-delete-record tasks:open-db server-id " rpc-transport:try-start-server stop")
+	      (open-run-close tasks:server-delete-record (lambda ()(tasks:open-db area-dat)) server-id " rpc-transport:try-start-server stop")
 	      (thread-sleep! 10)
 	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
 	      (debug:print-info 0 "Server shutdown complete. Exiting")
@@ -181,7 +181,7 @@
 		    (server:try-running run-id)
 		    (thread-sleep! 2)
 		    (rpc-transport:client-setup run-id area-dat remtries: (- remtries 1)))))
- 	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
+ 	    (let* ((server-db-info (open-run-close tasks:get-server (lambda ()(tasks:open-db area-dat)) run-id)))
  	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-db-info
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))

@@ -42,7 +42,7 @@
 ;;======================================================================
 
 ;; Create the sqlite db for the individual test(s)
-(define (open-test-db work-area) 
+(define (open-test-db work-area area-dat) 
   (debug:print-info 11 "open-test-db " work-area)
   (if (and work-area 
 	   (directory? work-area)
@@ -73,7 +73,7 @@
 	    (sqlite3:set-busy-handler! db handler))
 	(if (not dbexists)
 	    (begin
-	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
+	      (db:set-sync db area-dat) ;; (sqlite3:execute db "PRAGMA synchronous = FULL;")
 	      (debug:print-info 11 "Initialized test database " dbpath)
 	      (tdb:testdb-initialize db)))
 	;; (sqlite3:execute db "PRAGMA synchronous = 0;")
@@ -99,27 +99,27 @@
  	baddb)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-test-db-by-test-id test-id #!key (work-area #f))
+(define (tdb:open-test-db-by-test-id test-id area-dat #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
 			(rmt:test-get-rundir-from-test-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
-    (open-test-db test-path)))
+    (open-test-db test-path area-dat)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-test-db-by-test-id-local dbstruct run-id test-id #!key (work-area #f))
+(define (tdb:open-test-db-by-test-id-local dbstruct area-dat run-id test-id #!key (work-area #f))
   (let* ((test-path (if work-area
 			work-area
 			(db:test-get-rundir-from-test-id dbstruct run-id test-id))))
     (debug:print 3 "TEST PATH: " test-path)
-    (open-test-db test-path)))
+    (open-test-db test-path area-dat)))
 
 ;; find and open the testdat.db file for an existing test
-(define (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id work-area proc . params)
+(define (tdb:open-run-close-db-by-test-id-local dbstruct area-dat run-id test-id work-area proc . params)
   (let* ((test-path (if work-area
 			work-area
 			(db:test-get-rundir-from-test-id dbstruct run-id test-id)))
-	 (tdb        (open-test-db test-path)))
+	 (tdb        (open-test-db test-path area-dat)))
     (apply proc tdb params)))
 
 (define (tdb:testdb-initialize db)
@@ -370,8 +370,8 @@
 		     (string<? (conc time-a)(conc time-b))))))))
 
 ;; 
-(define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes)
-  (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id work-area: work-area)))
+(define (tdb:remote-update-testdat-meta-info run-id test-id work-area cpuload diskfree minutes area-dat)
+  (let ((tdb         (rmt:open-test-db-by-test-id run-id test-id area-dat work-area: work-area)))
     (if (sqlite3:database? tdb)
 	(begin
 	  (sqlite3:execute tdb "INSERT INTO test_rundat (update_time,cpuload,diskfree,run_duration) VALUES (strftime('%s','now'),?,?,?);"

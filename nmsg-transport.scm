@@ -65,11 +65,11 @@
 
 (define (nmsg-transport:run dbstruct area-dat hostn run-id server-id #!key (retrynum 1000))
   (debug:print 2 "Attempting to start the server ...")
-  (let* ((start-port      (portlogger:open-run-close portlogger:find-port))
+  (let* ((start-port      (portlogger:open-run-close portlogger:find-port area-dat))
 	 (server-thread   (make-thread (lambda ()
 					 (nmsg-transport:try-start-server dbstruct run-id start-port server-id))
 				       "server thread"))
-	 (tdbdat          (tasks:open-db)))
+	 (tdbdat          (tasks:open-db area-dat)))
     (thread-start! server-thread)
     (thread-sleep! 0.1)
     (if (nmsg-transport:ping hostn start-port timeout: 2 expected-key: (current-process-id))
@@ -88,7 +88,7 @@
 	    (begin
 	      (debug:print 0 "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
-	      (portlogger:open-run-close portlogger:set-failed start-port)
+	      (portlogger:open-run-close portlogger:set-failed area-dat start-port)
 	      (nmsg-transport:run dbstruct area-dat hostn run-id server-id))
 	    (begin
 	      (debug:print 0 "ERROR: could not find an open port to start server on. Giving up")
@@ -108,7 +108,7 @@
 ;; all routes though here end in exit ...
 ;;
 (define (nmsg-transport:launch run-id area-dat)
-  (let* ((tdbdat   (tasks:open-db))
+  (let* ((tdbdat   (tasks:open-db area-dat))
 	 (dbstruct (db:setup run-id))
 	 (hostn    (or (args:get-arg "-server") "-")))
     (set! *run-id*   run-id)
@@ -122,7 +122,7 @@
     ;;           (begin
     ;;     	(current-error-port *alt-log-file*)
     ;;     	(current-output-port *alt-log-file*)))))
-    (if (server:check-if-running run-id)
+    (if (server:check-if-running run-id area-dat)
 	(begin
 	  (debug:print-info 0 "Server for run-id " run-id " already running")
 	  (exit 0)))
@@ -132,7 +132,7 @@
 	  (if (> remtries 0)
 	      (begin
 		(thread-sleep! 2)
-		(if (not (server:check-if-running run-id))
+		(if (not (server:check-if-running run-id area-dat))
 		    (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
 			  (- remtries 1))
 		    (begin
@@ -273,7 +273,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (tdbdat      (tasks:open-db))
+	 (tdbdat      (tasks:open-db area-dat))
 	 (server-timeout (let ((tmo (configf:lookup  (megatest:area-configdat area-dat) "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))

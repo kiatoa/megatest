@@ -514,8 +514,8 @@
      ;; (iup:label "Run statistics"  #:expand "HORIZONTAL")
      stats-matrix)))
 
-(define (dcommon:servers-table)
-  (let* ((tdbdat         (tasks:open-db))
+(define (dcommon:servers-table area-dat)
+  (let* ((tdbdat         (tasks:open-db area-dat))
 	 (colnum         0)
 	 (rownum         0)
 	 (servers-matrix (iup:matrix #:expand "YES"

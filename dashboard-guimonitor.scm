@@ -177,14 +177,14 @@
 
 ;; BUG: Remember to re-instate this!!!!
 ;; (on-exit (lambda ()
-;; 	   (let ((tdb (tasks:open-db)))
+;; 	   (let ((tdb (tasks:open-db area-dat)))
 ;; 	     ;; (print "On-exit called")
 ;; 	     (tasks:remove-monitor-record tdb)
 ;; 	     (sqlite3:finalize! tdb))))
 
-(define (gui-monitor db)
+(define (gui-monitor db area-dat)
   (let ((keys (db:get-keys db))
-	(tdb  (tasks:open-db)))
+	(tdb  (tasks:open-db area-dat)))
     (tasks:register-monitor db tdb) ;;; let the other monitors know we are here
     (control-panel db tdb keys)
     ;(tasks:remove-monitor-record db)

@@ -653,7 +653,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			  (string->number (args:get-arg "-run-id")))))
       (if run-id
 	  (begin
-	    (server:launch run-id)
+	    (server:launch run-id *area-dat*)
 	    (set! *didsomething* #t))
 	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
@@ -690,7 +690,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(args:get-arg "-stop-server"))
     (let ((tl (launch:setup-for-run *area-dat*)))
       (if tl 
-	  (let* ((tdbdat  (tasks:open-db))
+	  (let* ((tdbdat  (tasks:open-db *area-dat*))
 		 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat)))
 		 (fmtstr  "~5a~12a~8a~20a~24a~10a~10a~10a~10a\n")
 		 (servers-to-kill '())
@@ -1053,7 +1053,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      ;; May or may not implement it this way ...
      ;;
      ;; Insert this run into the tasks queue
-     ;; (open-run-close tasks:add tasks:open-db 
+     ;; (open-run-close tasks:add (lambda ()(tasks:open-db *area-dat*))
      ;;    	     "runtests" 
      ;;    	     user
      ;;    	     target

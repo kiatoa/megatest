@@ -50,11 +50,11 @@
 ;; start_server
 ;;
 (define (server:launch run-id area-dat)
-  (case *transport-type*
+  (case (megatest:area-transport area-dat)
     ((http)(http-transport:launch run-id area-dat))
     ((nmsg)(nmsg-transport:launch run-id area-dat))
     ((rpc)  (rpc-transport:launch run-id area-dat))
-    (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
+    (else (debug:print 0 "ERROR: unknown server type " (megatest:area-transport area-dat)))))
 ;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
 
@@ -84,7 +84,7 @@
 ;; When using zmq this would send the message back (two step process)
 ;; with spiffy or rpc this simply returns the return data to be returned
 ;; 
-(define (server:reply return-addr query-sig success/fail result #!key (remote #f))
+(define (server:reply return-addr query-sig success/fail result area-dat #!key (remote #f))
   (debug:print-info 11 "server:reply return-addr=" return-addr ", result=" result)
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
@@ -97,7 +97,7 @@
        (send-message pub-socket (db:obj->string (vector success/fail query-sig result)))))
     ((fs)   result)
     (else 
-     (debug:print 0 "ERROR: unrecognised transport type: " *transport-type*)
+     (debug:print 0 "ERROR: unrecognised transport type: " (megatest:area-transport area-dat))
      result)))
 
 ;; Given a run id start a server process    ### NOTE ### > file 2>&1 
@@ -159,8 +159,8 @@
       (server:run run-id area-dat)
       (rmt:start-server run-id)))
 
-(define (server:check-if-running run-id)
-  (let ((tdbdat (tasks:open-db)))
+(define (server:check-if-running run-id area-dat)
+  (let ((tdbdat (tasks:open-db area-dat)))
     (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
 	       (trycount 0))
     (if server
@@ -169,7 +169,7 @@
 	;;
 	;; client:start returns #t if login was successful.
 	;;
-	(let ((res (case *transport-type*
+	(let ((res (case (megatest:area-transport area-dat)
 		     ((http)(server:ping-server run-id 
 						(tasks:hostinfo-get-interface server)
 						(tasks:hostinfo-get-port      server)))
@@ -188,8 +188,8 @@
 
 ;; called in megatest.scm, host-port is string hostname:port
 ;;
-(define (server:ping run-id host:port)
-  (let ((tdbdat (tasks:open-db)))
+(define (server:ping run-id host:port area-dat)
+  (let ((tdbdat (tasks:open-db area-dat)))
     (let* ((host-port (let ((slst (string-split   host:port ":")))
 			(if (eq? (length slst) 2)
 			    (list (car slst)(string->number (cadr slst)))

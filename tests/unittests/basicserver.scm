@@ -23,13 +23,13 @@
 ;; Server tests go here 
 (for-each
  (lambda (run-id)
-   (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
+   (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id))
    (server:kind-run run-id *area-dat*)
    (test "did server start within 20 seconds?"
 	 #t
 	 (let loop ((remtries 20)
 		    (running (tasks:server-running-or-starting? (db:delay-if-busy
-								 (tasks:open-db))
+								 (tasks:open-db *area-dat*) *area-dat*)
 								run-id)))
 	   (if running 
 	       (> running 0)
@@ -38,19 +38,19 @@
 		     (thread-sleep! 1)
 		     (loop (- remtries 1)
 			   (tasks:server-running-or-starting? (db:delay-if-busy
-							       (tasks:open-db))
+							       (tasks:open-db *area-dat*) *area-dat*)
 							      run-id)))))))
    
    (test "did server become available" #t
 	 (let loop ((remtries 10)
-		    (res      (tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
+		    (res      (tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id)))
 	   (if res
 	       (vector? res)
 	       (begin
 		 (if (> remtries 0)
 		     (begin
 		       (thread-sleep! 1.1)
-		       (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db)) run-id)))
+		       (loop (- remtries 1)(tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id)))
 		     res)))))
    )
  (list 0 1))
@@ -119,14 +119,14 @@
 ;;
 (tasks:kill-server-run-id run-id)
 
-(test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db)) run-id))
+(test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id))
 )
 (list 0 1))
 
 ;; Tests to assess reading/writing while servers are starting/stopping
 (define start-time (current-seconds))
 (let loop ((test-state 'start))
-  (let* ((server-dats (tasks:get-server-records (db:delay-if-busy (tasks:open-db)) run-id))
+  (let* ((server-dats (tasks:get-server-records (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id))
 	 (first-dat   (if (not (null? server-dats))
 			  (car server-dats)
 			  #f)))
@@ -165,13 +165,13 @@
 ;; 				(string? (getenv "MT_RUN_AREA_HOME"))))
 ;; 
 ;; (test "server-register, get-best-server" #t (let ((res #f))
-;; 					      (open-run-close tasks:server-register tasks:open-db 1 "bob" 1234 100 'live 'http)
-;; 					      (set! res (open-run-close tasks:get-best-server tasks:open-db))
+;; 					      (open-run-close tasks:server-register tasks:open-db *area-dat* 1 "bob" 1234 100 'live 'http)
+;; 					      (set! res (open-run-close tasks:get-best-server tasks:open-db *area-dat*))
 ;; 					      (number? (vector-ref res 3))))
 ;; 
 ;; (test "de-register server" #f (let ((res #f))
-;; 				(open-run-close tasks:server-deregister tasks:open-db "bob" port: 1234)
-;; 				(vector? (open-run-close tasks:get-best-server tasks:open-db))))
+;; 				(open-run-close tasks:server-deregister tasks:open-db *area-dat* "bob" port: 1234)
+;; 				(vector? (open-run-close tasks:get-best-server tasks:open-db *area-dat*))))
 ;; 
 ;; (define server-pid #f)
 ;; 
@@ -185,7 +185,7 @@
 ;; 
 ;; (let loop ((n 10))
 ;;   (thread-sleep! 1) ;; need to wait for server to start.
-;;   (let ((res (open-run-close tasks:get-best-server tasks:open-db)))
+;;   (let ((res (open-run-close tasks:get-best-server tasks:open-db *area-dat*)))
 ;;     (print "tasks:get-best-server returned " res)
 ;;     (if (and (not res)
 ;; 	     (> n 0))
@@ -193,7 +193,7 @@
 ;; 
 ;; (test "get-best-server" #t (begin 
 ;; 			     (client:launch)
-;; 			     (let ((dat (open-run-close tasks:get-best-server tasks:open-db)))
+;; 			     (let ((dat (open-run-close tasks:get-best-server tasks:open-db *area-dat*)))
 ;; 			       (vector? dat))))
 ;; 
 ;; (define *keys*               (keys:config-get-fields *configdat*))

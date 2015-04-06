@@ -651,7 +651,7 @@
 		       (if toppath (begin
 				     (db:delay-if-busy mtdb area-dat)
 				     (db:get-all-run-ids mtdb)))))
-	 (tdbdat  (tasks:open-db))
+	 (tdbdat  (tasks:open-db area-dat))
 	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat area-dat))))
     
     ;; kill servers

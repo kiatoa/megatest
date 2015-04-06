@@ -112,7 +112,7 @@
     ;;
 ;;     (on-exit (lambda ()
 ;; 	       (if (and toppath *server-info*)
-;; 		   (open-run-close tasks:server-deregister-self tasks:open-db (car *server-info*))
+;; 		   (open-run-close tasks:server-deregister-self (lambda ()(tasks:open-db area-dat)) (car *server-info*))
 ;; 		   (let loop () 
 ;; 		     (let ((queue-len 0))
 ;; 		       (thread-sleep! (random 5))
@@ -150,7 +150,7 @@
 ;; run zmq-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (zmq-transport:keep-running)
+(define (zmq-transport:keep-running area-dat)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -180,7 +180,10 @@
 	    (loop (+ count 1)))
 
 	;; NOTE: Get rid of this mechanism! It really is not needed...
-	(open-run-close tasks:server-update-heartbeat tasks:open-db (car server-info))
+	(open-run-close tasks:server-update-heartbeat
+			(lambda ()
+			  (tasks:open-db area-dat))
+			(car server-info))
 
 	;; (if ;; (or (> numrunning 0) ;; stay alive for two days after last access
 	(mutex-lock! *heartbeat-mutex*)
@@ -200,7 +203,10 @@
 	      (debug:print-info 0 "Starting to shutdown the server.")
 	      ;; need to delete only *my* server entry (future use)
 	      (set! *time-to-exit* #t)
-	      (open-run-close tasks:server-deregister-self tasks:open-db (get-host-name))
+	      (open-run-close tasks:server-deregister-self
+			      (lambda ()
+				(tasks:open-db area-dat))
+			      (get-host-name))
 	      (thread-sleep! 1)
 	      (debug:print-info 0 "Max cached queries was " *max-cache-size*)
 	      (debug:print-info 0 "Server shutdown complete. Exiting")
@@ -236,7 +242,7 @@
     (debug:print 0 "Server started on " ipaddrstr " ports " p1 " and " p2)
     (mutex-lock! *heartbeat-mutex*)
     (set! *server-info* (open-run-close tasks:server-register 
-					tasks:open-db 
+					(lambda ()(tasks:open-db area-dat))
 					(current-process-id) 
 					ipaddrstr p1 
 					0 
@@ -306,7 +312,7 @@
 ;; run zmq-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (zmq-transport:keep-running)
+(define (zmq-transport:keep-running area-dat)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -322,7 +328,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (tdb         (tasks:open-db))
+	 (tdb         (tasks:open-db area-dat))
 	 (spid        (tasks:server-get-server-id tdb #f iface port #f)))
     (print "Keep-running got server pid " spid ", using iface " iface " and port " port)
     (let loop ((count 0))

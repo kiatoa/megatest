@@ -50,11 +50,11 @@
     ((zmq)  (zmq:client-connect  iface port))
     (else   (rpc:client-connect  iface port))))
 
-(define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
+(define (client:setup run-id area-dat #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
-    ((http)(client:setup-http run-id))
-    (else  (rpc-transport:client-setup run-id)))) ;; (client:setup-rpc run-id))))
+    ((rpc) (rpc-transport:client-setup run-id area-dat))
+    ((http)(client:setup-http run-id area-dat))
+    (else  (rpc-transport:client-setup run-id area-dat))))
 
 ;; (define (client:login-no-auto-setup server-info run-id)
 ;;   (case (server:get-transport)
@@ -85,7 +85,7 @@
 ;; 			(debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" host-info)
 ;; 			(hash-table-delete! (common:get-remote remote) run-id)
 ;; 			(open-run-close tasks:server-force-clean-run-record
-;; 			 		tasks:open-db
+;; 			 		(lambda ()(tasks:open-db area-dat))
 ;; 			 		run-id 
 ;; 			 		(car  host-info)
 ;; 			 		(cadr host-info)
@@ -97,7 +97,7 @@
 ;; 			(thread-sleep! 5)
 ;; 			(client:setup run-id remaining-tries: (- remaining-tries 1))))))
 ;; 	    ;; YUK: rename server-dat here
-;; 	    (let* ((server-dat (open-run-close tasks:get-server tasks:open-db run-id)))
+;; 	    (let* ((server-dat (open-run-close tasks:get-server (lambda ()(tasks:open-db area-dat)) run-id)))
 ;; 	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 ;; 	      (if server-dat
 ;; 		  (let* ((iface     (tasks:hostinfo-get-interface server-dat))
@@ -114,7 +114,7 @@
 ;; 			      (debug:print 25 "INFO: client:setup start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
 ;; 			      (hash-table-delete! (common:get-remote remote) run-id)
 ;; 			      (open-run-close tasks:server-force-clean-run-record
-;; 					      tasks:open-db
+;; 					      (lambda ()(tasks:open-db area-dat))
 ;; 					      run-id 
 ;; 					      (tasks:hostinfo-get-interface server-dat)
 ;; 					      (tasks:hostinfo-get-port      server-dat)
@@ -130,14 +130,14 @@
 ;; 		  (begin    ;; no server registered
 ;; 		    (if (eq? remaining-tries 2)
 ;; 			(begin
-;; 			  ;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+;; 			  ;; (open-run-close tasks:server-clean-out-old-records-for-run-id (lambda ()(tasks:open-db area-dat)) run-id " client:setup (server-dat=#f)")
 ;; 			  (client:setup run-id remaining-tries: 10))
 ;; 			(begin
 ;; 			  (thread-sleep! 2) 
 ;; 			  (debug:print 25 "INFO: client:setup start-res (not defined here), run-id=" run-id ", server-dat=" server-dat)
-;; 			  (if (< (open-run-close tasks:num-in-available-state tasks:open-db run-id) 3)
+;; 			  (if (< (open-run-close tasks:num-in-available-state (lambda ()(tasks:open-db area-dat)) run-id) 3)
 ;; 			      (begin
-;; 				;; (open-run-close tasks:server-clean-out-old-records-for-run-id tasks:open-db run-id " client:setup (server-dat=#f)")
+;; 				;; (open-run-close tasks:server-clean-out-old-records-for-run-id (lambda ()(tasks:open-db area-dat)) run-id " client:setup (server-dat=#f)")
 ;; 				(server:try-running run-id)))
 ;; 			  (thread-sleep! 10) ;; give server a little time to start up
 ;; 			  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))))
@@ -146,17 +146,18 @@
 ;; connection if required.
 ;;
 ;; There are two scenarios. 
-;;   1. We are a test manager and we received *transport-type* and (common:get-remote remote) via cmdline
+;;   1. We are a test manager and we received transport-type and (common:get-remote remote) via cmdline
 ;;   2. We are a run tests, list runs or other interactive process and we must figure out
-;;      *transport-type* and (common:get-remote remote) from the monitor.db
+;;      transport-type and (common:get-remote remote) from the monitor.db
 ;;
 ;; client:setup
 ;;
 ;; lookup_server, need to remove (common:get-remote remote) stuff
 ;;
-(define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0)(remote #f))
+(define (client:setup-http run-id area-dat #!key (remaining-tries 10) (failed-connects 0)(remote #f))
   (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
-  (let* ((tdbdat (tasks:open-db)))
+  (let* ((tdbdat         (tasks:open-db area-dat))
+	 (transport-type (megatest:area-transport area-dat)))
     (if (<= remaining-tries 0)
 	(begin
 	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
@@ -167,10 +168,10 @@
 	      (let* ((iface     (tasks:hostinfo-get-interface server-dat))
 		     (hostname  (tasks:hostinfo-get-hostname  server-dat))
 		     (port      (tasks:hostinfo-get-port      server-dat))
-		     (start-res (case *transport-type*
+		     (start-res (case transport-type
 				  ((http)(http-transport:client-connect iface port))
 				  ((nmsg)(nmsg-transport:client-connect hostname port))))
-		     (ping-res  (case *transport-type* 
+		     (ping-res  (case transport-type 
 				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
 				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
  					   (if logininfo
@@ -184,7 +185,7 @@
 		      start-res)
 		    (begin    ;; login failed but have a server record, clean out the record and try again
 		      (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
-		      (case *transport-type* 
+		      (case transport-type 
 			((http)(http-transport:close-connections run-id)))
 		      (common:del-remote! remote run-id)
 		      (tasks:kill-server-run-id run-id)
@@ -198,7 +199,7 @@
 			  (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
 		      (server:try-running run-id)
 		      (thread-sleep! 5)   ;; give server a little time to start up
-		      (client:setup run-id remaining-tries: (- remaining-tries 1))
+		      (client:setup run-id area-dat remaining-tries: (- remaining-tries 1))
 		      )))
 	      (begin    ;; no server registered
 		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
@@ -206,7 +207,7 @@
 		  (if (< num-available 2)
 		      (server:try-running run-id))
 		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
-		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+		  (client:setup run-id area-dat remaining-tries: (- remaining-tries 1)))))))))
 
 ;; keep this as a function to ease future 
 (define (client:start run-id server-info)

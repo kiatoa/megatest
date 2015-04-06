@@ -876,7 +876,7 @@
 		     (with-output-to-string
 		       (lambda () ;; (list 'hosts     hosts)
 			 (write (list (list 'testpath  test-path)
-				      (list 'transport (conc (megatest:area-transport area-dat))) ;;; *transport-type*))
+				      (list 'transport (conc (megatest:area-transport area-dat))) ;;
 				      ;; (list 'serverinf *server-info*)
 				      (list 'toppath   toppath)
 				      (list 'work-area work-area)

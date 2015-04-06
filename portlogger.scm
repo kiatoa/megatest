@@ -19,7 +19,7 @@
 ;; lsof -i
 
 
-(define (portlogger:open-db fname)
+(define (portlogger:open-db fname area-dat)
   (let* ((avail    (tasks:wait-on-journal fname 5 remove: #t)) ;; wait up to about 10 seconds for the journal to go away
 	 (exists   (file-exists? fname))
 	 (db       (if avail 
@@ -38,7 +38,7 @@
          ;;                 fail_count INTEGER DEFAULT 0,
          ;;                 update_time TIMESTAMP DEFAULT (strftime('%s','now')) );"))))
     (sqlite3:set-busy-handler! db handler)
-    (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+    (db:set-sync db area-dat) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
     ;; (if (not exists) ;; needed with IF NOT EXISTS?
     (sqlite3:execute 
      db
@@ -49,7 +49,7 @@
             update_time TIMESTAMP DEFAULT (strftime('%s','now')) );")
     db))
 
-(define (portlogger:open-run-close proc . params)
+(define (portlogger:open-run-close proc area-dat . params)
   (let* ((fname  (conc "/tmp/." (current-user-name) "-portlogger.db"))
 	 (avail  (tasks:wait-on-journal fname 10))) ;; wait up to about 10 seconds for the journal to go away
     (handle-exceptions
@@ -62,7 +62,7 @@
        (if (file-exists? fname)(delete-file fname)) ;; brutally get rid of it
        (print-call-chain (current-error-port)))
      (let* (;; (lock   (obtain-dot-lock fname 2 9 10))
-	    (db     (portlogger:open-db fname))
+	    (db     (portlogger:open-db fname area-dat))
 	    (res    (apply proc db params)))
        (sqlite3:finalize! db)
        ;; (release-dot-lock fname)

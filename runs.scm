@@ -224,7 +224,7 @@
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
 	 (required-tests     #f)  ;;(lset-intersection equal? (string-split test-patts ",") test-names))) ;; test-names)) ;; Added test-names as initial for required-tests but that failed to work
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
-	 (tdbdat             (tasks:open-db)))
+	 (tdbdat             (tasks:open-db area-dat)))
 
     (if (tasks:need-server run-id area-dat)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
@@ -232,7 +232,7 @@
 			 (lambda (signum)
 			   (signal-mask! signum)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
-			   (let ((tdbdat (tasks:open-db)))
+			   (let ((tdbdat (tasks:open-db area-dat)))
 			     (rmt:tasks-set-state-given-param-key task-key "killed"))
 			   (print "Killed by signal " signum ". Exiting")
 			   (exit)))
@@ -921,7 +921,7 @@
 	(reglen                (if (number? reglen-in) reglen-in 1))
 	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
 	(last-time-some-running (current-seconds))
-	(tdbdat                (tasks:open-db)))
+	(tdbdat                (tasks:open-db area-dat)))
 
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
@@ -1430,7 +1430,7 @@
 (define (runs:operate-on action target runnamepatt testpatt area-dat #!key (state #f)(status #f)(new-state-status #f)(mode 'remove-all)(options '()))
   (common:clear-caches) ;; clear all caches
   (let* ((db           #f)
-	 (tdbdat       (tasks:open-db))
+	 (tdbdat       (tasks:open-db area-dat))
 	 (keys         (rmt:get-keys area-dat))
 	 (rundat       (mt:get-runs-by-patt keys runnamepatt target))
 	 (header       (vector-ref rundat 0))

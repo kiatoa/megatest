@@ -102,7 +102,7 @@
 		  (not write-access))
 	     (set! *db-write-access* write-access)) ;; only unset so other db's also can use this control
 	 (sqlite3:set-busy-handler! mdb handler)
-	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
+	 (db:set-sync mdb area-dat) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
 	 ;;  (if (or (and (not exists)
 	 ;; 	      (file-write-access? toppath))
 	 ;; 	 (not (file-read-access? dbpath)))
@@ -168,17 +168,17 @@
 (define (tasks:hostinfo-get-pid         vec)    (vector-ref  vec 5))
 (define (tasks:hostinfo-get-hostname    vec)    (vector-ref  vec 6))
 
-(define (tasks:server-lock-slot mdb run-id)
+(define (tasks:server-lock-slot mdb run-id area-dat)
   (tasks:server-clean-out-old-records-for-run-id mdb run-id " tasks:server-lock-slot")
   (if (< (tasks:num-in-available-state mdb run-id) 4)
       (begin 
-	(tasks:server-set-available mdb run-id)
+	(tasks:server-set-available mdb run-id area-dat)
 	(thread-sleep! (/ (random 1500) 1000)) ;; (thread-sleep! 2) ;; Try removing this. It may not be needed.
 	(tasks:server-am-i-the-server? mdb run-id))
       #f))
 	
 ;; register that this server may come online (first to register goes though with the process)
-(define (tasks:server-set-available mdb run-id)
+(define (tasks:server-set-available mdb run-id area-dat)
   (sqlite3:execute 
    mdb 
    "INSERT INTO servers (pid,hostname,port,pubport,start_time,      priority,state,mt_version,heartbeat,   interface,transport,run_id)
@@ -192,7 +192,7 @@
    (common:version-signature)    ;; mt_version
    -1                            ;; interface
    ;; (conc (server:get-transport)) ;; transport
-   (conc *transport-type*)    ;; transport
+   (conc (megatest:area-transport area-dat))    ;; transport
    run-id
    ))
 
