@@ -200,9 +200,9 @@
 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
 	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
 	 ;; run-id is #f in next line to send the query to server 0
- 	 (run-changes     (synchash:client-get 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
+ 	 (run-changes     (synchash:client-get *area-dat* 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
 	 (tests-detail-changes (if (not (null? test-ids))
-				   (synchash:client-get 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
+				   (synchash:client-get *area-dat* 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
 				   '()))
 
 	 ;; Now can calculate the run-ids
@@ -212,7 +212,7 @@
 	 (all-test-changes (let ((res (make-hash-table)))
 			     (for-each (lambda (run-id)
 					 (if (> run-id 0)
-					     (hash-table-set! res run-id (synchash:client-get 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
+					     (hash-table-set! res run-id (synchash:client-get *area-dat* 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
 				       run-ids)
 			     res))
 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))

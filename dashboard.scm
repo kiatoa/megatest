@@ -97,10 +97,27 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(define *dbdir* (db:dbfile-path #f))
+(define *runremote* #f)
+(define *data* (make-vector 25 #f))
+
+(dboard:data-set-run-keys! *data* (make-hash-table))
+
+;; List of test ids being viewed in various panels
+(dboard:data-set-curr-test-ids! *data* (make-hash-table))
+
+;; Look up test-ids by (key1 key2 ... testname [itempath])
+(dboard:data-set-path-test-ids! *data* (make-hash-table))
+
+;; Look up run-ids by ??
+(dboard:data-set-path-run-ids! *data* (make-hash-table))
+
+(dboard:data-set-updaters! *data* (make-hash-table))
+
+(define *other* (make-hash-table))
+(define *dbdir* (db:dbfile-path #f *area-dat*))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
-(define *db-file-path* (db:dbfile-path 0))
+(define *db-file-path* (db:dbfile-path 0 *area-dat*))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? *db-file-path*)))
@@ -597,14 +614,14 @@ Misc
 (define (main-panel window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
-   #:menu (dcommon:main-menu)
+   #:menu (dcommon:main-menu *other*)
    #:shrink "YES"
    (let ((tabtop (iup:tabs 
-		  (runs window-id)
-		  (tests window-id)
-		  (runcontrol window-id)
-		  (mtest window-id) 
-		  (rconfig window-id)
+		  (runs       window-id )
+		  (tests      window-id )
+		  (runcontrol window-id )
+		  (mtest      window-id *area-dat*) 
+		  (rconfig    window-id )
 		  )))
      (iup:attribute-set! tabtop "TABTITLE0" "Runs")
      (iup:attribute-set! tabtop "TABTITLE1" "Tests")
@@ -616,7 +633,7 @@ Misc
 (define *current-window-id* 0)
 
 (define (newdashboard data)
-  (let* ((keys     (db:get-keys dbstruct))
+  (let* ((keys     (db:get-keys *dbstruct-local* *area-dat*))
 	 (runname  "%")
 	 (testpatt "%")
 	 (keypatts (map (lambda (k)(list k "%")) keys))
