@@ -2,7 +2,7 @@
 listfiles ls
 
 [requirements]
-waiton #{scheme (string-intersperse \
+waiton #{ scheme (string-intersperse \
                   (tests:filter-test-names \
                       (hash-table-keys (tests:get-all *area-dat*)) \
                       (or (args:get-arg "-runtests") \
