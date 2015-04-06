@@ -509,8 +509,8 @@
     ;;
     (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "shutting-down")
     (portlogger:open-run-close 
-     (lambda (db port yada)
-       (portlogger:set-port db area-dat port yada))
+     (lambda (db port value)
+       (portlogger:set-port db port value))
      area-dat port "released")
     (thread-sleep! 5)
     (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
