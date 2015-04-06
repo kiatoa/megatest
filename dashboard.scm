@@ -131,9 +131,10 @@ Misc
 
 ;; mtest is actually the megatest.config file
 ;;
-(define (mtest window-id)
-  (let* ((curr-row-num     0)
-	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
+(define (mtest window-id area-dat)
+  (let* ((toppath          (megatest:area-path area-dat))
+	 (curr-row-num     0)
+	 (rawconfig        (read-config (conc toppath "/megatest.config") #f 'return-string))
 	 (keys-matrix      (dcommon:keys-matrix rawconfig))
 	 (setup-matrix     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))
 	 (jobtools-matrix  (iup:matrix

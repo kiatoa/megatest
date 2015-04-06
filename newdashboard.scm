@@ -85,7 +85,7 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
 (define *db-file-path* (db:dbfile-path 0))
@@ -131,9 +131,9 @@ Misc
 
 ;; mtest is actually the megatest.config file
 ;;
-(define (mtest window-id)
+(define (mtest window-id area-dat)
   (let* ((curr-row-num     0)
-	 (rawconfig        (read-config (conc *toppath* "/megatest.config") #f 'return-string))
+	 (rawconfig        (read-config (conc (megatest:area-path area-dat) "/megatest.config") #f 'return-string))
 	 (keys-matrix      (dcommon:keys-matrix rawconfig))
 	 (setup-matrix     (dcommon:section-matrix rawconfig "setup" "Varname" "Value"))
 	 (jobtools-matrix  (iup:matrix
@@ -581,17 +581,17 @@ Misc
 ;;======================================================================
 
 ;; Main Panel
-(define (main-panel window-id)
+(define (main-panel window-id area-dat)
   (iup:dialog
    #:title "Megatest Control Panel"
    #:menu (dcommon:main-menu)
    #:shrink "YES"
    (let ((tabtop (iup:tabs 
-		  (runs window-id)
-		  (tests window-id)
-		  (runcontrol window-id)
-		  (mtest window-id) 
-		  (rconfig window-id)
+		  (runs       window-id area-dat)
+		  (tests      window-id area-dat)
+		  (runcontrol window-id area-dat)
+		  (mtest      window-id area-dat) 
+		  (rconfig    window-id area-dat)
 		  )))
      (iup:attribute-set! tabtop "TABTITLE0" "Runs")
      (iup:attribute-set! tabtop "TABTITLE1" "Tests")

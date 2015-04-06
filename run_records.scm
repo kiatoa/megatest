@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2015, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -21,7 +21,7 @@
 (define-inline (runs:runrec-serverdat   vec)(vector-ref vec 8))  ;; (host port)
 (define-inline (runs:runrec-transport   vec)(vector-ref vec 9))  ;; 'http
 (define-inline (runs:runrec-db          vec)(vector-ref vec 10)) ;; <sqlite3db> (if 'fs)
-(define-inline (runs:runrec-top-path    vec)(vector-ref vec 11)) ;; *toppath*
+(define-inline (runs:runrec-top-path    vec)(vector-ref vec 11)) ;; toppath
 (define-inline (runs:runrec-run_id      vec)(vector-ref vec 12)) ;; run-id
 
 (define-inline (test:get-id vec)       (vector-ref vec 0))

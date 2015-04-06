@@ -61,9 +61,10 @@
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
 
-(define (http-transport:run hostn run-id server-id)
+(define (http-transport:run hostn run-id server-id area-dat)
   (debug:print 2 "Attempting to start the server ...")
-  (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
+  (let* ((configdat       (megatest:area-configdat area-dat))
+	 (db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
@@ -71,7 +72,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (portlogger:open-run-close portlogger:find-port))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree")))
+	 (link-tree-path  (configf:lookup configdat "setup" "linktree")))
     ;; (set! db *inmemdb*)
     (debug:print-info 0 "portlogger recommended port: " start-port)
     (root-path     (if link-tree-path 
@@ -96,7 +97,7 @@
 				 (cond
 				  ((equal? (uri-path (request-uri (current-request)))
 					   '(/ "api"))
-				   (send-response body:    (api:process-request *inmemdb* $) ;; the $ is the request vars proc
+				   (send-response body:    (api:process-request *inmemdb* area-dat $) ;; the $ is the request vars proc
 						  headers: '((content-type text/plain)))
 				   (mutex-lock! *heartbeat-mutex*)
 				   (set! *last-db-access* (current-seconds))
@@ -116,13 +117,13 @@
 				   (send-response body: "hey there!\n"
 						  headers: '((content-type text/plain))))
 				  (else (continue))))))))
-    (http-transport:try-start-server run-id ipaddrstr start-port server-id)))
+    (http-transport:try-start-server run-id ipaddrstr start-port server-id area-dat)))
 
 ;; This is recursively run by http-transport:run until sucessful
 ;;
-(define (http-transport:try-start-server run-id ipaddrstr portnum server-id)
-  (let ((config-hostname (configf:lookup *configdat* "server" "hostname"))
-	(tdbdat          (tasks:open-db)))
+(define (http-transport:try-start-server run-id ipaddrstr portnum server-id area-dat)
+  (let ((config-hostname (configf:lookup (megatest:area-configdat area-dat) "server" "hostname"))
+	(tdbdat          (tasks:open-db area-dat)))
     (debug:print-info 0 "http-transport:try-start-server run-id=" run-id " ipaddrsstr=" ipaddrstr " portnum=" portnum " server-id=" server-id " config-hostname=" config-hostname)
     (handle-exceptions
      exn
@@ -141,7 +142,8 @@
 	     (http-transport:try-start-server run-id
 					      ipaddrstr
 					      (portlogger:open-run-close portlogger:find-port)
-					      server-id))
+					      server-id
+					      area-dat))
 	   (begin
 	     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
 	     (print "ERROR: Tried and tried but could not start the server"))))
@@ -472,7 +474,7 @@
       ;;
       ;; no_traffic, no running tests, if server 0, no running servers
       ;;
-      ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
+      ;; (let ((wait-on-running (configf:lookup configdat "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
       ;;
       (if (and *server-run*
 	       (> (+ last-access server-timeout)
@@ -524,7 +526,7 @@
 ;;
 ;; start_server? 
 ;;
-(define (http-transport:launch run-id)
+(define (http-transport:launch run-id area-dat)
   (let* ((tdbdat (tasks:open-db)))
     (set! *run-id*   run-id)
     (if (args:get-arg "-daemonize")
@@ -558,7 +560,8 @@
 					  (args:get-arg "-server")
 					  "-")
 				      run-id
-				      server-id)) "Server run"))
+				      server-id
+				      area-dat)) "Server run"))
 		 (th3 (make-thread (lambda ()
 				     (debug:print-info 0 "Server monitor thread started")
 				     (http-transport:keep-running server-id run-id))
@@ -604,11 +607,12 @@
 ;; web pages
 ;;======================================================================
 
-(define (http-transport:main-page)
-  (let ((linkpath (root-path)))
-    (conc "<head><h1>" (pathname-strip-directory *toppath*) "</h1></head>"
+(define (http-transport:main-page area-dat)
+  (let* ((toppath  (megatest:area-path area-dat))
+	 (linkpath (root-path)))
+    (conc "<head><h1>" (pathname-strip-directory toppath) "</h1></head>"
 	  "<body>"
-	  "Run area: " *toppath*
+	  "Run area: " toppath
 	  "<h2>Server Stats</h2>"
 	  (http-transport:stats-table) 
 	  "<hr>"

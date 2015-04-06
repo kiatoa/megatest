@@ -353,7 +353,7 @@
        ;; (iup:attribute-set! keys-matrix "ADDLIN" (conc curr-row-num))
        (iup:attribute-set! keys-matrix (conc curr-row-num ":0") curr-row-num)
        (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
-       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
+       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup configdat "fields" var)))
      key-vals)
     (iup:attribute-set! keys-matrix "WIDTHDEF" "40")
     keys-matrix))
@@ -379,7 +379,7 @@
        ;; (iup:attribute-set! keys-matrix "ADDLIN" (conc curr-row-num))
        (iup:attribute-set! section-matrix (conc curr-row-num ":0") var)
        (iup:attribute-set! section-matrix (conc curr-row-num ":1") (configf:lookup rawconfig sectionname var))
-       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
+       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup configdat "fields" var)))
      key-vals)
     (iup:vbox
      (iup:label (if title title (conc "Settings from [" sectionname "]"))  
@@ -405,7 +405,7 @@
     (iup:attribute-set! general-matrix "1:1" (current-user-name))
     ;; Megatest area
     ;; (iup:attribute-set! general-matrix "2:0" "Area")
-    ;; (iup:attribute-set! general-matrix "2:1" *toppath*)
+    ;; (iup:attribute-set! general-matrix "2:1" toppath)
     ;; Megatest version
     (iup:attribute-set! general-matrix "2:0" "Version")
     (iup:attribute-set! general-matrix "2:1" (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))
@@ -758,7 +758,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
 (define *db-file-path* (db:dbfile-path 0))
@@ -826,7 +826,7 @@ Misc
   *tests-sort-reverse*)
 
 (define *tests-sort-reverse* 
-  (let ((t-sort (assoc (configf:lookup *configdat* "dashboard" "testsort") *tests-sort-type-index*)))
+  (let ((t-sort (assoc (configf:lookup (megatest:area-configdat *area-dat*) "dashboard" "testsort") *tests-sort-type-index*)))
     (if t-sort
 	(cadr t-sort)
 	3)))
@@ -1386,7 +1386,7 @@ Misc
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))
-	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests *toppath* '()))
+	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests toppath '()))
 	 (test-names    (hash-table-keys all-tests-registry))
 	 (sorted-testnames #f)
 	 (action        "-runtests")
@@ -1648,8 +1648,9 @@ Misc
 ;;======================================================================
 ;;
 ;; General info about the run(s) and megatest area
-(define (dashboard:summary db)
-  (let ((rawconfig        (read-config (conc *toppath* "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
+(define (dashboard:summary db area-dat)
+  (let* ((toppath    (megatest:area-path area-dat))
+	 (rawconfig  (read-config (conc toppath "/megatest.config") #f #f))) ;; changed to #f since I want #{} to be expanded by [system ...] to NOT be expanded. WAS: 'return-string)))
     (iup:vbox
      (iup:split
       #:value 500
@@ -1658,7 +1659,7 @@ Misc
        (iup:vbox
 	(iup:hbox
 	 (iup:label "Area Path")
-	 (iup:textbox #:value *toppath* #:expand "HORIZONTAL"))
+	 (iup:textbox #:value toppath #:expand "HORIZONTAL"))
 	(iup:hbox 
 	 (dcommon:keys-matrix rawconfig)
 	 (dcommon:general-info)
@@ -1852,8 +1853,9 @@ Misc
 ;; R U N S 
 ;;======================================================================
 
-(define (make-dashboard-buttons db nruns ntests keynames)
-  (let* ((nkeys   (length keynames))
+(define (make-dashboard-buttons db nruns ntests keynames area-dat)
+  (let* ((toppath (megatest:area-path area-dat))
+	 (nkeys   (length keynames))
 	 (runsvec (make-vector nruns))
 	 (header  (make-vector nruns))
 	 (lftcol  (make-vector ntests))
@@ -2062,7 +2064,7 @@ Misc
     ;; now assemble the hdrlst and bdylst and kick off the dialog
     (iup:show
      (iup:dialog 
-      #:title (conc "Megatest dashboard " (current-user-name) ":" *toppath*)
+      #:title (conc "Megatest dashboard " (current-user-name) ":" toppath)
       #:menu (dcommon:main-menu)
       (let* ((runs-view (iup:vbox
 			 (apply iup:hbox 
@@ -2107,7 +2109,7 @@ Misc
 
 ;; Move this stuff to db.scm? I'm not sure that is the right thing to do...
 ;;
-(define *last-db-update-time* (file-modification-time *db-file-path*)) ;; (conc *toppath* "/db/main.db")))
+(define *last-db-update-time* (file-modification-time *db-file-path*)) ;; (conc toppath "/db/main.db")))
 (define *last-recalc-ended-time* 0)
 
 (define (dashboard:been-changed)

@@ -123,7 +123,7 @@
 ;;   (let ((db (vector-ref dbstruct 2)))
 ;;     (if db
 ;; 	db
-;; 	(let ((fdb (filedb:open-db (conc *toplevel* "/db/files.db"))))
+;; 	(let ((fdb (filedb:open-db (conc toppath "/db/files.db"))))
 ;; 	  (vector-set! dbstruct 2 fdb)
 ;; 	  fdb))))
 ;; 
@@ -195,7 +195,7 @@
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
-(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc toppath "/megatest.db") (car configinfo)))
   (let* ((local  (dbr:dbstruct-get-local dbstruct))
 	 (rdb    (if local
 		     (dbr:dbstruct-get-localdb dbstruct run-id)
@@ -259,7 +259,7 @@
 
 ;; This routine creates the db. It is only called if the db is not already ls opened
 ;;
-(define (db:open-main dbstruct) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
+(define (db:open-main dbstruct) ;;  (conc toppath "/megatest.db") (car configinfo)))
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
@@ -278,14 +278,15 @@
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 (define (db:setup run-id #!key (local #f))
-  (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
 ;;
-(define (db:open-megatest-db)
-  (let* ((dbpath       (conc *toppath* "/megatest.db"))
+(define (db:open-megatest-db area-dat)
+  (let* ((toppath      (megatest:area-path area-dat))
+	 (dbpath       (conc toppath "/megatest.db"))
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
@@ -771,7 +772,7 @@
 ;;)
 
 (define (db:initialize-main-db dbdat area-dat)
-  (let* ((configdat (megatest:area-configdat area-dat)) ;; (car *configinfo*))  ;; tut tut, global warning...
+  (let* ((configdat (megatest:area-configdat area-dat)) ;; (car configinfo))  ;; tut tut, global warning...
 	 (keys     (keys:config-get-fields configdat))
 	 (havekeys (> (length keys) 0))
 	 (keystr   (keys->keystr keys))
@@ -1081,8 +1082,9 @@
 ;; L O G G I N G    D B 
 ;;======================================================================
 
-(define (open-logging-db) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
-  (let* ((dbpath    (conc (if *toppath* (conc *toppath* "/") "") "logging.db")) ;; fname)
+(define (open-logging-db area-dat) ;;  (conc toppath "/megatest.db") (car configinfo)))
+  (let* ((toppath   (megatest:area-path area-dat))
+	 (dbpath    (conc (if toppath (conc toppath "/") "") "logging.db")) ;; fname)
 	 (dbexists  (file-exists? dbpath))
 	 (db        (sqlite3:open-database dbpath))
 	 (handler   (make-busy-timeout (if (args:get-arg "-override-timeout")
@@ -1445,7 +1447,7 @@
 ;; re-read the db over and over again for the keys since they never
 ;; change
 
-;; why get the keys from the db? why not get from the *configdat*
+;; why get the keys from the db? why not get from the configdat
 ;; using keys:config-get-fields?
 
 (define (db:get-keys dbstruct)
@@ -2832,10 +2834,10 @@
 			       killserver
 			       ))
 
-(define (db:login dbstruct calling-path calling-version run-id client-signature)
+(define (db:login dbstruct area-dat calling-path calling-version run-id client-signature)
   (cond 
-   ((not (equal? calling-path *toppath*))
-    (list #f "Login failed due to mismatch paths: " calling-path ", " *toppath*))
+   ((not (equal? calling-path (megatest:area-path area-dat)))
+    (list #f "Login failed due to mismatch paths: " calling-path ", " (megatest:area-path area-dat)))
    ((not (equal? *run-id* run-id))
     (list #f "Login failed due to mismatch run-id: " run-id ", " *run-id*))
    ((not (equal? megatest-version calling-version))

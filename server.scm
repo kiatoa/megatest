@@ -49,11 +49,11 @@
 ;;
 ;; start_server
 ;;
-(define (server:launch run-id)
+(define (server:launch run-id area-dat)
   (case *transport-type*
-    ((http)(http-transport:launch run-id))
-    ((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
+    ((http)(http-transport:launch run-id area-dat))
+    ((nmsg)(nmsg-transport:launch run-id area-dat))
+    ((rpc)  (rpc-transport:launch run-id area-dat))
     (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
 ;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
@@ -234,10 +234,10 @@
 	     (else       #f))
 	   (loop (read-line) inl))))))
 
-(define (server:login toppath)
+(define (server:login toppath area-dat)
   (lambda (toppath)
     (set! *last-db-access* (current-seconds))
-    (if (equal? *toppath* toppath)
+    (if (equal? (megatest:area-path area-dat) toppath)
 	(begin
 	  ;; (debug:print-info 2 "login successful")
 	  #t)

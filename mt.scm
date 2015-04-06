@@ -189,18 +189,19 @@
   (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
     (mt:test-set-state-status-by-id test-id new-state new-status new-comment)))
 
-(define (mt:lazy-read-test-config test-name)
-  (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))
+(define (mt:lazy-read-test-config test-name area-dat)
+  (let ((tconf (hash-table-ref/default *testconfigs* test-name #f))
+	(configdat (megatest:area-configdat area-dat)))
     (if tconf
 	tconf
-	(let ((test-dirs (tests:get-tests-search-path *configdat*)))
+	(let ((test-dirs (tests:get-tests-search-path configdat area-dat)))
 	  (let loop ((hed (car test-dirs))
 		     (tal (cdr test-dirs)))
 	    ;; Setting MT_LINKTREE here is almost certainly unnecessary. 
 	    (let ((tconfig-file (conc hed "/" test-name "/testconfig")))
 	      (if (and (file-exists? tconfig-file)
 		       (file-read-access? tconfig-file))
-		  (let ((link-tree-path (configf:lookup *configdat* "setup" "linktree"))
+		  (let ((link-tree-path (configf:lookup configdat "setup" "linktree"))
 			(old-link-tree  (get-environment-variable "MT_LINKTREE")))
 		    (if link-tree-path (setenv "MT_LINKTREE" link-tree-path))
 		    (let ((newtcfg (read-config tconfig-file #f #f))) ;; NOTE: Does NOT run [system ...]
@@ -211,7 +212,7 @@
 		      newtcfg))
 		  (if (null? tal)
 		      (begin
-			(debug:print 0 "ERROR: No readable testconfig found for " test-name)
+			(debug:print-info 0 "No readable testconfig found for " test-name)
 			#f)
 		      (loop (car tal)(cdr tal))))))))))
 

@@ -391,7 +391,7 @@
        ;; (iup:attribute-set! keys-matrix "ADDLIN" (conc curr-row-num))
        (iup:attribute-set! keys-matrix (conc curr-row-num ":0") curr-row-num)
        (iup:attribute-set! keys-matrix (conc curr-row-num ":1") var)
-       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
+       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup configdat "fields" var)))
      key-vals)
     (iup:attribute-set! keys-matrix "WIDTHDEF" "40")
     keys-matrix))
@@ -417,7 +417,7 @@
        ;; (iup:attribute-set! keys-matrix "ADDLIN" (conc curr-row-num))
        (iup:attribute-set! section-matrix (conc curr-row-num ":0") var)
        (iup:attribute-set! section-matrix (conc curr-row-num ":1") (configf:lookup rawconfig sectionname var))
-       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup *configdat* "fields" var)))
+       (set! curr-row-num (+ 1 curr-row-num))) ;; (config-lookup configdat "fields" var)))
      key-vals)
     (iup:vbox
      (iup:label (if title title (conc "Settings from [" sectionname "]"))  
@@ -443,7 +443,7 @@
     (iup:attribute-set! general-matrix "1:1" (current-user-name))
     ;; Megatest area
     ;; (iup:attribute-set! general-matrix "2:0" "Area")
-    ;; (iup:attribute-set! general-matrix "2:1" *toppath*)
+    ;; (iup:attribute-set! general-matrix "2:1" toppath)
     ;; Megatest version
     (iup:attribute-set! general-matrix "2:0" "Version")
     (iup:attribute-set! general-matrix "2:1" (conc megatest-version "-" (substring megatest-fossil-hash 0 4)))

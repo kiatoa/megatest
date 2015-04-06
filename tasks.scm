@@ -92,7 +92,7 @@
 	      (avail        (tasks:wait-on-journal dbpath 10)) ;; wait up to about 10 seconds for the journal to go away
 	      (exists       (file-exists? dbpath))
 	      (write-access (file-write-access? dbpath))
-	      (mdb          (cond ;; what the hek is *toppath* doing here?
+	      (mdb          (cond ;; what the hek is toppath doing here?
 			     ((and (string? toppath)(file-write-access? toppath))
 			      (sqlite3:open-database dbfile))
 			     ((file-read-access? dbpath)    (sqlite3:open-database dbfile))
@@ -104,7 +104,7 @@
 	 (sqlite3:set-busy-handler! mdb handler)
 	 (db:set-sync mdb) ;; (sqlite3:execute mdb (conc "PRAGMA synchronous = 0;"))
 	 ;;  (if (or (and (not exists)
-	 ;; 	      (file-write-access? *toppath*))
+	 ;; 	      (file-write-access? toppath))
 	 ;; 	 (not (file-read-access? dbpath)))
 	 ;;      (begin
 	 ;; 
@@ -256,12 +256,7 @@
 	(port-param     (if (and (args:get-arg "-port")
 				 (string->number (args:get-arg "-port")))
 			    (string->number (args:get-arg "-port"))
-			    #f))
-	;; (config-port    (if (and (config-lookup  *configdat* "server" "port")
-	;; 			 (string->number (config-lookup  *configdat* "server" "port")))
-	;; 		    (string->number (config-lookup  *configdat* "server" "port"))
-	;; 		    #f))
-	)
+			    #f)))
     (sqlite3:for-each-row
      (lambda (port)
        (set! used-ports (cons port used-ports)))
@@ -363,11 +358,15 @@
      "SELECT id FROM servers WHERE run_id=? AND state = 'running';" run-id)
     res))
 
-(define (tasks:need-server run-id)
-  (configf:lookup *configdat* "server" "required"))
+(define (tasks:need-server run-id area-dat)
+  (let ((req (configf:lookup (megatest:area-configdat area-dat) "server" "required")))
+    (if (and req
+	     (equal? req "yes"))
+	#t
+	#f)))
 
 ;; 	(maxqry (cdr (rmt:get-max-query-average run-id)))
-;; 	(threshold   (string->number (or (configf:lookup *configdat* "server" "server-query-threshold") "10"))))
+;; 	(threshold   (string->number (or (configf:lookup configdat "server" "server-query-threshold") "10"))))
 ;;     (cond
 ;;      (forced 
 ;;       (if (common:low-noise-print 60 run-id "server required is set")
@@ -514,27 +513,6 @@
      (car (user-information (current-user-id))))
     res))
 
-;; 
-(define (tasks:start-monitor db mdb)
-  (if (> (tasks:get-num-alive-monitors mdb) 2) ;; have two running, no need for more
-      (debug:print-info 1 "Not starting monitor, already have more than two running")
-      (let* ((megatestdb     (conc *toppath* "/megatest.db"))
-	     (monitordbf     (conc (db:dbfile-path #f) "/monitor.db"))
-	     (last-db-update 0)) ;; (file-modification-time megatestdb)))
-	(task:register-monitor mdb)
-	(let loop ((count      0)
-		   (next-touch 0)) ;; next-touch is the time where we need to update last_update
-	  ;; if the db has been modified we'd best look at the task queue
-	  (let ((modtime (file-modification-time megatestdbpath )))
-	    (if (> modtime last-db-update)
-		(tasks:process-queue db mdb last-db-update megatestdb next-touch))
-	    ;; WARNING: Possible race conditon here!!
-	    ;; should this update be immediately after the task-get-action call above?
-	    (if (> (current-seconds) next-touch)
-		(begin
-		  (tasks:monitors-update mdb)
-		  (loop (+ count 1)(+ (current-seconds) 240)))
-		(loop (+ count 1) next-touch)))))))
       
 ;;======================================================================
 ;; T A S K S   Q U E U E

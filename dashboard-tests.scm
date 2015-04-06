@@ -45,8 +45,8 @@
   (let ((cfg-ovrd (configf:lookup (megatest:area-configdat area-dat) "dashboard" "pre-command")))
     (or cfg-ovrd default-override "xterm -geometry 180x20 -e \"")))
 
-(define (dtests:get-post-command #!key (default-override #f))
-  (let ((cfg-ovrd (configf:lookup *configdat* "dashboard" "post-command")))
+(define (dtests:get-post-command area-dat  #!key (default-override #f))
+  (let ((cfg-ovrd (configf:lookup (megatest:area-configdat area-dat) "dashboard" "post-command")))
     (or cfg-ovrd default-override ";echo Press any key to continue;bash -c 'read -n 1 -s'\" &")))
 
 
@@ -304,7 +304,8 @@
 														    (iup:attribute-set! wtxtbox "VALUE" c)
 														    (if (not *dashboard-comment-share-slot*)
 															(set! *dashboard-comment-share-slot* wtxtbox)))
-														  ))))
+														  ))
+													    area-dat))
 									  (begin
 									    (rmt:test-set-state-status-by-id run-id test-id #f status #f)
 									    (db:test-set-status! testdat status))))))))
@@ -321,8 +322,8 @@
 			       btns)))
 	       btns))))))
 
-(define (dashboard-tests:run-html-viewer lfilename)
-  (let ((htmlviewercmd (configf:lookup *configdat* "setup" "htmlviewercmd")))
+(define (dashboard-tests:run-html-viewer lfilename area-dat)
+  (let ((htmlviewercmd (configf:lookup (megatest:area-configdat area-dat) "setup" "htmlviewercmd")))
     (if htmlviewercmd
 	(system (conc "(" htmlviewercmd " " lfilename " ) &")) 
 	(iup:send-url lfilename))))
@@ -355,8 +356,8 @@
     ;;     		   (print "Refresh test data " stepname))
     )))
 
-(define (dashboard-tests:waiver run-id testdat ovrdval cmtcmd)
-  (let* ((wpatt (configf:lookup *configdat* "setup" "waivercommentpatt"))
+(define (dashboard-tests:waiver run-id testdat ovrdval cmtcmd area-dat)
+  (let* ((wpatt (configf:lookup (megatest:area-configdat area-dat) "setup" "waivercommentpatt"))
 	 (wregx (if (string? wpatt)(regexp wpatt) #f))
 	 (wmesg (iup:label (if wpatt (conc "Comment must match pattern " wpatt) "")))
 	 (comnt (iup:textbox #:action (lambda (val a b)
@@ -401,9 +402,9 @@
 ;;======================================================================
 ;;
 ;;======================================================================
-(define (examine-test run-id test-id) ;; run-id run-key origtest)
-  (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
-	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
+(define (examine-test run-id test-id area-dat) ;; run-id run-key origtest)
+  (let* ((db-path       (db:dbfile-path run-id))
+	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f)
 					   local: #t))
 	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
@@ -445,14 +446,14 @@
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
-				 (dashboard-tests:run-html-viewer logfile)
+				 (dashboard-tests:run-html-viewer logfile area-dat)
 				 (message-window (conc "File " logfile " not found")))))
 	       (view-a-log (lambda (lfile) 
 			     (let ((lfilename (conc rundir "/" lfile)))
 			       ;; (print "lfilename: " lfilename)
 			       (if (file-exists? lfilename)
 					;(system (conc "firefox " logfile "&"))
-				   (dashboard-tests:run-html-viewer lfilename)
+				   (dashboard-tests:run-html-viewer lfilename area-dat)
 				   (message-window (conc "File " lfilename " not found"))))))
 	       (xterm      (lambda (x)
 			     (if (directory-exists? rundir)
@@ -544,9 +545,9 @@
 	       (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
 									(let* ((cmd     (iup:attribute command-text-box "VALUE"))
-									       (fullcmd (conc (dtests:get-pre-command)
+									       (fullcmd (conc (dtests:get-pre-command area-dat)
 											      cmd 
-											      (dtests:get-post-command))))
+											      (dtests:get-post-command area-dat))))
 									  (debug:print-info 02 "Running command: " fullcmd)
 									  (system fullcmd)))))
 	       (kill-jobs (lambda (x)
@@ -581,9 +582,9 @@
 											   "%" 
 											   item-path))
 						      )))
-				       (system (conc (dtests:get-pre-command)
+				       (system (conc (dtests:get-pre-command area-dat)
 						     cmd 
-						     (dtests:get-post-command))))))
+						     (dtests:get-post-command area-dat))))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"

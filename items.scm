@@ -129,8 +129,8 @@
       res)))
             ;; Nope, not now, return null as of 6/6/2011
 		
-(define (items:check-valid-items class item)
-  (let ((valid-values (let ((s (config-lookup *configdat* "validvalues" class)))
+(define (items:check-valid-items class item area-dat)
+  (let ((valid-values (let ((s (config-lookup (megatest:area-configdat area-dat) "validvalues" class)))
 			(if s (string-split s) #f))))
     (if valid-values
 	(if (member item valid-values)

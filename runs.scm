@@ -38,11 +38,13 @@
 ;;;;;; ;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
 ;;;;;; ;;
 ;;;;;; (define (runs:create-run-record area-dat) ;; #!key (remote #f))
-;;;;;;   (let* ((remote       (megatest:area-remote area-dat))
-;;;;;; 	 (mconfig      (if *configdat*
-;;;;;; 		           *configdat*
+;;;;;;   (let* ((remote       (megatest:area-remote    area-dat))
+;;;;;;          (configdat    (megatest:area-configdat area-dat))
+;;;;;;          (toppath      (megatest:area-path      area-dat)))
+;;;;;; 	 (mconfig      (if configdat
+;;;;;; 		           configdat
 ;;;;;; 		           (if (launch:setup-for-run)
-;;;;;; 		               *configdat*
+;;;;;; 		               configdat
 ;;;;;; 		               (begin
 ;;;;;; 		                 (debug:print 0 "ERROR: Called setup in a non-megatest area, exiting")
 ;;;;;; 		                 (exit 1)))))
@@ -54,7 +56,6 @@
 ;;;;;; 		           (args:get-arg "-runtests")))
 ;;;;;; 	  (keys        (keys:config-get-fields mconfig))
 ;;;;;; 	  (keyvals     (keys:target->keyval keys target))
-;;;;;; 	  (toppath     *toppath*)
 ;;;;;; 	  (envdat      keyvals) ;; initial values start with keyvals
 ;;;;;; 	  (runconfig   #f)
 ;;;;;; 	  (transport   (or (args:get-arg "-transport") 'http))
@@ -75,7 +76,7 @@
 ;;;;;; 			(list "MT_TARGET"        target))))
 ;;;;;;     ;; Now can read the runconfigs file
 ;;;;;;     ;; 
-;;;;;;     (set! runconfig (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target)))
+;;;;;;     (set! runconfig (read-config (conc  toppath "/runconfigs.config") #f #t sections: (list "default" target)))
 ;;;;;;     (if (not (hash-table-ref/default runconfig (args:get-arg "-reqtarg") #f))
 ;;;;;; 	(begin
 ;;;;;; 	  (debug:print 0 "ERROR: [" (args:get-arg "-reqtarg") "] not found in " runconfigf)
@@ -92,6 +93,7 @@
 
 (define (runs:set-megatest-env-vars run-id area-dat #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
   (let* ((configdat (megatest:area-configdat area-dat))
+	 (toppath   (megatest:area-path      area-dat))
 	 (target    (or (common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
@@ -123,7 +125,7 @@
       (if runname
 	  (setenv "MT_RUNNAME" runname)
 	  (debug:print 0 "ERROR: no value for runname for id " run-id)))
-    (setenv "MT_RUN_AREA_HOME" *toppath*)))
+    (setenv "MT_RUN_AREA_HOME" toppath)))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -224,7 +226,7 @@
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
 	 (tdbdat             (tasks:open-db)))
 
-    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+    (if (tasks:need-server run-id area-dat)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (set-signal-handler! signal/int
 			 (lambda (signum)
@@ -238,13 +240,13 @@
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
     (rmt:tasks-set-state-given-param-key task-key "running")
-    (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
+    (runs:set-megatest-env-vars run-id area-dat inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
 	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
 
     ;; Now generate all the tests lists
-    (set! all-tests-registry (tests:get-all))
+    (set! all-tests-registry (tests:get-all area-dat))
     (set! all-test-names     (hash-table-keys all-tests-registry))
     (set! test-names         (tests:filter-test-names all-test-names test-patts))
     (set! required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))
@@ -252,8 +254,8 @@
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
-    ;; (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
-    (debug:print-info 0 "tests search path: " (tests:get-tests-search-path configdat))
+    ;; (set! test-names (delete-duplicates (tests:get-valid-tests toppath test-patts)))
+    (debug:print-info 0 "tests search path: " (tests:get-tests-search-path configdat area-dat))
     (debug:print-info 0 "all tests:  " (string-intersperse (sort all-test-names string<) " "))
     (debug:print-info 0 "test names: " (string-intersperse (sort test-names string<) " "))
 
@@ -290,7 +292,7 @@
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
-	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
+	  (change-directory toppath) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
 	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
 		 (waitons (let ((instr (if config 
@@ -517,7 +519,7 @@
       (let ((test-name (tests:testqueue-get-testname test-record)))
 	(setenv "MT_TEST_NAME" test-name) ;; 
 	(setenv "MT_RUNNAME"   runname)
-	(runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+	(runs:set-megatest-env-vars run-id area-dat inrunname: runname) ;; these may be needed by the launching process
 	(let ((items-list (items:get-items-from-config tconfig)))
 	  (if (list? items-list)
 	      (begin
@@ -762,7 +764,7 @@
       ;; average cpu load is under the threshold before continuing
       (if (configf:lookup configdat "jobtools" "maxload") ;; only gate if maxload is specified
 	  (common:wait-for-cpuload maxload numcpus waitdelay))
-      (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry)
+      (run:test run-id run-info keyvals runname test-record flags #f test-registry all-tests-registry area-dat)
       (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'running)
       (runs:shrink-can-run-more-tests-count)  ;; DELAY TWEAKER (still needed?)
       ;; (thread-sleep! *global-delta*)
@@ -969,7 +971,7 @@
 
 	;; every couple minutes verify the server is there for this run
 	(if (and (common:low-noise-print 60 "try start server"  run-id)
-		 (tasks:need-server run-id))
+		 (tasks:need-server run-id area-dat))
 	    (tasks:start-and-wait-for-server tdbdat run-id 10)) ;; NOTE: delay and wait is done under the hood
 	
 	(if (> num-running 0)
@@ -1204,13 +1206,14 @@
        lst))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
-(define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry)
+(define (run:test run-id run-info keyvals runname test-record flags parent-test test-registry all-tests-registry area-dat)
   ;; All these vars might be referenced by the testconfig file reader
-  (let* ((test-name    (tests:testqueue-get-testname   test-record))
+  (let* ((toppath      (megatest:area-path area-dat))
+	 (test-name    (tests:testqueue-get-testname   test-record))
 	 (test-waitons (tests:testqueue-get-waitons    test-record))
 	 (test-conf    (tests:testqueue-get-testconfig test-record))
 	 (itemdat      (tests:testqueue-get-itemdat    test-record))
-	 (test-path    (hash-table-ref all-tests-registry test-name)) ;; (conc *toppath* "/tests/" test-name)) ;; could use tests:get-testconfig here ...
+	 (test-path    (hash-table-ref all-tests-registry test-name))
 	 (force        (hash-table-ref/default flags "-force" #f))
 	 (rerun        (hash-table-ref/default flags "-rerun" #f))
 	 (keepgoing    (hash-table-ref/default flags "-keepgoing" #f))
@@ -1232,8 +1235,8 @@
     (setenv "MT_TEST_NAME" test-name) ;; 
     (setenv "MT_ITEMPATH"  item-path)
     (setenv "MT_RUNNAME"   runname)
-    (runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
-    (change-directory *toppath*)
+    (runs:set-megatest-env-vars run-id area-dat inrunname: runname) ;; these may be needed by the launching process
+    (change-directory toppath)
 
     ;; Here is where the test_meta table is best updated
     ;; Yes, another use of a global for caching. Need a better way?
@@ -1281,7 +1284,7 @@
 	  (change-directory test-path)
 	  (begin
 	    (debug:print "ERROR: test run path not created before attempting to run the test. Perhaps you are running -remove-runs at the same time?")
-	    (change-directory *toppath*)))
+	    (change-directory toppath)))
       (case (if force ;; (args:get-arg "-force")
 		'NOT_STARTED
 		(if testdat
@@ -1465,14 +1468,14 @@
 	       (begin
 		 (case action
 		   ((remove-runs)
-		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+		    (if (tasks:need-server run-id area-dat)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
 		    (if (equal? testpatt "%")
 			(tasks:kill-runner target run-name)
 			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
-		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
+		    (if (tasks:need-server run-id area-dat)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    (debug:print 1 "Modifying state and staus for tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((print-run)
 		    (debug:print 1 "Printing info for run " runkey ", run=" run ", tests=" tests ", header=" header)
@@ -1757,7 +1760,7 @@
 
 ;; Update test_meta for all tests
 (define (runs:update-all-test_meta db)
-  (let ((test-names (tests:get-all))) ;; (tests:get-valid-tests)))
+  (let ((test-names (tests:get-all area-dat))) ;; (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
        (let* ((test-conf    (mt:lazy-read-test-config test-name)))

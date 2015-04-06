@@ -214,7 +214,7 @@
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys area-dat))
-	  ;; (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
+	  ;; (runs:set-megatest-env-vars run-id area-dat inkeys: keys inkeyvals: keyvals) ;; these may be needed by the launching process
 	  ;; one of these is defunct/redundant ...
 	  (if (not (launch:setup-for-run area-dat force: #t))
 	      (begin
@@ -222,14 +222,14 @@
 		;; (sqlite3:finalize! db)
 		;; (sqlite3:finalize! tdb)
 		(exit 1)))
-	  (change-directory *toppath*) 
+	  (change-directory toppath) 
 
 	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
 	  ;;       seems non-ideal but could well break stuff
 	  ;;    BUG? BUG? BUG?
 
-	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
-	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
+	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  toppath "/runconfigs.config") #f #t sections: (list "default" target))))
+	    ;; (setup-env-defaults (conc toppath "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
 	    ;; Now have runconfigs data loaded, set environment vars
 	    (for-each (lambda (section)
@@ -274,7 +274,7 @@
 	      (list  "MT_RUNNAME"   runname)
 	      (list  "MT_MEGATEST"  megatest)
 	      (list  "MT_TARGET"    target)
-	      (list  "MT_LINKTREE"  (configf:lookup *configdat* "setup" "linktree"))
+	      (list  "MT_LINKTREE"  (configf:lookup (megatest:area-configdat area-dat) "setup" "linktree"))
 	      (list  "MT_TESTSUITENAME" (common:get-testsuite-name))))
 
 	  (if mt-bindir-path (setenv "PATH" (conc (getenv "PATH") ":" mt-bindir-path)))
@@ -285,7 +285,7 @@
 	  
 	  ;; environment overrides are done *before* the remaining critical envars.
 	  (alist->env-vars env-ovrd)
-	  (runs:set-megatest-env-vars run-id inkeys: keys inkeyvals: keyvals)
+	  (runs:set-megatest-env-vars run-id area-dat inkeys: keys inkeyvals: keyvals)
 	  (set-item-env-vars itemdat)
 	  (save-environment-as-files "megatest")
 	  ;; open-run-close not needed for test-set-meta-info

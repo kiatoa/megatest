@@ -63,7 +63,7 @@
 ;; S E R V E R
 ;;======================================================================
 
-(define (nmsg-transport:run dbstruct hostn run-id server-id #!key (retrynum 1000))
+(define (nmsg-transport:run dbstruct area-dat hostn run-id server-id #!key (retrynum 1000))
   (debug:print 2 "Attempting to start the server ...")
   (let* ((start-port      (portlogger:open-run-close portlogger:find-port))
 	 (server-thread   (make-thread (lambda ()
@@ -81,7 +81,7 @@
 	  ;; (set! *inmemdb*  dbstruct)
 	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
 	  (thread-start! (make-thread
-			  (lambda ()(nmsg-transport:keep-running server-id run-id))
+			  (lambda ()(nmsg-transport:keep-running server-id run-id area-dat))
 			  "keep running"))
 	  (thread-join! server-thread))
 	(if (> retrynum 0)
@@ -89,7 +89,7 @@
 	      (debug:print 0 "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
 	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
 	      (portlogger:open-run-close portlogger:set-failed start-port)
-	      (nmsg-transport:run dbstruct hostn run-id server-id))
+	      (nmsg-transport:run dbstruct area-dat hostn run-id server-id))
 	    (begin
 	      (debug:print 0 "ERROR: could not find an open port to start server on. Giving up")
 	      (exit 1))))))
@@ -107,7 +107,7 @@
 
 ;; all routes though here end in exit ...
 ;;
-(define (nmsg-transport:launch run-id)
+(define (nmsg-transport:launch run-id area-dat)
   (let* ((tdbdat   (tasks:open-db))
 	 (dbstruct (db:setup run-id))
 	 (hostn    (or (args:get-arg "-server") "-")))
@@ -144,7 +144,7 @@
 		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
 		))
 	  ;; locked in a server id, try to start up
-	  (nmsg-transport:run dbstruct hostn run-id server-id))
+	  (nmsg-transport:run dbstruct area-dat hostn run-id server-id))
       (set! *didsomething* #t)
       (exit))))
 
@@ -254,7 +254,7 @@
 ;; run nmsg-transport:keep-running in a parallel thread to monitor that the db is being 
 ;; used and to shutdown after sometime if it is not.
 ;;
-(define (nmsg-transport:keep-running server-id run-id)
+(define (nmsg-transport:keep-running server-id run-id area-dat)
   ;; if none running or if > 20 seconds since 
   ;; server last used then start shutdown
   ;; This thread waits for the server to come alive
@@ -274,7 +274,7 @@
          (port        (cadr server-info))
          (last-access 0)
 	 (tdbdat      (tasks:open-db))
-	 (server-timeout (let ((tmo (configf:lookup  *configdat* "server" "timeout")))
+	 (server-timeout (let ((tmo (configf:lookup  (megatest:area-configdat area-dat) "server" "timeout")))
 			   (if (and (string? tmo)
 				    (string->number tmo))
 			       (* 60 60 (string->number tmo))

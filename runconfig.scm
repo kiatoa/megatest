@@ -58,9 +58,9 @@
 	  (set! *already-seen-runconfig-info* #t)))
     finaldat))
 
-(define (set-run-config-vars run-id keyvals targ-from-db)
-  (push-directory *toppath*) ;; the push/pop doesn't appear to do anything ...
-  (let ((runconfigf (conc  *toppath* "/runconfigs.config"))
+(define (set-run-config-vars run-id keyvals targ-from-db area-dat)
+  (push-directory (megatest:area-path area-dat)) ;; the push/pop doesn't appear to do anything ...
+  (let ((runconfigf (conc (megatest:area-path area-dat) "/runconfigs.config"))
 	(targ       (or (common:args-get-target)
 			targ-from-db
 			(get-environment-variable "MT_TARGET"))))

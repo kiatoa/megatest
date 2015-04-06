@@ -95,7 +95,7 @@
              (begin
                (debug:print-info 0 "Discarding connection to server for run-id " run-id ", too long between accesses")
                ;; SHOULD CLOSE THE CONNECTION HERE
-	       (case *transport-type*
+	       (case (megatest:area-transport area-dat)
 		 ((nmsg)(nn-close (http-transport:server-dat-get-socket 
 				   (common:get-remote remote run-id)))))
                (common:del-remote! remote run-id)))))
@@ -108,6 +108,7 @@
   (rmt:discard-old-connections area-dat)
   ;; (mutex-lock! *send-receive-mutex*)
   (let* ((run-id          (if rid rid 0))
+	 (configdat       (megatest:area-configdat area-dat))
 	 (connection-info (rmt:get-connection-info run-id area-dat)))
     ;; the nmsg method does the encoding under the hood (the http method should be changed to do this also)
     (if connection-info
@@ -155,7 +156,7 @@
 	;;
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
-	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
+	    (let ((faststart (configf:lookup configdat "server" "faststart")))
 	      (common:del-remote! remote run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      (if (and faststart (equal? faststart "no"))
@@ -193,7 +194,7 @@
   (mutex-unlock! *db-stats-mutex*))
 
 
-(define (rmt:print-db-stats)
+(define (rmt:print-db-stats area-dat)
   (let ((fmtstr "~40a~7-d~9-d~20,2-f")) ;; "~20,2-f"
     (debug:print 18 "DB Stats\n========")
     (debug:print 18 (format #f "~40a~8a~10a~10a" "Cmd" "Count" "TotTime" "Avg"))
@@ -233,7 +234,7 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+			     (let* ((dbdir (db:dbfile-path #f))
 				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
@@ -312,16 +313,18 @@
 ;;  M I S C
 ;;======================================================================
 
-(define (rmt:login run-id)
-  (rmt:send-receive 'login run-id (list *toppath* megatest-version run-id *my-client-signature*) area-dat))
+(define (rmt:login run-id area-dat)
+  (rmt:send-receive 'login run-id (list (megatest:area-path area-dat) megatest-version run-id *my-client-signature*) area-dat))
 
 ;; This login does no retries under the hood - it acts a bit like a ping.
 ;; Deprecated for nmsg-transport.
 ;;
-(define (rmt:login-no-auto-client-setup connection-info run-id)
-  (case *transport-type*
-    ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id (list *toppath* megatest-version run-id *my-client-signature*) area-dat))
-    ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list *toppath* megatest-version run-id *my-client-signature*) area-dat))))
+(define (rmt:login-no-auto-client-setup connection-info run-id area-dat)
+  (let ((transport (megatest:area-transport area-dat))
+	(toppath   (megatest:area-path      area-dat)))
+    (case transport
+      ((http)(rmt:send-receive-no-auto-client-setup connection-info 'login run-id  (list toppath megatest-version run-id *my-client-signature*) area-dat))
+      ((nmsg)(nmsg-transport:client-api-send-receive run-id connection-info 'login (list toppath megatest-version run-id *my-client-signature*) area-dat)))))
 
 ;; hand off a call to one of the db:queries statements
 ;; added run-id to make looking up the correct db possible 

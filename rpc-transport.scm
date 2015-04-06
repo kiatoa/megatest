@@ -63,14 +63,15 @@
 	  (rpc-transport:run (if (args:get-arg "-server")(args:get-arg "-server") "-") run-id server-id)
 	  (exit)))))
 
-(define (rpc-transport:run hostn run-id server-id)
+(define (rpc-transport:run hostn run-id server-id area-dat)
   (debug:print 2 "Attempting to start the rpc server ...")
    ;; (trace rpc:publish-procedure!)
 
   (rpc:publish-procedure! 'server:login server:login)
   (rpc:publish-procedure! 'testing (lambda () "Just testing"))
 
-  (let* ((db              #f)
+  (let* ((configdat       (megatest:area-configdat area-dat))
+	 (db              #f)
 	 (hostname        (get-host-name))
 	 (ipaddrstr       (let ((ipstr (if (string=? "-" hostn)
 					   ;; (string-intersperse (map number->string (u8vector->list (hostname->ip hostname))) ".")
@@ -78,7 +79,7 @@
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
 	 (start-port      (open-run-close tasks:server-get-next-port tasks:open-db))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
+	 (link-tree-path  (configf:lookup configdat "setup" "linktree"))
 	 (rpc:listener    (rpc-transport:find-free-port-and-open (rpc:default-server-port)))
 	 (th1             (make-thread
 			   (lambda ()
@@ -145,13 +146,13 @@
    (tcp-read-timeout 240000)
    (tcp-listen (rpc:default-server-port) 10000)))
 
-(define (rpc-transport:ping run-id host port)
+(define (rpc-transport:ping run-id host port area-dat)
   (handle-exceptions
    exn
    (begin
      (print "SERVER_NOT_FOUND")
      (exit 1))
-   (let ((login-res ((rpc:procedure 'server:login host port) *toppath*)))
+   (let ((login-res ((rpc:procedure 'server:login host port) (megatest:area-path area-dat))))
      (if (and (list? login-res)
 	      (car login-res))
 	 (begin
@@ -161,16 +162,17 @@
 	   (print "LOGIN_FAILED")
 	   (exit 1))))))
 
-(define (rpc-transport:client-setup run-id #!key (remtries 10))
+(define (rpc-transport:client-setup run-id area-dat #!key (remtries 10))
   (if (common:get-remote remote run-id)
       (begin
 	(debug:print 0 "ERROR: Attempt to connect to server but already connected")
 	#f)
-      (let* ((host-info (common:get-remote remote run-id))) ;; (open-run-close db:get-var #f "SERVER"))
+      (let* ((toppath (megatest:area-path area-dat))
+	     (host-info (common:get-remote remote run-id))) ;; (open-run-close db:get-var #f "SERVER"))
 	(if host-info
 	    (let ((iface    (car host-info))
 		  (port     (cadr host-info))
-		  (ping-res ((rpc:procedure 'server:login host port) *toppath*)))
+		  (ping-res ((rpc:procedure 'server:login host port) toppath)))
 	      (if ping-res
 		  (let ((server-dat (list iface port #f #f #f)))
 		    (common:set-remote! remote run-id server-dat)
@@ -178,14 +180,14 @@
 		  (begin
 		    (server:try-running run-id)
 		    (thread-sleep! 2)
-		    (rpc-transport:client-setup run-id (- remtries 1)))))
+		    (rpc-transport:client-setup run-id area-dat remtries: (- remtries 1)))))
  	    (let* ((server-db-info (open-run-close tasks:get-server tasks:open-db run-id)))
  	      (debug:print-info 0 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	      (if server-db-info
  		  (let* ((iface     (tasks:hostinfo-get-interface server-db-info))
  			 (port      (tasks:hostinfo-get-port      server-db-info))
 			 (server-dat (list iface port #f #f #f))
- 			 (ping-res  ((rpc:procedure 'server:login host port) *toppath*)))
+ 			 (ping-res  ((rpc:procedure 'server:login host port) toppath)))
  		    (if start-res
  			(begin
  			  (common:set-remote! remote run-id server-dat)
@@ -193,11 +195,11 @@
 			(begin
 			  (server:try-running run-id)
 			  (thread-sleep! 2)
-			  (rpc-transport:client-setup run-id (- remtries 1)))))
+			  (rpc-transport:client-setup run-id area-dat remtries: (- remtries 1)))))
 		  (begin
 		    (server:try-running run-id)
 		    (thread-sleep! 2)
-		    (rpc-transport:client-setup run-id (- remtries 1)))))))))
+		    (rpc-transport:client-setup run-id area-dat remtries: (- remtries 1)))))))))
 ;; 
 ;; 	     (port     (if (and hostinfo (> (length hostdat) 1))(cadr hostdat) #f)))
 ;; 	(if (and port
@@ -215,7 +217,7 @@
 ;; 		 ;;  #f)
 ;; 		 (set! (common:get-remote remote) #f))
 ;; 	       (if (and (not (args:get-arg "-server")) ;; no point in the server using the server using the server
-;; 			((rpc:procedure 'server:login host portn) *toppath*))
+;; 			((rpc:procedure 'server:login host portn) toppath))
 ;; 		   (begin
 ;; 		     (debug:print-info 2 "Logged in and connected to " host ":" port)
 ;; 		     (set! (common:get-remote remote) (vector host portn)))

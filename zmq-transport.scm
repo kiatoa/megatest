@@ -68,9 +68,9 @@
 (define-inline (zmqsock:set-pub! dat s)(vector-set! dat s 0))
 (define-inline (zmqsock:set-pull! dat s)(vector-set! dat s 0))
 
-(define (zmq-transport:run hostn)
+(define (zmq-transport:run hostn area-dat)
   (debug:print 2 "Attempting to start the server ...")
-  (if (not *toppath*)
+  (if (not (megatest:area-path area-dat))
       (if (not (setup-for-run))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, cannot start server, exiting")
@@ -111,7 +111,7 @@
     ;; what to do when we quit
     ;;
 ;;     (on-exit (lambda ()
-;; 	       (if (and *toppath* *server-info*)
+;; 	       (if (and toppath *server-info*)
 ;; 		   (open-run-close tasks:server-deregister-self tasks:open-db (car *server-info*))
 ;; 		   (let loop () 
 ;; 		     (let ((queue-len 0))
@@ -361,14 +361,14 @@
               (exit)))))))
 
 ;; all routes though here end in exit ...
-(define (zmq-transport:launch)
-  (if (not *toppath*)
-      (if (not (setup-for-run))
+(define (zmq-transport:launch run-id area-dat)
+  (if (not (megatest:area-path area-dat))
+      (if (not (launch:setup-for-run area-dat))
 	  (begin
 	    (debug:print 0 "ERROR: cannot find megatest.config, exiting")
 	    (exit))))
   (debug:print-info 2 "Starting zmq server")
-  (if *toppath* 
+  (if (megatest:area-path area-dat)
       (let* (;; (th1 (make-thread (lambda ()
 	     ;;      	       (let ((server-info #f))
 	     ;;      		 ;; wait for the server to be online and available

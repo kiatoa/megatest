@@ -34,13 +34,13 @@
 (include "test_records.scm")
 
 ;; Call this one to do all the work and get a standardized list of tests
-(define (tests:get-all)
-  (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
+(define (tests:get-all area-dat)
+  (let* ((test-search-path   (tests:get-tests-search-path (megatest:area-configdat area-dat))))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
-(define (tests:get-tests-search-path cfgdat)
+(define (tests:get-tests-search-path cfgdat area-dat)
   (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
-    (append paths (list (conc *toppath* "/tests")))))
+    (append paths (list (conc (megatest:area-path area-dat) "/tests")))))
 
 (define (tests:get-valid-tests test-registry tests-paths)
   (if (null? tests-paths) 
@@ -586,8 +586,8 @@
 ;; 		    (last (string-split testp "/")))
 ;; 		  tests)))))
 
-(define (tests:get-testconfig test-name test-registry system-allowed)
-  (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
+(define (tests:get-testconfig test-name test-registry system-allowed area-dat)
+  (let* ((test-path    (hash-table-ref/default test-registry test-name (conc (megatest:area-path area-dat) "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (tcfg         (if testexists

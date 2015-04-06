@@ -434,7 +434,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
-(on-exit std-exit-procedure)
+(on-exit (lambda ()
+	   (std-exit-procedure *area-dat*)))
 
 ;;======================================================================
 ;; Misc general calls
@@ -453,7 +454,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (string-intersperse 
 		x
 		" => "))
-	     (common:get-disks *configdat*))
+	     (common:get-disks (megatest:area-configdat *area-dat*)))
 	"\n"))
       (set! *didsomething* #t)))
 
@@ -638,14 +639,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (host:port     (args:get-arg "-ping")))
       (server:ping run-id host:port)))
 
-;;       (set! *did-something* #t)
-;; 	      (begin
-;; 		(print ((rpc:procedure 'testing (car host-port)(cadr host-port))))
-;; 		(case (server:get-transport)
-;; 		  ((http)(http:ping run-id host-port))
-;; 		  ((rpc) (rpc:procedure 'server:login (car host-port)(cadr host-port));;  *toppath*)) ;; (rpc-transport:ping  run-id (car host-port)(cadr host-port)))
-;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
-
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
@@ -678,7 +671,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	(if (launch:setup-for-run *area-dat*)
 	    (let ((run-id    (and (args:get-arg "-run-id")
 				  (string->number (args:get-arg "-run-id")))))
-	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+	      ;; (set! *fdb*   (filedb:open-db (conc toppath "/db/paths.db")))
 	      ;; if not list or kill then start a client (if appropriate)
 	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
 		      (eq? (length (hash-table-keys args:arg-hash)) 0))
@@ -691,7 +684,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    ))))))
 
 ;; MAY STILL NEED THIS
-;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
+;;		       (set! *megatest-db* (make-dbr:dbstruct path: toppath local: #t))))))))))
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))
@@ -756,24 +749,25 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		targets)
       (set! *didsomething* #t)))
 
-(define (full-runconfigs-read)
-  (let* ((keys   (rmt:get-keys))
-	 (target (common:args-get-target))
+(define (full-runconfigs-read area-dat)
+  (let* ((toppath  (megatest:area-path area-dat))
+	 (keys     (rmt:get-keys))
+	 (target   (common:args-get-target))
 	 (key-vals (if target (keys:target->keyval keys target) #f))
 	 (sections (if target (list "default" target) #f))
 	 (data     (begin
-		     (setenv "MT_RUN_AREA_HOME" *toppath*)
+		     (setenv "MT_RUN_AREA_HOME" toppath)
 		     (if key-vals
 			 (for-each (lambda (kt)
 				     (setenv (car kt) (cadr kt)))
 				   key-vals))
-		     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+		     (read-config (conc toppath "/runconfigs.config") #f #t sections: sections))))
     data))
 
 
 (if (args:get-arg "-show-runconfig")
     (let ((tl (launch:setup-for-run *area-dat*)))
-      (push-directory *toppath*)
+      (push-directory (megatest:area-path *area-dat*))
       (let ((data (full-runconfigs-read)))
 	;; keep this one local
 	(cond
@@ -792,8 +786,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-show-config")
     (let ((tl   (launch:setup-for-run *area-dat*))
-	  (data *configdat*)) ;; (read-config "megatest.config" #f #t)))
-      (push-directory *toppath*)
+	  (data (megatest:area-configdat *area-dat*)))
+      (push-directory (megatest:area-path *area-dat*))
       ;; keep this one local
       (cond 
        ((and (args:get-arg "-section")
@@ -824,9 +818,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; since several actions can be specified on the command line the removal
 ;; is done first
-(define (operate-on action)
-  (let* ((runrec (runs:runrec-make-record))
-	 (target (common:args-get-target)))
+(define (operate-on action area-dat)
+  (let* ((runrec     (runs:runrec-make-record))
+	 (target     (common:args-get-target))
+	 (configinfo (megatest:area-configinfo area-dat)))
     (cond
      ((not target)
       (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify -target or -reqtarg")
@@ -839,7 +834,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (debug:print 0 "ERROR: Missing required parameter for " action ", you must specify the test pattern with -testpatt")
       (exit 3))
      (else
-      (if (not (car *configinfo*))
+      (if (not (car configinfo))
 	  (begin
 	    (debug:print 0 "ERROR: Attempted " action "on test(s) but run area config file not found")
 	    (exit 1))
@@ -848,6 +843,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			    target
 			    (or (args:get-arg "-runname")(args:get-arg ":runname"))
 			    (args:get-arg "-testpatt")
+			    area-dat
 			    state: (or (args:get-arg "-state")(args:get-arg ":state") )
 			    status: (or (args:get-arg "-status")(args:get-arg ":status"))
 			    new-state-status: (args:get-arg "-set-state-status")))
@@ -901,7 +897,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (launch:setup-for-run *area-dat*)
-	(let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
+	(let* ((dbstruct (make-dbr:dbstruct path: (megatest:area-path *area-dat*) local: #t))
 	       (runpatt  (args:get-arg "-list-runs"))
 	       (testpatt (if (args:get-arg "-testpatt") 
 			     (args:get-arg "-testpatt") 
@@ -1176,7 +1172,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      "-extract-ods"
      "Make ods spreadsheet"
      (lambda (target runname keys keyvals)
-       (let ((dbstruct   (make-dbr:dbstruct path: *toppath* local: #t))
+       (let ((dbstruct   (make-dbr:dbstruct path: (megatest:area-path *area-dat*) local: #t))
 	     (outputfile (args:get-arg "-extract-ods"))
 	     (runspatt   (or (args:get-arg "-runname")(args:get-arg ":runname")))
 	     (pathmod    (args:get-arg "-pathmod")))

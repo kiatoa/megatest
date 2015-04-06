@@ -116,8 +116,8 @@
     db
     "SELECT (port) FROM ports WHERE state='released' LIMIT 1;")))
 
-(define (portlogger:find-port db)
-  (let* ((lowport (let ((val (configf:lookup *configdat* "server" "lowport")))
+(define (portlogger:find-port db area-dat)
+  (let* ((lowport (let ((val (configf:lookup (megatest:area-configdat area-dat) "server" "lowport")))
 		    (if (and val 
 			     (string->number val))
 			(string->number val)
