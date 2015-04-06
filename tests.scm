@@ -134,9 +134,9 @@
 
 ;; Check for waiver eligibility
 ;;
-(define (tests:check-waiver-eligibility testdat prev-testdat)
+(define (tests:check-waiver-eligibility testdat prev-testdat area-dat)
   (let* ((test-registry (make-hash-table))
-	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f))
+	 (testconfig  (tests:get-testconfig (db:test-get-testname testdat) test-registry #f area-dat))
 	 (test-rundir ;; (sdb:qry 'passstr 
 	  (db:test-get-rundir testdat)) ;; )
 	 (prev-rundir ;; (sdb:qry 'passstr 
@@ -232,7 +232,7 @@
 			   #f)
 		       #f)))
     (if (and waived 
-	     (tests:check-waiver-eligibility testdat prev-test))
+	     (tests:check-waiver-eligibility testdat prev-test area-dat))
 	(set! real-status "WAIVED"))
 
     (debug:print 4 "real-status " real-status ", waived " waived ", status " status)

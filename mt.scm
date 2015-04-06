@@ -68,8 +68,8 @@
 ;;  T E S T S
 ;;======================================================================
 
-(define (mt:get-tests-for-run run-id testpatt states status #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
-  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals))
+(define (mt:get-tests-for-run run-id testpatt states status area-dat #!key (not-in #t) (sort-by 'event_time) (sort-order "ASC") (qryvals #f))
+  (let loop ((testsdat (rmt:get-tests-for-run run-id testpatt states status 0 500 not-in sort-by sort-order qryvals area-dat))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -78,7 +78,7 @@
       (if have-more 
 	  (let ((new-offset (+ offset limit)))
 	    (debug:print-info 4 "More than " limit " tests, have " (length full-list) " tests so far.")
-	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals)
+	    (loop (rmt:get-tests-for-run run-id testpatt states status new-offset limit not-in sort-by sort-order qryvals area-dat)
 		  full-list
 		  new-offset
 		  limit))

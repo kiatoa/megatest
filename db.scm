@@ -380,7 +380,7 @@
   (let ((locdbs (dbr:dbstruct-get-locdbs dbstruct)))
     (if (hash-table? locdbs)
 	(for-each (lambda (run-id)
-		    (db:close-run-db dbstruct run-id))
+		    (db:close-run-db dbstruct area-dat run-id))
 		  (hash-table-keys locdbs))))
 
   ;; (let* ((local (dbr:dbstruct-get-local dbstruct))
@@ -642,7 +642,7 @@
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
 (define (db:multi-db-sync run-ids area-dat . options)
-  (let* ((toppath  (launch:setup-for-run))
+  (let* ((toppath  (launch:setup-for-run area-dat))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
 	 (mtdb     (if toppath (db:open-megatest-db area-dat)))
 	 (allow-cleanup (if run-ids #f #t))
@@ -650,7 +650,7 @@
 		       run-ids
 		       (if toppath (begin
 				     (db:delay-if-busy mtdb area-dat)
-				     (db:get-all-run-ids mtdb)))))
+				     (db:get-all-run-ids mtdb area-dat)))))
 	 (tdbdat  (tasks:open-db area-dat))
 	 (servers (tasks:get-all-servers (db:delay-if-busy tdbdat area-dat))))
     
@@ -674,7 +674,7 @@
     (if (member 'adj-testids options)
 	(begin
 	  (db:delay-if-busy mtdb area-dat)
-	  (db:prep-megatest.db-for-migration mtdb)))
+	  (db:prep-megatest.db-for-migration mtdb area-dat)))
 
     ;; sync runs, test_meta etc.
     ;;
@@ -696,7 +696,7 @@
     ;;
     (if (member 'new2old options)
 	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
-	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb area-dat 0))))
+	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb area-dat 0)) area-dat))
 	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
 	       (count       1)
 	       (total       (length all-run-ids))
@@ -713,15 +713,15 @@
 	       (if (eq? run-id 0)
 		   (begin
 		     (db:sync-tables area-dat (db:sync-main-list dbstruct area-dat) (db:get-db fromdb area-dat #f) mtdb)
-		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb area-dat #f))))
+		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb area-dat #f) area-dat)))
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
 		     (db:sync-tables area-dat db:sync-tests-only (db:get-db fromdb area-dat run-id) mtdb)
-		     (db:clean-up-rundb (db:get-db fromdb area-dat run-id))
+		     (db:clean-up-rundb (db:get-db fromdb area-dat run-id) area-dat)
 		     ))))
 	   all-run-ids)
 	  ;; removed deleted runs
-	  (let ((dbdir (tasks:get-task-db-path)))
+	  (let ((dbdir (tasks:get-task-db-path area-dat)))
 	    (for-each (lambda (run-id)
 			(let ((fullname (conc dbdir "/" run-id ".db")))
 			  (if (file-exists? fullname)
@@ -1126,7 +1126,7 @@
 ;; M A I N T E N A N C E
 ;;======================================================================
 
-(define (db:have-incompletes? dbstruct area-dat run-id ovr-deadtime area-dat)
+(define (db:have-incompletes? dbstruct area-dat run-id ovr-deadtime)
   (let* ((dbdat        (db:get-db dbstruct area-dat run-id))
 	 (db           (db:dbdat-get-db dbdat))
 	 (incompleted '())
@@ -1323,7 +1323,7 @@
 ;;    a. If have tests that are not deleted, set state='unknown'
 ;;    b. ....
 ;;
-(define (db:clean-up-rundb dbdat)
+(define (db:clean-up-rundb dbdat area-dat)
   ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM tests);"))
@@ -1364,7 +1364,7 @@
 ;;    a. If have tests that are not deleted, set state='unknown'
 ;;    b. ....
 ;;
-(define (db:clean-up-maindb dbdat)
+(define (db:clean-up-maindb dbdat area-dat)
   ;; (debug:print 0 "WARNING: db clean up not fully ported to v1.60, cleanup action will be on megatest.db")
   (let* ((db         (db:dbdat-get-db dbdat))
 	 (count-stmt (sqlite3:prepare db "SELECT (SELECT count(id) FROM runs);"))
@@ -2413,8 +2413,8 @@
 ;; 1. move test ids into the 30k * run_id range
 ;; 2. move step ids into the 30k * run_id range
 ;;
-(define (db:prep-megatest.db-for-migration mtdb)
-  (let* ((run-ids (db:get-all-run-ids mtdb)))
+(define (db:prep-megatest.db-for-migration mtdb area-dat)
+  (let* ((run-ids (db:get-all-run-ids mtdb area-dat)))
     (for-each 
      (lambda (run-id)
        (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id)))
@@ -2852,7 +2852,7 @@
     (hash-table-set! *logged-in-clients* client-signature (current-seconds))
     '(#t "successful login"))))
 
-(define (db:general-call dbdat stmtname params)
+(define (db:general-call dbdat stmtname params area-dat)
   (let ((query (let ((q (alist-ref (if (string? stmtname)
 				       (string->symbol stmtname)
 				       stmtname)

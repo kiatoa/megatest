@@ -157,7 +157,7 @@
 (define (server:try-running run-id area-dat)
   (if (eq? run-id 0)
       (server:run run-id area-dat)
-      (rmt:start-server run-id)))
+      (rmt:start-server run-id area-dat)))
 
 (define (server:check-if-running run-id area-dat)
   (let ((tdbdat (tasks:open-db area-dat)))
@@ -209,7 +209,7 @@
 	      (let* ((iface      (if host-port (car host-port) (tasks:hostinfo-get-interface server-db-dat)))
 		     (port       (if host-port (cadr host-port)(tasks:hostinfo-get-port      server-db-dat)))
 		     (server-dat (http-transport:client-connect iface port))
-		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+		     (login-res  (rmt:login-no-auto-client-setup server-dat run-id area-dat)))
 		(if (and (list? login-res)
 			 (car login-res))
 		    (begin

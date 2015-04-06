@@ -280,7 +280,7 @@
 		    (string-split (or (configf:lookup configdat "setup" "allow-auto-rerun") "")))))
 
     ;; Ensure all tests are registered in the test_meta table
-    (runs:update-all-test_meta #f)
+    (runs:update-all-test_meta #f area-dat)
 
     ;; now add non-directly referenced dependencies (i.e. waiton)
     ;;======================================================================
@@ -294,7 +294,7 @@
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory toppath) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
-	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
+	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs area-dat))
 		 (waitons (let ((instr (if config 
 					   (config-lookup config "requirements" "waiton")
 					   (begin ;; No config means this is a non-existant test
@@ -463,9 +463,9 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap area-dat)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode area-dat itemmap: itemmap))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path area-dat itemmap: itemmap))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -649,7 +649,7 @@
 (define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap area-dat)
   (let* ((configdat               (megatest:area-configdat area-dat))
 	 (toppath                 (megatest:area-path      area-dat))
-	 (run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
+	 (run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs area-dat)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
@@ -905,24 +905,24 @@
   ;;
   ;; (cdb:remote-run db:find-and-mark-incomplete #f)
 
-  (let ((configdat             (megatest:area-configdat area-dat))
-	(toppath               (megatest:area-path      area-dat))
-	(run-info              (rmt:get-run-info run-id area-dat))
-	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
-	(sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
-	(test-registry         (make-hash-table))
-	(registry-mutex        (make-mutex))
-	(num-retries           0)
-	(max-retries           (config-lookup configdat "setup" "maxretries"))
-	(max-concurrent-jobs   (let ((mcj (config-lookup configdat "setup"     "max_concurrent_jobs")))
-				 (if (and mcj (string->number mcj))
-				     (string->number mcj)
-				     1))) ;; length of the register queue ahead
-	(reglen                (if (number? reglen-in) reglen-in 1))
-	(last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
-	(last-time-some-running (current-seconds))
-	(tdbdat                (tasks:open-db area-dat)))
-
+  (let* ((configdat             (megatest:area-configdat area-dat))
+	 (toppath               (megatest:area-path      area-dat))
+	 (run-info              (rmt:get-run-info run-id area-dat))
+	 (tests-info            (mt:get-tests-for-run run-id #f '() '() area-dat)) ;;  qryvals: "id,testname,item_path"))
+	 (sorted-test-names     (tests:sort-by-priority-and-waiton test-records))
+	 (test-registry         (make-hash-table))
+	 (registry-mutex        (make-mutex))
+	 (num-retries           0)
+	 (max-retries           (config-lookup configdat "setup" "maxretries"))
+	 (max-concurrent-jobs   (let ((mcj (config-lookup configdat "setup"     "max_concurrent_jobs")))
+				  (if (and mcj (string->number mcj))
+				      (string->number mcj)
+				      1))) ;; length of the register queue ahead
+	 (reglen                (if (number? reglen-in) reglen-in 1))
+	 (last-time-incomplete  (- (current-seconds) 900)) ;; force at least one clean up cycle
+	 (last-time-some-running (current-seconds))
+	 (tdbdat                (tasks:open-db area-dat)))
+    
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
     (for-each (lambda (trec)
@@ -1050,7 +1050,7 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap)))
+	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap area-dat)))
 	    (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
@@ -1102,10 +1102,10 @@
 	 ;;    - but only do that if resources exist to kick off the job
 	 ;; EXPAND ITEMS
 	 ((or (procedure? items)(eq? items 'have-procedure))
-	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)))
+	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs area-dat)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap area-dat)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
@@ -1248,7 +1248,7 @@
     (if (not (hash-table-ref/default *test-meta-updated* test-name #f))
         (begin
 	   (hash-table-set! *test-meta-updated* test-name #t)
-           (runs:update-test_meta test-name test-conf)))
+           (runs:update-test_meta test-name test-conf area-dat)))
     
     ;; itemdat => ((ripeness "overripe") (temperature "cool") (season "summer"))
     (let* ((new-test-path (string-intersperse (cons test-path (map cadr itemdat)) "/"))
@@ -1450,7 +1450,7 @@
 	     (dirs-to-remove (make-hash-table))
 	     (proc-get-tests (lambda (run-id)
 			      (mt:get-tests-for-run run-id
-						    testpatt states statuses
+						    testpatt states statuses area-dat
 						    not-in:  #f
 						    sort-by: (case action
 							       ((remove-runs) 'rundir)
@@ -1593,7 +1593,7 @@
 		     (if worker-thread (thread-join! worker-thread))))))
 	   ;; remove the run if zero tests remain
 	   (if (eq? action 'remove-runs)
-	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") not-in: #t)))
+	       (let ((remtests (mt:get-tests-for-run (db:get-value-by-header run header "id") #f '("DELETED") '("n/a") area-dat not-in: #t)))
 		 (if (null? remtests) ;; no more tests remaining
 		     (let* ((dparts  (string-split lasttpath "/"))
 			    (runpath (conc "/" (string-intersperse 
@@ -1759,12 +1759,12 @@
      '(("author" 2)("owner" 3)("description" 4)("reviewed" 5)("tags" 9)("jobgroup" 10)))))
 
 ;; Update test_meta for all tests
-(define (runs:update-all-test_meta db)
+(define (runs:update-all-test_meta db area-dat)
   (let ((test-names (tests:get-all area-dat))) ;; (tests:get-valid-tests)))
     (for-each 
      (lambda (test-name)
-       (let* ((test-conf    (mt:lazy-read-test-config test-name)))
-	 (if test-conf (runs:update-test_meta test-name test-conf))))
+       (let* ((test-conf    (mt:lazy-read-test-config test-name area-dat)))
+	 (if test-conf (runs:update-test_meta test-name test-conf area-dat))))
      (hash-table-keys test-names))))
 
 ;; This could probably be refactored into one complex query ...

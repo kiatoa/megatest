@@ -129,7 +129,7 @@
 	  (if success
 	      (begin
 		;; (mutex-unlock! *send-receive-mutex*)
-		(case 
+		(case transport-type 
 		  ((http) res) ;; (db:string->obj res))
 		  ((nmsg) res))) ;; (vector-ref res 1)))
 	      (begin ;; let ((new-connection-info (client:setup run-id)))
@@ -167,12 +167,12 @@
 		    (rmt:send-receive cmd rid params area-dat attemptnum: (+ attemptnum 1)))
 		  (begin
 		    (server:kind-run run-id area-dat)
-		    (rmt:open-qry-close-locally cmd run-id area-dat params area-dat))))
+		    (rmt:open-qry-close-locally cmd run-id area-dat params))))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      ;; (exit)
-	      (rmt:open-qry-close-locally cmd run-id area-dat params area-dat)
+	      (rmt:open-qry-close-locally cmd run-id area-dat params)
 	      )))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
@@ -307,7 +307,7 @@
 (define (rmt:kill-server run-id)
   (rmt:send-receive 'kill-server run-id (list run-id) area-dat))
 
-(define (rmt:start-server run-id)
+(define (rmt:start-server run-id area-dat)
   (rmt:send-receive 'start-server 0 (list run-id) area-dat))
 
 ;;======================================================================

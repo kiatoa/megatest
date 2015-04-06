@@ -172,8 +172,8 @@
 				  ((http)(http-transport:client-connect iface port))
 				  ((nmsg)(nmsg-transport:client-connect hostname port))))
 		     (ping-res  (case transport-type 
-				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
-				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
+				  ((http)(rmt:login-no-auto-client-setup start-res run-id area-dat))
+				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id area-dat)))
  					   (if logininfo
  					       (car (vector-ref logininfo 1))
  					       #f))))))

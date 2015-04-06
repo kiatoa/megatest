@@ -123,7 +123,7 @@
 	    ;;===============================================
 
 	    ;; SERVERS
-	    ((start-server)                    (apply server:kind-run params))
+	    ((start-server)                    (apply server:kind-run params area-dat))
 	    ((kill-server)                     (set! *server-run* #f))
 
 	    ;; TESTS
@@ -156,11 +156,11 @@
 	    ((mark-incomplete)              (apply db:find-and-mark-incomplete dbstruct area-dat params))
 
 	    ;; TESTMETA
-	    ((testmeta-add-record)       (apply db:testmeta-add-record dbstruct area-dat params))
-	    ((testmeta-update-field)     (apply db:testmeta-update-field dbstruct area-dat params))
+	    ((testmeta-add-record)             (apply db:testmeta-add-record dbstruct area-dat params))
+	    ((testmeta-update-field)           (apply db:testmeta-update-field dbstruct area-dat params))
 
 	    ;; TASKS
-	    ((tasks-add)                 (apply tasks:add dbstruct area-dat params))   
+	    ((tasks-add)                       (apply tasks:add dbstruct area-dat params))   
 	    ((tasks-set-state-given-param-key) (apply tasks:set-state-given-param-key dbstruct area-dat params))
 
 	    ;; ARCHIVES
@@ -225,7 +225,7 @@
 						  (realparams (cddr params)))
 					      (db:with-db dbstruct area-dat run-id #t ;; these are all for modifying the db
 							  (lambda (db)
-							    (db:general-call db stmtname realparams)))))
+							    (db:general-call db stmtname realparams area-dat)))))
 	    ((sdb-qry)                      (apply sdb:qry params))
 	    ((ping)                         (current-process-id))
 

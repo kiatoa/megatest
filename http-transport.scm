@@ -583,9 +583,9 @@
 	    (thread-join! th2)
 	    (exit))))))
 
-(define (http:ping run-id host-port)
+(define (http:ping run-id host-port area-dat)
   (let* ((server-dat (http-transport:client-connect (car host-port)(cadr host-port)))
-	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id)))
+	 (login-res  (rmt:login-no-auto-client-setup server-dat run-id area-dat)))
     (if (and (list? login-res)
 	     (car login-res))
 	(begin

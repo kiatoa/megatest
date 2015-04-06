@@ -73,7 +73,7 @@
 (define *db-access-mutex*     (make-mutex))
 
 ;; SERVER
-;; (define *my-client-signature* #f)
+(define *my-client-signature* #f)
 ;; (define *transport-type*    'http)             ;; override with [server] transport http|rpc|nmsg
 ;; (define *runremote*         (make-hash-table)) ;; if set up for server communication this will hold <host port>
 

@@ -527,9 +527,9 @@
 
 
 ;; register a task
-(define (tasks:add dbstruct action owner target runname testpatt params)
+(define (tasks:add dbstruct area-dat action owner target runname testpatt params)
   (db:with-db 
-   dbstruct #f #t
+   dbstruct area-dat #f #t
    (lambda (db)
      (sqlite3:execute db "INSERT INTO tasks_queue (action,owner,state,target,name,testpatt,params,creation_time,execution_time)
                              VALUES (?,?,'new',?,?,?,?,strftime('%s','now'),0);" 
@@ -682,15 +682,15 @@
       (sqlite3:first-result db "SELECT id FROM tasks_queue WHERE params LIKE ?;"
 			    task-params)))))
 
-(define (tasks:set-state-given-param-key dbstruct param-key new-state)
+(define (tasks:set-state-given-param-key dbstruct area-dat param-key new-state)
   (db:with-db
-   dbstruct #f #t
+   dbstruct area-dat #f #t
    (lambda (db)
      (sqlite3:execute db "UPDATE tasks_queue SET state=? WHERE params LIKE ?;" new-state param-key))))
 
-(define (tasks:get-records-given-param-key dbstruct param-key state-patt action-patt test-patt)
+(define (tasks:get-records-given-param-key dbstruct area-dat param-key state-patt action-patt test-patt)
   (db:with-db
-   dbstruct #f #f
+   dbstruct area-dat #f #f
    (lambda (db)
      (handle-exceptions
       exn
