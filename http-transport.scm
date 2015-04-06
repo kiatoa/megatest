@@ -71,7 +71,9 @@
 					   (server:get-best-guess-address hostname)
 					   #f)))
 			    (if ipstr ipstr hostn))) ;; hostname))) 
-	 (start-port      (portlogger:open-run-close portlogger:find-port area-dat))
+	 (start-port      (portlogger:open-run-close (lambda (db)
+						       (portlogger:find-port db area-dat))
+						     area-dat))
 	 (link-tree-path  (configf:lookup configdat "setup" "linktree")))
     ;; (set! db *inmemdb*)
     (debug:print-info 0 "portlogger recommended port: " start-port)
@@ -134,14 +136,19 @@
 	     (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 "exn=" (condition->list exn))
-	     (portlogger:open-run-close portlogger:set-failed area-dat portnum)
+	     (portlogger:open-run-close (lambda (db)
+					  (portlogger:set-failed db area-dat))
+					area-dat portnum)
 	     (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	     (thread-sleep! 0.1)
 
 	     ;; get_next_port goes here
 	     (http-transport:try-start-server run-id
 					      ipaddrstr
-					      (portlogger:open-run-close portlogger:find-port area-dat)
+					      (portlogger:open-run-close 
+					       (lambda (db)
+						 (portlogger:find-port db area-dat))
+					       area-dat)
 					      server-id
 					      area-dat))
 	   (begin
@@ -400,7 +407,7 @@
          (iface       (car server-info))
          (port        (cadr server-info))
          (last-access 0)
-	 (server-timeout (server:get-timeout)))
+	 (server-timeout (server:get-timeout area-dat)))
     (let loop ((count         0)
 	       (server-state 'available)
 	       (bad-sync-count 0))
@@ -501,7 +508,10 @@
     ;; start_shutdown
     ;;
     (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "shutting-down")
-    (portlogger:open-run-close portlogger:set-port area-dat port "released")
+    (portlogger:open-run-close 
+     (lambda (db)
+       (portlogger:set-port db area-dat))
+     area-dat port "released")
     (thread-sleep! 5)
     (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
     (debug:print-info 0 "Number of cached writes   " *number-of-writes*)
