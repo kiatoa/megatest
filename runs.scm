@@ -96,7 +96,7 @@
 	 (toppath   (megatest:area-path      area-dat))
 	 (target    (or (common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
+	 (keys    (if inkeys    inkeys    (rmt:get-keys area-dat)))
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
 	 (link-tree (configf:lookup configdat "setup" "linktree")))
@@ -121,7 +121,7 @@
     (if (not (get-environment-variable "MT_TARGET"))(setenv "MT_TARGET" target))
     (alist->env-vars (hash-table-ref/default configdat "env-override" '()))
     ;; Lets use this as an opportunity to put MT_RUNNAME in the environment
-    (let ((runname  (if inrunname inrunname (rmt:get-run-name-from-id run-id))))
+    (let ((runname  (if inrunname inrunname (rmt:get-run-name-from-id run-id area-dat))))
       (if runname
 	  (setenv "MT_RUNNAME" runname)
 	  (debug:print 0 "ERROR: no value for runname for id " run-id)))
@@ -171,8 +171,8 @@
 		   2);; obviously haven't had any work to do for a while
         	  (else 0)))
   (let* ((configdat               (megatest:area-configdat area-dat))
-	 (num-running             (rmt:get-count-tests-running run-id))
-	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup))
+	 (num-running             (rmt:get-count-tests-running run-id area-dat))
+	 (num-running-in-jobgroup (rmt:get-count-tests-running-in-jobgroup run-id jobgroup area-dat))
 	 (job-group-limit         (let ((jobg-count (config-lookup configdat "jobgroups" jobgroup)))
 				    (if (string? jobg-count)
 					(string->number jobg-count)
@@ -238,8 +238,8 @@
 			   (exit)))
 
     ;; register this run in monitor.db
-    (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
-    (rmt:tasks-set-state-given-param-key task-key "running")
+    (rmt:tasks-add "run-tests" user target runname test-patts task-key area-dat) ;; params)
+    (rmt:tasks-set-state-given-param-key task-key "running" area-dat)
     (runs:set-megatest-env-vars run-id area-dat inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (if (file-exists? runconfigf)
 	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
@@ -276,7 +276,7 @@
 	  ;; Now convert FAIL and anything in allow-auto-rerun to NOT_STARTED
 	  ;;
 	  (for-each (lambda (state)
-		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state))
+		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state area-dat))
 		    (string-split (or (configf:lookup configdat "setup" "allow-auto-rerun") "")))))
 
     ;; Ensure all tests are registered in the test_meta table
@@ -393,13 +393,13 @@
 					  "runs:run-tests-queue"))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
-					    (let ((run-ids (rmt:get-all-run-ids)))
+					    (let ((run-ids (rmt:get-all-run-ids area-dat)))
 					      (for-each (lambda (run-id)
 							  (if keep-going
 							      (handle-exceptions
 							       exn
 							       (debug:print 0 "error in calling find-and-mark-incomplete for run-id " run-id)
-							       (rmt:find-and-mark-incomplete run-id #f)))) ;; ovr-deadtime)))
+							       (rmt:find-and-mark-incomplete run-id #f area-dat)))) ;; ovr-deadtime)))
 							run-ids)))
 					  "runs: mark-incompletes")))
 	    (thread-start! th1)
@@ -417,7 +417,7 @@
 		  (runs:run-tests target runname test-patts user flags area-dat run-count: (- run-count 1)))))
 	  (debug:print-info 0 "No tests to run")))
     (debug:print-info 4 "All done by here")
-    (rmt:tasks-set-state-given-param-key task-key "done")
+    (rmt:tasks-set-state-given-param-key task-key "done" area-dat)
     ;; (sqlite3:finalize! tasks-db)
     ))
 
@@ -465,7 +465,7 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode area-dat itemmap: itemmap))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -524,7 +524,7 @@
 	  (if (list? items-list)
 	      (begin
 		(if (null? items-list)
-		    (let ((test-id (rmt:get-test-id run-id test-name "")))
+		    (let ((test-id (rmt:get-test-id run-id test-name "" area-dat)))
 		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites"))))
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
@@ -562,7 +562,7 @@
 		  (trimmed-reg (mt:discard-blocked-tests run-id hed reg test-records)))
 	      (debug:print 1 "WARNING: test " hed " has discarded prerequisites, removing it from the queue")
 
-	      (let ((test-id (rmt:get-test-id run-id hed "")))
+	      (let ((test-id (rmt:get-test-id run-id hed "" area-dat)))
 		(if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to discarded prerequisites")))
 	      
 	      (if (and (null? trimmed-tal)
@@ -588,7 +588,7 @@
 	    (list (car newtal)(append (cdr newtal) reg) '() reruns)) ;; an issue with prereqs not yet met?
 	  (begin
 	    (debug:print-info 1 "no fails in prerequisites for " hed " but nothing seen running in a while, dropping test " hed " from the run queue")
-	    (let ((test-id (rmt:get-test-id run-id hed "")))
+	    (let ((test-id (rmt:get-test-id run-id hed "" area-dat)))
 	      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "TIMED_OUT" "Nothing seen running in a while.")))
 	    (list (runs:queue-next-hed tal reg reglen regfull)
 		  (runs:queue-next-tal tal reg reglen regfull)
@@ -602,7 +602,7 @@
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
 			(string-intersperse (map (lambda (t)(conc (db:test-get-testname t) ":" (db:test-get-state t)"/"(db:test-get-status t))) fails) ", ")
 			", removing it from to-do list")
-      (let ((test-id (rmt:get-test-id run-id hed "")))
+      (let ((test-id (rmt:get-test-id run-id hed "" area-dat)))
 	(if test-id
 	    (if (not (null? prereq-fails))
 		(mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "PREQ_DISCARDED" "Failed to run due to prior failed prerequisites")
@@ -655,7 +655,7 @@
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode area-dat itemmap: itemmap))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (runs:calc-not-completed prereqs-not-met))
@@ -701,7 +701,7 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (let register-loop ((numtries 15))
-	(rmt:general-call 'register-test run-id run-id test-name item-path)
+	(rmt:general-call 'register-test run-id area-dat run-id test-name item-path)
 	(if (rmt:get-test-id run-id test-name item-path)
 	    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'done)
 	    (if (> numtries 0)
@@ -711,7 +711,7 @@
 		(debug:print 0 "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
-	    (rmt:general-call 'register-test run-id run-id test-name "")
+	    (rmt:general-call 'register-test run-id area-dat run-id test-name "")
 	    (if (rmt:get-test-id run-id test-name "")
 		(hash-table-set! test-registry (db:test-make-full-name test-name "") 'done))))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
@@ -985,7 +985,7 @@
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f))
 	    (begin
-	      (rmt:general-call 'register-test run-id run-id test-name "" area-dat)
+	      (rmt:general-call 'register-test run-id area-dat run-id test-name "" area-dat)
 	      (hash-table-set! test-registry (db:test-make-full-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
@@ -1268,7 +1268,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rmt:general-call 'register-test run-id run-id test-name item-path area-dat)
+		  (rmt:general-call 'register-test run-id area-dat run-id test-name item-path area-dat)
 		  (set! test-id (rmt:get-test-id run-id test-name item-path area-dat))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (rmt:get-test-info-by-id run-id test-id area-dat))

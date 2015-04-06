@@ -281,7 +281,7 @@
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
-(define (db:setup run-id #!key (local #f))
+(define (db:setup run-id area-dat #!key (local #f))
   (let* ((dbdir    (db:dbfile-path #f area-dat)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))

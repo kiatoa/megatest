@@ -281,8 +281,8 @@
     (if (and (not (null? run-ids))
 	     (configf:lookup configdat "setup" "megatest-db"))
 	(db:multi-db-sync run-ids 'new2old)))
-  (if *dbstruct-db* (db:close-all *dbstruct-db*))
-  (if *inmemdb*     (db:close-all *inmemdb*))
+  (if *dbstruct-db* (db:close-all *dbstruct-db* area-dat))
+  (if *inmemdb*     (db:close-all *inmemdb* area-dat))
   (if (and *megatest-db*
 	   (sqlite3:database? *megatest-db*))
       (begin

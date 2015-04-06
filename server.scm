@@ -65,7 +65,7 @@
 ;; Get the transport
 (define (server:get-transport area-dat)
   (if (megatest:area-transport area-dat)
-      (megatest-area-transport area-dat)
+      (megatest:area-transport area-dat)
       (let ((ttype (string->symbol
 		    (or (args:get-arg "-transport")
 			(configf:lookup (megatest:area-configdat area-dat) "server" "transport")

@@ -637,7 +637,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (args:get-arg "-ping")
     (let* ((run-id        (string->number (args:get-arg "-run-id")))
 	   (host:port     (args:get-arg "-ping")))
-      (server:ping run-id host:port)))
+      (server:ping run-id host:port *area-dat*)))
 
 ;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)

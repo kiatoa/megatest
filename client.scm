@@ -43,15 +43,15 @@
 		 (cdb:logout serverdat (megatest:area-path area-dat) (client:get-signature)))))
     ok))
 
-(define (client:connect iface port)
-  (case (server:get-transport)
+(define (client:connect iface port area-dat)
+  (case (server:get-transport area-dat)
     ((rpc)  (rpc:client-connect  iface port))
     ((http) (http:client-connect iface port))
     ((zmq)  (zmq:client-connect  iface port))
     (else   (rpc:client-connect  iface port))))
 
 (define (client:setup run-id area-dat #!key (remaining-tries 10) (failed-connects 0))
-  (case (server:get-transport)
+  (case (server:get-transport area-dat)
     ((rpc) (rpc-transport:client-setup run-id area-dat))
     ((http)(client:setup-http run-id area-dat))
     (else  (rpc-transport:client-setup run-id area-dat))))
@@ -205,7 +205,7 @@
 		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
 		  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
 		  (if (< num-available 2)
-		      (server:try-running run-id))
+		      (server:try-running run-id area-dat))
 		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
 		  (client:setup run-id area-dat remaining-tries: (- remaining-tries 1)))))))))
 

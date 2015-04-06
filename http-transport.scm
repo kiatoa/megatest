@@ -448,10 +448,10 @@
 		    (begin
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "dbprep")
 		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
-		      (set! *inmemdb*  (db:setup run-id))
+		      (set! *inmemdb*  (db:setup run-id area-dat))
 		      ;; force initialization
 		      ;; (db:get-db *inmemdb* #t)
-		      (db:get-db *inmemdb* run-id)
+		      (db:get-db *inmemdb* area-dat run-id)
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "running"))
 		    (begin ;; gotta exit nicely
 		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "collision")

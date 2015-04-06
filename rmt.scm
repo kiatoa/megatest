@@ -78,7 +78,7 @@
 	cinfo
 	;; NB// can cache the answer for server running for 10 seconds ...
 	;;  ;; (and (not (rmt:write-frequency-over-limit? cmd run-id))
-	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db area-dat)) run-id)
+	(if (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db area-dat) area-dat) run-id)
 	    (client:setup run-id area-dat remote: remote)
 	    #f))))
 
@@ -167,12 +167,12 @@
 		    (rmt:send-receive cmd rid params area-dat attemptnum: (+ attemptnum 1)))
 		  (begin
 		    (server:kind-run run-id area-dat)
-		    (rmt:open-qry-close-locally cmd run-id params area-dat))))
+		    (rmt:open-qry-close-locally cmd run-id area-dat params area-dat))))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
 	      ;; (exit)
-	      (rmt:open-qry-close-locally cmd run-id params area-dat)
+	      (rmt:open-qry-close-locally cmd run-id area-dat params area-dat)
 	      )))))
 
 (define (rmt:update-db-stats run-id rawcmd params duration)
@@ -232,17 +232,17 @@
     (mutex-unlock! *db-stats-mutex*)
     res))
 	  
-(define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
+(define (rmt:open-qry-close-locally cmd run-id area-dat params #!key (remretries 5))
   (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((dbdir (db:dbfile-path #f))
+			     (let* ((dbdir (db:dbfile-path #f area-dat))
 				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
-	 (db-file-path   (db:dbfile-path 0))
+	 (db-file-path   (db:dbfile-path 0 area-dat))
 	 ;; (read-only      (not (file-read-access? db-file-path)))
 	 (start          (current-milliseconds))
-	 (resdat         (api:execute-requests dbstruct-local (vector (symbol->string cmd) params)))
+	 (resdat         (api:execute-requests dbstruct-local area-dat (vector (symbol->string cmd) params)))
 	 (success        (vector-ref resdat 0))
 	 (res            (vector-ref resdat 1))
 	 (duration       (- (current-milliseconds) start)))
@@ -251,7 +251,7 @@
 	    (begin
 	      (debug:print 0 "ERROR: local query failed. Trying again.")
 	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
-	      (rmt:open-qry-close-locally cmd run-id params remretries: (- remretries 1)))
+	      (rmt:open-qry-close-locally cmd run-id area-dat params remretries: (- remretries 1)))
 	    (begin
 	      (debug:print 0 "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
 	      #f))
