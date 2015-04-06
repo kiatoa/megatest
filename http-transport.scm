@@ -145,12 +145,12 @@
 					      server-id
 					      area-dat))
 	   (begin
-	     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
+	     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat area-dat) run-id ipaddrstr portnum " http-transport:try-start-server")
 	     (print "ERROR: Tried and tried but could not start the server"))))
      ;; any error in following steps will result in a retry
      (set! *server-info* (list ipaddrstr portnum))
      (tasks:server-set-interface-port 
-		     (db:delay-if-busy tdbdat)
+		     (db:delay-if-busy tdbdat area-dat)
 		     server-id 
 		     ipaddrstr portnum)
      (debug:print 0 "INFO: Trying to start server on " ipaddrstr ":" portnum)
@@ -163,7 +163,7 @@
 						       config-hostname))
 	 (start-server port: portnum))
      ;;  (portlogger:open-run-close portlogger:set-port portnum "released")
-     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat) run-id ipaddrstr portnum " http-transport:try-start-server")
+     (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat area-dat) run-id ipaddrstr portnum " http-transport:try-start-server")
      (debug:print 1 "INFO: server has been stopped"))))
 
 ;;======================================================================
@@ -392,7 +392,7 @@
 				(if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
 				    (begin
 				      (debug:print 0 "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)
-				      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
+				      (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id "failed to start, never received server alive signature")
 				      (exit))
 				    (loop start-time
 					  (equal? sdat last-sdat)
@@ -421,7 +421,7 @@
 			     (loop count server-state (+ bad-sync-count 1)))))
 	     ((exn)
 	      (debug:print 0 "ERROR: error from sync code other than 'sync-failed. Attempting to gracefully shutdown the server")
-	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
+	      (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id " http-transport:keep-running crashed")
 	      (exit)))
 	    (set! sync-time  (- (current-milliseconds) start-time))
 	    (set! rem-time (quotient (- 4000 sync-time) 1000))
@@ -436,18 +436,18 @@
 	  ;; no *inmemdb* yet, set running after our first pass through and start the db
 	  ;;
 	  (if (eq? server-state 'available)
-	      (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
+	      (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat area-dat) run-id))) ;; try to ensure no double registering of servers
 		(if (equal? new-server-id server-id)
 		    (begin
-		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "dbprep")
 		      (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
 		      (set! *inmemdb*  (db:setup run-id))
 		      ;; force initialization
 		      ;; (db:get-db *inmemdb* #t)
 		      (db:get-db *inmemdb* run-id)
-		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "running"))
 		    (begin ;; gotta exit nicely
-		      (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
+		      (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "collision")
 		      (http-transport:server-shutdown server-id port area-dat))))))
       
       (if (< count 1) ;; 3x3 = 9 secs aprox
@@ -500,7 +500,7 @@
     ;;
     ;; start_shutdown
     ;;
-    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
+    (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "shutting-down")
     (portlogger:open-run-close portlogger:set-port area-dat port "released")
     (thread-sleep! 5)
     (debug:print-info 0 "Max cached queries was    " *max-cache-size*)
@@ -519,7 +519,7 @@
 			     *number-non-write-queries*))
 		      " ms")
     (debug:print-info 0 "Server shutdown complete. Exiting")
-    (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running complete")
+    (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id " http-transport:keep-running complete")
     (exit)))
 
 ;; all routes though here end in exit ...
@@ -540,18 +540,18 @@
 	(begin
 	  (debug:print 0 "INFO: Server for run-id " run-id " already running")
 	  (exit 0)))
-    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id area-dat))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat area-dat) run-id area-dat))
 	       (remtries  4))
       (if (not server-id)
 	  (if (> remtries 0)
 	      (begin
 		(thread-sleep! 2)
-		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id area-dat)
+		(loop (tasks:server-lock-slot (db:delay-if-busy tdbdat area-dat) run-id area-dat)
 		      (- remtries 1)))
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
 		(debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
+		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat area-dat) " http-transport:launch")
 		))
 	  (let* ((th2 (make-thread (lambda ()
 				     (debug:print-info 0 "Server run thread started")

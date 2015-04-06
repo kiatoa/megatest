@@ -74,12 +74,12 @@
     (thread-sleep! 0.1)
     (if (nmsg-transport:ping hostn start-port timeout: 2 expected-key: (current-process-id))
 	(let ((interface (if (equal? hostn "-")(get-host-name) hostn)))
-	  (tasks:server-set-interface-port (db:delay-if-busy tdbdat) server-id interface start-port)
-	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+	  (tasks:server-set-interface-port (db:delay-if-busy tdbdat area-dat) server-id interface start-port)
+	  (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "dbprep")
 	  (set! *server-info* (list hostn start-port)) ;; probably not needed anymore? currently used by keep-running
 	  (thread-sleep! 3) ;; give some margin for queries to complete before switching from file based access to server based access
 	  ;; (set! *inmemdb*  dbstruct)
-	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running")
+	  (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "running")
 	  (thread-start! (make-thread
 			  (lambda ()(nmsg-transport:keep-running server-id run-id area-dat))
 			  "keep running"))
@@ -87,7 +87,7 @@
 	(if (> retrynum 0)
 	    (begin
 	      (debug:print 0 "WARNING: Failed to connect to server (self) on host " hostn ":" start-port ", trying again.")
-	      (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id "failed to start, never received server alive signature")
+	      (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id "failed to start, never received server alive signature")
 	      (portlogger:open-run-close portlogger:set-failed area-dat start-port)
 	      (nmsg-transport:run dbstruct area-dat hostn run-id server-id))
 	    (begin
@@ -126,14 +126,14 @@
 	(begin
 	  (debug:print-info 0 "Server for run-id " run-id " already running")
 	  (exit 0)))
-    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server-id (tasks:server-lock-slot (db:delay-if-busy tdbdat area-dat) run-id))
 	       (remtries  4))
       (if (not server-id)
 	  (if (> remtries 0)
 	      (begin
 		(thread-sleep! 2)
 		(if (not (server:check-if-running run-id area-dat))
-		    (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat) run-id)
+		    (loop (tasks:server-lock-slot (db:delay-if-busy tdbdat area-dat) run-id)
 			  (- remtries 1))
 		    (begin
 		      (debug:print-info 0 "Another server took the slot, exiting")
@@ -141,7 +141,7 @@
 	      (begin
 		;; since we didn't get the server lock we are going to clean up and bail out
 		(debug:print-info 2 "INFO: server pid=" (current-process-id) ", hostname=" (get-host-name) " not starting due to other candidates ahead in start queue")
-		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat) " http-transport:launch")
+		(tasks:server-delete-records-for-this-pid (db:delay-if-busy tdbdat area-dat) " http-transport:launch")
 		))
 	  ;; locked in a server id, try to start up
 	  (nmsg-transport:run dbstruct area-dat hostn run-id server-id))
@@ -305,7 +305,7 @@
               (debug:print-info 0 "Starting to shutdown the server.")
               (set! *time-to-exit* #t)
 	      (db:sync-touched *inmemdb* run-id force-sync: #t)
-              (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running")
+              (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id " http-transport:keep-running")
               (debug:print-info 0 "Server shutdown complete. Exiting")
               (exit)
 	      ))))))

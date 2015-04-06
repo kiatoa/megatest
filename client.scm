@@ -162,7 +162,7 @@
 	(begin
 	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
 	  (exit 1))
-	(let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+	(let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id)))
 	  (debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
 	  (if server-dat
 	      (let* ((iface     (tasks:hostinfo-get-interface server-dat))
@@ -189,7 +189,7 @@
 			((http)(http-transport:close-connections run-id)))
 		      (common:del-remote! remote run-id)
 		      (tasks:kill-server-run-id run-id)
-		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
+		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat area-dat)
 							   run-id 
 							   (tasks:hostinfo-get-interface server-dat)
 							   (tasks:hostinfo-get-port      server-dat)

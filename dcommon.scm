@@ -525,7 +525,7 @@
 				     ))
 	 (colnames       (list "Id" "MTver" "Pid" "Host" "Interface:OutPort" "RunTime" "State" "RunId"))
 	 (updater        (lambda ()
-			   (let ((servers (tasks:get-all-servers (db:delay-if-busy tdbdat))))
+			   (let ((servers (tasks:get-all-servers (db:delay-if-busy tdbdat area-dat))))
 			     (iup:attribute-set! servers-matrix "NUMLIN" (length servers))
 			     ;; (set! colnum 0)
 			     ;; (for-each (lambda (colname)

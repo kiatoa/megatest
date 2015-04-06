@@ -161,7 +161,7 @@
 
 (define (server:check-if-running run-id area-dat)
   (let ((tdbdat (tasks:open-db area-dat)))
-    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+    (let loop ((server (tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id))
 	       (trycount 0))
     (if server
 	;; note: client:start will set (common:get-remote remote). this needs to be changed
@@ -181,7 +181,7 @@
 	      #t
 	      (begin
 		(debug:print-info 0 "server at " server " not responding, removing record")
-		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat) run-id 
+		(tasks:server-force-clean-running-records-for-run-id (db:delay-if-busy tdbdat area-dat) run-id 
 				" server:check-if-running")
 		res)))
 	#f))))
@@ -195,7 +195,7 @@
 			    (list (car slst)(string->number (cadr slst)))
 			    #f)))
 	   (toppath       (launch:setup-for-run))
-	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat) run-id) #f)))
+	   (server-db-dat (if (not host-port)(tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id) #f)))
       (if (not run-id)
 	  (begin
 	    (debug:print 0 "ERROR: must specify run-id when doing ping, -run-id n")

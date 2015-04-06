@@ -381,9 +381,9 @@
 
 ;; try to start a server and wait for it to be available
 ;;
-(define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries)
+(define (tasks:start-and-wait-for-server tdbdat run-id delay-max-tries area-dat)
   ;; ensure a server is running for this run
-  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id))
+  (let loop ((server-dat (tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id))
 	     (delay-time 0))
       (if (and (not server-dat)
 	       (< delay-time delay-max-tries))
@@ -393,7 +393,7 @@
 	    (thread-sleep! (/ (random 2000) 1000))
 	    (server:kind-run run-id)
 	    (thread-sleep! (min delay-time 1))
-	    (loop (tasks:get-server (db:delay-if-busy tdbdat) run-id)(+ delay-time 1))))))
+	    (loop (tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id)(+ delay-time 1))))))
 
 (define (tasks:get-all-servers mdb)
   (let ((res '()))
@@ -432,15 +432,15 @@
 ;;
 (define (tasks:kill-server-run-id run-id area-dat #!key (tag "default"))
   (let* ((tdbdat  (tasks:open-db area-dat))
-	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+	 (sdat    (tasks:get-server (db:delay-if-busy tdbdat area-dat) run-id)))
     (if sdat
 	(let ((hostname (vector-ref sdat 6))
 	      (pid      (vector-ref sdat 5))
 	      (server-id (vector-ref sdat 0)))
-	  (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "killed")
+	  (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "killed")
 	  (debug:print-info 0 "Killing server " server-id " for run-id " run-id " on host " hostname " with pid " pid)
 	  (tasks:kill-server hostname pid)
-	  (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id tag) )
+	  (tasks:server-delete-record (db:delay-if-busy tdbdat area-dat) server-id tag) )
 	(debug:print-info 0 "No server found for run-id " run-id ", nothing to kill"))
     ;; (sqlite3:finalize! tdb)
     ))
@@ -700,12 +700,12 @@
 			 param-key state-patt action-patt test-patt)))))
 
 
-(define (tasks:find-task-queue-records dbstruct target run-name test-patt state-patt action-patt)
+(define (tasks:find-task-queue-records dbstruct area-dat target run-name test-patt state-patt action-patt)
   ;; (handle-exceptions
   ;;  exn
   ;;  '()
   ;;  (sqlite3:first-row
-  (let ((db (db:delay-if-busy (db:get-db dbstruct #f)))
+  (let ((db (db:delay-if-busy (db:get-db dbstruct #f) area-dat))
 	(res '()))
     (sqlite3:for-each-row 
      (lambda (a . b)
