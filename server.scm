@@ -239,10 +239,10 @@
     (set! *last-db-access* (current-seconds))
     (if (equal? (megatest:area-path area-dat) toppath)
 	(begin
-	  ;; (debug:print-info 2 "login successful")
+	  (debug:print-info 2 "login successful")
 	  #t)
 	(begin
-	  ;; (debug:print-info 2 "login failed")
+	  (debug:print-info 2 "login failed")
 	  #f))))
 
 (define (server:get-timeout area-dat)

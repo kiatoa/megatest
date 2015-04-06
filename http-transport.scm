@@ -146,8 +146,8 @@
 	     (http-transport:try-start-server run-id
 					      ipaddrstr
 					      (portlogger:open-run-close 
-					       (lambda (db server-id)
-						 (portlogger:find-port db area-dat server-id))
+					       (lambda (db)
+						 (portlogger:find-port db area-dat))
 					       area-dat)
 					      server-id
 					      area-dat))
@@ -419,7 +419,7 @@
 		(rem-time   #f))
 	    ;; inmemdb is a dbstruct
 	    (condition-case
-	     (db:sync-touched *inmemdb* *run-id* force-sync: #t)
+	     (db:sync-touched *inmemdb* area-dat *run-id* force-sync: #t)
 	     ((sync-failed)(cond
 			    ((> bad-sync-count 10) ;; time to give up
 			     (http-transport:server-shutdown server-id port area-dat))
@@ -503,7 +503,7 @@
     (debug:print-info 0 "Starting to shutdown the server.")
     ;; need to delete only *my* server entry (future use)
     (set! *time-to-exit* #t)
-    (if *inmemdb* (db:sync-touched *inmemdb* *run-id* force-sync: #t))
+    (if *inmemdb* (db:sync-touched *inmemdb* area-dat *run-id* force-sync: #t))
     ;;
     ;; start_shutdown
     ;;
