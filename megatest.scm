@@ -335,7 +335,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (hash-table-ref/default *db-local-sync* run-id #f))
 		  ;; (if (> (- start-time last-write) 5) ;; every five seconds
 		  (begin ;; let ((sync-time (- (current-seconds) start-time)))
-		    (db:multi-db-sync (list run-id) 'new2old)
+		    (db:multi-db-sync (list run-id) *area-dat* 'new2old)
 		    (if (common:low-noise-print 30 "sync new to old")
 			(let ((sync-time (- (current-seconds) start-time)))
 			  (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
@@ -1419,6 +1419,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       ;; (open-run-close db:clean-up #f)
       (db:multi-db-sync 
        #f ;; do all run-ids
+       *area-dat*
        ;; 'new2old
        'killservers
        'dejunk
@@ -1531,6 +1532,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (db:multi-db-sync 
        #f ;; do all run-ids
+       *area-dat*
        'killservers
        'dejunk
        'adj-testids
@@ -1543,6 +1545,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (db:multi-db-sync 
        #f ;; do all run-ids
+       *area-dat*
        'new2old
        )
       (set! *didsomething* #t)))

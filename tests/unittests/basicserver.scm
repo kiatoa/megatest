@@ -14,8 +14,8 @@
 
 ;; NON Server tests go here
 
-(test #f #f (db:dbdat-get-path *db* *area-dat*))
-(test #f #f (db:get-run-name-from-id *db* run-id))
+(test #f #f (db:dbdat-get-path *db*))
+(test #f #f (db:get-run-name-from-id *db* *area-dat* run-id))
 ;; (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 
 ;; (exit)

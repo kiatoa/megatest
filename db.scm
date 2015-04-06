@@ -66,7 +66,7 @@
 	(mutex-lock! *rundb-mutex*)
 	(let ((dbdat (if (or (not run-id)
 			     (eq? run-id 0))
-			 (db:open-main dbstruct)
+			 (db:open-main dbstruct area-dat)
 			 (db:open-rundb dbstruct area-dat run-id)
 			 )))
 	  ;; db prunning would go here
@@ -87,7 +87,7 @@
 ;;     'mod   modified data
 ;;     'read  read data
 ;;
-(define (db:done-with dbstruct area-dat run-id mod-read)
+(define (db:done-with dbstruct run-id mod-read)
   (if (not (sqlite3:database? dbstruct))
       (begin
 	(mutex-lock! *rundb-mutex*)
@@ -100,11 +100,11 @@
 ;; (db:with-db dbstruct run-id sqlite3:exec "select blah from blaz;")
 ;; r/w is a flag to indicate if the db is modified by this query #t = yes, #f = no
 ;;
-(define (db:with-db dbstruct area-dat area-dat run-id r/w proc . params)
+(define (db:with-db dbstruct area-dat run-id r/w proc . params)
   (let* ((dbdat (if (vector? dbstruct)
-		    (db:get-db dbstruct run-id)
+		    (db:get-db dbstruct area-dat run-id)
 		    dbstruct)) ;; cheat, allow for passing in a dbdat
-	 (db    (db:dbdat-get-db dbdat area-dat)))
+	 (db    (db:dbdat-get-db dbdat)))
     (db:delay-if-busy dbdat area-dat)
     (handle-exceptions
      exn
@@ -172,11 +172,11 @@
 ;;
 ;; returns: db existed-prior-to-opening
 ;;
-(define (db:lock-create-open fname initproc)
+(define (db:lock-create-open fname initproc area-dat)
   (if (file-exists? fname)
       (let ((db (sqlite3:open-database fname)))
 	(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	(db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	(db:set-sync db area-dat) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	db)
       (let* ((parent-dir   (pathname-directory fname))
 	     (dir-writable (file-write-access? parent-dir)))
@@ -185,7 +185,7 @@
 		  (lock    (obtain-dot-lock fname 1 5 10))
 		  (db      (sqlite3:open-database fname)))
 	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	      (db:set-sync db area-dat) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	      (if (not exists)(initproc db))
 	      (release-dot-lock fname)
 	      db)
@@ -203,7 +203,7 @@
     (if (or rdb
 	    do-not-open)
 	rdb
-	(let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
+	(let* ((dbpath       (db:dbfile-path run-id area-dat)) ;; (conc toppath "/db/" run-id ".db"))
 	       (dbexists     (file-exists? dbpath))
 	       (inmem        (if local #f (db:open-inmem-db)))
 	       (refdb        (if local #f (db:open-inmem-db)))
@@ -224,11 +224,12 @@
 						      run-id)
 						     ;; do a dummy query to test that the table exists and the db is truly readable
 						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
-						    )))) ;; add strings db to rundb, not in use yet
+						    ))
+						  area-dat)) ;; add strings db to rundb, not in use yet
 	       ;;   )) ;; (sqlite3:open-database dbpath))
 	       (olddb        (if *megatest-db*
 				 *megatest-db* 
-				 (let ((db (db:open-megatest-db)))
+				 (let ((db (db:open-megatest-db area-dat)))
 				   (set! *megatest-db* db)
 				   db)))
 	       (write-access (file-write-access? dbpath))
@@ -263,10 +264,13 @@
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
-	(let* ((dbpath       (db:dbfile-path 0))
+	(let* ((dbpath       (db:dbfile-path 0 area-dat))
 	       (dbexists     (file-exists? dbpath))
-	       (db           (db:lock-create-open dbpath db:initialize-main-db))
-	       (olddb        (db:open-megatest-db))
+	       (db           (db:lock-create-open dbpath 
+						  (lambda (db)
+						    (db:initialize-main-db db area-dat))
+						  area-dat))
+	       (olddb        (db:open-megatest-db area-dat))
 	       (write-access (file-write-access? dbpath))
 	       (dbdat        (cons db dbpath)))
 	  (if (and dbexists (not write-access))
@@ -278,7 +282,7 @@
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 (define (db:setup run-id #!key (local #f))
-  (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
+  (let* ((dbdir    (db:dbfile-path #f area-dat)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
@@ -290,8 +294,9 @@
 	 (dbexists     (file-exists? dbpath))
 	 (db           (db:lock-create-open dbpath
 					    (lambda (db)
-					      (db:initialize-main-db db)
-					      (db:initialize-run-id-db db))))
+					      (db:initialize-main-db db area-dat)
+					      (db:initialize-run-id-db db))
+					    area-dat))
 	 (write-access (file-write-access? dbpath)))
     (if (and dbexists (not write-access))
 	(set! *db-write-access* #f))
@@ -321,7 +326,7 @@
 		(begin
 		  (db:delay-if-busy maindb area-dat)
 		  (db:delay-if-busy olddb area-dat)
-		  (let ((num-synced (db:sync-tables area-dat (db:sync-main-list maindb) maindb olddb)))
+		  (let ((num-synced (db:sync-tables area-dat (db:sync-main-list maindb area-dat) maindb olddb)))
 		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
 		    num-synced)
 		  0))
@@ -465,8 +470,8 @@
 
 ;; needs db to get keys, this is for syncing all tables
 ;;
-(define (db:sync-main-list db)
-  (let ((keys  (db:get-keys db)))
+(define (db:sync-main-list db area-dat)
+  (let ((keys  (db:get-keys db area-dat)))
     (list
      (list "keys"
 	   '("id"        #f)
@@ -542,7 +547,7 @@
 		 (fromdat    '())
 		 (fromdats   '())
 		 (totrecords 0)
-		 (batch-len  (string->number (or (configf:lookup configdat "sync" "batchsize") "10")))
+		 (batch-len  (string->number (or (configf:lookup (megatest:area-configdat area-dat) "sync" "batchsize") "10")))
 		 (todat      (make-hash-table))
 		 (count      0))
 
@@ -636,10 +641,10 @@
 ;;
 ;;  run-ids: '(1 2 3 ...) or #f (for all)
 ;;
-(define (db:multi-db-sync run-ids . options)
+(define (db:multi-db-sync run-ids area-dat . options)
   (let* ((toppath  (launch:setup-for-run))
 	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
-	 (mtdb     (if toppath (db:open-megatest-db)))
+	 (mtdb     (if toppath (db:open-megatest-db area-dat)))
 	 (allow-cleanup (if run-ids #f #t))
 	 (run-ids  (if run-ids 
 		       run-ids
@@ -675,7 +680,7 @@
     ;;
     (if (member 'old2new options)
 	(begin
-	  (db:sync-tables area-dat (db:sync-main-list mtdb) mtdb (db:get-db dbstruct area-dat #f))
+	  (db:sync-tables area-dat (db:sync-main-list mtdb area-dat) mtdb (db:get-db dbstruct area-dat #f))
 	  (for-each 
 	   (lambda (run-id)
 	     (db:delay-if-busy mtdb area-dat)
@@ -691,7 +696,7 @@
     ;;
     (if (member 'new2old options)
 	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
-	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0))))
+	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb area-dat 0))))
 	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
 	       (count       1)
 	       (total       (length all-run-ids))
@@ -701,18 +706,18 @@
 	     (debug:print 0 "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
 	     (set! count (+ count 1))
 	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
-		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
+		    (frundb (db:dbdat-get-db (db:get-db fromdb area-dat run-id))))
 	       ;; (db:delay-if-busy frundb)
 	       ;; (db:delay-if-busy mtdb)
 	       ;; (db:clean-up frundb)
 	       (if (eq? run-id 0)
 		   (begin
-		     (db:sync-tables area-dat (db:sync-main-list dbstruct area-dat) (db:get-db fromdb #f) mtdb)
-		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+		     (db:sync-tables area-dat (db:sync-main-list dbstruct area-dat) (db:get-db fromdb area-dat #f) mtdb)
+		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb area-dat #f))))
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
-		     (db:sync-tables area-dat db:sync-tests-only (db:get-db fromdb run-id) mtdb)
-		     (db:clean-up-rundb (db:get-db fromdb run-id))
+		     (db:sync-tables area-dat db:sync-tests-only (db:get-db fromdb area-dat run-id) mtdb)
+		     (db:clean-up-rundb (db:get-db fromdb area-dat run-id))
 		     ))))
 	   all-run-ids)
 	  ;; removed deleted runs
@@ -1095,7 +1100,7 @@
     (if (not dbexists)
 	(begin
 	  (sqlite3:execute db "CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY,event_time TIMESTAMP DEFAULT (strftime('%s','now')),logline TEXT,pwd TEXT,cmdline TEXT,pid INTEGER);")
-	  (db:set-sync db) ;; (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))
+	  (db:set-sync db area-dat) ;; (sqlite3:execute db (conc "PRAGMA synchronous = 0;"))
 	  ))
     db))
 
@@ -2866,7 +2871,7 @@
 (define (db:get-matching-previous-test-run-records dbstruct area-dat run-id test-name item-path)
   (let* ((dbdat   (db:get-db dbstruct area-dat #f))
 	 (db      (db:dbdat-get-db dbdat))
-	 (keys    (db:get-keys db))
+	 (keys    (db:get-keys db area-dat))
 	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
 	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
 	 (keyvals #f)
