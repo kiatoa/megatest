@@ -69,7 +69,19 @@ Misc
       (print help)
       (exit)))
 
-(if (not (launch:setup-for-run))
+;;; REMOVE ME, this is a stop-gap
+(define *area-dat* (make-megatest:area
+		    "default"         ;; area name
+		    #f                ;; area path
+		    'http             ;; transport
+		    #f                ;; configinfo
+		    #f                ;; configdat
+		    (make-hash-table) ;; denoise
+		    #f                ;; client signature
+		    #f                ;; remote connections
+		    ))
+
+(if (not (launch:setup-for-run *area-dat*))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))

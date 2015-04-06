@@ -35,7 +35,7 @@
 
 ;; Call this one to do all the work and get a standardized list of tests
 (define (tests:get-all area-dat)
-  (let* ((test-search-path   (tests:get-tests-search-path (megatest:area-configdat area-dat))))
+  (let* ((test-search-path   (tests:get-tests-search-path (megatest:area-configdat area-dat) area-dat)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat area-dat)
@@ -690,12 +690,12 @@
 ;;======================================================================
 ;; hed is the test name
 ;; test-records is a hash of test-name => test record
-(define (tests:get-full-data test-names test-records required-tests all-tests-registry)
+(define (tests:get-full-data test-names test-records required-tests all-tests-registry area-dat)
   (if (not (null? test-names))
       (let loop ((hed (car test-names))
 		 (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	(debug:print-info 4 "hed=" hed " at top of loop")
-	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
+	(let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs area-dat))
 	       (waitons (let ((instr (if config 
 					 (config-lookup config "requirements" "waiton")
 					 (begin ;; No config means this is a non-existant test

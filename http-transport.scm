@@ -136,8 +136,8 @@
 	     (debug:print 0 "WARNING: attempt to start server failed. Trying again ...")
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (debug:print 0 "exn=" (condition->list exn))
-	     (portlogger:open-run-close (lambda (db)
-					  (portlogger:set-failed db area-dat))
+	     (portlogger:open-run-close (lambda (db portnum)
+					  (portlogger:set-failed db area-dat portnum))
 					area-dat portnum)
 	     (debug:print 0 "WARNING: failed to start on portnum: " portnum ", trying next port")
 	     (thread-sleep! 0.1)
@@ -146,8 +146,8 @@
 	     (http-transport:try-start-server run-id
 					      ipaddrstr
 					      (portlogger:open-run-close 
-					       (lambda (db)
-						 (portlogger:find-port db area-dat))
+					       (lambda (db server-id)
+						 (portlogger:find-port db area-dat server-id))
 					       area-dat)
 					      server-id
 					      area-dat))
@@ -509,8 +509,8 @@
     ;;
     (tasks:server-set-state! (db:delay-if-busy tdbdat area-dat) server-id "shutting-down")
     (portlogger:open-run-close 
-     (lambda (db)
-       (portlogger:set-port db area-dat))
+     (lambda (db port yada)
+       (portlogger:set-port db area-dat port yada))
      area-dat port "released")
     (thread-sleep! 5)
     (debug:print-info 0 "Max cached queries was    " *max-cache-size*)

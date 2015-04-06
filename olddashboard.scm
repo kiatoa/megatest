@@ -416,7 +416,7 @@
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (db:get-run-stats dbstruct))
+			 (let* ((run-stats    (db:get-run-stats dbstruct *area-dat*))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))
@@ -753,15 +753,27 @@ Misc
       (print help)
       (exit)))
 
-(if (not (launch:setup-for-run))
+;; legacy ...
+(define *area-dat* (make-megatest:area
+		    "default"         ;; area name
+		    #f                ;; area path
+		    'http             ;; transport
+		    #f                ;; configinfo
+		    #f                ;; configdat
+		    (make-hash-table) ;; denoise
+		    #f                ;; client signature
+		    #f                ;; remote connections
+		    ))
+
+(if (not (launch:setup-for-run *area-dat*))
     (begin
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
+(define *dbdir* (db:dbfile-path #f *area-dat*)) ;; (conc (configf:lookup configdat "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
-(define *db-file-path* (db:dbfile-path 0))
+(define *db-file-path* (db:dbfile-path 0 *area-dat*))
 
 ;; HACK ALERT: this is a hack, please fix.
 (define *read-only* (not (file-read-access? *db-file-path*)))
@@ -769,7 +781,7 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (db:get-keys *dbstruct-local*))
+(define *keys*   (db:get-keys *dbstruct-local* *area-dat*))
 
 (define *dbkeys*  (append *keys* (list "runname")))
 
@@ -782,7 +794,7 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
+(define *tot-run-count* (db:get-num-runs *dbstruct-local* *area-dat* "%"))
 ;; (define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
 
 ;; Update management
@@ -882,7 +894,7 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	 (allruns     (db:get-runs *dbstruct-local* *area-dat* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 				      *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
@@ -901,7 +913,7 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests       (db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
+		       (tests       (db:get-tests-for-run *dbstruct-local* *area-dat* run-id testnamepatt states statuses
 							  #f #f
 							  *hide-not-hide*
 							  sort-by
@@ -909,7 +921,7 @@ Misc
 							  'shortlist))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
-		       (key-vals    (db:get-key-vals *dbstruct-local* run-id)))
+		       (key-vals    (db:get-key-vals *dbstruct-local* *area-dat* run-id)))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
@@ -1245,7 +1257,7 @@ Misc
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (db:get-targets *dbstruct-local*))
+	 (db-target-dat (db:get-targets *dbstruct-local* *area-dat*))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (all-targets   (append db-targets
@@ -1386,7 +1398,7 @@ Misc
 (define (dashboard:run-controls)
   (let* ((targets       (make-hash-table))
 	 (test-records  (make-hash-table))
-	 (all-tests-registry (tests:get-all)) ;; (tests:get-valid-tests toppath '()))
+	 (all-tests-registry (tests:get-all *area-dat*)) ;; (tests:get-valid-tests toppath '()))
 	 (test-names    (hash-table-keys all-tests-registry))
 	 (sorted-testnames #f)
 	 (action        "-runtests")
@@ -1405,7 +1417,7 @@ Misc
 	 (test-patterns-textbox  #f))
     (hash-table-set! tests-draw-state 'first-time #t)
     (hash-table-set! tests-draw-state 'scalef 8)
-    (tests:get-full-data test-names test-records '() all-tests-registry)
+    (tests:get-full-data test-names test-records '() all-tests-registry *area-dat*)
     (set! sorted-testnames (tests:sort-by-priority-and-waiton test-records))
     
     ;; refer to *keys*, *dbkeys* for keys
@@ -1477,7 +1489,7 @@ Misc
 					    (dashboard:update-run-command))))
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
-					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f))
+					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *area-dat* *keys* "%" target #f #f))
 					    (runs-header   (vector-ref runs-for-targ 0))
 					    (runs-dat      (vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
@@ -1666,7 +1678,7 @@ Misc
 	 )))
       (iup:frame
        #:title "Server"
-       (dcommon:servers-table)))
+       (dcommon:servers-table area-dat)))
      (iup:frame 
       #:title "Megatest config settings"
       (iup:hbox
@@ -1722,10 +1734,10 @@ Misc
 			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
+		     (let* ((runs-dat     (db:get-runs-by-patt db *area-dat* *keys* "%" #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
-			    (tests-dat    (let ((tdat (db:get-tests-for-run db run-id 
+			    (tests-dat    (let ((tdat (db:get-tests-for-run db *area-dat* run-id 
 									    (hash-table-ref/default *searchpatts* "test-name" "%/%")
 									    (hash-table-keys *state-ignore-hash*) ;; '()
 									    (hash-table-keys *status-ignore-hash*) ;; '()
@@ -2079,7 +2091,7 @@ Misc
 		    #:tabchangepos-cb (lambda (obj curr prev)
 					(set! *please-update-buttons* #t)
 					(set! *current-tab-number* curr))
-		    (dashboard:summary db)
+		    (dashboard:summary db *area-dat*)
 		    runs-view
 		    (dashboard:one-run db)
 		    (dashboard:run-controls)
@@ -2128,7 +2140,7 @@ Misc
 (define *last-monitor-update-time* 0)
 
 ;; Force creation of the db in case it isn't already there.
-(tasks:open-db area-dat)
+(tasks:open-db *area-dat*)
 
 (define (dashboard:get-youngest-run-db-mod-time)
   (handle-exceptions
@@ -2214,7 +2226,7 @@ Misc
  ((args:get-arg "-guimonitor")
   (gui-monitor *dbstruct-local*))
  (else
-  (set! uidat (make-dashboard-buttons *dbstruct-local* *num-runs* *num-tests* *dbkeys*))
+  (set! uidat (make-dashboard-buttons *dbstruct-local* *num-runs* *num-tests* *dbkeys* *area-dat*))
   (iup:callback-set! *tim*
 		     "ACTION_CB"
 		     (lambda (x)
