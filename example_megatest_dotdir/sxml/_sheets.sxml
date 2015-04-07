@@ -1,0 +1,56 @@
+((@ (http://www.w3.org/2001/XMLSchema-instance:schemaLocation
+      "http://www.gnumeric.org/v9.xsd"))
+ (http://www.gnumeric.org/v10.dtd:Version
+   (@ (Minor "17")
+      (Major "12")
+      (Full "1.12.17")
+      (Epoch "1")))
+ (http://www.gnumeric.org/v10.dtd:Attributes
+   (http://www.gnumeric.org/v10.dtd:Attribute
+     (http://www.gnumeric.org/v10.dtd:name
+       "WorkbookView::show_horizontal_scrollbar")
+     (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+   (http://www.gnumeric.org/v10.dtd:Attribute
+     (http://www.gnumeric.org/v10.dtd:name
+       "WorkbookView::show_vertical_scrollbar")
+     (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+   (http://www.gnumeric.org/v10.dtd:Attribute
+     (http://www.gnumeric.org/v10.dtd:name
+       "WorkbookView::show_notebook_tabs")
+     (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+   (http://www.gnumeric.org/v10.dtd:Attribute
+     (http://www.gnumeric.org/v10.dtd:name
+       "WorkbookView::do_auto_completion")
+     (http://www.gnumeric.org/v10.dtd:value "TRUE"))
+   (http://www.gnumeric.org/v10.dtd:Attribute
+     (http://www.gnumeric.org/v10.dtd:name
+       "WorkbookView::is_protected")
+     (http://www.gnumeric.org/v10.dtd:value "FALSE")))
+ (urn:oasis:names:tc:opendocument:xmlns:office:1.0:document-meta
+   (@ (urn:oasis:names:tc:opendocument:xmlns:office:1.0:version
+        "1.2"))
+   (urn:oasis:names:tc:opendocument:xmlns:office:1.0:meta
+     (http://purl.org/dc/elements/1.1/:date
+       "2015-04-07T05:26:56Z")
+     (urn:oasis:names:tc:opendocument:xmlns:meta:1.0:creation-date
+       "2015-04-07T05:25:23Z")))
+ (http://www.gnumeric.org/v10.dtd:Calculation
+   (@ (MaxIterations "100")
+      (ManualRecalc "0")
+      (IterationTolerance "0.001")
+      (FloatRadix "2")
+      (FloatDigits "53")
+      (EnableIteration "1")))
+ (http://www.gnumeric.org/v10.dtd:SheetNameIndex
+   (http://www.gnumeric.org/v10.dtd:SheetName
+     (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+        (http://www.gnumeric.org/v10.dtd:Cols "256"))
+     "default")
+   (http://www.gnumeric.org/v10.dtd:SheetName
+     (@ (http://www.gnumeric.org/v10.dtd:Rows "65536")
+        (http://www.gnumeric.org/v10.dtd:Cols "256"))
+     "sysmaint"))
+ (http://www.gnumeric.org/v10.dtd:Geometry
+   (@ (Width "1053") (Height "639")))
+ (http://www.gnumeric.org/v10.dtd:UIData
+   (@ (SelectedTab "0"))))

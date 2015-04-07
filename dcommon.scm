@@ -40,7 +40,9 @@
 
 
 (define-record dboard:areas
-  areas ;; hash of name -> area
+  area-groups          ;; hash of group -> areanames -> areapaths
+  current-window-id
+  tree-browser
   )
 
 (define-record dboard:area
@@ -152,155 +154,157 @@
 ;;  3. Add extraction of filters to synchash calls
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
-(define (dcommon:run-update keys data runname keypatts testpatt states statuses mode window-id)
-  (let* (;; count and offset => #f so not used
-	 ;; the synchash calls modify the "data" hash
-	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
-	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
-	 (get-details-sig (conc (client:get-signature) " get-test-details"))
+(define (dcommon:run-update data)
+  (thread-sleep! 0.25))
 
-	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
-	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
-	 ;; run-id is #f in next line to send the query to server 0
- 	 (run-changes     (synchash:client-get *area-dat* 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
-	 (tests-detail-changes (if (not (null? test-ids))
-				   (synchash:client-get *area-dat* 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
-				   '()))
-
-	 ;; Now can calculate the run-ids
-	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
-	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
-
-	 (all-test-changes (let ((res (make-hash-table)))
-			     (for-each (lambda (run-id)
-					 (if (> run-id 0)
-					     (hash-table-set! res run-id (synchash:client-get *area-dat* 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
-				       run-ids)
-			     res))
-	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
-	 (header       (hash-table-ref/default runs-hash "header" #f))
-	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
-			     (lambda (a b)
-			       (let* ((record-a (hash-table-ref runs-hash a))
-				      (record-b (hash-table-ref runs-hash b))
-				      (time-a   (db:get-value-by-header record-a header "event_time"))
-				      (time-b   (db:get-value-by-header record-b header "event_time")))
-				 (> time-a time-b)))
-			     ))
-	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
-	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
-	 (colnum       1)
-	 (rownum       0)) ;; rownum = 0 is the header
-;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
-    
-	 ;; tests related stuff
-	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
-
-    ;; Given a run-id and testname/item_path calculate a cell R:C
-
-    ;; NOTE: Also build the test tree browser and look up table
-    ;;
-    ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
-    (for-each (lambda (run-id)
-		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
-		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
-					keys))
-		       (run-name   (db:get-value-by-header run-record header "runname"))
-		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
-		       (run-path   (append key-vals (list run-name))))
-		  (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
-		  (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
-				      (conc rownum ":" colnum) col-name)
-		  (hash-table-set! runid-to-col run-id (list colnum run-record))
-		  ;; Here we update the tests treebox and tree keys
-		  (tree:add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name))
-				 userdata: (conc "run-id: " run-id))
-		  (set! colnum (+ colnum 1))))
-	      run-ids)
-
-    ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
-    ;; Do this analysis in the order of the run-ids, the most recent run wins
-    (for-each (lambda (run-id)
-		(let* ((run-path       (hash-table-ref (dboard:data-get-run-keys *data*) run-id))
-		       (test-changes   (hash-table-ref all-test-changes run-id))
-		       (new-test-dat   (car test-changes))
-		       (removed-tests  (cadr test-changes))
-		       (tests          (sort (map cadr (filter (lambda (testrec)
-								 (eq? run-id (db:mintest-get-run_id (cadr testrec))))
-							       new-test-dat))
-					     (lambda (a b)
-					       (let ((time-a (db:mintest-get-event_time a))
-						     (time-b (db:mintest-get-event_time b)))
-						 (> time-a time-b)))))
-		       ;; test-changes is a list of (( id record ) ... )
-		       ;; Get list of test names sorted by time, remove tests
-		       (test-names (delete-duplicates (map (lambda (t)
-							     (let ((i (db:mintest-get-item_path t))
-								   (n (db:mintest-get-testname  t)))
-							       (if (string=? i "")
-								   (conc "   " i)
-								   n)))
-							   tests)))
-		       (colnum     (car (hash-table-ref runid-to-col run-id))))
-		  ;; for each test name get the slot if it exists and fill in the cell
-		  ;; or take the next slot and fill in the cell, deal with items in the
-		  ;; run view panel? The run view panel can have a tree selector for
-		  ;; browsing the tests/items
-
-		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
-		  (for-each (lambda (test)
-			      (let* ((test-id   (db:mintest-get-id test))
-				     (state     (db:mintest-get-state test))
-				     (status    (db:mintest-get-status test))
-				     (testname  (db:mintest-get-testname test))
-				     (itempath  (db:mintest-get-item_path test))
-				     (fullname  (conc testname "/" itempath))
-				     (dispname  (if (string=? itempath "") testname (conc "   " itempath)))
-				     (rownum    (hash-table-ref/default testname-to-row fullname #f))
-				     (test-path (append run-path (if (equal? itempath "") 
-								     (list testname)
-								     (list testname itempath))))
-				     (tb         (dboard:data-get-tests-tree *data*)))
-				(print "INFONOTE: run-path: " run-path)
-				(tree:add-node (dboard:data-get-tests-tree *data*) "Runs" 
-					       test-path
-					       userdata: (conc "test-id: " test-id))
-				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
-				      (color    (car (gutils:get-color-for-state-status state status))))
-				  (debug:print 0 "node-num: " node-num ", color: " color)
-				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
-				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
-				(if (not rownum)
-				    (let ((rownums (hash-table-values testname-to-row)))
-				      (set! rownum (if (null? rownums)
-						       1
-						       (+ 1 (apply max rownums))))
-				      (hash-table-set! testname-to-row fullname rownum)
-				      ;; create the label
-				      (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
-							  (conc rownum ":" 0) dispname)
-				      ))
-				;; set the cell text and color
-				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
-				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
-						    (conc rownum ":" colnum)
-						    (if (member state '("ARCHIVED" "COMPLETED"))
-							status
-							state))
-				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
-						    (conc "BGCOLOR" rownum ":" colnum)
-						    (car (gutils:get-color-for-state-status state status)))
-				))
-			    tests)))
-	      run-ids)
-
-    (let ((updater (hash-table-ref/default  (dboard:data-get-updaters *data*) window-id #f)))
-      (if updater (updater (hash-table-ref/default data get-details-sig #f))))
-
-    (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
-    ;; (debug:print 2 "run-changes: " run-changes)
-    ;; (debug:print 2 "test-changes: " test-changes)
-    (list run-changes all-test-changes)))
+;;  (let* (;; count and offset => #f so not used
+;; 	 ;; the synchash calls modify the "data" hash
+;; 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
+;; 	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
+;; 	 (get-details-sig (conc (client:get-signature) " get-test-details"))
+;; 
+;; 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
+;; 	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
+;; 	 ;; run-id is #f in next line to send the query to server 0
+;;  	 (run-changes     (synchash:client-get *area-dat* 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
+;; 	 (tests-detail-changes (if (not (null? test-ids))
+;; 				   (synchash:client-get *area-dat* 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
+;; 				   '()))
+;; 
+;; 	 ;; Now can calculate the run-ids
+;; 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
+;; 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+;; 
+;; 	 (all-test-changes (let ((res (make-hash-table)))
+;; 			     (for-each (lambda (run-id)
+;; 					 (if (> run-id 0)
+;; 					     (hash-table-set! res run-id (synchash:client-get *area-dat* 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
+;; 				       run-ids)
+;; 			     res))
+;; 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
+;; 	 (header       (hash-table-ref/default runs-hash "header" #f))
+;; 	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+;; 			     (lambda (a b)
+;; 			       (let* ((record-a (hash-table-ref runs-hash a))
+;; 				      (record-b (hash-table-ref runs-hash b))
+;; 				      (time-a   (db:get-value-by-header record-a header "event_time"))
+;; 				      (time-b   (db:get-value-by-header record-b header "event_time")))
+;; 				 (> time-a time-b)))
+;; 			     ))
+;; 	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
+;; 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
+;; 	 (colnum       1)
+;; 	 (rownum       0)) ;; rownum = 0 is the header
+;; ;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
+;;     
+;; 	 ;; tests related stuff
+;; 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
+;; 
+;;     ;; Given a run-id and testname/item_path calculate a cell R:C
+;; 
+;;     ;; NOTE: Also build the test tree browser and look up table
+;;     ;;
+;;     ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
+;;     (for-each (lambda (run-id)
+;; 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
+;; 		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
+;; 					keys))
+;; 		       (run-name   (db:get-value-by-header run-record header "runname"))
+;; 		       (col-name   (conc (string-intersperse key-vals "\n") "\n" run-name))
+;; 		       (run-path   (append key-vals (list run-name))))
+;; 		  (hash-table-set! (dboard:data-get-run-keys *data*) run-id run-path)
+;; 		  (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+;; 				      (conc rownum ":" colnum) col-name)
+;; 		  (hash-table-set! runid-to-col run-id (list colnum run-record))
+;; 		  ;; Here we update the tests treebox and tree keys
+;; 		  (tree:add-node (dboard:data-get-tests-tree *data*) "Runs" (append key-vals (list run-name))
+;; 				 userdata: (conc "run-id: " run-id))
+;; 		  (set! colnum (+ colnum 1))))
+;; 	      run-ids)
+;; 
+;;     ;; Scan all tests to be displayed and organise all the test names, respecting what is in the hash table
+;;     ;; Do this analysis in the order of the run-ids, the most recent run wins
+;;     (for-each (lambda (run-id)
+;; 		(let* ((run-path       (hash-table-ref (dboard:data-get-run-keys *data*) run-id))
+;; 		       (test-changes   (hash-table-ref all-test-changes run-id))
+;; 		       (new-test-dat   (car test-changes))
+;; 		       (removed-tests  (cadr test-changes))
+;; 		       (tests          (sort (map cadr (filter (lambda (testrec)
+;; 								 (eq? run-id (db:mintest-get-run_id (cadr testrec))))
+;; 							       new-test-dat))
+;; 					     (lambda (a b)
+;; 					       (let ((time-a (db:mintest-get-event_time a))
+;; 						     (time-b (db:mintest-get-event_time b)))
+;; 						 (> time-a time-b)))))
+;; 		       ;; test-changes is a list of (( id record ) ... )
+;; 		       ;; Get list of test names sorted by time, remove tests
+;; 		       (test-names (delete-duplicates (map (lambda (t)
+;; 							     (let ((i (db:mintest-get-item_path t))
+;; 								   (n (db:mintest-get-testname  t)))
+;; 							       (if (string=? i "")
+;; 								   (conc "   " i)
+;; 								   n)))
+;; 							   tests)))
+;; 		       (colnum     (car (hash-table-ref runid-to-col run-id))))
+;; 		  ;; for each test name get the slot if it exists and fill in the cell
+;; 		  ;; or take the next slot and fill in the cell, deal with items in the
+;; 		  ;; run view panel? The run view panel can have a tree selector for
+;; 		  ;; browsing the tests/items
+;; 
+;; 		  ;; SWITCH THIS TO USING CHANGED TESTS ONLY
+;; 		  (for-each (lambda (test)
+;; 			      (let* ((test-id   (db:mintest-get-id test))
+;; 				     (state     (db:mintest-get-state test))
+;; 				     (status    (db:mintest-get-status test))
+;; 				     (testname  (db:mintest-get-testname test))
+;; 				     (itempath  (db:mintest-get-item_path test))
+;; 				     (fullname  (conc testname "/" itempath))
+;; 				     (dispname  (if (string=? itempath "") testname (conc "   " itempath)))
+;; 				     (rownum    (hash-table-ref/default testname-to-row fullname #f))
+;; 				     (test-path (append run-path (if (equal? itempath "") 
+;; 								     (list testname)
+;; 								     (list testname itempath))))
+;; 				     (tb         (dboard:data-get-tests-tree *data*)))
+;; 				(print "INFONOTE: run-path: " run-path)
+;; 				(tree:add-node (dboard:data-get-tests-tree *data*) "Runs" 
+;; 					       test-path
+;; 					       userdata: (conc "test-id: " test-id))
+;; 				(let ((node-num (tree:find-node tb (cons "Runs" test-path)))
+;; 				      (color    (car (gutils:get-color-for-state-status state status))))
+;; 				  (debug:print 0 "node-num: " node-num ", color: " color)
+;; 				  (iup:attribute-set! tb (conc "COLOR" node-num) color))
+;; 				(hash-table-set! (dboard:data-get-path-test-ids *data*) test-path test-id)
+;; 				(if (not rownum)
+;; 				    (let ((rownums (hash-table-values testname-to-row)))
+;; 				      (set! rownum (if (null? rownums)
+;; 						       1
+;; 						       (+ 1 (apply max rownums))))
+;; 				      (hash-table-set! testname-to-row fullname rownum)
+;; 				      ;; create the label
+;; 				      (iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+;; 							  (conc rownum ":" 0) dispname)
+;; 				      ))
+;; 				;; set the cell text and color
+;; 				;; (debug:print 2 "rownum:colnum=" rownum ":" colnum ", state=" status)
+;; 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+;; 						    (conc rownum ":" colnum)
+;; 						    (if (member state '("ARCHIVED" "COMPLETED"))
+;; 							status
+;; 							state))
+;; 				(iup:attribute-set! (dboard:data-get-runs-matrix *data*)
+;; 						    (conc "BGCOLOR" rownum ":" colnum)
+;; 						    (car (gutils:get-color-for-state-status state status)))
+;; 				))
+;; 			    tests)))
+;; 	      run-ids)
+;; 
+;;     (let ((updater (hash-table-ref/default  (dboard:data-get-updaters *data*) window-id #f)))
+;;       (if updater (updater (hash-table-ref/default data get-details-sig #f))))
+;; 
+;;     (iup:attribute-set! (dboard:data-get-runs-matrix *data*) "REDRAW" "ALL")
+;;     ;; (debug:print 2 "run-changes: " run-changes)
+;;     ;; (debug:print 2 "test-changes: " test-changes)
+;;     (list run-changes all-test-changes)))
 
 ;;======================================================================
 ;; TESTS DATA

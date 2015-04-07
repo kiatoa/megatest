@@ -1,0 +1,9 @@
+[mfstest]
+path /mfs/matt/data/megatest/tests/fullrun
+order 1
+[mfsbig]
+path /mfs/matt/data/megatest/tests/fdktestqa/testqa
+order 2
+[localtest]
+path /home/matt/data/megatest/tests/fullrun
+order 3

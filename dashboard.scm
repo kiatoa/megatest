@@ -26,6 +26,7 @@
 (declare (uses synchash))
 (declare (uses dcommon))
 (declare (uses tree))
+(declare (uses configf))
 
 (include "common_records.scm")
 (include "db_records.scm")
@@ -38,7 +39,7 @@
 
 Usage: dashboard [options]
   -h                : this help
-  -server host:port : connect to host:port instead of db access
+  -group groupname  : display this group of areas
   -test testid      : control test identified by testid
   -guimonitor       : control panel for runs
 
@@ -49,15 +50,10 @@ Misc
 ;; process args
 (define remargs (args:get-args 
 		 (argv)
-		 (list  "-rows"
-			"-run"
-			"-test"
+		 (list  "-group" ;; display this group of areas
 			"-debug"
-			"-host" 
 			) 
 		 (list  "-h"
-			"-guimonitor"
-			"-main"
 			"-v"
 			"-q"
 		       )
@@ -98,29 +94,6 @@ Misc
       (load debugcontrolf)))
 
 (define *runremote* #f)
-;; (define *data* (make-vector 25 #f))
-;; 
-;; (dboard:data-set-run-keys! *data* (make-hash-table))
-;; 
-;; ;; List of test ids being viewed in various panels
-;; (dboard:data-set-curr-test-ids! *data* (make-hash-table))
-;; 
-;; ;; Look up test-ids by (key1 key2 ... testname [itempath])
-;; (dboard:data-set-path-test-ids! *data* (make-hash-table))
-;; 
-;; ;; Look up run-ids by ??
-;; (dboard:data-set-path-run-ids! *data* (make-hash-table))
-;; 
-;; (dboard:data-set-updaters! *data* (make-hash-table))
-;; 
-;; (define *other* (make-hash-table))
-;; (define *dbdir* (db:dbfile-path #f *area-dat*))
-;; (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
-;; 					     local: #t))
-;; (define *db-file-path* (db:dbfile-path 0 *area-dat*))
-;; 
-;; ;; HACK ALERT: this is a hack, please fix.
-;; (define *read-only* (not (file-read-access? *db-file-path*)))
 
 (debug:setup)
 
@@ -470,24 +443,28 @@ Misc
 	 tabs)))))
        
 ;; Test browser
-(define (tests window-id)
-  (iup:split
-   (let* ((tb      (iup:treebox
-		    #:selection-cb
-		    (lambda (obj id state)
-		      ;; (print "obj: " obj ", id: " id ", state: " state)
-		      (let* ((run-path (tree:node->path obj id))
-			     (test-id  (tree-path->test-id (cdr run-path))))
-			(if test-id
-			    (hash-table-set! (dboard:data-get-curr-test-ids *data*)
-					     window-id test-id))
-			(print "path: " (tree:node->path obj id) " test-id: " test-id))))))
-     (iup:attribute-set! tb "VALUE" "0")
-     (iup:attribute-set! tb "NAME" "Runs")
-     ;;(iup:attribute-set! tb "ADDEXPANDED" "NO")
-     (dboard:data-set-tests-tree! *data* tb)
-     tb)
-   (test-panel window-id)))
+(define (tree-browser data window-id)
+  ;; (iup:split
+  (let* ((tb      (iup:treebox
+		   #:selection-cb
+		   (lambda (obj id state)
+		     ;; (print "obj: " obj ", id: " id ", state: " state)
+		     (let* ((tree-path (tree:node->path obj id))
+			    (area      (car tree-path))
+			    (area-path (cdr tree-path)))
+		       #f
+		       ;; (test-id  (tree-path->test-id (cdr run-path))))
+		       ;; (if test-id
+		       ;;    (hash-table-set! (dboard:data-get-curr-test-ids *data*)
+		       ;;		     window-id test-id))
+		       ;; (print "path: " (tree:node->path obj id) " test-id: " test-id))))))
+		       )))))
+    ;; (iup:attribute-set! tb "VALUE" "0")
+    ;; (iup:attribute-set! tb "NAME" "Runs")
+    ;; (iup:attribute-set! tb "ADDEXPANDED" "NO")
+    ;; (dboard:data-set-tests-tree! *data* tb)
+    tb))
+;;   (test-panel window-id)))
 
 ;; The function to update the fields in the test view panel
 (define (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix)
@@ -577,29 +554,29 @@ Misc
 ;; R U N   C O N T R O L
 ;;======================================================================
 
-;; Overall runs browser
+;; General displayer
 ;;
-(define (runs window-id)
-  (let* ((runs-matrix     (iup:matrix
+(define (area-display data window-id)
+  (let* ((view-matrix     (iup:matrix
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
 			   #:scrollbar "YES"
 			   #:numcol 100
 			   #:numlin 100
-			   #:numcol-visible 7
-			   #:numlin-visible 7
+			   #:numcol-visible 3
+			   #:numlin-visible 3
 			   #:click-cb (lambda (obj lin col status)
 					(print "obj: " obj " lin: " lin " col: " col " status: " status)))))
 
-    (iup:attribute-set! runs-matrix "RESIZEMATRIX" "YES")
-    (iup:attribute-set! runs-matrix "WIDTH0" "100")
+    (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
+    (iup:attribute-set! view-matrix "WIDTH0" "100")
 
-    (dboard:data-set-runs-matrix! *data* runs-matrix)
+    ;; (dboard:data-set-runs-matrix! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
       #:title "Runs browser"
       (iup:vbox
-       runs-matrix)))))
+       view-matrix)))))
 
 ;; Browse and control a single run
 ;;
@@ -610,60 +587,73 @@ Misc
 ;; D A S H B O A R D
 ;;======================================================================
 
+(define (make-area-panel data area-name window-id)
+  (iup:split
+   #:value 200
+   (tree-browser data window-id) ;; (dboard:areas-tree-browser data)
+   (area-display data window-id)))
+
 ;; Main Panel
-(define (main-panel window-id)
+(define (main-panel data window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
-   #:menu (dcommon:main-menu *other*)
+   #:menu (dcommon:main-menu data)
    #:shrink "YES"
-   (let ((tabtop (iup:tabs 
-		  (runs       window-id )
-		  (tests      window-id )
-		  (runcontrol window-id )
-		  (mtest      window-id *area-dat*) 
-		  (rconfig    window-id )
-		  )))
-     (iup:attribute-set! tabtop "TABTITLE0" "Runs")
-     (iup:attribute-set! tabtop "TABTITLE1" "Tests")
-     (iup:attribute-set! tabtop "TABTITLE2" "Run Control")
-     (iup:attribute-set! tabtop "TABTITLE3" "megatest.config") 
-     (iup:attribute-set! tabtop "TABTITLE4" "runconfigs.config")
-     tabtop)))
+   (iup:vbox
+    (let* ((area-names (hash-table-keys (dboard:areas-area-groups data)))
+	   (areas (map (lambda (aname)
+			 (make-area-panel data aname window-id))
+		       area-names))
+	   (tabtop (apply iup:tabs areas)))
+      (let loop ((index 0)
+		 (hed   (car area-names))
+		 (tal   (cdr area-names)))
+	(debug:print 0 "Adding area " hed " with index " index " to dashboard")
+	(iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
+	(if (not (null? tal))
+	    (loop (+ index 1)(car tal)(cdr tal))))
+      tabtop))))
 
 (define *current-window-id* 0)
 
-(define (newdashboard data)
-  (let* ((keys     (db:get-keys *dbstruct-local* *area-dat*))
-	 (runname  "%")
-	 (testpatt "%")
-	 (keypatts (map (lambda (k)(list k "%")) keys))
-	 (states   '())
-	 (statuses '())
-	 (nextmintime (current-milliseconds))
-	 (my-window-id *current-window-id*))
-    (set! *current-window-id* (+ 1 *current-window-id*))
-    (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
-    (iup:show (main-panel my-window-id))
+(define (newdashboard data window-id)
+  (let* (;; (keys     (db:get-keys *dbstruct-local* *area-dat*))
+	 ;; (runname  "%")
+	 ;; (testpatt "%")
+	 ;; (keypatts (map (lambda (k)(list k "%")) keys))
+	 ;; (states   '())
+	 ;; (statuses '())
+	 (nextmintime (current-milliseconds)))
+    (dboard:areas-current-window-id-set! data (+ 1 (dboard:areas-current-window-id data)))
+    ;; (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
+    (iup:show (main-panel data (dboard:areas-current-window-id data)))
     ;; Yes, running iup:show will pop up a new panel
     ;; (iup:show (main-panel my-window-id))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)
-			 ;; Want to dedicate no more than 50% of the time to this so skip if
-			 ;; 2x delta time has not passed since last query
-			 ;; (if (< nextmintime (current-milliseconds))
-			 ;;     (let* ((starttime (current-milliseconds))
-			 ;;            (changes   '()) ;; (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
-			 ;;            (endtime   (current-milliseconds)))
-			 ;;       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
-			 ;;       ;; (debug:print 11 "CHANGE(S): " (car changes) "...")
-			 ;;       )
-			 ;;     (debug:print-info 11 "Server overloaded"))))))
-			 ;; pretend to do work ....
-			 (thread-sleep! 0.1)
-			 ))))
-;;; main
+			 (let ((starttime (current-milliseconds)))
+			   ;; Want to dedicate no more than 50% of the time to this so skip if
+			   ;; 2x delta time has not passed since last query
+			   ;; (if (< (inexact->exact nextmintime)(inexact->exact starttime))
+			   ;;     (let* ((changes   (dcommon:run-update data)) ;;keys data runname keypatts testpatt states statuses 'full my-window-id))
+			   ;;            (endtime   (current-milliseconds)))
+			   ;;       (set! nextmintime (+ endtime (* 2.0 (- endtime starttime))))
+			   ;;       ;; (debug:print 11 "CHANGE(S): " (car changes) "...")
+			   ;;       )
+			   ;;     (debug:print-info 11 "Server overloaded")))))))
+			   (dcommon:run-update data))))))
+
+;;; main. Theoretically could have multiple windows (each with a group of tags, thus window-id
 ;;;
-(let ((data (make-hash-table))) ;; data will have "areaname" => "area record" entries
-  (newdashboard data)
+(let* ((window-id 0)
+       (groupn    (or (args:get-arg "-group") "default"))
+       (cfname    (conc (getenv "HOME") "/.megatest/" groupn ".dat"))
+       (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)))
+       (data      (make-dboard:areas 
+		   cfgdat
+		   0 
+		   #f)))
+  ;; (dboard:areas-tree-browser-set! data (tree-browser data window-id)) ;; data will have "areaname" => "area record" entries
+  (newdashboard data window-id)
   (iup:main-loop))
