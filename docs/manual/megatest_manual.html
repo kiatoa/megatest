@@ -3,7 +3,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
 <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
-<meta name="generator" content="AsciiDoc 8.6.9" />
+<meta name="generator" content="AsciiDoc 8.6.7" />
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -87,15 +87,9 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-.monospaced, code, pre {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
+pre {
   padding: 0;
   margin: 0;
-}
-pre {
-  white-space: pre-wrap;
 }
 
 #author {
@@ -225,7 +219,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; vertical-align: text-bottom; }
+span.image img { border-style: none; }
 a.image:visited { color: white; }
 
 dl {
@@ -421,6 +415,12 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
+tt {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
+
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -453,6 +453,12 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
+
+.monospaced {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -533,8 +539,6 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
-
-
 </style>
 <script type="text/javascript">
 /*<![CDATA[*/
@@ -735,7 +739,7 @@ asciidoc.install();
 <div id="header">
 <h1>The Megatest Users Manual</h1>
 <span id="author">Matt Welland</span><br />
-<span id="email"><code>&lt;<a href="mailto:matt@kiatoa.com">matt@kiatoa.com</a>&gt;</code></span><br />
+<span id="email"><tt>&lt;<a href="mailto:matt@kiatoa.com">matt@kiatoa.com</a>&gt;</tt></span><br />
 <span id="revnumber">version 1.0,</span>
 <span id="revdate">April 2012</span>
 </div>
@@ -963,15 +967,37 @@ configuring and generally getting the most out of Megatest.</p></div>
 <div class="paragraph"><p>In your testconfig:</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>[test_meta]
-jobgroup group1</code></pre>
+<pre><tt>[test_meta]
+jobgroup group1</tt></pre>
 </div></div>
 <div class="paragraph"><p>In your megatest.config:</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>[jobgroups]
+<pre><tt>[jobgroups]
 group1 10
-custdes 4</code></pre>
+custdes 4</tt></pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_limiting_job_runtime">Limiting Job Runtime</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>runtimlim can be set in megatest.config (affects all tests),
+runconfigs (modifies for all tests based on a run) or in the
+testconfig (affects only that test). The default in all cases is unlimited.</p></div>
+<div class="listingblock">
+<div class="title">megatest.config or runconfig</div>
+<div class="content">
+<pre><tt>[setup]
+# Default runtimelim 1d 1h 1m 10s
+#
+runtimelim 20m</tt></pre>
+</div></div>
+<div class="listingblock">
+<div class="title">testconfig</div>
+<div class="content">
+<pre><tt>[requirements]
+runtimelim 1h 5m</tt></pre>
 </div></div>
 </div>
 </div>
@@ -987,18 +1013,18 @@ custdes 4</code></pre>
 <h4 id="_organising_your_tests_and_tasks">Organising Your Tests and Tasks</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>[tests-paths]
-1 #{get misc parent}/simplerun/tests</code></pre>
+<pre><tt>[tests-paths]
+1 #{get misc parent}/simplerun/tests</tt></pre>
 </div></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>[setup]</code></pre>
+<pre><tt>[setup]</tt></pre>
 </div></div>
 <div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
 user is responsible for setting STATE and STATUS</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>runscript main.csh</code></pre>
+<pre><tt>runscript main.csh</tt></pre>
 </div></div>
 </div>
 </div>
@@ -1006,9 +1032,9 @@ user is responsible for setting STATE and STATUS</p></div>
 <h3 id="_debugging_server_problems">Debugging Server Problems</h3>
 <div class="listingblock">
 <div class="content">
-<pre><code>sudo lsof -i
+<pre><tt>sudo lsof -i
 sudo netstat -lptu
-sudo netstat -tulpn</code></pre>
+sudo netstat -tulpn</tt></pre>
 </div></div>
 </div>
 </div>
@@ -1023,13 +1049,13 @@ sudo netstat -tulpn</code></pre>
 <h4 id="_header">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>[setup]</code></pre>
+<pre><tt>[setup]</tt></pre>
 </div></div>
 <div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
 user is responsible for setting STATE and STATUS</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>runscript main.csh</code></pre>
+<pre><tt>runscript main.csh</tt></pre>
 </div></div>
 </div>
 </div>
@@ -1039,16 +1065,16 @@ user is responsible for setting STATE and STATUS</p></div>
 <h4 id="_header_2">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>[requirements]</code></pre>
+<pre><tt>[requirements]</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_wait_on_other_tests">Wait on Other Tests</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code># A normal waiton waits for the prior tests to be COMPLETED
+<pre><tt># A normal waiton waits for the prior tests to be COMPLETED
 # and PASS, CHECK or WAIVED
-waiton test1 test2</code></pre>
+waiton test1 test2</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1057,33 +1083,33 @@ waiton test1 test2</code></pre>
 must be COMPLETED and PASS, CHECK or WAIVED before the test will start</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>mode   normal</code></pre>
+<pre><tt>mode   normal</tt></pre>
 </div></div>
 <div class="paragraph"><p>The toplevel mode requires only that the prior tests are COMPLETED.</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>mode toplevel</code></pre>
+<pre><tt>mode toplevel</tt></pre>
 </div></div>
 <div class="paragraph"><p>A item based waiton will start items in a test when the
 same-named item is COMPLETED and PASS, CHECK or WAIVED
 in the prior test</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>mode itemmatch</code></pre>
+<pre><tt>mode itemmatch</tt></pre>
 </div></div>
 <div class="listingblock">
 <div class="content">
-<pre><code># With a toplevel test you may wish to generate your list
+<pre><tt># With a toplevel test you may wish to generate your list
 # of tests to run dynamically
 #
-# waiton #{shell get-valid-tests-to-run.sh}</code></pre>
+# waiton #{shell get-valid-tests-to-run.sh}</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_run_time_limit">Run time limit</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</code></pre>
+<pre><tt>runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1093,24 +1119,24 @@ in the prior test</p></div>
 <h4 id="_header_3">Header</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>[skip]</code></pre>
+<pre><tt>[skip]</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_skip_on_still_running_tests">Skip on Still-running Tests</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code># NB// If the prevrunning line exists with *any* value the test will
+<pre><tt># NB// If the prevrunning line exists with *any* value the test will
 # automatically SKIP if the same-named test is currently RUNNING
 
-prevrunning x</code></pre>
+prevrunning x</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
 <h4 id="_skip_if_a_file_exists">Skip if a File Exists</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>fileexists /path/to/a/file # skip if /path/to/a/file exists</code></pre>
+<pre><tt>fileexists /path/to/a/file # skip if /path/to/a/file exists</tt></pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1120,7 +1146,7 @@ If a waiver check is specified in the testconfig apply the check and if it passe
 <div class="paragraph"><p>Waiver check has two parts, 1) a list of waiver, rulename, filepatterns and 2) the rulename script spec (note that "diff" and "logpro" are predefined)</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>###### EXAMPLE FROM testconfig #########
+<pre><tt>###### EXAMPLE FROM testconfig #########
 # matching file(s) will be diff'd with previous run and logpro applied
 # if PASS or WARN result from logpro then WAIVER state is set
 #
@@ -1134,7 +1160,7 @@ waiver_1         logpro        lookittmp.log
 # diff   diff %file1% %file2%
 
 # This builtin rule is applied if a &lt;waivername&gt;.logpro file exists
-# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html</code></pre>
+# logpro diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html</tt></pre>
 </div></div>
 </div>
 </div>
@@ -1143,7 +1169,7 @@ waiver_1         logpro        lookittmp.log
 <div class="paragraph"><p>To transfer the environment to the next step you can do the following:</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>$MT_MEGATEST -env2file .ezsteps/${stepname}</code></pre>
+<pre><tt>$MT_MEGATEST -env2file .ezsteps/${stepname}</tt></pre>
 </div></div>
 </div>
 <div class="sect2">
@@ -1151,7 +1177,7 @@ waiver_1         logpro        lookittmp.log
 <div class="paragraph"><p>In your testconfig triggers can be specified</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>[triggers]
+<pre><tt>[triggers]
 
 # Call script running.sh when test goes to state=RUNNING, status=PASS
 RUNNING/PASS running.sh
@@ -1160,15 +1186,15 @@ RUNNING/PASS running.sh
 RUNNING/ running.sh
 
 # Call script onpass.sh any time status goes to PASS
-PASS/ onpass.sh</code></pre>
+PASS/ onpass.sh</tt></pre>
 </div></div>
 <div class="paragraph"><p>Scripts called will have; test-id test-rundir trigger, added to the commandline.</p></div>
 <div class="paragraph"><p>HINT</p></div>
 <div class="paragraph"><p>To start an xterm (useful for debugging), use a command line like the following:</p></div>
 <div class="listingblock">
 <div class="content">
-<pre><code>[triggers]
-COMPLETED/ xterm -e bash -s --</code></pre>
+<pre><tt>[triggers]
+COMPLETED/ xterm -e bash -s --</tt></pre>
 </div></div>
 <div class="admonitionblock">
 <table><tr>
@@ -1206,23 +1232,23 @@ cellspacing="0" cellpadding="4">
 <tfoot>
 <tr>
 <td align="center" valign="top"><p class="table">(rmt:login        run-id)</p></td>
-<td align="left" valign="top"><p class="table"><code>Verify the the version, testsuite area etc. are correct.</code></p></td>
-<td align="left" valign="top"><p class="table"><code>#( #t "successful login" )</code></p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><tt>Verify the the version, testsuite area etc. are correct.</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>#( #t "successful login" )</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
 </tr>
 </tfoot>
 <tbody>
 <tr>
 <td align="center" valign="top"><p class="table">(rmt:start-server run-id)</p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
-<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>#( success/fail   n/a )</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
 </tr>
 <tr>
 <td align="center" valign="top"><p class="table">(rmt:kill-server  run-id)</p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
-<td align="left" valign="top"><p class="table"><code>#( success/fail   n/a )</code></p></td>
-<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>#( success/fail   n/a )</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>Works only if the server is still reachable</tt></p></td>
 </tr>
 </tbody>
 </table>
@@ -1248,17 +1274,17 @@ cellspacing="0" cellpadding="4">
 <tfoot>
 <tr>
 <td align="center" valign="top"><p class="table">(rmt:get-key-val-pairs run-id)</p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
-<td align="left" valign="top"><p class="table"><code>#t=success/#f=fail</code></p></td>
-<td align="left" valign="top"><p class="table"><code>Works only if the server is still reachable</code></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>#t=success/#f=fail</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>Works only if the server is still reachable</tt></p></td>
 </tr>
 </tfoot>
 <tbody>
 <tr>
 <td align="center" valign="top"><p class="table">(rmt:get-keys run-id)</p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
-<td align="left" valign="top"><p class="table"><code>( key1 key2 &#8230; )</code></p></td>
-<td align="left" valign="top"><p class="table"><code></code></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
+<td align="left" valign="top"><p class="table"><tt>( key1 key2 &#8230; )</tt></p></td>
+<td align="left" valign="top"><p class="table"><tt></tt></p></td>
 </tr>
 </tbody>
 </table>
@@ -1354,7 +1380,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br />
-Last updated 2014-11-25 21:11:28 MST
+Last updated 2015-04-06 08:49:48 MST
 </div>
 </div>
 </body>

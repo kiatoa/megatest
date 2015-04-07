@@ -249,7 +249,7 @@
     (if (not success)
 	(if (> remretries 0)
 	    (begin
-	      (debug:print 0 "ERROR: local query failed. Trying again.")
+	      (debug:print 0 "ERROR: local query failed; cmd=" cmd ", run-id=" run-id ", params=" params ". Trying again.")
 	      (thread-sleep! (/ (random 5000) 1000)) ;; some random delay 
 	      (rmt:open-qry-close-locally cmd run-id area-dat params remretries: (- remretries 1)))
 	    (begin

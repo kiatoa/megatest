@@ -35,75 +35,42 @@
 ;;======================================================================
 ;; 
 ;; A single data structure for all the data used in a dashboard for
-;; a given area.
+;; all areas tracked.
 ;;
-;; Share this structure between newdashboard and dashboard with the 
-;; intent of converging on a single app.
-;;
-(define *data* (make-vector 25 #f))
-(define (dboard:data-get-runs          vec)    (vector-ref  vec 0))
-(define (dboard:data-get-tests         vec)    (vector-ref  vec 1))
-(define (dboard:data-get-runs-matrix   vec)    (vector-ref  vec 2))
-(define (dboard:data-get-tests-tree    vec)    (vector-ref  vec 3))
-(define (dboard:data-get-run-keys      vec)    (vector-ref  vec 4))
-(define (dboard:data-get-curr-test-ids vec)    (vector-ref  vec 5))
-;; (define (dboard:data-get-test-details  vec)    (vector-ref  vec 6))
-(define (dboard:data-get-path-test-ids vec)    (vector-ref  vec 7))
-(define (dboard:data-get-updaters      vec)    (vector-ref  vec 8))
-(define (dboard:data-get-path-run-ids  vec)    (vector-ref  vec 9))
-(define (dboard:data-get-curr-run-id   vec)    (vector-ref  vec 10))
-(define (dboard:data-get-runs-tree     vec)    (vector-ref  vec 11))
-;; For test-patts convert #f to ""
-(define (dboard:data-get-test-patts    vec)    
-  (let ((val (vector-ref  vec 12)))(if val val "")))
-(define (dboard:data-get-states        vec)    (vector-ref vec 13))
-(define (dboard:data-get-statuses      vec)    (vector-ref vec 14))
-(define (dboard:data-get-logs-textbox  vec val)(vector-ref vec 15))
-(define (dboard:data-get-command       vec)    (vector-ref vec 16))
-(define (dboard:data-get-command-tb    vec)    (vector-ref vec 17))
-(define (dboard:data-get-target        vec)    (vector-ref vec 18))
-(define (dboard:data-get-target-string vec)
-  (let ((targ (dboard:data-get-target vec)))
-    (if (list? targ)(string-intersperse targ "/") "no-target-specified")))
-(define (dboard:data-get-run-name      vec)    (vector-ref vec 19))
-(define (dboard:data-get-runs-listbox  vec)    (vector-ref vec 20))
-(define (dboard:data-get-area-path     vec)    (vector-ref vec 21))
 
-(define (dboard:data-set-runs!          vec val)(vector-set! vec 0 val))
-(define (dboard:data-set-tests!         vec val)(vector-set! vec 1 val))
-(define (dboard:data-set-runs-matrix!   vec val)(vector-set! vec 2 val))
-(define (dboard:data-set-tests-tree!    vec val)(vector-set! vec 3 val))
-(define (dboard:data-set-run-keys!      vec val)(vector-set! vec 4 val))
-(define (dboard:data-set-curr-test-ids! vec val)(vector-set! vec 5 val))
-;; (define (dboard:data-set-test-details!  vec val)(vector-set! vec 6 val))
-(define (dboard:data-set-path-test-ids! vec val)(vector-set! vec 7 val))
-(define (dboard:data-set-updaters!      vec val)(vector-set! vec 8 val))
-(define (dboard:data-set-path-run-ids!  vec val)(vector-set! vec 9 val))
-(define (dboard:data-set-curr-run-id!   vec val)(vector-set! vec 10 val))
-(define (dboard:data-set-runs-tree!     vec val)(vector-set! vec 11 val))
-;; For test-patts convert "" to #f 
-(define (dboard:data-set-test-patts!    vec val)
-  (vector-set! vec 12 (if (equal? val "") #f val)))
-(define (dboard:data-set-states!        vec val)(vector-set! vec 13 val))
-(define (dboard:data-set-statuses!      vec val)(vector-set! vec 14 val))
-(define (dboard:data-set-logs-textbox!  vec val)(vector-set! vec 15 val))
-(define (dboard:data-set-command!       vec val)(vector-set! vec 16 val))
-(define (dboard:data-set-command-tb!    vec val)(vector-set! vec 17 val))
-(define (dboard:data-set-target!        vec val)(vector-set! vec 18 val))
-(define (dboard:data-set-run-name!      vec val)(vector-set! vec 19 val))
-(define (dboard:data-set-runs-listbox!  vec val)(vector-set! vec 20 val))
-(define (dboard:data-set-area-path!     vec val)(vector-set! vec 21 val))
 
-(dboard:data-set-run-keys! *data* (make-hash-table))
+(define-record dboard:areas
+  areas ;; hash of name -> area
+  )
 
-;; List of test ids being viewed in various panels
-(dboard:data-set-curr-test-ids! *data* (make-hash-table))
+(define-record dboard:area
+  read-only ;; #t => can't write
+  dbstruct  ;; database connector
+  area-dat  ;; the one-structure (one day dbstruct will be put in here)
+  name      ;; name for this area
+  mpath     ;; path to the megatest home (MT_RUN_AREA_HOME)
+  view-path ;; <target/path>/<runname>/...
+  view-type ;; standard, etc.
+  matrix    ;; the spreadsheet 
+  controls  ;; the controls
+  data      ;; all the data kept in sync with db
+  filters   ;; user filters 
+  run-id    ;; the current run-id
+  test-ids  ;; the current test id hash, run-id => test-id
+  command   ;; the command from the entry field
+  )
 
-;; Look up test-ids by (key1 key2 ... testname [itempath])
-(dboard:data-set-path-test-ids! *data* (make-hash-table))
+(define-record dboard:filter
+  target    ;; hash of widgets for the target
+  runname   ;; the runname widget
+  testpatt  ;; the testpatt widget
+  )
 
-;; Look up run-ids by ??
-(dboard:data-set-path-run-ids! *data* (make-hash-table))
+(define-record dboard:area-dat
+  run-keys
+  runs
+  tests
+  )  
 
 ;;======================================================================
 ;; D O T F I L E
@@ -178,11 +145,6 @@
 ;;======================================================================
 ;; P R O C E S S   R U N S
 ;;======================================================================
-
-;; MOVE THIS INTO *data*
-(define *cachedata* (make-hash-table))
-(hash-table-set! *cachedata* "runid-to-col"    (make-hash-table))
-(hash-table-set! *cachedata* "testname-to-row" (make-hash-table))
 
 ;; TO-DO
 ;;  1. Make "data" hash-table hierarchial store of all displayed data

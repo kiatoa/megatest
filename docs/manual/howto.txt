@@ -28,8 +28,26 @@ group1 10
 custdes 4
 ---------------
 
+Limiting Job Runtime
+--------------------
 
+runtimlim can be set in megatest.config (affects all tests),
+runconfigs (modifies for all tests based on a run) or in the
+testconfig (affects only that test). The default in all cases is unlimited.
 
+.megatest.config or runconfig
+-------------------------
+[setup]
+# Default runtimelim 1d 1h 1m 10s
+#
+runtimelim 20m
+-------------------------
+
+.testconfig
+-------------------------
+[requirements]
+runtimelim 1h 5m
+-------------------------
 
 Debugging Tricks
 ----------------

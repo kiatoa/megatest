@@ -98,29 +98,29 @@ Misc
       (load debugcontrolf)))
 
 (define *runremote* #f)
-(define *data* (make-vector 25 #f))
-
-(dboard:data-set-run-keys! *data* (make-hash-table))
-
-;; List of test ids being viewed in various panels
-(dboard:data-set-curr-test-ids! *data* (make-hash-table))
-
-;; Look up test-ids by (key1 key2 ... testname [itempath])
-(dboard:data-set-path-test-ids! *data* (make-hash-table))
-
-;; Look up run-ids by ??
-(dboard:data-set-path-run-ids! *data* (make-hash-table))
-
-(dboard:data-set-updaters! *data* (make-hash-table))
-
-(define *other* (make-hash-table))
-(define *dbdir* (db:dbfile-path #f *area-dat*))
-(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
-					     local: #t))
-(define *db-file-path* (db:dbfile-path 0 *area-dat*))
-
-;; HACK ALERT: this is a hack, please fix.
-(define *read-only* (not (file-read-access? *db-file-path*)))
+;; (define *data* (make-vector 25 #f))
+;; 
+;; (dboard:data-set-run-keys! *data* (make-hash-table))
+;; 
+;; ;; List of test ids being viewed in various panels
+;; (dboard:data-set-curr-test-ids! *data* (make-hash-table))
+;; 
+;; ;; Look up test-ids by (key1 key2 ... testname [itempath])
+;; (dboard:data-set-path-test-ids! *data* (make-hash-table))
+;; 
+;; ;; Look up run-ids by ??
+;; (dboard:data-set-path-run-ids! *data* (make-hash-table))
+;; 
+;; (dboard:data-set-updaters! *data* (make-hash-table))
+;; 
+;; (define *other* (make-hash-table))
+;; (define *dbdir* (db:dbfile-path #f *area-dat*))
+;; (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
+;; 					     local: #t))
+;; (define *db-file-path* (db:dbfile-path 0 *area-dat*))
+;; 
+;; ;; HACK ALERT: this is a hack, please fix.
+;; (define *read-only* (not (file-read-access? *db-file-path*)))
 
 (debug:setup)
 
@@ -651,13 +651,17 @@ Misc
 		       (lambda (x)
 			 ;; Want to dedicate no more than 50% of the time to this so skip if
 			 ;; 2x delta time has not passed since last query
-			 (if (< nextmintime (current-milliseconds))
-			     (let* ((starttime (current-milliseconds))
-				    (changes   (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
-				    (endtime   (current-milliseconds)))
-			       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
-			       (debug:print 11 "CHANGE(S): " (car changes) "..."))
-			     (debug:print-info 11 "Server overloaded"))))))
+			 ;; (if (< nextmintime (current-milliseconds))
+			 ;;     (let* ((starttime (current-milliseconds))
+			 ;;            (changes   '()) ;; (dcommon:run-update keys data runname keypatts testpatt states statuses 'full my-window-id))
+			 ;;            (endtime   (current-milliseconds)))
+			 ;;       (set! nextmintime (+ endtime (* 2 (- endtime starttime))))
+			 ;;       ;; (debug:print 11 "CHANGE(S): " (car changes) "...")
+			 ;;       )
+			 ;;     (debug:print-info 11 "Server overloaded"))))))
+			 ;; pretend to do work ....
+			 (thread-sleep! 0.1)
+			 ))))
 ;;; main
 ;;;
 (let ((data (make-hash-table))) ;; data will have "areaname" => "area record" entries
