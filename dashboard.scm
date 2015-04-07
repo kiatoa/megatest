@@ -443,7 +443,7 @@ Misc
 	 tabs)))))
        
 ;; Test browser
-(define (tree-browser data window-id)
+(define (tree-browser data adat window-id)
   ;; (iup:split
   (let* ((tb      (iup:treebox
 		   #:selection-cb
@@ -532,31 +532,13 @@ Misc
 		;;	  (list (
 
   
-;; db:test-get-id           
-;; db:test-get-run_id       
-;; db:test-get-testname     
-;; db:test-get-state        
-;; db:test-get-status       
-;; db:test-get-event_time   
-;; db:test-get-host         
-;; db:test-get-cpuload      
-;; db:test-get-diskfree     
-;; db:test-get-uname        
-;; db:test-get-rundir       
-;; db:test-get-item-path    
-;; db:test-get-run_duration 
-;; db:test-get-final_logf   
-;; db:test-get-comment      
-;; db:test-get-fullname     	  
-
-
 ;;======================================================================
 ;; R U N   C O N T R O L
 ;;======================================================================
 
 ;; General displayer
 ;;
-(define (area-display data window-id)
+(define (area-display data adat window-id)
   (let* ((view-matrix     (iup:matrix
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
@@ -570,7 +552,7 @@ Misc
 
     (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! view-matrix "WIDTH0" "100")
-
+    (dboard:area-matrix-set! adat view-matrix)
     ;; (dboard:data-set-runs-matrix! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
@@ -588,10 +570,16 @@ Misc
 ;;======================================================================
 
 (define (make-area-panel data area-name window-id)
-  (iup:split
-   #:value 200
-   (tree-browser data window-id) ;; (dboard:areas-tree-browser data)
-   (area-display data window-id)))
+  (let* ((adat   (hash-table-ref areas area-name))
+	 (tb     (tree-browser data adat window-id)) ;; (dboard:areas-tree-browser data)
+	 (ad     (area-display data adat window-id))
+	(areas  (dboard:data-areas data)))
+    (dboard:area-tree-set!   adat tb)
+    (dboard:area-matrix-set! adat ad)
+    (iup:split
+     #:value 200
+     tb ad)))
+
 
 ;; Main Panel
 (define (main-panel data window-id)
@@ -600,21 +588,43 @@ Misc
    #:menu (dcommon:main-menu data)
    #:shrink "YES"
    (iup:vbox
-    (let* ((area-names (hash-table-keys (dboard:areas-area-groups data)))
-	   (areas (map (lambda (aname)
-			 (make-area-panel data aname window-id))
-		       area-names))
-	   (tabtop (apply iup:tabs areas)))
+    (let* ((area-names  (hash-table-keys (dboard:data-cfgdat data)))
+	   (area-panels (map (lambda (aname)
+			       (make-area-panel data aname window-id))
+			     area-names))
+	   (tabtop      (apply iup:tabs areas)))
       (let loop ((index 0)
 		 (hed   (car area-names))
 		 (tal   (cdr area-names)))
-	(debug:print 0 "Adding area " hed " with index " index " to dashboard")
-	(iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
-	(if (not (null? tal))
-	    (loop (+ index 1)(car tal)(cdr tal))))
-      tabtop))))
+	(let* ((apath   (hash-table-ref (dboard:data-cfgdat data)) hed)
+	       (mtconf    (read-config apath (make-hash-table) #f)) ;; megatest.config
+	       (area-dat (make-megatest:area
+			  hed      ;; area name
+			  apath    ;; path to area
+			  'http    ;; transport
+			  (list apath mtconf) ;; configinfo (legacy)
+			  mtconf   ;; megatest.config
+			  (make-hash-table)
+			  #f
+			  #f       ;; remote connections
+			  #f       ;; run keys
+			  (make-hash-table) ;; run-id -> (hash of test-ids => dat)
+			  )))
+	  (hash-table-set! (dboard:data-areas data) hed 
+			   (make-dboard:area
+			    #f ;; tree
+			    #f ;; matrix
+			    (and (file-exists?       apath)
+				 (file-write-access? apath))
+			    area-dat
+			    hed 
 
-(define *current-window-id* 0)
+			    ))
+	  (debug:print 0 "Adding area " hed " with index " index " to dashboard")
+	  (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
+	  (if (not (null? tal))
+	      (loop (+ index 1)(car tal)(cdr tal))))
+	tabtop)))))
 
 (define (newdashboard data window-id)
   (let* (;; (keys     (db:get-keys *dbstruct-local* *area-dat*))
@@ -624,9 +634,9 @@ Misc
 	 ;; (states   '())
 	 ;; (statuses '())
 	 (nextmintime (current-milliseconds)))
-    (dboard:areas-current-window-id-set! data (+ 1 (dboard:areas-current-window-id data)))
+    (dboard:data-current-window-id-set! data (+ 1 (dboard:data-current-window-id data)))
     ;; (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
-    (iup:show (main-panel data (dboard:areas-current-window-id data)))
+    (iup:show (main-panel data (dboard:data-current-window-id data)))
     ;; Yes, running iup:show will pop up a new panel
     ;; (iup:show (main-panel my-window-id))
     (iup:callback-set! *tim*
@@ -650,10 +660,10 @@ Misc
        (groupn    (or (args:get-arg "-group") "default"))
        (cfname    (conc (getenv "HOME") "/.megatest/" groupn ".dat"))
        (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)))
-       (data      (make-dboard:areas 
-		   cfgdat
+       (data      (make-dboard:data
+		   cfgdat ;; this is the data from ~/.megatest for the selected group
+		   (make-hash-table) ;; areaname -> area-rec
 		   0 
-		   #f)))
-  ;; (dboard:areas-tree-browser-set! data (tree-browser data window-id)) ;; data will have "areaname" => "area record" entries
+		   )))
   (newdashboard data window-id)
   (iup:main-loop))

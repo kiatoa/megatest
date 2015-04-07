@@ -46,6 +46,8 @@
   denoise
   client-signature
   remote
+  run-keys
+  runs      ;; used in dashboard
   )
 
 (define *already-seen-runconfig-info* #f)

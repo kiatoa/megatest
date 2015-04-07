@@ -39,15 +39,16 @@
 ;;
 
 
-(define-record dboard:areas
-  area-groups          ;; hash of group -> areanames -> areapaths
+(define-record dboard:data
+  cfgdat            ;; data from ~/.megatest/<group>.dat
+  areas             ;; hash of areaname -> area-rec
   current-window-id
-  tree-browser
   )
 
 (define-record dboard:area
+  tree
+  matrix
   read-only ;; #t => can't write
-  dbstruct  ;; database connector
   area-dat  ;; the one-structure (one day dbstruct will be put in here)
   name      ;; name for this area
   mpath     ;; path to the megatest home (MT_RUN_AREA_HOME)
@@ -60,6 +61,7 @@
   run-id    ;; the current run-id
   test-ids  ;; the current test id hash, run-id => test-id
   command   ;; the command from the entry field
+  ;; dbstruct ;; not needed
   )
 
 (define-record dboard:filter
@@ -68,11 +70,7 @@
   testpatt  ;; the testpatt widget
   )
 
-(define-record dboard:area-dat
-  run-keys
-  runs
-  tests
-  )  
+;; Use megatest:area from common.scm for an area record
 
 ;;======================================================================
 ;; D O T F I L E
