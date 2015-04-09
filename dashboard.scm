@@ -535,7 +535,6 @@ Misc
 
     (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! view-matrix "WIDTH0" "100")
-    (dboard:area-matrix-set! adat view-matrix)
     ;; (dboard:data-set-runs-matrix! *data* runs-matrix)
     (iup:hbox
      (iup:frame 
@@ -549,22 +548,35 @@ Misc
   (iup:hbox))
 
 ;;======================================================================
+;; A R E A S
+;;======================================================================
+
+(define (dashboard:init-area data area-name apath)
+  (let* ((mtconffile  (conc area-name "/megatest.config"))
+	 (mtconf      (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
+	 (area-dat    (let ((ad (make-megatest:area
+			       area-name ;; area name
+			       apath     ;; path to area
+			       'http     ;; transport
+			       (list apath mtconf) ;; configinfo (legacy)
+			       mtconf    ;; megatest.config
+			       (make-hash-table) ;; denoise hash
+			       #f        ;; client-signature
+			       #f        ;; remote connections
+			       #f        ;; run keys
+			       (make-hash-table) ;; run-id -> (hash of test-ids => dat)
+			       (and (file-exists? apath)(file-write-access? apath)) ;; read-only
+			       )))
+		      (hash-table-set! (dboard:data-areas data) area-name ad)
+		      ad)))
+    area-dat))
+
+;;======================================================================
 ;; D A S H B O A R D
 ;;======================================================================
 
-(define (make-area-panel data area-name window-id)
-  (let* ((adat   (hash-table-ref (dboard:data-areas data) area-name))
-	 (tb     (tree-browser data adat window-id)) ;; (dboard:areas-tree-browser data)
-	 (ad     (area-display data adat window-id))
-	 (areas  (dboard:data-areas data)))
-    (dboard:area-tree-set!   adat tb)
-    (dboard:area-matrix-set! adat ad)
-    (iup:split
-     #:value 200
-     tb ad)))
-
-
 ;; Main Panel
+;;
 (define (main-panel data window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
@@ -573,47 +585,42 @@ Misc
    (iup:vbox
     (let* ((area-names  (hash-table-keys (dboard:data-cfgdat data)))
 	   (area-panels (map (lambda (aname)
-			       (make-area-panel data aname window-id))
+			       (let* ((apath      (configf:lookup (dboard:data-cfgdat data) aname "path")) ;;  (hash-table-ref (dboard:data-cfgdat data) area-name))
+				      ;;          (hash-table-ref (dboard:data-cfgdat data) aname))
+				      (area-dat   (dashboard:init-area data aname apath))
+				      (tb         (tree-browser data area-dat window-id)) ;; (dboard:areas-tree-browser data)
+				      (ad         (area-display data area-dat window-id))
+				      (areas      (dboard:data-areas data))
+				      (dboard-dat (make-dboard:area 
+						   #f           ;; tree
+						   #f           ;; matrix
+						   area-dat     ;;
+						   #f           ;; view path
+						   'default     ;; view type
+						   #f           ;; matrix
+						   #f           ;; controls
+						   #f           ;; cached data
+						   #f           ;; filters
+						   #f           ;; the run-id
+						   (make-hash-table) ;; run-id -> test-id, for current test id
+						   ""
+						   )))
+				 (hash-table-set! (dboard:data-areas data) aname dboard-dat)
+				 (dboard:area-tree-set!   dboard-dat tb)
+				 (dboard:area-matrix-set! dboard-dat ad)
+				 (iup:split
+				  #:value 200
+				  tb ad)))
 			     area-names))
-	   (tabtop      (apply iup:tabs areas)))
+	   (tabtop      (apply iup:tabs area-panels)))
       (let loop ((index 0)
 		 (hed   (car area-names))
 		 (tal   (cdr area-names)))
-	(let* ((apath     (hash-table-ref (dboard:data-cfgdat data) hed))
-	       (mtconf    (read-config apath (make-hash-table) #f)) ;; megatest.config
-	       (area-dat  (make-megatest:area
-			   hed      ;; area name
-			   apath    ;; path to area
-			   'http    ;; transport
-			   (list apath mtconf) ;; configinfo (legacy)
-			   mtconf   ;; megatest.config
-			   (make-hash-table) ;; denoise hash
-			   #f       ;; client-signature
-			   #f       ;; remote connections
-			   #f       ;; run keys
-			   (make-hash-table) ;; run-id -> (hash of test-ids => dat)
-			   (and (file-exists? apath)(file-write-access? apath)) ;; read-only
-			   )))
-	  (hash-table-set! (dboard:data-areas data) hed 
-			   (make-dboard:area 
-			    #f           ;; tree
-			    #f           ;; matrix
-			    area-dat     ;;
-			    #f           ;; view path
-			    'default     ;; view type
-			    #f           ;; matrix
-			    #f           ;; controls
-			    #f           ;; cached data
-			    #f           ;; filters
-			    #f           ;; the run-id
-			    (make-hash-table) ;; run-id -> test-id, for current test id
-			    ""
-			    ))
-	  (debug:print 0 "Adding area " hed " with index " index " to dashboard")
-	  (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
-	  (if (not (null? tal))
-	      (loop (+ index 1)(car tal)(cdr tal))))
-	tabtop)))))
+	(debug:print 0 "Adding area " hed " with index " index " to dashboard")
+	(iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
+	(if (not (null? tal))
+	    (loop (+ index 1)(car tal)(cdr tal))))
+      tabtop))))
 
 (define (newdashboard data window-id)
   (let* (;; (keys     (db:get-keys *dbstruct-local* *area-dat*))
