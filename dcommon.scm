@@ -48,10 +48,7 @@
 (define-record dboard:area
   tree
   matrix
-  read-only ;; #t => can't write
   area-dat  ;; the one-structure (one day dbstruct will be put in here)
-  name      ;; name for this area
-  mpath     ;; path to the megatest home (MT_RUN_AREA_HOME)
   view-path ;; <target/path>/<runname>/...
   view-type ;; standard, etc.
   matrix    ;; the spreadsheet 
@@ -61,7 +58,6 @@
   run-id    ;; the current run-id
   test-ids  ;; the current test id hash, run-id => test-id
   command   ;; the command from the entry field
-  ;; dbstruct ;; not needed
   )
 
 (define-record dboard:filter

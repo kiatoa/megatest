@@ -38,16 +38,17 @@
 
 ;; GLOBAL GLETCHES
 (define-record megatest:area
-  name
-  path
-  transport
-  configinfo
-  configdat
-  denoise
-  client-signature
-  remote
-  run-keys
-  runs      ;; used in dashboard
+  name               ;; area name
+  path               ;; mt run area home
+  transport          ;; defaults to http
+  configinfo         ;; legacy config format
+  configdat          ;; megatest config
+  denoise            ;; focal point for not 
+  client-signature   ;; key for client-server conversation
+  remote             ;; hash of all the client side connnections
+  run-keys           ;; target keys for this area
+  runs               ;; used in dashboard
+  read-only          ;; can I write to this area?
   )
 
 (define *already-seen-runconfig-info* #f)

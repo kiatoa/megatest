@@ -33,7 +33,7 @@
 (include "key_records.scm")
 
 (define help (conc 
-"Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
+	      "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
   license GPL, Copyright (C) Matt Welland 2011
 
@@ -56,7 +56,7 @@ Misc
 		 (list  "-h"
 			"-v"
 			"-q"
-		       )
+			)
 		 args:arg-hash
 		 0))
 
@@ -64,23 +64,6 @@ Misc
     (begin
       (print help)
       (exit)))
-
-;;; REMOVE ME, this is a stop-gap
-(define *area-dat* (make-megatest:area
-		    "default"         ;; area name
-		    #f                ;; area path
-		    'http             ;; transport
-		    #f                ;; configinfo
-		    #f                ;; configdat
-		    (make-hash-table) ;; denoise
-		    #f                ;; client signature
-		    #f                ;; remote connections
-		    ))
-
-(if (not (launch:setup-for-run *area-dat*))
-    (begin
-      (print "Failed to find megatest.config, exiting") 
-      (exit 1)))
 
 ;; (if (args:get-arg "-host")
 ;;     (begin
@@ -202,7 +185,7 @@ Misc
 
     (iup:vbox
      (iup:hbox
-       
+      
       (iup:vbox
        (let ((tabs (iup:tabs 
 		    ;; The required tab
@@ -252,7 +235,7 @@ Misc
 	 (iup:attribute-set! tabs "TABTITLE0" "Required settings")
 	 (iup:attribute-set! tabs "TABTITLE1" "Optional settings")
 	 tabs))
-       ))))
+      ))))
 
 ;; The runconfigs.config file
 ;;
@@ -360,8 +343,8 @@ Misc
        (iup:attribute-set! mat "ALIGNMENT1" "ALEFT")
        ;; (iup:attribute-set! mat "FIXTOTEXT" "C1")
        (iup:attribute-set! mat "RESIZEMATRIX" "YES"))
-       ;; (iup:attribute-set! mat "WIDTH1" "120")
-       ;; (iup:attribute-set! mat "WIDTH0" "100"))
+     ;; (iup:attribute-set! mat "WIDTH1" "120")
+     ;; (iup:attribute-set! mat "WIDTH0" "100"))
      (list run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix))
 
     ;; Steps matrix
@@ -408,40 +391,40 @@ Misc
       (list test-info-matrix '("Test Id" "Testname" "Itempath" "State"   "Status" "Test Start Time" "Comment"))
       (list test-run-matrix  '("Hostname" "Host info" "Disk Free" "CPU Load" "Run Duration"))
       (list meta-dat-matrix  '("Author"   "Owner"     "Last Reviewed" "Tags" "Description"))))
-	    
+    
     (iup:split
-      #:orientation "HORIZONTAL"
-      (iup:vbox
-       (iup:hbox
-	(iup:vbox
-	 run-info-matrix
-	 test-info-matrix)
-       ;; test-info-matrix)
-	(iup:vbox
-	 test-run-matrix
-	 meta-dat-matrix))
+     #:orientation "HORIZONTAL"
+     (iup:vbox
+      (iup:hbox
        (iup:vbox
-	(iup:vbox
-	 (iup:hbox 
-	  (iup:button "View Log"    #:action viewlog      #:size "60x" )   ;; #:size "30x" 
-	  (iup:button "Start Xterm" #:action xterm        #:size "60x" ))	 ;; #:size "30x" 
-	 (iup:hbox
-	   (iup:button "Run Test"    #:action run-test    #:size "60x" )	 ;; #:size "30x" 
-	   (iup:button "Clean Test"  #:action remove-test #:size "60x" )))	 ;; #:size "30x" 
-	(iup:hbox
-	 ;; hiup:split ;; hbox
-	 ;; #:orientation "HORIZONTAL"
-	 ;; #:value 300
-	 command-text-box
-	 command-launch-button)))
+	run-info-matrix
+	test-info-matrix)
+       ;; test-info-matrix)
+       (iup:vbox
+	test-run-matrix
+	meta-dat-matrix))
       (iup:vbox
-       (let ((tabs (iup:tabs
-		    steps-matrix
-		    data-matrix)))
-	 (iup:attribute-set! tabs "TABTITLE0" "Test Steps")
-	 (iup:attribute-set! tabs "TABTITLE1" "Test Data")
-	 tabs)))))
-       
+       (iup:vbox
+	(iup:hbox 
+	 (iup:button "View Log"    #:action viewlog      #:size "60x" )   ;; #:size "30x" 
+	 (iup:button "Start Xterm" #:action xterm        #:size "60x" ))	 ;; #:size "30x" 
+	(iup:hbox
+	 (iup:button "Run Test"    #:action run-test    #:size "60x" )	 ;; #:size "30x" 
+	 (iup:button "Clean Test"  #:action remove-test #:size "60x" )))	 ;; #:size "30x" 
+       (iup:hbox
+	;; hiup:split ;; hbox
+	;; #:orientation "HORIZONTAL"
+	;; #:value 300
+	command-text-box
+	command-launch-button)))
+     (iup:vbox
+      (let ((tabs (iup:tabs
+		   steps-matrix
+		   data-matrix)))
+	(iup:attribute-set! tabs "TABTITLE0" "Test Steps")
+	(iup:attribute-set! tabs "TABTITLE1" "Test Data")
+	tabs)))))
+
 ;; Test browser
 (define (tree-browser data adat window-id)
   ;; (iup:split
@@ -480,7 +463,7 @@ Misc
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
 	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
 	     (steps-dat    (tests:get-compressed-steps *dbstruct-local* run-id test-id)))
-				
+	
 	(if test-data
 	    (begin
 	      ;; 
@@ -527,11 +510,11 @@ Misc
 			  (make-list 5 "")))
 		))
 	      (dcommon:populate-steps steps-dat steps-matrix))))))
-		;;(list meta-dat-matrix
-		;;      (if test-id
-		;;	  (list (
+;;(list meta-dat-matrix
+;;      (if test-id
+;;	  (list (
 
-  
+
 ;;======================================================================
 ;; R U N   C O N T R O L
 ;;======================================================================
@@ -570,10 +553,10 @@ Misc
 ;;======================================================================
 
 (define (make-area-panel data area-name window-id)
-  (let* ((adat   (hash-table-ref areas area-name))
+  (let* ((adat   (hash-table-ref (dboard:data-areas data) area-name))
 	 (tb     (tree-browser data adat window-id)) ;; (dboard:areas-tree-browser data)
 	 (ad     (area-display data adat window-id))
-	(areas  (dboard:data-areas data)))
+	 (areas  (dboard:data-areas data)))
     (dboard:area-tree-set!   adat tb)
     (dboard:area-matrix-set! adat ad)
     (iup:split
@@ -596,29 +579,35 @@ Misc
       (let loop ((index 0)
 		 (hed   (car area-names))
 		 (tal   (cdr area-names)))
-	(let* ((apath   (hash-table-ref (dboard:data-cfgdat data)) hed)
+	(let* ((apath     (hash-table-ref (dboard:data-cfgdat data) hed))
 	       (mtconf    (read-config apath (make-hash-table) #f)) ;; megatest.config
-	       (area-dat (make-megatest:area
-			  hed      ;; area name
-			  apath    ;; path to area
-			  'http    ;; transport
-			  (list apath mtconf) ;; configinfo (legacy)
-			  mtconf   ;; megatest.config
-			  (make-hash-table)
-			  #f
-			  #f       ;; remote connections
-			  #f       ;; run keys
-			  (make-hash-table) ;; run-id -> (hash of test-ids => dat)
-			  )))
+	       (area-dat  (make-megatest:area
+			   hed      ;; area name
+			   apath    ;; path to area
+			   'http    ;; transport
+			   (list apath mtconf) ;; configinfo (legacy)
+			   mtconf   ;; megatest.config
+			   (make-hash-table) ;; denoise hash
+			   #f       ;; client-signature
+			   #f       ;; remote connections
+			   #f       ;; run keys
+			   (make-hash-table) ;; run-id -> (hash of test-ids => dat)
+			   (and (file-exists? apath)(file-write-access? apath)) ;; read-only
+			   )))
 	  (hash-table-set! (dboard:data-areas data) hed 
-			   (make-dboard:area
-			    #f ;; tree
-			    #f ;; matrix
-			    (and (file-exists?       apath)
-				 (file-write-access? apath))
-			    area-dat
-			    hed 
-
+			   (make-dboard:area 
+			    #f           ;; tree
+			    #f           ;; matrix
+			    area-dat     ;;
+			    #f           ;; view path
+			    'default     ;; view type
+			    #f           ;; matrix
+			    #f           ;; controls
+			    #f           ;; cached data
+			    #f           ;; filters
+			    #f           ;; the run-id
+			    (make-hash-table) ;; run-id -> test-id, for current test id
+			    ""
 			    ))
 	  (debug:print 0 "Adding area " hed " with index " index " to dashboard")
 	  (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
