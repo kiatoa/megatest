@@ -65,6 +65,9 @@
 		    (make-hash-table) ;; denoise
 		    #f                ;; client signature
 		    #f                ;; remote connections
+		    #f                ;; run keys
+		    (make-hash-table) ;; runs
+		    #f                ;; read-only
 		    ))
 
 (define *runremote* #f) ;; BUG: Remove this ASAP and update common:*remote* to not refer to *runremote*
