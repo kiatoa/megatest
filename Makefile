@@ -38,7 +38,7 @@ ARCHSTR=$(shell lsb_release -sr)
 
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
-mtest: $(OFILES) megatest.o
+mtest: $(OFILES) megatest.o readline-fix.scm
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm
@@ -194,3 +194,10 @@ sd : datashare-testing/sd
 xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
+#  "(define (toplevel-command . a) #f)"
+readline-fix.scm :
+	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
+           echo "(use-legacy-bindings)" > readline-fix.scm; \
+	else \
+	   echo "" > readline-fix.scm;\
+	fi
