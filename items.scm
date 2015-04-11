@@ -37,25 +37,6 @@
 	    (loop (car tal)(cdr tal)))))
     res))
 
-;; Puts out all combinations
-(define (process-itemlist hierdepth curritemkey itemlist)
-  (let ((res '()))
-    (if (not hierdepth)
-	(set! hierdepth (length itemlist)))
-    (let loop ((hed (car itemlist))
-	       (tal (cdr itemlist)))
-      (if (null? tal)
-	  (for-each (lambda (item)
-		      (if (> (length curritemkey) (- hierdepth 2))
-			  (set! res (append res (list (append curritemkey (list (list (car hed) item))))))))
-		    (cadr hed))
-	  (begin
-	    (for-each (lambda (item)
-			(set! res (append res (process-itemlist hierdepth (append curritemkey (list (list (car hed) item))) tal))))
-		      (cadr hed))
-	    (loop (car tal)(cdr tal)))))
-    res))
-
 ;; (item-assoc->item-list '(("ANIMAL" "Elephant Lion")("SEASON" "Spring Fall")))
 ;;   => ((("ANIMAL" "Elephant") ("SEASON" "Spring")) 
 ;;       (("ANIMAL" "Elephant") ("SEASON" "Fall")) 

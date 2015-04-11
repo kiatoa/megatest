@@ -87,12 +87,16 @@
 				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(if (or allow-system
-			(not (member cmdtype '("system" "shell"))))
-		    (with-input-from-string fullcmd
-		      (lambda ()
-			(set! result ((eval (read)) ht))))
-		    (set! result (conc "#{(" cmdtype ") "  cmd "}")))		(loop (conc prestr result poststr)))
+		(handle-exceptions
+		 exn
+		 (debug:print 0 "ERROR: failed to process config input \"" l "\"")
+		 (if (or allow-system
+			 (not (member cmdtype '("system" "shell"))))
+		     (with-input-from-string fullcmd
+		       (lambda ()
+			 (set! result ((eval (read)) ht))))
+		     (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
+		(loop (conc prestr result poststr)))
 	      res))
 	res)))
 
