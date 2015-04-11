@@ -55,11 +55,17 @@
 	       #t))))))
 
 (define (tasks:get-task-db-path area-dat)
-  (let* ((linktree     (configf:lookup (megatest:area-configdat area-dat) "setup" "linktree"))
-	 (dbpath       (conc linktree "/.db")))
-    dbpath))
-
-
+  (let* ((configdat (megatest:area-configdat area-dat))
+  (dbdir  (or (configf:lookup configdat "setup" "monitordir")
+		    (configf:lookup configdat "setup" "dbdir")
+		    (conc (configf:lookup configdat "setup" "linktree") "/.db"))))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (exit 1))
+     (if (not (directory? dbdir))(create-directory dbdir #t)))
+    dbdir))
 
 ;; If file exists AND
 ;;    file readable

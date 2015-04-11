@@ -839,7 +839,6 @@
 	 (cmdparms   #f)
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
-	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (rmt:get-test-info-by-id run-id test-id area-dat))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())

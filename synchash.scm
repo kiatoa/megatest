@@ -58,10 +58,6 @@
     ;; (list indat '()) ;; just for debugging
     ))
     
-;; (cdb:remote-run db:get-keys #f)  
-;; (cdb:remote-run db:get-num-runs #f "%")
-;; (cdb:remote-run db:get-runs #f runnamepatt numruns *start-run-offset* keypatts)
-;;
 ;; keynum => the field to use as the unique key (usually 0 but can be other field)
 ;;
 (define (synchash:client-get area-dat proc synckey keynum synchash run-id . params)

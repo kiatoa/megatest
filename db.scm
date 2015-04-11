@@ -63,14 +63,11 @@
   (if (sqlite3:database? dbstruct) ;; pass sqlite3 databases on through
       dbstruct
       (begin
-	(mutex-lock! *rundb-mutex*)
 	(let ((dbdat (if (or (not run-id)
 			     (eq? run-id 0))
 			 (db:open-main dbstruct area-dat)
 			 (db:open-rundb dbstruct area-dat run-id)
 			 )))
-	  ;; db prunning would go here
-	  (mutex-unlock! *rundb-mutex*)
 	  dbdat))))
 
 (define (db:dbdat-get-db dbdat)
@@ -143,17 +140,14 @@
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id area-dat)
-  (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
+  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
 	 (configdat       (megatest:area-configdat area-dat))
 	 (toppath         (megatest:area-path      area-dat))
 	 (link-tree-path  (configf:lookup configdat "setup" "linktree"))
 	 (dbpath          (configf:lookup configdat "setup" "dbdir"))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
-			      #f))
-	 (dbdir           (if dbpath
-			      dbpath
-			      (conc link-tree-path "/.db/"))))
+			      #f)))
     (handle-exceptions
      exn
      (begin
@@ -161,7 +155,7 @@
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
     (if fname
-	(conc dbdir fname)
+	(conc dbdir "/" fname)
 	dbdir)))
 	       
 (define (db:set-sync db area-dat)
@@ -203,60 +197,63 @@
     (if (or rdb
 	    do-not-open)
 	rdb
-	(let* ((dbpath       (db:dbfile-path run-id area-dat)) ;; (conc toppath "/db/" run-id ".db"))
-	       (dbexists     (file-exists? dbpath))
-	       (inmem        (if local #f (db:open-inmem-db)))
-	       (refdb        (if local #f (db:open-inmem-db)))
-	       (db           (db:lock-create-open dbpath ;; this is the database physically on disk
-						  (lambda (db)
-						    (handle-exceptions
-						     exn
-						     (begin
-						       (release-dot-lock dbpath)
-						       (if (> attemptnum 2)
-							   (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+	(begin
+	  (mutex-lock! *rundb-mutex*)
+	  (let* ((dbpath       (db:dbfile-path run-id area-dat)) ;; (conc toppath "/db/" run-id ".db"))
+		 (dbexists     (file-exists? dbpath))
+		 (inmem        (if local #f (db:open-inmem-db)))
+		 (refdb        (if local #f (db:open-inmem-db)))
+		 (db           (db:lock-create-open dbpath ;; this is the database physically on disk
+						    (lambda (db)
+						      (handle-exceptions
+						       exn
+						       (begin
+							 (release-dot-lock dbpath)
+							 (if (> attemptnum 2)
+							     (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
 							   (db:open-rundb dbstruct area-dat run-id attemptnum (+ attemptnum 1))))
-						     (db:initialize-run-id-db db)
-						     (sqlite3:execute 
-						      db
-						      "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-						      (* run-id 30000) ;; allow for up to 30k tests per run
-						      run-id)
-						     ;; do a dummy query to test that the table exists and the db is truly readable
-						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+						       (db:initialize-run-id-db db)
+						       (sqlite3:execute 
+							db
+							"INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+							(* run-id 30000) ;; allow for up to 30k tests per run
+							run-id)
+						       ;; do a dummy query to test that the table exists and the db is truly readable
+						       (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
 						    ))
 						  area-dat)) ;; add strings db to rundb, not in use yet
-	       ;;   )) ;; (sqlite3:open-database dbpath))
-	       (olddb        (if *megatest-db*
-				 *megatest-db* 
+		 ;;   )) ;; (sqlite3:open-database dbpath))
+		 (olddb        (if *megatest-db*
+				   *megatest-db* 
 				 (let ((db (db:open-megatest-db area-dat)))
-				   (set! *megatest-db* db)
-				   db)))
-	       (write-access (file-write-access? dbpath))
-	       ;; (handler      (make-busy-timeout 136000))
-	       )
-	  (if (and dbexists (not write-access))
-	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	  (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
-	  (dbr:dbstruct-set-inuse!  dbstruct #t)
-	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
-	  ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
-	  (if local
-	      (begin
-		(dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
-		db)
-	      (begin
-		(dbr:dbstruct-set-inmem!  dbstruct inmem)
-		;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
-		;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
+				     (set! *megatest-db* db)
+				     db)))
+		 (write-access (file-write-access? dbpath))
+		 ;; (handler      (make-busy-timeout 136000))
+		 )
+	    (if (and dbexists (not write-access))
+		(set! *db-write-access* #f)) ;; only unset so other db's also can use this control
+	    (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
+	    (dbr:dbstruct-set-inuse!  dbstruct #t)
+	    (dbr:dbstruct-set-olddb!  dbstruct olddb)
+	    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
+	    (mutex-unlock! *rundb-mutex*)
+	    (if local
+		(begin
+		  (dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
+		  db)
+		(begin
+		  (dbr:dbstruct-set-inmem!  dbstruct inmem)
+		  ;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
+		  ;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
 		(db:sync-tables area-dat db:sync-tests-only db inmem)
 		(db:delay-if-busy refdb area-dat) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
-		(dbr:dbstruct-set-refdb!  dbstruct refdb)
+		  (dbr:dbstruct-set-refdb!  dbstruct refdb)
 		(db:sync-tables area-dat db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
-		;; sync once more to deal with delays?
-		;; (db:sync-tables db:sync-tests-only db inmem)
-		;; (db:sync-tables db:sync-tests-only inmem refdb)
-		inmem))))))
+		  ;; sync once more to deal with delays?
+		  ;; (db:sync-tables db:sync-tests-only db inmem)
+		  ;; (db:sync-tables db:sync-tests-only inmem refdb)
+		  inmem)))))))
 
 ;; This routine creates the db. It is only called if the db is not already ls opened
 ;;
@@ -264,20 +261,26 @@
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
-	(let* ((dbpath       (db:dbfile-path 0 area-dat))
-	       (dbexists     (file-exists? dbpath))
+	(begin
+	  (mutex-lock! *rundb-mutex*)
+	  (let* ((dbpath       (db:dbfile-path 0 area-dat))
+		 (dbexists     (file-exists? dbpath))
 	       (db           (db:lock-create-open dbpath 
 						  (lambda (db)
 						    (db:initialize-main-db db area-dat))
 						  area-dat))
 	       (olddb        (db:open-megatest-db area-dat))
-	       (write-access (file-write-access? dbpath))
-	       (dbdat        (cons db dbpath)))
-	  (if (and dbexists (not write-access))
-	      (set! *db-write-access* #f))
-	  (dbr:dbstruct-set-main!   dbstruct dbdat)
-	  (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
-	  dbdat))))
+		 (write-access (file-write-access? dbpath))
+		 (dbdat        (cons db dbpath)))
+	    (if (and dbexists (not write-access))
+		(set! *db-write-access* #f))
+	    (dbr:dbstruct-set-main!   dbstruct dbdat)
+	    (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
+	    (mutex-unlock! *rundb-mutex*)
+	    (if (and (not dbexists)
+		     *db-write-access*) ;; did not have a prior db and do have write access
+		(db:multi-db-sync #f 'old2new))  ;; migrate data from megatest.db automatically
+	    dbdat)))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;

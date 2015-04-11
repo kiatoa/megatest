@@ -909,7 +909,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runsdat  (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 					 #f #f))
-		;; (cdb:remote-run db:get-runs #f runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (db-targets (args:get-arg "-list-db-targets"))
@@ -1280,7 +1279,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
+	      ;; DO NOT put this one into either rmt: or open-run-close
 	      (tdb:load-test-data run-id test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
@@ -1377,7 +1376,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (cdb:remote-run db:get-keys db))
+      (set! keys (rmt:get-keys)) ;;  db))
       (debug:print 1 "Keys: " (string-intersperse keys ", "))
       (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
@@ -1474,6 +1473,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
             (use-legacy-bindings)
 	    (import apropos)
 	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
+	    (include "readline-fix.scm")
 	    (gnu-history-install-file-manager
 	     (let ((d (string-append
 		       (or (get-environment-variable "HOME") ".") "/.megatest")))
