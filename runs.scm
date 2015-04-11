@@ -897,7 +897,7 @@
 
   ;; Do mark-and-find clean up of db before starting runing of quue
   ;;
-  ;; (cdb:remote-run db:find-and-mark-incomplete #f)
+  ;; (rmt:find-and-mark-incomplete)
 
   (let ((run-info              (rmt:get-run-info run-id))
 	(tests-info            (mt:get-tests-for-run run-id #f '() '())) ;;  qryvals: "id,testname,item_path"))
@@ -1593,7 +1593,7 @@
 		       (debug:print 1 "Removing run: " runkey " " (db:get-value-by-header run header "runname") " and related record")
 		       (rmt:delete-run run-id)
 		       (rmt:delete-old-deleted-test-records)
-		       ;; (cdb:remote-run db:set-var db "DELETED_TESTS" (current-seconds))
+		       ;; (rmt:set-var "DELETED_TESTS" (current-seconds))
 		       ;; need to figure out the path to the run dir and remove it if empty
 		       ;;    (if (null? (glob (conc runpath "/*")))
 		       ;;        (begin
@@ -1676,8 +1676,6 @@
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
-	;; (if (args:get-arg "-server")
-	;;     (cdb:remote-run server:start db (args:get-arg "-server")))
 	(set! keys (keys:config-get-fields *configdat*))
 	;; have enough to process -target or -reqtarg here
 	(if (args:get-arg "-reqtarg")
@@ -1796,7 +1794,7 @@
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
 	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-get-id testdat) " to " (db:test-get-id new-testdat))
-	 (cdb:remote-run 
+	 (cdb:remote-run ;; to be replaced, note: this routine is not used currently
 	  (lambda ()
 	    (sqlite3:execute 
 	     db 

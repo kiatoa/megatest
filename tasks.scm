@@ -55,11 +55,16 @@
 	       #t))))))
 
 (define (tasks:get-task-db-path)
-  (let* ((linktree     (configf:lookup *configdat* "setup" "linktree"))
-	 (dbpath       (conc linktree "/.db")))
-    dbpath))
-
-
+  (let ((dbdir  (or (configf:lookup *configdat* "setup" "monitordir")
+		    (configf:lookup *configdat* "setup" "dbdir")
+		    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (exit 1))
+     (if (not (directory? dbdir))(create-directory dbdir #t)))
+    dbdir))
 
 ;; If file exists AND
 ;;    file readable
