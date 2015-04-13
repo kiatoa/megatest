@@ -10,6 +10,7 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
+;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
