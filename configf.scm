@@ -95,7 +95,7 @@
 		     (with-input-from-string fullcmd
 		       (lambda ()
 			 (set! result ((eval (read)) ht))))
-		     (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
+		    (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
 		(loop (conc prestr result poststr)))
 	      res))
 	res)))
