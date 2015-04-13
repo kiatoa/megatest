@@ -121,7 +121,7 @@ Misc
 
 
 ;; Test browser
-(define (tree-browser data adat window-id)
+(define (dashboard:tree-browser data adat window-id)
   ;; (iup:split
   (let* ((tb      (iup:treebox
 		   #:selection-cb
@@ -216,7 +216,7 @@ Misc
 
 ;; General displayer
 ;;
-(define (area-display data adat window-id)
+(define (dashboard:area-display data adat window-id)
   (let* ((view-matrix     (iup:matrix
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
@@ -272,7 +272,7 @@ Misc
 
 ;; Main Panel
 ;;
-(define (main-panel data window-id)
+(define (dashboard:main-panel data window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
    #:menu (dcommon:main-menu data)
@@ -283,16 +283,15 @@ Misc
 			       (let* ((apath      (configf:lookup (dboard:data-cfgdat data) aname "path")) ;;  (hash-table-ref (dboard:data-cfgdat data) area-name))
 				      ;;          (hash-table-ref (dboard:data-cfgdat data) aname))
 				      (area-dat   (dashboard:init-area data aname apath))
-				      (tb         (tree-browser data area-dat window-id)) ;; (dboard:areas-tree-browser data)
-				      (ad         (area-display data area-dat window-id))
+				      (tb         (dashboard:tree-browser data area-dat window-id)) ;; (dboard:areas-tree-browser data)
+				      (ad         (dashboard:area-display data area-dat window-id))
 				      (areas      (dboard:data-areas data))
-				      (dboard-dat (make-dboard:area 
+				      (dboard-dat (make-dboard:tab
 						   #f           ;; tree
 						   #f           ;; matrix
 						   area-dat     ;;
 						   #f           ;; view path
 						   'default     ;; view type
-						   #f           ;; matrix
 						   #f           ;; controls
 						   #f           ;; cached data
 						   #f           ;; filters
@@ -301,16 +300,23 @@ Misc
 						   ""
 						   )))
 				 (hash-table-set! (dboard:data-areas data) aname dboard-dat)
-				 (dboard:area-tree-set!   dboard-dat tb)
-				 (dboard:area-matrix-set! dboard-dat ad)
+				 (dboard:tab-tree-set!   dboard-dat tb)
+				 (dboard:tab-matrix-set! dboard-dat ad)
 				 (iup:split
 				  #:value 200
 				  tb ad)))
 			     area-names))
-	   (tabtop      (apply iup:tabs area-panels)))
+	   (tabtop      (apply iup:tabs  
+			       #:tabchangepos-cb (lambda (obj curr prev)
+						   (dboard:data-current-tab-id-set! data curr)
+						   (dboard:data-update-needed-set!  data #t)
+						   (print "Tab is: " curr ", prev was " prev))
+			       area-panels))
+	   (tab-ids     (dboard:data-tab-ids data)))
       (let loop ((index 0)
 		 (hed   (car area-names))
 		 (tal   (cdr area-names)))
+	(hash-table-set! tab-ids index hed)
 	(debug:print 0 "Adding area " hed " with index " index " to dashboard")
 	(iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
 	(if (not (null? tal))
@@ -327,7 +333,7 @@ Misc
 	 (nextmintime (current-milliseconds)))
     (dboard:data-current-window-id-set! data (+ 1 (dboard:data-current-window-id data)))
     ;; (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
-    (iup:show (main-panel data (dboard:data-current-window-id data)))
+    (iup:show (dashboard:main-panel data (dboard:data-current-window-id data)))
     ;; Yes, running iup:show will pop up a new panel
     ;; (iup:show (main-panel my-window-id))
     (iup:callback-set! *tim*
@@ -354,7 +360,10 @@ Misc
        (data      (make-dboard:data
 		   cfgdat ;; this is the data from ~/.megatest for the selected group
 		   (make-hash-table) ;; areaname -> area-rec
-		   0 
+		   0                 ;; current window id
+		   0                 ;; current tab id
+		   #f                ;; redraw needed for current tab id
+		   (make-hash-table) ;; tab-id -> areaname
 		   )))
   (newdashboard data window-id)
   (iup:main-loop))

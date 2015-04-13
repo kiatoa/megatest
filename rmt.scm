@@ -542,9 +542,6 @@
 (define (rmt:get-runs runpatt count offset keypatts area-dat)
   (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts) area-dat))
 
-(define (rmt:get-runs runpatt count offset keypatts area-dat)
-  (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts) area-dat))
-
 (define (rmt:get-all-run-ids area-dat)
   (rmt:send-receive 'get-all-run-ids #f '() area-dat))
 

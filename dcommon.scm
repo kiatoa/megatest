@@ -40,18 +40,20 @@
 
 
 (define-record dboard:data
-  cfgdat            ;; data from ~/.megatest/<group>.dat
-  areas             ;; hash of areaname -> area-rec
-  current-window-id
+  cfgdat             ;; data from ~/.megatest/<group>.dat
+  areas              ;; hash of areaname -> area-rec
+  current-window-id  ;; 
+  current-tab-id     ;; 
+  update-needed      ;; flag to indicate that the tab pointed to by current tab id needs refreshing immediately
+  tab-ids            ;; hash of tab-id -> areaname
   )
 
-(define-record dboard:area
+(define-record dboard:tab
   tree
-  matrix
+  matrix    ;; the spreadsheet 
   area-dat  ;; the one-structure (one day dbstruct will be put in here)
   view-path ;; <target/path>/<runname>/...
   view-type ;; standard, etc.
-  matrix    ;; the spreadsheet 
   controls  ;; the controls
   data      ;; all the data kept in sync with db
   filters   ;; user filters 
@@ -149,56 +151,65 @@
 ;;
 ;; Mode is 'full or 'incremental for full refresh or incremental refresh
 (define (dcommon:run-update data)
-  (thread-sleep! 0.25))
+  (let* ((current-tab-id  (dboard:data-current-tab-id data))
+	 (area-name       (hash-table-ref (dboard:data-tab-ids data) current-tab-id))
+	 (tab-dat         (hash-table-ref (dboard:data-areas   data) area-name))
+	 (matrix          (dboard:tab-matrix tab-dat))
+	 (tree            (dboard:tab-tree   tab-dat))
+	 (area-dat        (dboard:tab-area-dat tab-dat))
+	 (runpatt         "%")) ;; get from dboard:tab-filters
+    (if (dboard:data-update-needed data)
+	(let* (;; count and offset => #f so not used
+	       ;; the synchash calls modify the "data" hash
+	       ;; (get-runs-sig    (conc (client:get-signature) " get-runs"))
+	       ;; (get-tests-sig   (conc (client:get-signature) " get-tests"))
+	       ;; (get-details-sig (conc (client:get-signature) " get-test-details"))
+ 
+	       ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
+	       ;; (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
+	       ;; run-id is #f in next line to send the query to server 0
+	       ;; (run-changes     (synchash:client-get *area-dat* 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
+	       ;; (tests-detail-changes (if (not (null? test-ids))
+	       ;;				 (synchash:client-get *area-dat* 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
+	       ;;				 '()))
+ 
+	       ;; Now can calculate the run-ids
+	       ;; (run-hash    (hash-table-ref/default data get-runs-sig #f))
+	       ;; (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
+	       (launch:setup-for-run area-dat)
+	       (all-runs-dat   (rmt:get-runs runpatt #f #f '() area-dat)))
+	  (print "all-runs-dat: " all-runs-dat)))))
 
-;;  (let* (;; count and offset => #f so not used
-;; 	 ;; the synchash calls modify the "data" hash
-;; 	 (get-runs-sig    (conc (client:get-signature) " get-runs"))
-;; 	 (get-tests-sig   (conc (client:get-signature) " get-tests"))
-;; 	 (get-details-sig (conc (client:get-signature) " get-test-details"))
-;; 
-;; 	 ;; test-ids to get and display are indexed on window-id in curr-test-ids hash
-;; 	 (test-ids        (hash-table-values (dboard:data-get-curr-test-ids *data*)))
-;; 	 ;; run-id is #f in next line to send the query to server 0
-;;  	 (run-changes     (synchash:client-get *area-dat* 'db:get-runs get-runs-sig (length keypatts) data #f runname #f #f keypatts))
-;; 	 (tests-detail-changes (if (not (null? test-ids))
-;; 				   (synchash:client-get *area-dat* 'db:get-test-info-by-ids get-details-sig 0  data #f test-ids)
-;; 				   '()))
-;; 
-;; 	 ;; Now can calculate the run-ids
-;; 	 (run-hash    (hash-table-ref/default data get-runs-sig #f))
-;; 	 (run-ids     (if run-hash (filter number? (hash-table-keys run-hash)) '()))
-;; 
-;; 	 (all-test-changes (let ((res (make-hash-table)))
-;; 			     (for-each (lambda (run-id)
-;; 					 (if (> run-id 0)
-;; 					     (hash-table-set! res run-id (synchash:client-get *area-dat* 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
-;; 				       run-ids)
-;; 			     res))
-;; 	 (runs-hash    (hash-table-ref/default data get-runs-sig #f))
-;; 	 (header       (hash-table-ref/default runs-hash "header" #f))
-;; 	 (run-ids      (sort (filter number? (hash-table-keys runs-hash))
-;; 			     (lambda (a b)
-;; 			       (let* ((record-a (hash-table-ref runs-hash a))
-;; 				      (record-b (hash-table-ref runs-hash b))
-;; 				      (time-a   (db:get-value-by-header record-a header "event_time"))
-;; 				      (time-b   (db:get-value-by-header record-b header "event_time")))
-;; 				 (> time-a time-b)))
-;; 			     ))
-;; 	 (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
-;; 	 (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
-;; 	 (colnum       1)
-;; 	 (rownum       0)) ;; rownum = 0 is the header
-;; ;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
-;;     
-;; 	 ;; tests related stuff
-;; 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
-;; 
-;;     ;; Given a run-id and testname/item_path calculate a cell R:C
-;; 
-;;     ;; NOTE: Also build the test tree browser and look up table
-;;     ;;
-;;     ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
+	       ;; (all-test-changes (let ((res (make-hash-table)))
+	       ;;  		       (for-each (lambda (run-id)
+	       ;;  			            (if (> run-id 0)
+	       ;;  				        (hash-table-set! res run-id (synchash:client-get *area-dat* 'db:get-tests-for-run-mindata get-tests-sig 0 data run-id 1 testpatt states statuses #f))))
+	       ;;  			                run-ids)
+ 	       ;;  	                          res))
+	       ;; (runs-hash    (hash-table-ref/default data get-runs-sig #f))
+	       ;; (header       (hash-table-ref/default runs-hash "header" #f))
+	       ;; (run-ids      (sort (filter number? (hash-table-keys runs-hash))
+	       ;;  		   (lambda (a b)
+	       ;;  		     (let* ((record-a (hash-table-ref runs-hash a))
+	       ;;  			    (record-b (hash-table-ref runs-hash b))
+	       ;;  			    (time-a   (db:get-value-by-header record-a header "event_time"))
+	       ;;  			    (time-b   (db:get-value-by-header record-b header "event_time")))
+	       ;;  		       (> time-a time-b)))
+	       ;;  		   ))
+	       ;; (runid-to-col    (hash-table-ref *cachedata* "runid-to-col"))
+	       ;; (testname-to-row (hash-table-ref *cachedata* "testname-to-row")) 
+	       ;; (colnum       1)
+	       ;; (rownum       0)) ;; rownum = 0 is the header
+	       ;; ;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
+	       ;;     
+	       ;; 	 ;; tests related stuff
+	       ;; 	 ;; (all-testnames (delete-duplicates (map db:test-get-testname test-changes))))
+	       ;; 
+	       ;;     ;; Given a run-id and testname/item_path calculate a cell R:C
+	       ;; 
+	       ;;     ;; NOTE: Also build the test tree browser and look up table
+	       ;;     ;;
+	       ;;     ;; Each run is unique on its keys and runname or run-id, store in hash on colnum
 ;;     (for-each (lambda (run-id)
 ;; 		(let* ((run-record (hash-table-ref/default runs-hash run-id #f))
 ;; 		       (key-vals   (map (lambda (key)(db:get-value-by-header run-record header key))
