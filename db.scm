@@ -140,8 +140,9 @@
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id area-dat)
-  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
-	 (configdat       (megatest:area-configdat area-dat))
+  (let* ((configdat       (megatest:area-configdat area-dat))
+         (dbdir           (or (configf:lookup configdat "setup" "dbdir")
+		              (conc (configf:lookup configdat "setup" "linktree") "/.db")))
 	 (toppath         (megatest:area-path      area-dat))
 	 (link-tree-path  (configf:lookup configdat "setup" "linktree"))
 	 (dbpath          (configf:lookup configdat "setup" "dbdir"))
