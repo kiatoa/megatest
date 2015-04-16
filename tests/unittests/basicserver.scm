@@ -10,17 +10,28 @@
 (define run-id 1)
 
 (test "setup for run" #t (begin (launch:setup-for-run *area-dat*)
- 				(string? (getenv "MT_RUN_AREA_HOME"))))
+  				(string? (getenv "MT_RUN_AREA_HOME"))))
 
 ;; NON Server tests go here
 
 (test #f #f (db:dbdat-get-path *db*))
-(test #f #f (db:get-run-name-from-id *db* *area-dat* run-id))
+
+(print "db:get-run-name, try one")
+(test #f #t (string? (db:get-run-name-from-id *db* *area-dat* run-id)))
+(print "db:get-run-name, try two")
+(test #f #t (string? (db:get-run-name-from-id *db* *area-dat* run-id)))
+(print "db:get-run-name, try three")
+(test #f #t (string? (db:get-run-name-from-id *db* *area-dat* run-id)))
+(print "db:get-run-name, try four")
+(test #f #t (string? (db:get-run-name-from-id *db* *area-dat* run-id)))
+
+
 ;; (test #f '("SYSTEM" "RELEASE") (rmt:get-keys))
 
 ;; (exit)
 
 ;; Server tests go here 
+(print "Start server tests")
 (for-each
  (lambda (run-id)
    (test #f #f (tasks:server-running-or-starting? (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) run-id))
@@ -57,15 +68,45 @@
 
 (define user    (current-user-name))
 (define runname "mytestrun")
-(define keys    (rmt:get-keys))
+(define keys    (rmt:get-keys *area-dat*))
 (define runinfo #f)
 (define keyvals '(("SYSTEM" "abc")("RELEASE" "def")))
 (define header  (list "SYSTEM" "RELEASE" "id" "runname" "state" "status" "owner" "event_time"))
 
+;; Stuff to test before running client:setup
+;;
+(test #f #f (tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) 1))
+(server:kind-run 1 *area-dat*)
+(let loop ((count 5)
+	   (ok    (tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) 1)))
+  (if (and (> count 0)(not ok))
+      (begin
+	(print "Waiting for server to start...")
+	(thread-sleep! 1)
+	(loop (- count 1)(tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) 1)))
+      (print "Server started ....")))
+
+(define *start-res* (let* ((server-dat #f)
+			   (iface      #f)
+			   (hostname   #f)
+			   (port       #f)
+			   (remoteconn #f))
+		      (test #f #t (begin (set! server-dat (tasks:get-server (db:delay-if-busy (tasks:open-db *area-dat*) *area-dat*) 1))
+					(vector?  server-dat)))
+		      (test #f #t (begin (set! iface      (tasks:hostinfo-get-interface server-dat))
+					 (string? iface)))
+		      (test #f #t (begin (set! hostname   (tasks:hostinfo-get-hostname  server-dat))
+					 (string? hostname)))
+		      (test #f #t (begin (set! port       (tasks:hostinfo-get-port      server-dat))
+					 (number? port)))
+		      (test #f #t (begin (set! remoteconn (http-transport:client-connect iface port))
+					 (vector? remoteconn)))
+		      remoteconn))
 ;; Setup
 ;;
-(test #f #f  (not (client:setup run-id)))
-(test #f #f  (not (hash-table-ref/default *runremote* run-id #f)))
+(test #f #f  (not (client:setup run-id *area-dat*)))
+
+
 
 ;; Login
 ;;

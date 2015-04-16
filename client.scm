@@ -237,9 +237,9 @@
 ;; Need to set the signal handler somewhere other than here as this
 ;; routine will go away.
 ;;
-(define (client:launch run-id)
+(define (client:launch run-id *area-dat*)
   (set-signal-handler! signal/int client:signal-handler)
-  (if (client:setup run-id)
+  (if (client:setup run-id *area-dat*)
       (debug:print-info 2 "connected as client")
       (begin
 	(debug:print 0 "ERROR: Failed to connect as client")
