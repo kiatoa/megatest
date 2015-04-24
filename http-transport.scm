@@ -55,6 +55,7 @@
      (lambda (adr)
        (if (not (eq? (u8vector-ref adr 0) 127))
 	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
      (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
     (string-intersperse 
      (map number->string
