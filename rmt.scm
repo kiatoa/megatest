@@ -249,7 +249,7 @@
 	      (debug:print 0 "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
 	      #f))
 	(begin
-	  (rmt:update-db-stats run-id cmd params duration)
+	  ;; (rmt:update-db-stats run-id cmd params duration)
 	  ;; mark this run as dirty if this was a write
 	  (if (not (member cmd api:read-only-queries))
 	      (let ((start-time (current-seconds)))
