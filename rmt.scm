@@ -418,7 +418,7 @@
 				 (conc "multi-run-thread for run-id " hed)))
 		     (newthreads (cons newthread threads)))
 		(thread-start! newthread)
-		(thread-sleep! 0.5) ;; give that thread some time to start
+		(thread-sleep! 0.05) ;; give that thread some time to start
 		(if (null? tal)
 		    newthreads
 		    (loop (car tal)(cdr tal) newthreads))))))
