@@ -84,7 +84,7 @@
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
      (lambda ()
-       (let* ((cmd (conc stepcmd " > " stepname ".log"))
+       (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
 	      (pid (process-run cmd)))
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
