@@ -2094,7 +2094,7 @@
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
-;; use db:mintests-get-{id ,run_id,testname ...}
+;; use db:mintest-get-{id ,run_id,testname ...}
 ;; 
 (define (db:get-tests-for-runs-mindata dbstruct area-dat run-ids testpatt states statuses not-in)
   (debug:print 0 "ERROR: BROKN!")

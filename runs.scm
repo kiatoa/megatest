@@ -977,7 +977,7 @@
 	(if (> num-running 0)
 	  (set! last-time-some-running (current-seconds)))
 
-      (if (> (current-seconds)(+ last-time-some-running 240))
+      (if (> (current-seconds)(+ last-time-some-running (or (configf:lookup *configdat* "setup" "give-up-waiting") 36000)))
 	  (hash-table-set! *max-tries-hash* tfullname (+ (hash-table-ref/default *max-tries-hash* tfullname 0) 1)))
 	;; (debug:print 0 "max-tries-hash: " (hash-table->alist *max-tries-hash*))
 
@@ -1349,7 +1349,20 @@
 		  ((and skip-check
 			(configf:lookup test-conf "skip" "fileexists"))
 		   (if (file-exists? (configf:lookup test-conf "skip" "fileexists"))
-		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists"))))))
+		       (set! skip-test (conc "Skipping due to existance of file " (configf:lookup test-conf "skip" "fileexists")))))
+
+		  ((and skip-check
+			(configf:lookup test-conf "skip" "rundelay"))
+		   ;; run-ids = #f means *all* runs
+		   (let* ((numseconds      (common:hms-string->seconds (configf:lookup test-conf "skip" "rundelay")))
+			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
+			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED") '("PASS" "FAIL" "ABORT") #f))
+			  (last-run-times  (map db:mintest-get-event_time completed-tests))
+			  (time-since-last (- (current-seconds) (apply max last-run-times))))
+		     (if (or (not (null? running-tests)) ;; have to skip if test is running
+			     (> numseconds time-since-last))
+			 (set! skip-test (conc "Skipping due to previous test run less than " (configf:lookup test-conf "skip" "rundelay") " ago"))))))
+		 
 		 (if skip-test
 		     (begin
 		       (mt:test-set-state-status-by-id run-id test-id "COMPLETED" "SKIP" skip-test)
