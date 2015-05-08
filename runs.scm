@@ -1349,7 +1349,7 @@
 			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
 			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED") '("PASS" "FAIL" "ABORT") #f))
 			  (last-run-times  (map db:mintest-get-event_time completed-tests))
-			  (time-since-last (- (current-seconds) (apply max last-run-times))))
+			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (apply max last-run-times)))))
 		     (if (or (not (null? running-tests)) ;; have to skip if test is running
 			     (> numseconds time-since-last))
 			 (set! skip-test (conc "Skipping due to previous test run less than " (configf:lookup test-conf "skip" "rundelay") " ago"))))))
