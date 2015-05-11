@@ -10,6 +10,14 @@
 
 (draw-cpus)
 
+(define *pool1* (new-pool "generic" 100 100 100 100 2 10))
+(let loop ((count 10))
+  (pool:add-cpu *pool1* (conc count) 1 1)
+  (if (> count 0)
+      (loop (- count 1))))
+
+(pool:draw *ezx* *pool1*)
+
 ;; init the queues
 ;;
 (hash-table-set! *queues* "normal" '())

@@ -1,6 +1,7 @@
+RUN=default.scm
 
 all : batchsim
-	./batchsim
+	./batchsim $(RUN)
 
 batchsim : batchsim.scm
 	csc batchsim.scm
