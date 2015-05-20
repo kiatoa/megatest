@@ -83,9 +83,9 @@
     ;; now launch the actual process
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
-     (lambda ()
-       (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
-	      (pid (process-run cmd)))
+     (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
+       (let* ((cmd (conc "exec " stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
+	      (pid (process-run "/bin/bash" (list "-c" cmd))))
 	 (rmt:test-set-top-process-pid run-id test-id pid area-dat)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
@@ -202,11 +202,14 @@
 
 	  ;; (set-signal-handler! signal/int (lambda ()
 					    
-	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
+	  ;; WAS: Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
+	  ;; NOW: Do not run test test unless state is LAUNCHED
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
+	  ;; This is flawed. It should be a single transaction that tests for NOT_STARTED and updates to REMOTEHOSTSTART
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id area-dat)))
-	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
+	  ;;
+	    (if (equal? (db:test-get-state test-info) "LAUNCHED") ;; '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 		(begin
 		  (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
@@ -896,7 +899,15 @@
 
     ;; clean out step records from previous run if they exist
     ;; (rmt:delete-test-step-records run-id test-id)
-    (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+    
+    ;; Moving launch logs to MT_RUN_AREA_HOME/logs 
+    ;;
+    (let ((launchdir (configf:lookup *configdat* "setup" "launchdir"))) ;; (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+      (if (not launchdir) ;; default
+	  (change-directory (conc *toppath* "/logs")) ;; can assume this exists
+	  (case (string->symbol launchdir)
+	    ((legacy)(change-directory work-area))
+	    (else    (change-directory launchdir)))))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
@@ -934,14 +945,14 @@
 				      (let ((cmdstr (string-intersperse fullcmd " ")))
 					(if launchwait
 					    cmdstr
-					    (conc cmdstr " >> mt_launch.log 2>&1")))
+					    (conc cmdstr " >> " work-area "/mt_launch.log 2>&1")))
 				      (car fullcmd))
 				  (if useshell
 				      '()
 				      (cdr fullcmd)))))
       (if (not launchwait) ;; give the OS a little time to allow the process to start
 	  (thread-sleep! 0.01))
-      (with-output-to-file "mt_launch.log"
+      (with-output-to-file (conc work-area "/mt_launch.log")
 	(lambda ()
 	  (if (list? launch-results)
 	      (apply print launch-results)

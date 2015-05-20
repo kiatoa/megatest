@@ -65,6 +65,70 @@
 (define *job-log-scale* 10)
 
 ;;======================================================================
+;; CPU
+;;======================================================================
+
+(define-record cpu name num-cores mem job x y)
+
+;;======================================================================
+;; CPU Pool
+;;======================================================================
+
+(define-record pool name x y w h gap boxw cpus delta nrows ncols cpunum)
+
+(define (new-pool name x y nrows ncols gap boxw)
+  (let* ((delta (+ gap boxw))
+	 ;; (nrows (quotient h (+ gap delta)))
+	 ;; (ncols (quotient w (+ gap delta)))
+	 (w     (+ gap (* nrows delta)))
+	 (h     (+ gap (* ncols delta)))
+	 (cpus  (make-vector (* nrows ncols) #f))
+	 (npool (make-pool name x y w h gap boxw cpus delta nrows ncols 0)))
+    npool))
+
+(define (pool:add-cpu pool name num-cores mem)
+  (let* ((cpu (make-cpu name num-cores mem #f #f #f)))
+    (vector-set! (pool-cpus pool)(pool-cpunum pool) cpu)
+    (pool-cpunum-set! pool (+ 1 (pool-cpunum pool)))
+    cpu))
+
+(define (pool:draw ezx pool)
+  (let ((nrows (pool-nrows pool))
+	(ncols (pool-ncols pool))
+	(x     (pool-x     pool))
+	(y     (pool-y     pool))
+	(w     (pool-w     pool))
+	(h     (pool-h     pool))
+	(gap   (pool-gap   pool))
+	(boxw  (pool-boxw  pool))
+	(delta (pool-delta pool))
+	(cpus  (pool-cpus  pool)))
+    (ezx-select-layer ezx 1)
+    ;(ezx-wipe-layer   ezx 1)
+    ;; draw time at upper right
+    (ezx-str-2d ezx x y (pool-name pool) *black*)
+    (ezx-rect-2d ezx x y (+ x w)(+ y h) *black* 1)
+    (let loop ((row    0)
+	       (col    0)
+	       (cpunum 0))
+      (let* ((cpu  (vector-ref cpus cpunum))
+	     (xval (+ x gap (* row delta)))
+	     (yval (+ y gap (* col delta))))
+	(if cpu
+	    (begin
+	      (cpu-x-set! cpu xval)
+	      (cpu-y-set! cpu yval))
+	    (vector-set! cpus cpunum (make-cpu (conc cpunum) 1 1 #f xval yval)))
+	;; (print "box at " xval ", " yval)
+	(ezx-rect-2d ezx xval yval (+ xval boxw) (+ yval boxw) *grey* 1)
+	(if (< col (- ncols 1))
+	    (loop row (+ col 1)(+ cpunum 1))
+	    (if (< row (- nrows 1))
+		(loop (+ row 1) 0 (+ cpunum 1))))))
+    (ezx-redraw ezx)))
+	       
+
+;;======================================================================
 ;; Users
 ;;======================================================================
 
