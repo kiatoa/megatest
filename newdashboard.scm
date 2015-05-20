@@ -85,7 +85,7 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(define *dbdir* (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+(define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
 (define *db-file-path* (db:dbfile-path 0))
@@ -472,7 +472,7 @@ Misc
 						   '()))
 	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
 	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
-	     (steps-dat    (dcommon:get-compressed-steps *dbstruct-local* run-id test-id)))
+	     (steps-dat    (tests:get-compressed-steps *dbstruct-local* run-id test-id)))
 				
 	(if test-data
 	    (begin

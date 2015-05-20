@@ -186,8 +186,8 @@
 	#t)))
 
 (define (mt:test-set-state-status-by-testname run-id test-name item-path new-state new-status new-comment)
-  (let ((test-id (cdb:remote-run db:get-test-id-cached #f run-id test-name item-path)))
-    (mt:test-set-state-status-by-id test-id new-state new-status new-comment)))
+  (let ((test-id (rmt:get-test-id run-id test-name item-path)))
+    (mt:test-set-state-status-by-id run-id test-id new-state new-status new-comment)))
 
 (define (mt:lazy-read-test-config test-name)
   (let ((tconf (hash-table-ref/default *testconfigs* test-name #f)))

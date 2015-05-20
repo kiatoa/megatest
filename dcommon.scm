@@ -102,6 +102,15 @@
 (dboard:data-set-path-run-ids! *data* (make-hash-table))
 
 ;;======================================================================
+;; D O T F I L E
+;;======================================================================
+
+(define (dcommon:write-dotfile fname dat)
+  (with-output-to-file fname
+    (lambda ()
+      (pp dat))))
+
+;;======================================================================
 ;; TARGET AND PATTERN MANIPULATIONS
 ;;======================================================================
 
@@ -545,21 +554,28 @@
 (define (dcommon:main-menu)
   (iup:menu ;; a menu is a special attribute to a dialog (think Gnome putting the menu at screen top)
    (iup:menu-item "Files" (iup:menu   ;; Note that you can use either #:action or action: for options
-		       (iup:menu-item "Open"  action: (lambda (obj)
-							(iup:show (iup:file-dialog))
-							(print "File->open " obj)))
-		       (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
-		       (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
+			   (iup:menu-item "Open"  action: (lambda (obj)
+							    (let* ((area-name (iup:textbox #:expand "HORIZONTAL"))
+								   (fd        (iup:file-dialog #:dialogtype "DIR"))
+								   (top       (iup:show fd #:modal? "YES")))
+							      (iup:attribute-set! source-tb "VALUE"
+										  (iup:attribute fd "VALUE"))
+							      (iup:destroy! fd))))
+			   ;; (lambda (obj)
+			   ;;  (iup:show (iup:file-dialog))
+			   ;;  (print "File->open " obj)))
+			   (iup:menu-item "Save"  #:action (lambda (obj)(print "File->save " obj)))
+			   (iup:menu-item "Exit"  #:action (lambda (obj)(exit)))))
    (iup:menu-item "Tools" (iup:menu
-		       (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
-		       ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
-		       ;;  					   (show message-window
-		       ;;  					     #:modal? #t
-		       ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
-		       ;;  					     ;; #:x 'mouse
-		       ;;  					     ;; #:y 'mouse
-		       ;;  )					     
-		       ))))
+			   (iup:menu-item "Create new blah" #:action (lambda (obj)(print "Tools->new blah")))
+			   ;; (iup:menu-item "Show dialog"     #:action (lambda (obj)
+			   ;;  					   (show message-window
+			   ;;  					     #:modal? #t
+			   ;;  					     ;; set positon using coordinates or center, start, top, left, end, bottom, right, parent-center, current
+			   ;;  					     ;; #:x 'mouse
+			   ;;  					     ;; #:y 'mouse
+			   ;;  )					     
+			   ))))
 
 ;;======================================================================
 ;; CANVAS STUFF FOR TESTS
@@ -649,95 +665,6 @@
 ;;======================================================================
 ;;  S T E P S
 ;;======================================================================
-
-;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
-;;
-;; get a pretty table to summarize steps
-;;
-(define (dcommon:process-steps-table steps);; db test-id #!key (work-area #f))
-;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
-    ;; organise the steps for better readability
-    (let ((res (make-hash-table)))
-      (for-each 
-       (lambda (step)
-	 (debug:print 6 "step=" step)
-	 (let ((record (hash-table-ref/default 
-			res 
-			(tdb:step-get-stepname step) 
-			;;        stepname                start end status Duration  Logfile 
-			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
-	   (debug:print 6 "record(before) = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))
-	   (case (string->symbol (tdb:step-get-state step))
-	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
-	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
-					(tdb:step-get-status step)))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     ((end)  
-	      (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
-					  (endt   (any->number (vector-ref record 2))))
-				      (debug:print 4 "record[1]=" (vector-ref record 1) 
-						   ", startt=" startt ", endt=" endt
-						   ", get-status: " (tdb:step-get-status step))
-				      (if (and (number? startt)(number? endt))
-					  (seconds->hr-min-sec (- endt startt)) "-1")))
-	      (if (> (string-length (tdb:step-get-logfile step))
-		     0)
-		  (vector-set! record 5 (tdb:step-get-logfile step))))
-	     (else
-	      (vector-set! record 2 (tdb:step-get-state step))
-	      (vector-set! record 3 (tdb:step-get-status step))
-	      (vector-set! record 4 (tdb:step-get-event_time step))))
-	   (hash-table-set! res (tdb:step-get-stepname step) record)
-	   (debug:print 6 "record(after)  = " record 
-			"\nid:       " (tdb:step-get-id step)
-			"\nstepname: " (tdb:step-get-stepname step)
-			"\nstate:    " (tdb:step-get-state step)
-			"\nstatus:   " (tdb:step-get-status step)
-			"\ntime:     " (tdb:step-get-event_time step))))
-       ;; (else   (vector-set! record 1 (tdb:step-get-event_time step)))
-       (sort steps (lambda (a b)
-		     (cond
-		      ((<   (tdb:step-get-event_time a)(tdb:step-get-event_time b)) #t)
-		      ((eq? (tdb:step-get-event_time a)(tdb:step-get-event_time b)) 
-		       (<   (tdb:step-get-id a)        (tdb:step-get-id b)))
-		      (else #f)))))
-      res))
-
-(define (dcommon:get-compressed-steps dbstruct run-id test-id)
-  (let* ((steps-data  (db:get-steps-for-test dbstruct run-id test-id))
-	 (comprsteps  (dcommon:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
-    (map (lambda (x)
-	   ;; take advantage of the \n on time->string
-	   (vector
-	    (vector-ref x 0)
-	    (let ((s (vector-ref x 1)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (let ((s (vector-ref x 2)))
-	      (if (number? s)(seconds->time-string s) s))
-	    (vector-ref x 3)    ;; status
-	    (vector-ref x 4)
-	    (vector-ref x 5)))  ;; time delta
-	 (sort (hash-table-values comprsteps)
-	       (lambda (a b)
-		 (let ((time-a (vector-ref a 1))
-		       (time-b (vector-ref b 1)))
-		   (if (and (number? time-a)(number? time-b))
-		       (if (< time-a time-b)
-			   #t
-			   (if (eq? time-a time-b)
-			       (string<? (conc (vector-ref a 2))
-					 (conc (vector-ref b 2)))
-			       #f))
-		       (string<? (conc time-a)(conc time-b)))))))))
 
 (define (dcommon:populate-steps teststeps steps-matrix)
   (let ((max-row 0))

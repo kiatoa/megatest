@@ -59,6 +59,7 @@
 (define configf:key-no-val (regexp "^(\\S+)(\\s*)$"))
 (define configf:comment-rx (regexp "^\\s*#.*"))
 (define configf:cont-ln-rx (regexp "^(\\s+)(\\S+.*)$"))
+(define configf:settings   (regexp "^\\[configf:settings\\s+(\\S+)\\s+(\\S+)]\\s*$"))
 
 ;; read a line and process any #{ ... } constructs
 
@@ -87,12 +88,16 @@
 				((rget)           (conc "(lambda (ht)(runconfigs-get ht \"" cmd "\"))"))
 				(else "(lambda (ht)(print \"ERROR\") \"ERROR\")"))))
 		;; (print "fullcmd=" fullcmd)
-		(if (or allow-system
-			(not (member cmdtype '("system" "shell"))))
-		    (with-input-from-string fullcmd
-		      (lambda ()
-			(set! result ((eval (read)) ht))))
-		    (set! result (conc "#{(" cmdtype ") "  cmd "}")))		(loop (conc prestr result poststr)))
+		(handle-exceptions
+		 exn
+		 (debug:print 0 "ERROR: failed to process config input \"" l "\"")
+		 (if (or allow-system
+			 (not (member cmdtype '("system" "shell"))))
+		     (with-input-from-string fullcmd
+		       (lambda ()
+			 (set! result ((eval (read)) ht))))
+		    (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
+		(loop (conc prestr result poststr)))
 	      res))
 	res)))
 
@@ -123,7 +128,7 @@
 
 ;; this was inline but I'm pretty sure that is a hold over from when it was *very* simple ...
 ;;
-(define (configf:read-line p ht allow-processing)
+(define (configf:read-line p ht allow-processing settings)
   (let loop ((inl (read-line p)))
     (let ((cont-line (and (string? inl)
 			  (not (string-null? inl))
@@ -135,15 +140,19 @@
 					 (string-take inl (- (string-length inl) 1))
 					 inl)
 				     nextl))))
-	  (case allow-processing ;; if (and allow-processing 
-	    ;;	   (not (eq? allow-processing 'return-string)))
-	    ((#t #f)
-	     (configf:process-line inl ht allow-processing))
-	    ((return-string)
-	     inl)
-	    (else
-	     (configf:process-line inl ht allow-processing)))))))
-
+	  (let ((res (case allow-processing ;; if (and allow-processing 
+		       ;;	   (not (eq? allow-processing 'return-string)))
+		       ((#t #f)
+			(configf:process-line inl ht allow-processing))
+		       ((return-string)
+			inl)
+		       (else
+			(configf:process-line inl ht allow-processing)))))
+	    (if (and (string? res)
+		     (not (equal? (hash-table-ref/default settings "trim-trailing-spaces" "no") "no")))
+		(string-substitute "\\s+$" "" res)
+		res))))))
+      
 ;; read a config file, returns hash table of alists
 
 ;; read a config file, returns hash table of alists
@@ -151,8 +160,9 @@
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f))
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table)))
   (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
+  (debug:print 9 "START: " path)
   (if (not (file-exists? path))
       (begin 
 	(debug:print-info 1 "read-config - file not found " path " current path: " (current-directory))
@@ -160,7 +170,7 @@
 	#f) ;; (if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
 	    (res        (if (not ht)(make-hash-table) ht)))
-	(let loop ((inl               (configf:read-line inp res allow-system)) ;; (read-line inp))
+	(let loop ((inl               (configf:read-line inp res allow-system settings)) ;; (read-line inp))
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
 		   (lead     #f))
@@ -169,11 +179,15 @@
 	      (begin
 		(close-input-port inp)
 		(hash-table-delete! res "") ;; we are using "" as a dumping ground and must remove it before returning the ht
+		(debug:print 9 "END: " path)
 		res)
 	      (regex-case 
 	       inl 
-	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
+	       (configf:comment-rx _                  (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
+	       (configf:blank-l-rx _                  (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
+	       (configf:settings   ( x setting val  ) (begin
+							(hash-table-set! settings setting val)
+							(loop (configf:read-line inp res allow-system settings) curr-section-name #f #f)))
 	       (configf:include-rx ( x include-file ) (let* ((curr-conf-dir (pathname-directory path))
 							     (full-conf     (if (absolute-pathname? include-file)
 										include-file
@@ -185,14 +199,15 @@
 							(if (file-exists? full-conf)
 							    (begin
 							      ;; (push-directory conf-dir)
-							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections)
+							      (debug:print 9 "Including: " full-conf)
+							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings)
 							      ;; (pop-directory)
-							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
+							      (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
 							    (begin
-							      (debug:print 2 "INFO: include file " include-file " not found (called from " path ")")
+							      (debug:print '(2 9) "INFO: include file " include-file " not found (called from " path ")")
 							      (debug:print 2 "        " full-conf)
-							      (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))))
-	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system)
+							      (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f)))))
+	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system settings)
 							    ;; if we have the sections list then force all settings into "" and delete it later?
 							    (if (or (not sections) 
 								    (member section-name sections))
@@ -220,8 +235,8 @@
 												      ((return-procs) val-proc)
 												      ((return-string) cmd)
 												      (else (val-proc)))))
-							    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))
-							  (loop (configf:read-line inp res allow-system) curr-section-name #f #f)))
+							    (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
+							  (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
 								  (envar   (and environ-patt (string-search (regexp environ-patt) curr-section-name)))
 								  (realval (if envar
@@ -229,13 +244,15 @@
 									       val)))
 							     (debug:print-info 6 "read-config env setting, envar: " envar " realval: " realval " val: " val " key: " key " curr-section-name: " curr-section-name)
 							     (if envar (safe-setenv key realval))
+							     (debug:print 10 "   setting: [" curr-section-name "] " key " = " val)
 							     (hash-table-set! res curr-section-name 
 									      (config:assoc-safe-add alist key realval))
-							     (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
+							     (loop (configf:read-line inp res allow-system settings) curr-section-name key #f)))
 	       (configf:key-no-val ( x key val)             (let* ((alist   (hash-table-ref/default res curr-section-name '())))
+							      (debug:print 10 "   setting: [" curr-section-name "] " key " = #t")
 							      (hash-table-set! res curr-section-name 
 									       (config:assoc-safe-add alist key #t))
-							      (loop (configf:read-line inp res allow-system) curr-section-name key #f)))
+							      (loop (configf:read-line inp res allow-system settings) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
 						(if var-flag             ;; if set to a string then we have a continued var
@@ -249,11 +266,11 @@
 						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
 						      (hash-table-set! res curr-section-name 
 								       (config:assoc-safe-add alist var-flag newval))
-						      (loop (configf:read-line inp res allow-system) curr-section-name var-flag (if lead lead whsp)))
-						    (loop (configf:read-line inp res allow-system) curr-section-name #f #f))))
+						      (loop (configf:read-line inp res allow-system settings) curr-section-name var-flag (if lead lead whsp)))
+						    (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
 		     (set! var-flag #f)
-		     (loop (configf:read-line inp res allow-system) curr-section-name #f #f))))))))
+		     (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))))))))
   
 ;; pathenvvar will set the named var to the path of the config
 (define (find-and-read-config fname #!key (environ-patt #f)(given-toppath #f)(pathenvvar #f))

@@ -36,12 +36,9 @@ CKPATH=$(shell dirname $(shell dirname $(CSIPATH)))
 ARCHSTR=$(shell lsb_release -sr)
 # ARCHSTR=$(shell bash -c "echo \$$MACHTYPE")
 
-all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard txtdb
+all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
-refdb : txtdb/txtdb.scm
-	csc -I txtdb txtdb/txtdb.scm -o refdb
-
-mtest: $(OFILES) megatest.o
+mtest: $(OFILES) megatest.o readline-fix.scm
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm
@@ -89,7 +86,19 @@ $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
 
-$(HELPERS) : utils/mt_* 
+# $(HELPERS) : utils/%
+# 	$(INSTALL) $< $@
+# 	chmod a+x $@
+
+$(PREFIX)/bin/mt_laststep : utils/mt_laststep
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+$(PREFIX)/bin/mt_runstep : utils/mt_runstep
+	$(INSTALL) $< $@
+	chmod a+x $@
+
+$(PREFIX)/bin/mt_ezstep : utils/mt_ezstep
 	$(INSTALL) $< $@
 	chmod a+x $@
 
@@ -109,9 +118,9 @@ $(PREFIX)/bin/loadrunner : utils/loadrunner
 	$(INSTALL) $< $@
 	chmod a+x $@
 
-$(PREFIX)/bin/refdb : refdb
-	$(INSTALL) $< $@
-	chmod a+x $@
+# $(PREFIX)/bin/refdb : refdb
+# 	$(INSTALL) $< $@
+# 	chmod a+x $@
 
 deploytarg/nbfake : utils/nbfake
 	$(INSTALL) $< $@
@@ -130,7 +139,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
-	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/refdb $(PREFIX)/bin/mt_xterm \
+	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
           $(PREFIX)/bin/newdashboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
@@ -185,3 +194,10 @@ sd : datashare-testing/sd
 xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
+#  "(define (toplevel-command . a) #f)"
+readline-fix.scm :
+	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
+           echo "(use-legacy-bindings)" > readline-fix.scm; \
+	else \
+	   echo "" > readline-fix.scm;\
+	fi

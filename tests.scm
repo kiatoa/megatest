@@ -15,12 +15,14 @@
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking tcp directory-utils)
 (import (prefix sqlite3 sqlite3:))
+(require-library stml)
 
 (declare (unit tests))
 (declare (uses lock-queue))
 (declare (uses db))
 (declare (uses tdb))
 (declare (uses common))
+;; (declare (uses dcommon)) ;; needed for the steps processing
 (declare (uses items))
 (declare (uses runconfig))
 ;; (declare (uses sdb))
@@ -316,81 +318,237 @@
     (if (or (equal? logf "logs/final.log")
 	    (equal? logf outputfilename)
 	    force)
-	(begin
-	  (if (not (lock-queue:wait-turn outputfilename test-id))
-	      (print "Not updating " outputfilename " as another test item has signed up for the job")
-	      (begin
-		(print "Obtained lock for " outputfilename)
-		(let ((oup    (open-output-file outputfilename))
-		      (counts (make-hash-table))
-		      (statecounts (make-hash-table))
-		      (outtxt "")
-		      (tot    0)
-		      (testdat (rmt:test-get-records-for-index-file run-id test-name)))
-		  (with-output-to-port
-		      oup
-		    (lambda ()
-		      (set! outtxt (conc outtxt "<html><title>Summary: " test-name 
-					 "</title><body><h2>Summary for " test-name "</h2>"))
-		      (for-each
-		       (lambda (testrecord)
-			 (let ((id             (vector-ref testrecord 0))
-			       (itempath       (vector-ref testrecord 1))
-			       (state          (vector-ref testrecord 2))
-			       (status         (vector-ref testrecord 3))
-			       (run_duration   (vector-ref testrecord 4))
-			       (logf           (vector-ref testrecord 5))
-			       (comment        (vector-ref testrecord 6)))
-			   (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
-			   (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
-			   (set! outtxt (conc outtxt "<tr>"
-					      "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
-					      "<td>" state    "</td>" 
-					      "<td><font color=" (common:get-color-from-status status)
-					      ">"   status   "</font></td>"
-					      "<td>" (if (equal? comment "")
-							 "&nbsp;"
-							 comment) "</td>"
-							 "</tr>"))))
-		       (if (list? testdat)
-			   testdat
-			   (begin
-			     (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
-			     '())))
-			   
-		      (print "<table><tr><td valign=\"top\">")
-		      ;; Print out stats for status
-		      (set! tot 0)
-		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
-		      (for-each (lambda (state)
-				  (set! tot (+ tot (hash-table-ref statecounts state)))
-				  (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
-				(hash-table-keys statecounts))
-		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		      (print "</td><td valign=\"top\">")
-		      ;; Print out stats for state
-		      (set! tot 0)
-		      (print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
-		      (for-each (lambda (status)
-				  (set! tot (+ tot (hash-table-ref counts status)))
-				  (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
-					 "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
-				(hash-table-keys counts))
-		      (print "<tr><td>Total</td><td>" tot "</td></tr></table>")
-		      (print "</td></td></tr></table>")
-		      
-		      (print "<table cellspacing=\"0\" border=\"1\">" 
-			     "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
-			     outtxt "</table></body></html>")
-		      ;; (release-dot-lock outputfilename)
-		      ))
-		  (close-output-port oup)
-		  (lock-queue:release-lock outputfilename test-id)
+	(let ((my-start-time (current-seconds))
+	      (lockf         (conc outputfilename ".lock")))
+	  (let loop ((have-lock  (common:simple-file-lock lockf)))
+	    (if have-lock
+		(begin
+		  (print "Obtained lock for " outputfilename)
+		  (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+		  (common:simple-file-release-lock lockf)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
-		  (tests:test-set-toplog! run-id test-name outputfilename)
-		  )))))))
+		  (tests:test-set-toplog! run-id test-name outputfilename))
+		;; didn't get the lock, check to see if current update started later than this 
+		;; update, if so we can exit without doing any work
+		(if (> my-start-time (file-modification-time lockf))
+		    ;; we started since current re-gen in flight, delay a little and try again
+		    (begin
+		      (debug:print-info 1 "Waiting to update " outputfilename ", another test currently updating it")
+		      (thread-sleep! (+ 5 (random 5))) ;; delay between 5 and 10 seconds
+		      (loop (common:simple-file-lock lockf))))))))))
 
+(define (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+  (let ((counts (make-hash-table))
+	(statecounts (make-hash-table))
+	(outtxt "")
+	(tot    0)
+	(testdat (rmt:test-get-records-for-index-file run-id test-name)))
+    (with-output-to-file outputfilename
+      (lambda ()
+	(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
+			   "</title><body><h2>Summary for " test-name "</h2>"))
+	(for-each
+	 (lambda (testrecord)
+	   (let ((id             (vector-ref testrecord 0))
+		 (itempath       (vector-ref testrecord 1))
+		 (state          (vector-ref testrecord 2))
+		 (status         (vector-ref testrecord 3))
+		 (run_duration   (vector-ref testrecord 4))
+		 (logf           (vector-ref testrecord 5))
+		 (comment        (vector-ref testrecord 6)))
+	     (hash-table-set! counts status (+ 1 (hash-table-ref/default counts status 0)))
+	     (hash-table-set! statecounts state (+ 1 (hash-table-ref/default statecounts state 0)))
+	     (set! outtxt (conc outtxt "<tr>"
+				;; "<td><a href=\"" itempath "/" logf "\"> " itempath "</a></td>" 
+				"<td><a href=\"" itempath "/test-summary.html\"> " itempath "</a></td>" 
+				"<td>" state    "</td>" 
+				"<td><font color=" (common:get-color-from-status status)
+				">"   status   "</font></td>"
+				"<td>" (if (equal? comment "")
+					   "&nbsp;"
+					   comment) "</td>"
+					   "</tr>"))))
+	 (if (list? testdat)
+	     testdat
+	     (begin
+	       (print "ERROR: failed to get records with rmt:test-get-records-for-index-file run-id=" run-id "test-name=" test-name)
+	       '())))
+	
+	(print "<table><tr><td valign=\"top\">")
+	;; Print out stats for status
+	(set! tot 0)
+	(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>State stats</h2></td></tr>")
+	(for-each (lambda (state)
+		    (set! tot (+ tot (hash-table-ref statecounts state)))
+		    (print "<tr><td>" state "</td><td>" (hash-table-ref statecounts state) "</td></tr>"))
+		  (hash-table-keys statecounts))
+	(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+	(print "</td><td valign=\"top\">")
+	;; Print out stats for state
+	(set! tot 0)
+	(print "<table cellspacing=\"0\" border=\"1\"><tr><td colspan=\"2\"><h2>Status stats</h2></td></tr>")
+	(for-each (lambda (status)
+		    (set! tot (+ tot (hash-table-ref counts status)))
+		    (print "<tr><td><font color=\"" (common:get-color-from-status status) "\">" status
+			   "</font></td><td>" (hash-table-ref counts status) "</td></tr>"))
+		  (hash-table-keys counts))
+	(print "<tr><td>Total</td><td>" tot "</td></tr></table>")
+	(print "</td></td></tr></table>")
+	
+	(print "<table cellspacing=\"0\" border=\"1\">" 
+	       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
+	       outtxt "</table></body></html>")
+	;; (release-dot-lock outputfilename)
+	))))
+
+;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!
+;;
+;; get a pretty table to summarize steps
+;;
+;; (define (dcommon:process-steps-table steps);; db test-id #!key (work-area #f))
+(define (tests:process-steps-table steps);; db test-id #!key (work-area #f))
+;;  (let ((steps   (db:get-steps-for-test db test-id work-area: work-area)))
+    ;; organise the steps for better readability
+    (let ((res (make-hash-table)))
+      (for-each 
+       (lambda (step)
+	 (debug:print 6 "step=" step)
+	 (let ((record (hash-table-ref/default 
+			res 
+			(tdb:step-get-stepname step) 
+			;;        stepname                start end status Duration  Logfile 
+			(vector (tdb:step-get-stepname step) ""   "" ""     ""        ""))))
+	   (debug:print 6 "record(before) = " record 
+			"\nid:       " (tdb:step-get-id step)
+			"\nstepname: " (tdb:step-get-stepname step)
+			"\nstate:    " (tdb:step-get-state step)
+			"\nstatus:   " (tdb:step-get-status step)
+			"\ntime:     " (tdb:step-get-event_time step))
+	   (case (string->symbol (tdb:step-get-state step))
+	     ((start)(vector-set! record 1 (tdb:step-get-event_time step))
+	      (vector-set! record 3 (if (equal? (vector-ref record 3) "")
+					(tdb:step-get-status step)))
+	      (if (> (string-length (tdb:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (tdb:step-get-logfile step))))
+	     ((end)  
+	      (vector-set! record 2 (any->number (tdb:step-get-event_time step)))
+	      (vector-set! record 3 (tdb:step-get-status step))
+	      (vector-set! record 4 (let ((startt (any->number (vector-ref record 1)))
+					  (endt   (any->number (vector-ref record 2))))
+				      (debug:print 4 "record[1]=" (vector-ref record 1) 
+						   ", startt=" startt ", endt=" endt
+						   ", get-status: " (tdb:step-get-status step))
+				      (if (and (number? startt)(number? endt))
+					  (seconds->hr-min-sec (- endt startt)) "-1")))
+	      (if (> (string-length (tdb:step-get-logfile step))
+		     0)
+		  (vector-set! record 5 (tdb:step-get-logfile step))))
+	     (else
+	      (vector-set! record 2 (tdb:step-get-state step))
+	      (vector-set! record 3 (tdb:step-get-status step))
+	      (vector-set! record 4 (tdb:step-get-event_time step))))
+	   (hash-table-set! res (tdb:step-get-stepname step) record)
+	   (debug:print 6 "record(after)  = " record 
+			"\nid:       " (tdb:step-get-id step)
+			"\nstepname: " (tdb:step-get-stepname step)
+			"\nstate:    " (tdb:step-get-state step)
+			"\nstatus:   " (tdb:step-get-status step)
+			"\ntime:     " (tdb:step-get-event_time step))))
+       ;; (else   (vector-set! record 1 (tdb:step-get-event_time step)))
+       (sort steps (lambda (a b)
+		     (cond
+		      ((<   (tdb:step-get-event_time a)(tdb:step-get-event_time b)) #t)
+		      ((eq? (tdb:step-get-event_time a)(tdb:step-get-event_time b)) 
+		       (<   (tdb:step-get-id a)        (tdb:step-get-id b)))
+		      (else #f)))))
+      res))
+
+
+;; temporarily passing in dbstruct to support direct access (i.e. bypassing servers)
+;;
+(define (tests:get-compressed-steps dbstruct run-id test-id)
+  (let* ((steps-data  (if dbstruct 
+			  (db:get-steps-for-test dbstruct run-id test-id)
+			  (rmt:get-steps-for-test run-id test-id))) 
+	 (comprsteps  (tests:process-steps-table steps-data))) ;; (open-run-close db:get-steps-table #f test-id work-area: work-area)))
+    (map (lambda (x)
+	   ;; take advantage of the \n on time->string
+	   (vector
+	    (vector-ref x 0)
+	    (let ((s (vector-ref x 1)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (let ((s (vector-ref x 2)))
+	      (if (number? s)(seconds->time-string s) s))
+	    (vector-ref x 3)    ;; status
+	    (vector-ref x 4)
+	    (vector-ref x 5)))  ;; time delta
+	 (sort (hash-table-values comprsteps)
+	       (lambda (a b)
+		 (let ((time-a (vector-ref a 1))
+		       (time-b (vector-ref b 1)))
+		   (if (and (number? time-a)(number? time-b))
+		       (if (< time-a time-b)
+			   #t
+			   (if (eq? time-a time-b)
+			       (string<? (conc (vector-ref a 2))
+					 (conc (vector-ref b 2)))
+			       #f))
+		       (string<? (conc time-a)(conc time-b)))))))))
+
+
+;; summarize test
+(define (tests:summarize-test run-id test-id)
+  (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
+	 (steps-dat (rmt:get-steps-for-test run-id test-id))
+	 (test-name (db:test-get-testname test-dat))
+	 (item-path (db:test-get-item-path test-dat))
+	 (full-name (db:test-make-full-name test-name item-path))
+	 (oup       (open-output-file (conc (db:test-get-rundir test-dat) "/test-summary.html")))
+	 (status    (db:test-get-status   test-dat))
+	 (color     (common:get-color-from-status status))
+	 (logf      (db:test-get-final_logf test-dat))
+	 (steps-dat (tests:get-compressed-steps #f run-id test-id)))
+    ;; (dcommon:get-compressed-steps #f 1 30045)
+    ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
+
+    (s:output-new
+     oup
+     (s:html
+      (s:title "Summary for " full-name)
+      (s:body 
+       (s:h2 "Summary for " full-name)
+       (s:table 'cellspacing "0" 'border "1"
+	(s:tr (s:td "run id")   (s:td (db:test-get-run_id   test-dat))
+	      (s:td "test id")  (s:td (db:test-get-id       test-dat)))
+	(s:tr (s:td "testname") (s:td test-name)
+	      (s:td "itempath") (s:td item-path))
+	(s:tr (s:td "state")    (s:td (db:test-get-state    test-dat))
+	      (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
+	(s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
+				       (db:test-get-event_time test-dat)))
+	      (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-get-run_duration test-dat)))))
+       (s:h3 "Log files")
+       (s:table
+	'cellspacing "0" 'border "1"
+	(s:tr (s:td "Final log")(s:td (s:a 'href logf logf))))
+       (s:table
+	'cellspacing "0" 'border "1"
+	(s:tr (s:td "Step Name")(s:td "Start")(s:td "End")(s:td "Status")(s:td "Duration")(s:td "Log File"))
+	(map (lambda (step-dat)
+	       (s:tr (s:td (tdb:steps-table-get-stepname step-dat))
+		     (s:td (tdb:steps-table-get-start    step-dat))
+		     (s:td (tdb:steps-table-get-end      step-dat))
+		     (s:td (tdb:steps-table-get-status   step-dat))
+		     (s:td (tdb:steps-table-get-runtime  step-dat))
+		     (s:td (let ((step-log (tdb:steps-table-get-log-file step-dat)))
+			     (s:a 'href step-log step-log)))))
+	     steps-dat))
+	)))
+    (close-output-port oup)))
+	  
+	  
 ;; MUST BE CALLED local!
 ;;
 (define (tests:test-get-paths-matching keynames target fnamepatt #!key (res '()))

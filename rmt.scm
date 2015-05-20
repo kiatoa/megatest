@@ -150,13 +150,17 @@
 	;;
 	(if (and (< attemptnum 15)
 		 (member cmd api:write-queries))
-	    (begin
+	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
-	      ;; (client:setup run-id) ;; client setup happens in rmt:get-connection-info
-	      (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
-	      (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+	      (if (and faststart (equal? faststart "no"))
+		  (begin
+		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
+		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
+		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
+		  (begin
+		    (server:kind-run run-id)
+		    (rmt:open-qry-close-locally cmd run-id params))))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
@@ -224,7 +228,7 @@
 (define (rmt:open-qry-close-locally cmd run-id params #!key (remretries 5))
   (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
-			     (let* ((dbdir (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
+			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
 				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
@@ -245,7 +249,7 @@
 	      (debug:print 0 "ERROR: too many retries in rmt:open-qry-close-locally, giving up")
 	      #f))
 	(begin
-	  (rmt:update-db-stats run-id cmd params duration)
+	  ;; (rmt:update-db-stats run-id cmd params duration)
 	  ;; mark this run as dirty if this was a write
 	  (if (not (member cmd api:read-only-queries))
 	      (let ((start-time (current-seconds)))
@@ -414,7 +418,7 @@
 				 (conc "multi-run-thread for run-id " hed)))
 		     (newthreads (cons newthread threads)))
 		(thread-start! newthread)
-		(thread-sleep! 0.5) ;; give that thread some time to start
+		(thread-sleep! 0.05) ;; give that thread some time to start
 		(if (null? tal)
 		    newthreads
 		    (loop (car tal)(cdr tal) newthreads))))))
@@ -493,6 +497,9 @@
 
 (define (rmt:get-count-tests-running run-id)
   (rmt:send-receive 'get-count-tests-running run-id (list run-id)))
+
+(define (rmt:get-count-tests-running-for-testname run-id testname)
+  (rmt:send-receive 'get-count-tests-running-for-testname run-id (list run-id testname)))
 
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup)))
@@ -606,8 +613,8 @@
 ;;  1. Do a remote call to get the test path
 ;;  2. Continue as above
 ;; 
-(define (rmt:get-steps-for-test run-id test-id)
-  (rmt:send-receive 'get-steps-data run-id (list test-id)))
+;;(define (rmt:get-steps-for-test run-id test-id)
+;;  (rmt:send-receive 'get-steps-data run-id (list test-id)))
 
 (define (rmt:teststep-set-status! run-id test-id teststep-name state-in status-in comment logfile)
   (let* ((state     (items:check-valid-items "state" state-in))
@@ -618,7 +625,7 @@
     (rmt:send-receive 'teststep-set-status! run-id (list run-id test-id teststep-name state-in status-in comment logfile))))
 
 (define (rmt:get-steps-for-test run-id test-id)
-  (rmt:send-receive 'get-steps-for-test run-id (list test-id)))
+  (rmt:send-receive 'get-steps-for-test run-id (list run-id test-id)))
 
 ;;======================================================================
 ;;  T E S T   D A T A 

@@ -2,6 +2,16 @@
 Reference
 =========
 
+Config File Settings
+--------------------
+
+Trim trailing spaces
+~~~~~~~~~~~~~~~~~~~~
+
+------------------
+[configf:settings trim-trailing-spaces yes]
+------------------
+
 The testconfig File
 -------------------
 

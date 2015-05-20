@@ -23,6 +23,10 @@ help :
 	@echo   PROX=$(PROX)
 	@echo 
 	@echo To make all do: make all
+	@echo 
+	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
+
+# FPIC=-C "-fPIC"
 
 # Put the installation here
 ifeq ($(PREFIX),)
@@ -45,7 +49,7 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
-     srfi-19 refdb ini-file sparse-vectors
+     srfi-19 refdb ini-file sparse-vectors z3 call-with-environment-variables
 
 #
 # Derived variables
@@ -82,16 +86,21 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
-CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS)"
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs
+all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs \
+        $(PREFIX)/lib/chicken/7/mutils.so \
+        $(PREFIX)/lib/chicken/7/dbi.so \
+        $(PREFIX)/lib/chicken/7/stml.so \
+        $(PREFIX)/lib/chicken/7/margs.so
 
 chkn : $(CHICKEN_INSTALL)
 
 eggs : $(EGGSOFILES)
 
-libiup : $(PREFIX)/lib/libavcall.a $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
+# libiup : $(PREFIX)/lib/libavcall.a 
+libiup : $(CHICKEN_EGG_DIR)/iup.so $(CHICKEN_EGG_DIR)/canvas-draw.so
 
 logprobin : $(PREFIX)/bin/logpro
 
@@ -108,10 +117,15 @@ $(EGGFLAGS) : # $(CHICKEN_INSTALL)
 
 # some setup stuff
 #
-setup-chicken4x.sh : $(EGGFLAGS)
-	(echo "export PATH=$(PATH)" > setup-chicken4x.sh)
-	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> setup-chicken4x.sh)
+$(PREFIX)/setup-chicken4x.sh : $(EGGFLAGS)
 	mkdir -p $(PREFIX)
+	(echo 'export PATH=$(PREFIX)/bin:$$PATH' > $(PREFIX)/setup-chicken4x.sh)
+	(echo "export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.sh)
+
+$(PREFIX)/setup-chicken4x.csh : $(EGGFLAGS)
+	mkdir -p $(PREFIX)
+	(echo "setenv PATH $(PREFIX):'$$'PATH" > $(PREFIX)/setup-chicken4x.csh)
+	(echo "setenv LD_LIBRARY_PATH $(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.csh)
 
 chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
 	tar xfz chicken-$(CHICKEN_VERSION).tar.gz
@@ -127,7 +141,7 @@ chicken-4.9.0.1.tar.gz :
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
 
-$(CHICKEN_INSTALL) : chicken-core/chicken.scm setup-chicken4x.sh
+$(CHICKEN_INSTALL) : chicken-core/chicken.scm $(PREFIX)/setup-chicken4x.sh $(PREFIX)/setup-chicken4x.csh
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX)
 	cd chicken-core;make PLATFORM=linux PREFIX=$(PREFIX) install
 
@@ -167,18 +181,45 @@ $(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
 # M A T T S   U T I L S
 #======================================================================
 
+# opensrc
+
 opensrc.fossil :
 	fossil clone http://www.kiatoa.com/fossils/opensrc opensrc.fossil
 
 opensrc/histstore/histstore.scm : opensrc.fossil
 	mkdir -p opensrc
-	cd opensrc;fossil open ../opensrc.fossil
+	cd opensrc;if [ -e .fslckout ];then fossil update; else fossil open ../opensrc.fossil; fi
+
+$(PREFIX)/lib/chicken/7/mutils.so : opensrc/histstore/histstore.scm
+	cd opensrc/mutils;chicken-install
+
+$(PREFIX)/lib/chicken/7/dbi.so : opensrc/dbi/dbi.scm
+	cd opensrc/dbi;chicken-install
+
+$(PREFIX)/lib/chicken/7/margs.so : opensrc/margs/margs.scm
+	cd opensrc/margs;chicken-install
 
 opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/sqlite3.so 
 	cd opensrc/histstore;$(PREFIX)/bin/csc histstore.scm -o hs
 
 $(PREFIX)/bin/hs : opensrc/histstore/hs 
 	cp -f opensrc/histstore/hs $(PREFIX)/bin/hs
+
+# stml
+stml.fossil :
+	fossil clone http://www.kiatoa.com/fossils/stml stml.fossil
+
+# open touches the .fossil :(
+stml/requirements.scm.template : stml.fossil
+	mkdir -p stml
+	cd stml;if [ -e .fslckout ];then fossil update; else fossil open ../stml.fossil;fi
+
+stml/requirements.scm : stml/requirements.scm.template
+	cp stml/install.cfg.template      stml/install.cfg
+	cp stml/requirements.scm.template stml/requirements.scm
+
+$(PREFIX)/lib/chicken/7/stml.so : stml/requirements.scm
+	cd stml;make
 
 #======================================================================
 # I U P 
@@ -212,10 +253,10 @@ $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
 # $(PREFIX)/lib/libiup.so : iup/iup/alldone
 #	touch -c $(PREFIX)/lib/libiup.so
 
-$(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so
+$(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so  $(PREFIX)/lib/libavcall.a 
 	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
 
-$(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so
+$(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so  $(PREFIX)/lib/libavcall.a 
 	CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
 
 

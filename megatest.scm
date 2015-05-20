@@ -10,8 +10,11 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 format readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
-     http-client srfi-18) ;;  zmq extras)
+;; fake out readline usage of toplevel-command
+(define (toplevel-command . a) #f)
+
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
+     http-client srfi-18 extras format) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
 ;;
@@ -20,6 +23,7 @@
 (import (prefix sqlite3 sqlite3:))
 (import (prefix base64 base64:))
 (import (prefix rpc rpc:))
+(require-library mutils)
 
 ;; (use zmq)
 
@@ -332,7 +336,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (> (- start-time last-time) 60))
 	       (begin
 		 (set! last-time start-time)
-		 (debug:print-info 1 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
+		 (debug:print-info 4 "timestamp -> " (seconds->time-string (current-seconds)) ", time since start -> " (seconds->hr-min-sec (- (current-seconds) *time-zero*))))))
 	 
 	 ;; keep going unless time to exit
 	 ;;
@@ -889,11 +893,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runsdat  (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 					 #f #f))
-		;; (cdb:remote-run db:get-runs #f runpatt #f #f '()))
 	       (runs     (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
 	       (db-targets (args:get-arg "-list-db-targets"))
-	       (seen     (make-hash-table)))
+	       (seen     (make-hash-table))
+	       (dmode    (let ((d (args:get-arg "-dumpmode")))
+			   (if d (string->symbol d) #f)))
+	       (data     (make-hash-table)))
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
@@ -905,52 +911,74 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (begin
 			 (hash-table-set! seen targetstr #t)
 			 ;; (print "[" targetstr "]"))))
-			 (print targetstr))))
-	       (if (not db-targets)
-		   (let* ((run-id (db:get-value-by-header run header "id"))
+			 (if (not dmode)(print targetstr))))
+		   (let* ((run-id  (db:get-value-by-header run header "id"))
+			  (runname (db:get-value-by-header run header "runname")) 
 			  (tests  (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
-		     (print "Run: " targetstr "/" (db:get-value-by-header run header "runname") 
-			    " status: " (db:get-value-by-header run header "state")
-			    " run-id: " run-id ", number tests: " (length tests))
+		     (case dmode
+		       ((json)
+			(mutils:hierhash-set! data (db:get-value-by-header run header "status")     targetstr runname "meta" "status"     )
+			(mutils:hierhash-set! data (db:get-value-by-header run header "state")      targetstr runname "meta" "state"      )
+			(mutils:hierhash-set! data (conc (db:get-value-by-header run header "id"))  targetstr runname "meta" "id"         )
+			(mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" ))
+		       (else
+			(print "Run: " targetstr "/" runname 
+			       " status: " (db:get-value-by-header run header "state")
+			       " run-id: " run-id ", number tests: " (length tests))))
 		     (for-each 
 		      (lambda (test)
-			(format #t
-				"  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-				(conc (db:test-get-testname test)
-				      (if (equal? (db:test-get-item-path test) "")
-					  "" 
-					  (conc "(" (db:test-get-item-path test) ")")))
-				(db:test-get-state test)
-				(db:test-get-status test)
-				(db:test-get-run_duration test)
-				(db:test-get-event_time test)
-				(db:test-get-host test))
-			(if (not (or (equal? (db:test-get-status test) "PASS")
-			   	     (equal? (db:test-get-status test) "WARN")
-				     (equal? (db:test-get-state test)  "NOT_STARTED")))
-			    (begin
-			      (print   "         cpuload:  " (db:test-get-cpuload test)
-				     "\n         diskfree: " (db:test-get-diskfree test)
-				     "\n         uname:    " ;; (sdb:qry 'getstr 
-				     (db:test-get-uname test) ;; )
-				     "\n         rundir:   " ;; (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
-				     (db:test-get-rundir test) ;; )
-				     )
-			      ;; Each test
-			      ;; DO NOT remote run
-			      (let ((steps (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
-				(for-each 
-				 (lambda (step)
-				   (format #t 
-					   "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
-					   (tdb:step-get-stepname step)
-					   (tdb:step-get-state step)
-					   (tdb:step-get-status step)
-					   (tdb:step-get-event_time step)))
-				 steps)))))
+		      	(handle-exceptions
+			 exn
+			 (debug:print 0 "ERROR: Bad data in test record? " test)
+			 (let ((test-id    (db:test-get-id test))
+			       (fullname   (conc (db:test-get-testname test)
+						 (if (equal? (db:test-get-item-path test) "")
+						     "" 
+						     (conc "(" (db:test-get-item-path test) ")"))))
+			       (tstate     (db:test-get-state test))
+			       (tstatus    (db:test-get-status test))
+			       (event-time (db:test-get-event_time test)))
+			   (case dmode
+			     ((json)
+			      (mutils:hierhash-set! data  fullname   targetstr runname "data" (conc test-id) "tname"     )
+			      (mutils:hierhash-set! data  tstate     targetstr runname "data" (conc test-id) "state"     )
+			      (mutils:hierhash-set! data  tstatus    targetstr runname "data" (conc test-id) "status"    )
+			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-is) "event_time"))
+			     (else
+			      (format #t
+				      "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+				      fullname
+				      tstate
+				      tstatus
+				      (db:test-get-run_duration test)
+				      event-time
+				      (db:test-get-host test))
+			      (if (not (or (equal? (db:test-get-status test) "PASS")
+					   (equal? (db:test-get-status test) "WARN")
+					   (equal? (db:test-get-state test)  "NOT_STARTED")))
+				  (begin
+				    (print   "         cpuload:  " (db:test-get-cpuload test)
+					     "\n         diskfree: " (db:test-get-diskfree test)
+					     "\n         uname:    " (db:test-get-uname test)
+					     "\n         rundir:   " (db:test-get-rundir test)
+					     "\n         rundir:   " ;; (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
+					     (db:test-get-rundir test) ;; )
+					     )
+				    ;; Each test
+				    ;; DO NOT remote run
+				    (let ((steps (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				      (for-each 
+				       (lambda (step)
+					 (format #t 
+						 "    Step: ~20a State: ~10a Status: ~10a Time ~22a\n"
+						 (tdb:step-get-stepname step)
+						 (tdb:step-get-state step)
+						 (tdb:step-get-status step)
+						 (tdb:step-get-event_time step)))
+				       steps)))))))))
 		      tests)))))
-	     runs)
-	  ;; (db:close-all dbstruct)
+	   runs)
+	  (if (eq? dmode 'json)(json-write data))
 	  (set! *didsomething* #t))))
 
 ;;======================================================================
@@ -1226,7 +1254,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 	  (if (args:get-arg "-load-test-data")
 	      ;; has sub commands that are rdb:
-	      ;; DO NOT put this one into either cdb:remote-run or open-run-close
+	      ;; DO NOT put this one into either rmt: or open-run-close
 	      (tdb:load-test-data run-id test-id))
 	  (if (args:get-arg "-setlog")
 	      (let ((logfname (args:get-arg "-setlog")))
@@ -1323,7 +1351,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (debug:print 0 "Failed to setup, exiting")
 	    (exit 1)))
-      (set! keys (cdb:remote-run db:get-keys db))
+      (set! keys (rmt:get-keys)) ;;  db))
       (debug:print 1 "Keys: " (string-intersperse keys ", "))
       (if (sqlite3:database? db)(sqlite3:finalize! db))
       (set! *didsomething* #t)))
@@ -1405,6 +1433,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Start a repl
 ;;======================================================================
 
+;; fakeout readline
+
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup-for-run))
@@ -1413,9 +1443,12 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (set! *db* dbstruct)
 	    (set! *client-non-blocking-mode* #t)
+	    (import extras) ;; might not be needed
+	    ;; (import csi)
 	    (import readline)
 	    (import apropos)
 	    ;; (import (prefix sqlite3 sqlite3:)) ;; doesn't work ...
+	    (include "readline-fix.scm")
 	    (gnu-history-install-file-manager
 	     (string-append
 	      (or (get-environment-variable "HOME") ".") "/.megatest_history"))

@@ -403,7 +403,8 @@
 ;;======================================================================
 (define (examine-test run-id test-id) ;; run-id run-key origtest)
   (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
-	 (dbstruct      (make-dbr:dbstruct path: (configf:lookup *configdat* "setup" "linktree") local: #t))
+	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
+					   local: #t))
 	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
@@ -426,7 +427,7 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (dcommon:get-compressed-steps dbstruct run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       (testmeta      (if testdat 
@@ -483,7 +484,7 @@
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (dcommon:get-compressed-steps dbstruct run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps dbstruct run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )

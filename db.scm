@@ -63,14 +63,11 @@
   (if (sqlite3:database? dbstruct) ;; pass sqlite3 databases on through
       dbstruct
       (begin
-	(mutex-lock! *rundb-mutex*)
 	(let ((dbdat (if (or (not run-id)
 			     (eq? run-id 0))
 			 (db:open-main dbstruct)
 			 (db:open-rundb dbstruct run-id)
 			 )))
-	  ;; db prunning would go here
-	  (mutex-unlock! *rundb-mutex*)
 	  dbdat))))
 
 (define (db:dbdat-get-db dbdat)
@@ -139,20 +136,24 @@
 ;;   (let ((fdb (db:get-filedb dbstruct)))
 ;;     (filedb:get-path db id)))
 
-;; NB// #f => zeroth db with name=main.db
+;; NB// #f => return dbdir only
+;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id)
-  (let* (;; (toppath      (dbr:dbstruct-get-path  dbstruct))
-	 (link-tree-path  (configf:lookup *configdat* "setup" "linktree"))
-	 (fname           (if (eq? run-id 0) "main.db" (conc run-id ".db")))
-	 (dbdir           (conc link-tree-path "/.db/")))
+  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
+			      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
+	 (fname           (if run-id
+			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
+			      #f)))
     (handle-exceptions
      exn
      (begin
        (debug:print 0 "ERROR: Couldn't create path to " dbdir)
        (exit 1))
      (if (not (directory? dbdir))(create-directory dbdir #t)))
-    (conc dbdir fname)))
+    (if fname
+	(conc dbdir "/" fname)
+	dbdir)))
 	       
 (define (db:set-sync db)
   (let ((syncprag (configf:lookup *configdat* "setup" "sychronous")))
@@ -193,59 +194,62 @@
     (if (or rdb
 	    do-not-open)
 	rdb
-	(let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
-	       (dbexists     (file-exists? dbpath))
-	       (inmem        (if local #f (db:open-inmem-db)))
-	       (refdb        (if local #f (db:open-inmem-db)))
-	       (db           (db:lock-create-open dbpath ;; this is the database physically on disk
-						  (lambda (db)
-						    (handle-exceptions
-						     exn
-						     (begin
-						       (release-dot-lock dbpath)
-						       (if (> attemptnum 2)
-							   (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
-							   (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
-						     (db:initialize-run-id-db db)
-						     (sqlite3:execute 
-						      db
-						      "INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
-						      (* run-id 30000) ;; allow for up to 30k tests per run
-						      run-id)
-						     ;; do a dummy query to test that the table exists and the db is truly readable
-						     (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
-						    )))) ;; add strings db to rundb, not in use yet
-	       ;;   )) ;; (sqlite3:open-database dbpath))
-	       (olddb        (if *megatest-db*
-				 *megatest-db* 
-				 (let ((db (db:open-megatest-db)))
-				   (set! *megatest-db* db)
-				   db)))
-	       (write-access (file-write-access? dbpath))
-	       ;; (handler      (make-busy-timeout 136000))
-	       )
-	  (if (and dbexists (not write-access))
-	      (set! *db-write-access* #f)) ;; only unset so other db's also can use this control
-	  (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
-	  (dbr:dbstruct-set-inuse!  dbstruct #t)
-	  (dbr:dbstruct-set-olddb!  dbstruct olddb)
-	  ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
-	  (if local
-	      (begin
-		(dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
-		db)
-	      (begin
-		(dbr:dbstruct-set-inmem!  dbstruct inmem)
-		;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
-		;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
-		(db:sync-tables db:sync-tests-only db inmem)
-		(db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
-		(dbr:dbstruct-set-refdb!  dbstruct refdb)
-		(db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
-		;; sync once more to deal with delays?
-		;; (db:sync-tables db:sync-tests-only db inmem)
-		;; (db:sync-tables db:sync-tests-only inmem refdb)
-		inmem))))))
+	(begin
+	  (mutex-lock! *rundb-mutex*)
+	  (let* ((dbpath       (db:dbfile-path run-id)) ;; (conc toppath "/db/" run-id ".db"))
+		 (dbexists     (file-exists? dbpath))
+		 (inmem        (if local #f (db:open-inmem-db)))
+		 (refdb        (if local #f (db:open-inmem-db)))
+		 (db           (db:lock-create-open dbpath ;; this is the database physically on disk
+						    (lambda (db)
+						      (handle-exceptions
+						       exn
+						       (begin
+							 (release-dot-lock dbpath)
+							 (if (> attemptnum 2)
+							     (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
+							     (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
+						       (db:initialize-run-id-db db)
+						       (sqlite3:execute 
+							db
+							"INSERT OR IGNORE INTO tests (id,run_id,testname,event_time,item_path,state,status) VALUES (?,?,'bogustest',strftime('%s','now'),'nowherepath','DELETED','n/a');"
+							(* run-id 30000) ;; allow for up to 30k tests per run
+							run-id)
+						       ;; do a dummy query to test that the table exists and the db is truly readable
+						       (sqlite3:execute db "SELECT * FROM tests WHERE id=?;" (* run-id 30000))
+						       )))) ;; add strings db to rundb, not in use yet
+		 ;;   )) ;; (sqlite3:open-database dbpath))
+		 (olddb        (if *megatest-db*
+				   *megatest-db* 
+				   (let ((db (db:open-megatest-db)))
+				     (set! *megatest-db* db)
+				     db)))
+		 (write-access (file-write-access? dbpath))
+		 ;; (handler      (make-busy-timeout 136000))
+		 )
+	    (if (and dbexists (not write-access))
+		(set! *db-write-access* #f)) ;; only unset so other db's also can use this control
+	    (dbr:dbstruct-set-rundb!  dbstruct (cons db dbpath))
+	    (dbr:dbstruct-set-inuse!  dbstruct #t)
+	    (dbr:dbstruct-set-olddb!  dbstruct olddb)
+	    ;; (dbr:dbstruct-set-run-id! dbstruct run-id)
+	    (mutex-unlock! *rundb-mutex*)
+	    (if local
+		(begin
+		  (dbr:dbstruct-set-localdb! dbstruct run-id db) ;; (dbr:dbstruct-set-inmem! dbstruct db) ;; direct access ...
+		  db)
+		(begin
+		  (dbr:dbstruct-set-inmem!  dbstruct inmem)
+		  ;; dec 14, 2014 - keep deleted records available. hunch is that they are needed for id placeholders
+		  ;; (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';") ;; they just slow us down in this context
+		  (db:sync-tables db:sync-tests-only db inmem)
+		  (db:delay-if-busy refdb) ;; dbpath: (db:dbdat-get-path refdb)) ;; What does delaying here achieve? 
+		  (dbr:dbstruct-set-refdb!  dbstruct refdb)
+		  (db:sync-tables db:sync-tests-only inmem refdb) ;; use inmem as the reference, don't read again from db
+		  ;; sync once more to deal with delays?
+		  ;; (db:sync-tables db:sync-tests-only db inmem)
+		  ;; (db:sync-tables db:sync-tests-only inmem refdb)
+		  inmem)))))))
 
 ;; This routine creates the db. It is only called if the db is not already ls opened
 ;;
@@ -253,22 +257,28 @@
   (let ((mdb (dbr:dbstruct-get-main dbstruct)))
     (if mdb
 	mdb
-	(let* ((dbpath       (db:dbfile-path 0))
-	       (dbexists     (file-exists? dbpath))
-	       (db           (db:lock-create-open dbpath db:initialize-main-db))
-	       (olddb        (db:open-megatest-db))
-	       (write-access (file-write-access? dbpath))
-	       (dbdat        (cons db dbpath)))
-	  (if (and dbexists (not write-access))
-	      (set! *db-write-access* #f))
-	  (dbr:dbstruct-set-main!   dbstruct dbdat)
-	  (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
-	  dbdat))))
+	(begin
+	  (mutex-lock! *rundb-mutex*)
+	  (let* ((dbpath       (db:dbfile-path 0))
+		 (dbexists     (file-exists? dbpath))
+		 (db           (db:lock-create-open dbpath db:initialize-main-db))
+		 (olddb        (db:open-megatest-db))
+		 (write-access (file-write-access? dbpath))
+		 (dbdat        (cons db dbpath)))
+	    (if (and dbexists (not write-access))
+		(set! *db-write-access* #f))
+	    (dbr:dbstruct-set-main!   dbstruct dbdat)
+	    (dbr:dbstruct-set-olddb!  dbstruct olddb) ;; olddb is already a (cons db path)
+	    (mutex-unlock! *rundb-mutex*)
+	    (if (and (not dbexists)
+		     *db-write-access*) ;; did not have a prior db and do have write access
+		(db:multi-db-sync #f 'old2new))  ;; migrate data from megatest.db automatically
+	    dbdat)))))
 
 ;; Make the dbstruct, setup up auxillary db's and call for main db at least once
 ;;
 (define (db:setup run-id #!key (local #f))
-  (let* ((dbdir    (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
+  (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
     dbstruct))
 
@@ -2074,7 +2084,7 @@
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
-;; use db:mintests-get-{id ,run_id,testname ...}
+;; use db:mintest-get-{id ,run_id,testname ...}
 ;; 
 (define (db:get-tests-for-runs-mindata dbstruct run-ids testpatt states statuses not-in)
   (debug:print 0 "ERROR: BROKN!")
@@ -2213,6 +2223,19 @@
       db
       "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '');" run-id))))
 
+;; For a given testname how many items are running? Used to determine
+;; probability for regenerating html
+;; 
+(define (db:get-count-tests-running-for-testname dbstruct run-id testname)
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:first-result
+      db
+      "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND run_id=? AND NOT (uname = 'n/a' AND item_path = '') AND testname=?;" run-id testname))))
+
 (define (db:get-count-tests-running-in-jobgroup dbstruct run-id jobgroup)
   (let* ((dbdat (db:get-db dbstruct #f))
 	 (db    (db:dbdat-get-db dbdat)))
@@ -2239,7 +2262,7 @@
 		(conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		      (string-intersperse testnames "','")
 		      "') AND NOT (uname = 'n/a' AND item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
-	       0)))))))
+	       )))))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
              ;; AND NOT (uname = 'n/a' AND item_path = '');"

@@ -13,7 +13,8 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
+
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
 
@@ -53,6 +54,111 @@
 	(common:read-encoded-string enccmd)
 	'())))
 
+
+(define (launch:runstep ezstep run-id test-id exit-info m tal)
+  (let* ((stepname  (car ezstep))  ;; do stuff to run the step
+	 (stepinfo  (cadr ezstep))
+	 (stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
+	 (stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
+	 (stepcmd   (list-ref stepparts 3))
+	 (script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
+	 (logpro-file (conc stepname ".logpro"))
+	 (html-file   (conc stepname ".html"))
+	 (logpro-used (file-exists? logpro-file)))
+    ;; NB// can safely assume we are in test-area directory
+    (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
+		 " stepparms: " stepparms " stepcmd: " stepcmd)
+    
+    ;; ;; first source the previous environment
+    ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
+    ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
+    ;;   (if (and prevstep (file-exists? prev-env))
+    ;;       (set! script (conc script "source " prev-env))))
+    
+    ;; call the command using mt_ezstep
+    ;; (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "x") " " stepcmd))
+    
+    (debug:print 4 "script: " script)
+    (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
+    ;; now launch the actual process
+    (call-with-environment-variables 
+     (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
+     (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
+       (let* ((cmd (conc "exec " stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
+	      (pid (process-run "/bin/bash" (list "-c" cmd))))
+	 (rmt:test-set-top-process-pid run-id test-id pid)
+	 (let processloop ((i 0))
+	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
+		       (mutex-lock! m)
+		       (vector-set! exit-info 0 pid)
+		       (vector-set! exit-info 1 exit-status)
+		       (vector-set! exit-info 2 exit-code)
+		       (mutex-unlock! m)
+		       (if (eq? pid-val 0)
+			   (begin
+			     (thread-sleep! 2)
+			     (processloop (+ i 1))))
+		       )))))
+    (debug:print-info 0 "step " stepname " completed with exit code " (vector-ref exit-info 2))
+    ;; now run logpro if needed
+    (if logpro-used
+	(let ((pid (process-run (conc "logpro " logpro-file " " (conc stepname ".html") " < " stepname ".log"))))
+	  (let processloop ((i 0))
+	    (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
+			(mutex-lock! m)
+			(vector-set! exit-info 0 pid)
+			(vector-set! exit-info 1 exit-status)
+			(vector-set! exit-info 2 exit-code)
+			(mutex-unlock! m)
+			(if (eq? pid-val 0)
+			    (begin
+			      (thread-sleep! 2)
+			      (processloop (+ i 1)))))
+	    (debug:print-info 0 "logpro for step " stepname " exited with code " (vector-ref exit-info 2)))))
+    
+    (let ((exinfo (vector-ref exit-info 2))
+	  (logfna (if logpro-used (conc stepname ".html") "")))
+      (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
+    (if logpro-used
+	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
+    ;; set the test final status
+    (let* ((this-step-status (cond
+			      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
+			      ((eq? (vector-ref exit-info 2) 0)                   'pass)
+			      (else 'fail)))
+	   (overall-status   (cond
+			      ((eq? (vector-ref exit-info 3) 2) 'warn) ;; rollup-status
+			      ((eq? (vector-ref exit-info 3) 0) 'pass)
+			      (else 'fail)))
+	   (next-status      (cond 
+			      ((eq? overall-status 'pass) this-step-status)
+			      ((eq? overall-status 'warn)
+			       (if (eq? this-step-status 'fail) 'fail 'warn))
+			      (else 'fail)))
+	   (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
+	    (cond
+	     ((null? tal) ;; more to run?
+	      "COMPLETED")
+	     (else "RUNNING")))
+	   )
+      (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+		   " this-step-status: " this-step-status " overall-status: " overall-status 
+		   " next-status: " next-status " rollup-status: " (vector-ref exit-info 3))
+      (case next-status
+	((warn)
+	 (vector-set! exit-info 3 2) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "WARN" 
+				 (if (eq? this-step-status 'warn) "Logpro warning found" #f)
+				 #f))
+	((pass)
+	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
+	(else ;; 'fail
+	 (vector-set! exit-info 3 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
+	 (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
+	 )))
+    logpro-used))
+
 (define (launch:execute encoded-cmd)
   (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
     (setenv "MT_CMDINFO" encoded-cmd)
@@ -90,16 +196,20 @@
                                                    (file-execute-access? fulln))
                                               fulln
                                               runscript))))) ;; assume it is on the path
-	       (rollup-status 0))
+	       ;; (rollup-status 0)
+	       )
 	  (change-directory top-path)
 
 	  ;; (set-signal-handler! signal/int (lambda ()
 					    
-	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
+	  ;; WAS: Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
+	  ;; NOW: Do not run test test unless state is LAUNCHED
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
+	  ;; This is flawed. It should be a single transaction that tests for NOT_STARTED and updates to REMOTEHOSTSTART
+	  ;;
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
-	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
+	    (if (equal? (db:test-get-state test-info) "LAUNCHED") ;; '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
 		(begin
 		  (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
@@ -199,7 +309,7 @@
 	  
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
-		 (exit-info    (vector #t #t #t))
+		 (exit-info    (vector #t #t #t 0))
 		 (job-thread   #f)
 		 (keep-going   #t)
 		 (runit        (lambda ()
@@ -212,10 +322,10 @@
 				 ;; force RUNNING/n/a
 				 
 
-				 (thread-sleep! 0.3)
+				 ;; (thread-sleep! 0.3)
 				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
 				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING")
-				 (thread-sleep! 0.3) ;; NFS slowness has caused grief here
+				 ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
@@ -228,7 +338,7 @@
 					  (vector-set! exit-info 0 pid)
 					  (vector-set! exit-info 1 exit-status)
 					  (vector-set! exit-info 2 exit-code)
-					  (set! rollup-status exit-code) 
+					  (vector-set! exit-info 3 exit-code)  ;; rollup status
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
@@ -250,86 +360,7 @@
 						      (prevstep #f))
 					     ;; check exit-info (vector-ref exit-info 1)
 					     (if (vector-ref exit-info 1)
-						 (let* ((stepname  (car ezstep))  ;; do stuff to run the step
-							(stepinfo  (cadr ezstep))
-							(stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
-							(stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
-							(stepcmd   (list-ref stepparts 3))
-							(script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!
-							(logpro-used #f))
-						   ;; NB// can safely assume we are in test-area directory
-						   (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
-								" stepparms: " stepparms " stepcmd: " stepcmd)
-						   
-						   (if (file-exists? (conc stepname ".logpro"))(set! logpro-used #t))
-
-						   ;; ;; first source the previous environment
-						   ;; (let ((prev-env (conc ".ezsteps/" prevstep (if (string-search (regexp "csh") 
-						   ;;      							 (get-environment-variable "SHELL")) ".csh" ".sh"))))
-						   ;;   (if (and prevstep (file-exists? prev-env))
-						   ;;       (set! script (conc script "source " prev-env))))
-						   
-						   ;; call the command using mt_ezstep
-						   (set! script (conc "mt_ezstep " stepname " " (if prevstep prevstep "-") " " stepcmd))
-
-						   (debug:print 4 "script: " script)
-						   (rmt:teststep-set-status! run-id test-id stepname "start" "-" #f #f)
-						   ;; now launch
-						   (let ((pid (process-run script)))
-						     (rmt:test-set-top-process-pid run-id test-id pid)
-						     (let processloop ((i 0))
-						       (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
-								   (mutex-lock! m)
-								   (vector-set! exit-info 0 pid)
-								   (vector-set! exit-info 1 exit-status)
-								   (vector-set! exit-info 2 exit-code)
-								   (mutex-unlock! m)
-								   (if (eq? pid-val 0)
-								       (begin
-									 (thread-sleep! 2)
-									 (processloop (+ i 1))))
-								   ))
-                                                     (let ((exinfo (vector-ref exit-info 2))
-                                                           (logfna (if logpro-used (conc stepname ".html") "")))
-						       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
-						     (if logpro-used
-							 (rmt:test-set-log! run-id test-id (conc stepname ".html")))
-						     ;; set the test final status
-						     (let* ((this-step-status (cond
-									       ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-									       ((eq? (vector-ref exit-info 2) 0)                   'pass)
-									       (else 'fail)))
-							    (overall-status   (cond
-									       ((eq? rollup-status 2) 'warn)
-									       ((eq? rollup-status 0) 'pass)
-									       (else 'fail)))
-							    (next-status      (cond 
-									       ((eq? overall-status 'pass) this-step-status)
-									       ((eq? overall-status 'warn)
-										(if (eq? this-step-status 'fail) 'fail 'warn))
-									       (else 'fail)))
-							    (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
-							                       (cond
-									       ((null? tal) ;; more to run?
-									        "COMPLETED")
-									       (else "RUNNING")))
-							    )
-						       (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
-								    " this-step-status: " this-step-status " overall-status: " overall-status 
-								    " next-status: " next-status " rollup-status: " rollup-status)
-						       (case next-status
-							 ((warn)
-							  (set! rollup-status 2)
-							  ;; NB// test-set-status! does rdb calls under the hood
-							  (tests:test-set-status! run-id test-id next-state "WARN" 
-									  (if (eq? this-step-status 'warn) "Logpro warning found" #f)
-									  #f))
-							 ((pass)
-							  (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
-							 (else ;; 'fail
-							  (set! rollup-status 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
-							  (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
-							  ))))
+						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal)))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
@@ -376,12 +407,21 @@
 							   (debug:print-info 0 "Unable to kill process with pid " pid ", possibly already killed.")
 							   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn)))
 							 (debug:print 0 "WARNING: Request received to kill job " pid) ;;  " (attempt # " kill-tries ")")
-							 (if (process:alive? pid)
-							     (begin
-							       (process-signal pid signal/int)
-							       (thread-sleep! 5)
-							       (if (process:process-alive? pid)
-								   (process-signal pid signal/kill))))))
+							 (debug:print-info 0 "Signal mask=" (signal-mask))
+							 ;; (if (process:alive? pid)
+							 ;;     (begin
+							 (map (lambda (pid-num)
+								(process-signal pid-num signal/term))
+							      (process:get-sub-pids pid))
+							 (thread-sleep! 5)
+							 ;; (if (process:process-alive? pid)
+							 (map (lambda (pid-num)
+								(handle-exceptions
+								 exn
+								 #f
+								 (process-signal pid-num signal/kill)))
+							      (process:get-sub-pids pid))))
+							 ;;    (debug:print-info 0 "not killing process " pid " as it is not alive"))))
 						      pids)
 						     (tests:test-set-status! run-id test-id "KILLED"  "KILLED" (args:get-arg "-m") #f))
 						   (begin
@@ -419,15 +459,15 @@
 				    )
 			(new-status (cond
 				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
-				     ((eq? rollup-status 0)
+				     ((eq? (vector-ref exit-info 3) 0)
 				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
-				     ((eq? rollup-status 1) "FAIL")
-				     ((eq? rollup-status 2)
+				     ((eq? (vector-ref exit-info 3) 1) "FAIL")
+				     ((eq? (vector-ref exit-info 3) 2)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " rollup-status)
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " (vector-ref exit-info 3))
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -437,8 +477,10 @@
 		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
-	      (if (not (equal? item-path ""))
-		  (tests:summarize-items run-id test-id test-name #f))) ;; don't force - just update if no
+	      ;; (if (and (not (equal? item-path ""))
+	      ;;      (< (random (rmt:get-count-tests-running-for-testname run-id test-name)) 5))
+	      (tests:summarize-items run-id test-id test-name #f)
+	      (tests:summarize-test run-id test-id)) ;; don't force - just update if no
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
@@ -463,11 +505,13 @@
 					       (get-environment-variable "MT_RUN_AREA_HOME"))
 					 #f))
 				   #f) ;; no config cached - give up
-			       (find-and-read-config 
-				(if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
-				environ-patt: "env-override"
-				given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
-				pathenvvar: "MT_RUN_AREA_HOME")))
+			       (let ((runname (or (args:get-arg "-runname")(args:get-arg ":runname"))))
+				 (if runname (setenv "MT_RUNNAME" runname))
+				 (find-and-read-config 
+				  (if (args:get-arg "-config")(args:get-arg "-config") "megatest.config")
+				  environ-patt: "env-override"
+				  given-toppath: (get-environment-variable "MT_RUN_AREA_HOME")
+				  pathenvvar: "MT_RUN_AREA_HOME"))))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
 	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
@@ -786,7 +830,6 @@
 	 (cmdparms   #f)
 	 (fullcmd    #f) ;; (define a (with-output-to-string (lambda ()(write x))))
 	 (mt-bindir-path #f)
-	 ;; (test-id    (cdb:remote-run db:get-test-id #f run-id test-name item-path))
 	 (testinfo   (rmt:get-test-info-by-id run-id test-id))
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
@@ -844,7 +887,15 @@
 
     ;; clean out step records from previous run if they exist
     ;; (rmt:delete-test-step-records run-id test-id)
-    (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+    
+    ;; Moving launch logs to MT_RUN_AREA_HOME/logs 
+    ;;
+    (let ((launchdir (configf:lookup *configdat* "setup" "launchdir"))) ;; (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+      (if (not launchdir) ;; default
+	  (change-directory (conc *toppath* "/logs")) ;; can assume this exists
+	  (case (string->symbol launchdir)
+	    ((legacy)(change-directory work-area))
+	    (else    (change-directory launchdir)))))
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
@@ -882,14 +933,14 @@
 				      (let ((cmdstr (string-intersperse fullcmd " ")))
 					(if launchwait
 					    cmdstr
-					    (conc cmdstr " >> mt_launch.log 2>&1")))
+					    (conc cmdstr " >> " work-area "/mt_launch.log 2>&1")))
 				      (car fullcmd))
 				  (if useshell
 				      '()
 				      (cdr fullcmd)))))
       (if (not launchwait) ;; give the OS a little time to allow the process to start
 	  (thread-sleep! 0.01))
-      (with-output-to-file "mt_launch.log"
+      (with-output-to-file (conc work-area "/mt_launch.log")
 	(lambda ()
 	  (if (list? launch-results)
 	      (apply print launch-results)

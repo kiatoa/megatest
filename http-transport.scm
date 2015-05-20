@@ -55,6 +55,7 @@
      (lambda (adr)
        (if (not (eq? (u8vector-ref adr 0) 127))
 	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
      (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
     (string-intersperse 
      (map number->string
@@ -274,11 +275,12 @@
 					     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 					     (hash-table-delete! *runremote* run-id)
 					     ;; Killing associated server to allow clean retry.")
-					     (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
+					     ;; (tasks:kill-server-run-id run-id)  ;; better to kill the server in the logic that called this routine?
 					     (mutex-unlock! *http-mutex*)
-					     (signal (make-composite-condition
-						      (make-property-condition 'commfail 'message "failed to connect to server")))
-					     "communications failed")
+					     ;;; (signal (make-composite-condition
+					     ;;;          (make-property-condition 'commfail 'message "failed to connect to server")))
+					     ;;; "communications failed"
+					     (db:obj->string #f))
 					   (with-input-from-request ;; was dat
 					    fullurl 
 					    (list (cons 'key "thekey")
