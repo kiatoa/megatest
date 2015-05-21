@@ -84,7 +84,7 @@
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
      (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
-       (let* ((cmd (conc "exec " stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
+       (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
 	      (pid (process-run "/bin/bash" (list "-c" cmd))))
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
