@@ -83,9 +83,9 @@
     ;; now launch the actual process
     (call-with-environment-variables 
      (list (cons "PATH" (conc (get-environment-variable "PATH") ":.")))
-     (lambda ()
+     (lambda () ;; (process-run "/bin/bash" "-c" "exec ls -l /tmp/foobar > /tmp/delme-more.log 2>&1")
        (let* ((cmd (conc stepcmd " > " stepname ".log 2>&1")) ;; >outfile 2>&1 
-	      (pid (process-run cmd)))
+	      (pid (process-run "/bin/bash" (list "-c" cmd))))
 	 (rmt:test-set-top-process-pid run-id test-id pid)
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
