@@ -329,7 +329,7 @@
 
 				 ;; if there is a runscript do it first
 				 (if fullrunscript
-				     (let ((pid (process-run fullrunscript)))
+				     (let ((pid (process-run "/bin/bash" (list "-c" (conc fullrunscript " >> " work-area "/mt_launch.log 2>&1")))))
 				       (rmt:test-set-top-process-pid run-id test-id pid)
 				       (let loop ((i 0))
 					 (let-values
