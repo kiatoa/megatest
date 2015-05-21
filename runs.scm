@@ -853,7 +853,7 @@
 		      ;; (debug:print 0 "         prereqs: " prereqs-not-met)
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
-		      (mt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
+		      (rmt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
