@@ -238,7 +238,8 @@
 ;; routine will go away.
 ;;
 (define (client:launch run-id)
-  (set-signal-handler! signal/int client:signal-handler)
+  (set-signal-handler! signal/int  client:signal-handler)
+  (set-signal-handler! signal/term client:signal-handler)
   (if (client:setup run-id)
       (debug:print-info 2 "connected as client")
       (begin
