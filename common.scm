@@ -245,35 +245,47 @@
 ;;======================================================================
 
 (define (std-exit-procedure)
-  (debug:print-info 2 "starting exit process, finalizing databases.")
-  (rmt:print-db-stats)
-  (let ((run-ids (hash-table-keys *db-local-sync*)))
-    (if (and (not (null? run-ids))
-	     (configf:lookup *configdat* "setup" "megatest-db"))
-	(db:multi-db-sync run-ids 'new2old)))
-  (if *dbstruct-db* (db:close-all *dbstruct-db*))
-  (if *inmemdb*     (db:close-all *inmemdb*))
-  (if (and *megatest-db*
-	   (sqlite3:database? *megatest-db*))
-      (begin
-	(sqlite3:interrupt! *megatest-db*)
-	(sqlite3:finalize! *megatest-db* #t)
-	(set! *megatest-db* #f)))
-  (if *task-db*     (let ((db (cdr *task-db*)))
-		      (if (sqlite3:database? db)
-			  (begin
-			    (sqlite3:interrupt! db)
-			    (sqlite3:finalize! db #t)
-			    (vector-set! *task-db* 0 #f))))))
+  (set! *time-to-exit* #t)
+  (debug:print-info 0 "starting exit process, finalizing databases.")
+  (if (debug:debug-mode 18)
+      (rmt:print-db-stats))
+  (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
+			    (let ((run-ids (hash-table-keys *db-local-sync*)))
+			      (if (and (not (null? run-ids))
+				       (configf:lookup *configdat* "setup" "megatest-db"))
+				  (db:multi-db-sync run-ids 'new2old)))
+			    (if *dbstruct-db* (db:close-all *dbstruct-db*))
+			    (if *inmemdb*     (db:close-all *inmemdb*))
+			    (if (and *megatest-db*
+				     (sqlite3:database? *megatest-db*))
+				(begin
+				  (sqlite3:interrupt! *megatest-db*)
+				  (sqlite3:finalize! *megatest-db* #t)
+				  (set! *megatest-db* #f)))
+			    (if *task-db*     (let ((db (cdr *task-db*)))
+						(if (sqlite3:database? db)
+						    (begin
+						      (sqlite3:interrupt! db)
+						      (sqlite3:finalize! db #t)
+						      (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
+	(th2 (make-thread (lambda ()
+			    (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			    (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
+			    (debug:print 0 "       Done.")
+			    (exit 4))
+			  "exit on ^C timer")))
+    (thread-start! th2)
+    (thread-start! th1)
+    (thread-join! th2)))
 
 (define (std-signal-handler signum)
-  (signal-mask! signum)
+  ;; (signal-mask! signum)
   (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
-(set-signal-handler! signal/int std-signal-handler)
-(set-signal-handler! signal/term std-signal-handler)
+(set-signal-handler! signal/int std-signal-handler)  ;; ^C
+;; (set-signal-handler! signal/term std-signal-handler)
 
 ;;======================================================================
 ;; Misc utils

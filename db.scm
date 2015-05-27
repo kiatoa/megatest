@@ -508,7 +508,8 @@
 	       (cons todb slave-dbs))
      (if *server-run* ;; we are inside a server, throw a sync-failed error
 	 (signal (make-composite-condition
-		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))))
+		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))
+	 0)) ;; return zero for num synced
 
 	 ;; (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
 	 ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
@@ -568,7 +569,7 @@
 	    (if (not (null? fromdat))
 		(set! fromdats (cons fromdat fromdats)))
 
-	    (debug:print-info 2 "found " totrecords " records to sync")
+	    (debug:print-info 4 "found " totrecords " records to sync")
 
 	    ;; read the target table
 	    (sqlite3:for-each-row
