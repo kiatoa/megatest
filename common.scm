@@ -284,8 +284,8 @@
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
-(set-signal-handler! signal/int std-signal-handler)  ;; ^C
-;; (set-signal-handler! signal/term std-signal-handler)
+(set-signal-handler! signal/int  std-signal-handler)  ;; ^C
+(set-signal-handler! signal/term std-signal-handler)
 
 ;;======================================================================
 ;; Misc utils
