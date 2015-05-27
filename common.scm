@@ -24,6 +24,13 @@
 ;; (require-library margs)
 ;; (include "margs.scm")
 
+;; (define old-exit exit)
+;; 
+;; (define (exit . code)
+;;   (if (null? code)
+;;       (old-exit)
+;;       (old-exit code)))
+
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
   (if (and (string? val)(string? key))
@@ -279,7 +286,7 @@
 				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
 				  (thread-sleep! 1))
 			      (debug:print 0 "       Done.")
-			      (exit))
+			      )
 			    "clean exit")))
       (thread-start! th2)
       (thread-start! th1)
