@@ -353,8 +353,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (begin
 			 (thread-sleep! 1)
 			 (delay-loop (+ count 1))))
-		   (loop))))
-	   (debug:print-info 0 "Exiting watchdog timer")))
+		   (loop)))
+	     (debug:print-info 0 "Exiting watchdog timer, *time-to-exit* = " *time-to-exit*))))
      "Watchdog thread")))
 
 (thread-start! *watchdog*)
