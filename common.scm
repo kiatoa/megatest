@@ -246,7 +246,7 @@
 
 (define (std-exit-procedure)
   (set! *time-to-exit* #t)
-  (debug:print-info 0 "starting exit process, finalizing databases.")
+  (debug:print-info 4 "starting exit process, finalizing databases.")
   (if (debug:debug-mode 18)
       (rmt:print-db-stats))
   (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
@@ -269,11 +269,11 @@
 						      (sqlite3:finalize! db #t)
 						      (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
 	(th2 (make-thread (lambda ()
-			    (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+			    (debug:print 4 "Attempting clean exit. Please be patient and wait a few seconds...")
 			    (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
 			    (debug:print 0 "       Done.")
-			    (exit 4))
-			  "exit on ^C timer")))
+			    (exit))
+			  "clean exit")))
     (thread-start! th2)
     (thread-start! th1)
     (thread-join! th2)))
