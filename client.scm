@@ -213,36 +213,36 @@
   (http-transport:client-connect (tasks:hostinfo-get-interface server-info)
 				 (tasks:hostinfo-get-port server-info)))
 
-;; client:signal-handler
-(define (client:signal-handler signum)
-  (signal-mask! signum)
-  (set! *time-to-exit* #t)
-  (handle-exceptions
-   exn
-   (debug:print " ... exiting ...")
-   (let ((th1 (make-thread (lambda ()
-			     "") ;; do nothing for now (was flush out last call if applicable)
-			   "eat response"))
-	 (th2 (make-thread (lambda ()
-			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
-			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
-			     (debug:print 0 "       Done.")
-			     (exit 4))
-			   "exit on ^C timer")))
-     (thread-start! th2)
-     (thread-start! th1)
-     (thread-join! th2))))
-
-;; client:launch
-;; Need to set the signal handler somewhere other than here as this
-;; routine will go away.
-;;
-(define (client:launch run-id)
-  (set-signal-handler! signal/int  client:signal-handler)
-  (set-signal-handler! signal/term client:signal-handler)
-  (if (client:setup run-id)
-      (debug:print-info 2 "connected as client")
-      (begin
-	(debug:print 0 "ERROR: Failed to connect as client")
-	(exit))))
-
+;; ;; client:signal-handler
+;; (define (client:signal-handler signum)
+;;   (signal-mask! signum)
+;;   (set! *time-to-exit* #t)
+;;   (handle-exceptions
+;;    exn
+;;    (debug:print " ... exiting ...")
+;;    (let ((th1 (make-thread (lambda ()
+;; 			     "") ;; do nothing for now (was flush out last call if applicable)
+;; 			   "eat response"))
+;; 	 (th2 (make-thread (lambda ()
+;; 			     (debug:print 0 "ERROR: Received ^C, attempting clean exit. Please be patient and wait a few seconds before hitting ^C again.")
+;; 			     (thread-sleep! 1) ;; give the flush one second to do it's stuff
+;; 			     (debug:print 0 "       Done.")
+;; 			     (exit 4))
+;; 			   "exit on ^C timer")))
+;;      (thread-start! th2)
+;;      (thread-start! th1)
+;;      (thread-join! th2))))
+;; 
+;; ;; client:launch
+;; ;; Need to set the signal handler somewhere other than here as this
+;; ;; routine will go away.
+;; ;;
+;; (define (client:launch run-id)
+;;   (set-signal-handler! signal/int  client:signal-handler)
+;;   (set-signal-handler! signal/term client:signal-handler)
+;;   (if (client:setup run-id)
+;;       (debug:print-info 2 "connected as client")
+;;       (begin
+;; 	(debug:print 0 "ERROR: Failed to connect as client")
+;; 	(exit))))
+;; 
