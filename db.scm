@@ -176,12 +176,12 @@
 			   (file-write-access? fname)
 			   dir-writable )))
     (if file-write ;; dir-writable
-	(let ((lock    (obtain-dot-lock fname 1 5 10))
+	(let (;; (lock    (obtain-dot-lock fname 1 5 10))
 	      (db      (sqlite3:open-database fname)))
 	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
 	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
 	  (if (not file-exists)(initproc db))
-	  (release-dot-lock fname)
+	  ;; (release-dot-lock fname)
 	  db)
 	(begin
 	  (debug:print 0 "ERROR: no such db in non-writable dir " fname)
