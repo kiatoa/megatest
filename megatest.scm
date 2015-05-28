@@ -129,7 +129,7 @@ Queries
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
-  -changed-runs-since N   : get list of runs changed since time N (Unix seconds)
+  -since N   : get list of runs changed since time N (Unix seconds)
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -246,7 +246,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-o"
 			"-log"
 			"-archive"
-			"-changed-runs-since"
+			"-since"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -903,8 +903,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runsdat  (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 					 #f #f))
-	       (runs     (db:get-rows runsdat))
+	       (runstmp  (db:get-rows runsdat))
 	       (header   (db:get-header runsdat))
+	       (runs     (if (and (not (null? runstmp))
+				  (args:get-arg "-since"))
+			     (let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
+			       (let loop ((hed (car runstmp))
+					  (tal (cdr runstmp))
+					  (res '()))
+				 (let ((new-res (if (member (db:get-value-by-header hed header "id") changed-ids)
+						    (cons hed res)
+						    res)))
+				   (if (null? tal)
+				       (reverse new-res)
+				       (loop (car tal)(cdr tal) new-res)))))
+			     runstmp))
 	       (db-targets (args:get-arg "-list-db-targets"))
 	       (seen     (make-hash-table))
 	       (dmode    (let ((d (args:get-arg "-dumpmode")))
@@ -939,7 +952,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (lambda (test)
 		      	(handle-exceptions
 			 exn
-			 (debug:print 0 "ERROR: Bad data in test record? " test)
+			 (debug:print 4 "ERROR: Bad data in test record? " test)
 			 (let ((test-id    (db:test-get-id test))
 			       (fullname   (conc (db:test-get-testname test)
 						 (if (equal? (db:test-get-item-path test) "")
@@ -991,26 +1004,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (eq? dmode 'json)(json-write data))
 	  (set! *didsomething* #t))))
 
-(if (and (args:get-arg "-changed-runs-since")
-	 (launch:setup-for-run))
-    (let* ((since-time (string->number (args:get-arg "-changed-runs-since")))
-	   (dbdir      (db:dbfile-path #f)) ;; (configf:lookup *configdat* "setup" "dbdir"))
-	   (alldbs     (glob (conc dbdir "/[0-9]*.db")))
-	   (changed    (filter (lambda (dbfile)
-				 (> (file-modification-time dbfile) since-time))
-			       alldbs))
-	   (run-ids    (delete-duplicates
-			(map (lambda (dbfile)
-			       (let* ((res (string-match ".*\\/(\\d)*\\.db" dbfile)))
-				 (if res
-				     (string->number (cadr res))
-				     (begin
-				       (debug:print 2 "ERROR: Failed to process " dbfile " for run-id")
-				       0))))
-			     changed))))
-      ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
-      (print (sort run-ids <))
-      (set! *didsomething* #t)))
+;; Don't think I need this. Incorporated into -list-runs instead
+;;
+;; (if (and (args:get-arg "-since")
+;; 	 (launch:setup-for-run))
+;;     (let* ((since-time (string->number (args:get-arg "-since")))
+;; 	   (run-ids    (db:get-changed-run-ids since-time)))
+;;       ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+;;       (print (sort run-ids <))
+;;       (set! *didsomething* #t)))
       
       
 ;;======================================================================
