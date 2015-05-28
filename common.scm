@@ -283,9 +283,9 @@
 	  (th2 (make-thread (lambda ()
 			      (debug:print 4 "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
-				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
-				  (thread-sleep! 1))
-			      (debug:print 0 "       Done.")
+				  (thread-sleep! 0.1) ;; give the clean up few seconds to do it's stuff
+				  (thread-sleep! 4))
+			      (debug:print 4 " ... done")
 			      )
 			    "clean exit")))
       (thread-start! th2)
