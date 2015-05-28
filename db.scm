@@ -1697,6 +1697,22 @@
     (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
+(define (db:get-changed-run-ids since-time)
+  (let* ((dbdir      (db:dbfile-path #f)) ;; (configf:lookup *configdat* "setup" "dbdir"))
+	 (alldbs     (glob (conc dbdir "/[0-9]*.db")))
+	 (changed    (filter (lambda (dbfile)
+			       (> (file-modification-time dbfile) since-time))
+			     alldbs)))
+    (delete-duplicates
+     (map (lambda (dbfile)
+	    (let* ((res (string-match ".*\\/(\\d)*\\.db" dbfile)))
+	      (if res
+		  (string->number (cadr res))
+		  (begin
+		    (debug:print 2 "WARNING: Failed to process " dbfile " for run-id")
+		    0))))
+	  changed))))
+
 ;; db:get-runs-by-patt
 ;; get runs by list of criteria
 ;; register a test run with the db
@@ -1816,7 +1832,7 @@
      (lambda (run-id runname)
        (set! runs-info (cons (list run-id runname) runs-info)))
      db
-     "SELECT id,runname FROM runs WHERE state != 'deleted';")
+     "SELECT id,runname FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;") ;; If you change this to the more logical ASC please adjust calls to db:get-run-stats
     ;; for each run get stats data
     (for-each
      (lambda (run-info)
