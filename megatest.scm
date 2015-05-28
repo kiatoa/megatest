@@ -129,6 +129,7 @@ Queries
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
+  -changed-runs-since N   : get list of runs changed since time N (Unix seconds)
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -245,6 +246,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-o"
 			"-log"
 			"-archive"
+			"-changed-runs-since"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -989,6 +991,28 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (eq? dmode 'json)(json-write data))
 	  (set! *didsomething* #t))))
 
+(if (and (args:get-arg "-changed-runs-since")
+	 (launch:setup-for-run))
+    (let* ((since-time (string->number (args:get-arg "-changed-runs-since")))
+	   (dbdir      (db:dbfile-path #f)) ;; (configf:lookup *configdat* "setup" "dbdir"))
+	   (alldbs     (glob (conc dbdir "/[0-9]*.db")))
+	   (changed    (filter (lambda (dbfile)
+				 (> (file-modification-time dbfile) since-time))
+			       alldbs))
+	   (run-ids    (delete-duplicates
+			(map (lambda (dbfile)
+			       (let* ((res (string-match ".*\\/(\\d)*\\.db" dbfile)))
+				 (if res
+				     (string->number (cadr res))
+				     (begin
+				       (debug:print 2 "ERROR: Failed to process " dbfile " for run-id")
+				       0))))
+			     changed))))
+      ;; (rmt:get-tests-for-runs-mindata run-ids testpatt states status not-in)
+      (print (sort run-ids <))
+      (set! *didsomething* #t)))
+      
+      
 ;;======================================================================
 ;; full run
 ;;======================================================================
