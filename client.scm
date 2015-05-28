@@ -217,6 +217,7 @@
 ;; client:signal-handler
 (define (client:signal-handler signum)
   (signal-mask! signum)
+  (set! *time-to-exit* #t)
   (handle-exceptions
    exn
    (debug:print " ... exiting ...")

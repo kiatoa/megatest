@@ -3,5 +3,11 @@
 
 (declare (unit megatest-version))
 
+<<<<<<< BEGIN MERGE CONFLICT: local copy shown first <<<<<<<<<<<<<<<
+(define megatest-version 1.6014)
+======= COMMON ANCESTOR content follows ============================
 (define megatest-version 1.6009)
+======= MERGED IN content follows ==================================
+(define megatest-version 1.6013)
+>>>>>>> END MERGE CONFLICT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 

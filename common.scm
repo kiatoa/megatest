@@ -277,35 +277,47 @@
 ;;======================================================================
 
 (define (std-exit-procedure area-dat)
-  (debug:print-info 2 "starting exit process, finalizing databases.")
+  (set! *time-to-exit* #t)
   (rmt:print-db-stats area-dat)
   (let* ((configdat (megatest:area-configdat area-dat))
 	 (run-ids (hash-table-keys *db-local-sync*)))
-    (if (and (not (null? run-ids))
-	     (configf:lookup configdat "setup" "megatest-db"))
-	(db:multi-db-sync run-ids 'new2old)))
-  (if *dbstruct-db* (db:close-all *dbstruct-db* area-dat))
-  (if *inmemdb*     (db:close-all *inmemdb* area-dat))
-  (if (and *megatest-db*
-	   (sqlite3:database? *megatest-db*))
-      (begin
-	(sqlite3:interrupt! *megatest-db*)
-	(sqlite3:finalize! *megatest-db* #t)
-	(set! *megatest-db* #f)))
-  (if *task-db*     (let ((db (cdr *task-db*)))
-		      (if (sqlite3:database? db)
-			  (begin
-			    (sqlite3:interrupt! db)
-			    (sqlite3:finalize! db #t)
-			    (vector-set! *task-db* 0 #f))))))
-
+    (if (debug:debug-mode 18)
+	(rmt:print-db-stats))
+    (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
+			      (if (and (not (null? run-ids))
+				       (configf:lookup configdat "setup" "megatest-db"))
+				  (db:multi-db-sync run-ids 'new2old))
+			      (if *dbstruct-db* (db:close-all *dbstruct-db* area-dat))
+			      (if *inmemdb*     (db:close-all *inmemdb* area-dat))
+			      (if (and *megatest-db*
+				       (sqlite3:database? *megatest-db*))
+				  (begin
+				    (sqlite3:interrupt! *megatest-db*)
+				    (sqlite3:finalize! *megatest-db* #t)
+				    (set! *megatest-db* #f)))
+			      (if *task-db*     (let ((db (cdr *task-db*)))
+						  (if (sqlite3:database? db)
+						      (begin
+							(sqlite3:interrupt! db)
+							(sqlite3:finalize! db #t)
+							(vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
+	  (th2 (make-thread (lambda ()
+			      (debug:print 4 "Exiting with clean exit. Please be patient and wait a few seconds.")
+			      (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
+			      (debug:print 4 "       Done.")
+			      (exit))
+			    "exit timer")))
+      (thread-start! th2)
+      (thread-start! th1)
+      (thread-join! th2))))
+  
 (define (std-signal-handler signum)
-  (signal-mask! signum)
+  ;; (signal-mask! signum)
   (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
-(set-signal-handler! signal/int std-signal-handler)
+(set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
 
 ;;======================================================================

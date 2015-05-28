@@ -137,7 +137,7 @@
 	      
 	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
 				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
-	      (test-partial-path (conc target "/" run-name "/" (runs:make-full-test-name test-name item-path)))
+	      (test-partial-path (conc target "/" run-name "/" (db:test-make-full-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
 	      (test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
@@ -222,7 +222,7 @@
 	      
 	      (toplevel/children (and (db:test-get-is-toplevel test-dat)
 				      (> (rmt:test-toplevel-num-items run-id test-name) 0)))
-	      (test-partial-path (conc target "/" run-name "/" (runs:make-full-test-name test-name item-path)))
+	      (test-partial-path (conc target "/" run-name "/" (db:test-make-full-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
 	      ;; if the old path was not deleted then prev-test-physical-path will end up pointing to a real directory
