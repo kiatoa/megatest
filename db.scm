@@ -164,25 +164,28 @@
 ;; returns: db existed-prior-to-opening
 ;;
 (define (db:lock-create-open fname initproc)
-  (if (file-exists? fname)
-      (let ((db (sqlite3:open-database fname)))
-	(sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	(db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	db)
-      (let* ((parent-dir   (pathname-directory fname))
-	     (dir-writable (file-write-access? parent-dir)))
-	(if dir-writable
-	    (let ((exists  (file-exists? fname))
-		  (lock    (obtain-dot-lock fname 1 5 10))
-		  (db      (sqlite3:open-database fname)))
-	      (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
-	      (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
-	      (if (not exists)(initproc db))
-	      (release-dot-lock fname)
-	      db)
-	    (begin
-	      (debug:print 0 "ERROR: no such db in non-writable dir " fname)
-	      (sqlite3:open-database fname))))))
+  ;; (if (file-exists? fname)
+  ;;     (let ((db (sqlite3:open-database fname)))
+  ;;       (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+  ;;       (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+  ;;       db)
+  (let* ((parent-dir   (pathname-directory fname))
+	 (dir-writable (file-write-access? parent-dir))
+	 (file-exists  (file-exists? fname))
+	 (file-write   (if file-exists
+			   (file-write-access? fname)
+			   dir-writable )))
+    (if file-write ;; dir-writable
+	(let ((lock    (obtain-dot-lock fname 1 5 10))
+	      (db      (sqlite3:open-database fname)))
+	  (sqlite3:set-busy-handler! db (make-busy-timeout 136000))
+	  (db:set-sync db) ;; (sqlite3:execute db "PRAGMA synchronous = 0;")
+	  (if (not file-exists)(initproc db))
+	  (release-dot-lock fname)
+	  db)
+	(begin
+	  (debug:print 0 "ERROR: no such db in non-writable dir " fname)
+	  (sqlite3:open-database fname))))) ;; )
 
 ;; This routine creates the db. It is only called if the db is not already opened
 ;; 
@@ -488,6 +491,80 @@
 	   '("avg_disk"       #f)
 	   '("tags"           #f)
 	   '("jobgroup"       #f)))))
+
+;; use bunch of Unix commands to try to break the lock and recreate the db
+;;
+(define (db:move-and-recreate-db dbdat)
+  (let* ((dbpath   (db:dbdat-get-path        dbdat))
+	 (dbdir    (pathname-directory       dbpath))
+	 (fname    (pathname-strip-directory dbpath))
+	 (fnamejnl (conc fname "-journal"))
+	 (tmpname  (conc fname "." (current-process-id)))
+	 (tmpjnl   (conc fnamejnl "." (current-process-id))))
+    (debug:print 0 "ERROR: " fname " appears corrupted. Making backup \"old/" fname "\"")
+    (system (conc "cd " dbdir ";mkdir -p old;cat " fname " > old/" tmpname))
+    (system (conc "rm -f " dbpath))
+    (if (file-exists? fnamejnl)
+	(begin
+	  (debug:print 0 "ERROR: " fnamejnl " found, moving it to old dir as " tmpjnl)
+	  (system (conc "cd " dbdir ";mkdir -p old;cat " fnamejnl " > old/" tmpjnl))
+	  (system (conc "rm -f " dbdir "/" fnamejnl))))
+    ;; attempt to recreate database
+    (system (conc "cd " dbdir ";sqlite3 old/" tmpname " .dump | sqlite3 " fname))))
+    
+;; return #f to indicate the dbdat should be closed/reopened
+;; else return dbdat
+;;
+(define (db:repair-db dbdat #!key (numtries 1))
+  (let* ((dbpath   (db:dbdat-get-path        dbdat))
+	 (dbdir    (pathname-directory       dbpath))
+	 (fname    (pathname-strip-directory dbpath)))
+    (debug:print-info 0 "Checking db " dbpath " for errors.")
+    (cond
+     ((not (file-write-access? dbdir))
+      (debug:print 0 "WARNING: can't write to " dbdir ", can't fix " fname)
+      #f)
+
+     ;; handle special cases, megatest.db and monitor.db
+     ;; 
+     ;;  NOPE: apply this same approach to all db files
+     ;;
+     (else ;; ((equal? fname "megatest.db") ;; this file can be regenerated if needed
+      (handle-exceptions
+       exn
+       (begin
+	 (db:move-and-recreate-db dbdat)
+	 (if (> numtries 0)
+	     (db:repair-db dbdat numtries: (- numtries 1))
+	     #f)
+	 (debug:print 0 "FATAL: file " dbpath " was found corrupted, an attempt to fix has been made but you must start over.")
+	 (debug:print 0
+		      "   check the following:\n"
+		      "      1. full directories, look in ~/ /tmp and " dbdir "\n"
+		      "      2. write access to " dbdir "\n\n"
+		      "   if the automatic recovery failed you may be able to recover data by doing \"" 
+		      (if (member fname '("megatest.db" "monitor.db"))
+			  "megatest -cleanup-db"
+			  "megatest -import-megatest.db;megatest -cleanup-db")
+		      "\"\n")
+	 (exit) ;; we can not safely continue when a db was corrupted - even if fixed.
+	 )
+       ;; test read/write access to the database
+       (let ((db (sqlite3:open-database dbpath)))
+	 (cond
+	  ((equal? fname "megatest.db")
+	   (sqlite3:execute db "DELETE FROM tests WHERE state='DELETED';"))
+	  ((equal? fname "main.db")
+	   (sqlite3:execute db "DELETE FROM runs WHERE state='deleted';"))
+	  ((string-match "\\d.db" fname)
+	   (sqlite3:execute db "UPDATE tests SET state='DELETED' WHERE state='DELETED';"))
+	  ((equal? fname "monitor.db")
+	   (sqlite3:execute "DELETE FROM servers WHERE state LIKE 'defunct%';"))
+	  (else
+	   (sqlite3:execute db "vacuum;")))
+	 
+	 (finalize! db)
+	 #t))))))
     
 ;; tbls is ( ("tablename" ( "field1" [#f|proc1] ) ( "field2" [#f|proc2] ) .... ) )
 ;; db's are dbdat's
@@ -497,6 +574,7 @@
   (handle-exceptions
    exn
    (begin
+     (mutex-unlock! *db-sync-mutex*)
      (debug:print 0 "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
      (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
@@ -504,12 +582,19 @@
      (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
      (debug:print 0 " src db:  " (db:dbdat-get-path fromdb))
      (for-each (lambda (dbdat)
-		 (debug:print 0 " dbpath:  " (db:dbdat-get-path dbdat)))
+		 (let ((dbpath (db:dbdat-get-path dbdat)))
+		   (debug:print 0 " dbpath:  " dbpath)
+		   (if (not (db:repair-db dbdat))
+		       (begin
+			 (debug:print 0 "ERROR: Failed to rebuild " dbpath ", exiting now.")
+			 (exit)))))
 	       (cons todb slave-dbs))
-     (if *server-run* ;; we are inside a server, throw a sync-failed error
-	 (signal (make-composite-condition
-		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))
-	 0)) ;; return zero for num synced
+     
+     0)
+;;      (if *server-run* ;; we are inside a server, throw a sync-failed error
+;; 	 (signal (make-composite-condition
+;; 		 (make-property-condition 'sync-failed 'message "db:sync-tables failed in a server context.")))
+;; 	 0)) ;; return zero for num synced
 
 	 ;; (set! *time-to-exit* #t) ;; let watch dog know that it is time to die.
 	 ;; (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "shutting-down")
