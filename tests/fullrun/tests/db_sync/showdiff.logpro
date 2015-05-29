@@ -42,3 +42,5 @@
 ;; (expect:error    in "Body"  = 0 "ERROR BLAH"  (list #/ERROR/ #/error/)) ;; but disallow any other errors
 ;; 
 ;; ;(expect in "Init"  < 1 "Junk"        #/This is bogus/)
+
+(expect:error    in "LogFileBody" = 0 "Any diff is failure" #/.+/)

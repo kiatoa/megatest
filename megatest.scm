@@ -308,15 +308,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (configf:lookup *configdat* "setup" "megatest-db"))
+     (let ((legacy-sync (common:legacy-sync-required))
 	   (debug-mode  (debug:debug-mode 1))
 	   (last-time   (current-seconds)))
-       (if (or (args:get-arg "-runtests")
-	       (args:get-arg "-server")
-	       (args:get-arg "-set-run-status")
-	       (args:get-arg "-remove-runs")
-	       (args:get-arg "-get-run-status")
-	       )
+       (if (common:legacy-sync-recommended)
 	   (let loop ()
 	     ;; sync for filesystem local db writes
 	     ;;
