@@ -1,5 +1,10 @@
+[pre-launch-env-vars]
+
+MT_DBDIR #{scheme (db:dbfile-path #f)}
+
 [ezsteps]
-calcresults megatest -list-runs $MT_RUNNAME -target $MT_TARGET
+calcresults csi -b dbdelta.scm
+showdiff    diff  current-db-dump legacy-db-dump
 
 [requirements]
 waiton  #{getenv ALL_TOPLEVEL_TESTS}
