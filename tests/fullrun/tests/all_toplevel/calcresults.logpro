@@ -60,6 +60,7 @@
 
 ;; Special cases
 ;;
+(expect:ignore   in logbody >= 0  "db_sync test might not have run"  #/Test: db_sync/)
 (expect:ignore   in logbody >= 0  "all_toplevel may not yet be done" #/Test: all_toplevel/)
 (expect:error    in logbody =  0  "tests left in RUNNING state"      #/State: RUNNING/)
 (expect:required in logbody =  1  "priority_2 is KILLED"             #/Test: priority_2\s+State: KILLED\s+Status: KILLED/)

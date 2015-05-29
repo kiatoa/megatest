@@ -251,6 +251,17 @@
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
+(define (common:legacy-sync-recommended)
+  (or (args:get-arg "-runtests")
+      (args:get-arg "-server")
+      (args:get-arg "-set-run-status")
+      (args:get-arg "-remove-runs")
+      (args:get-arg "-get-run-status")
+      ))
+
+(define (common:legacy-sync-required)
+  (configf:lookup *configdat* "setup" "megatest-db"))
+
 (define (std-exit-procedure)
   (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f

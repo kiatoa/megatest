@@ -6,7 +6,7 @@
 (define runsquery "sysname||'/'||fsname||'/'||datapath||'/'||runname||'/'||runs.state||'-'||runs.status") 
 (define bigquery
   (conc 
-   "SELECT " runsquery "||testname||'/'||item_path||'-'||'-'||tests.state||'-'||tests.status||'-'||runs.id AS outdat FROM runs INNER JOIN tests ON runs.id=tests.run_id ORDER BY outdat ASC ;"))
+   "SELECT " runsquery "||testname||'/'||item_path||'-'||'-'||tests.state||'-'||tests.status||'-'||runs.id AS outdat FROM runs INNER JOIN tests ON runs.id=tests.run_id WHERE runs.state NOT LIKE 'deleted' AND tests.state NOT LIKE 'deleted' AND testname NOT LIKE 'db_sync' ORDER BY outdat ASC ;"))
 
 (print "Creating file for legacy db")
 (with-output-to-file "legacy-db-dump"
