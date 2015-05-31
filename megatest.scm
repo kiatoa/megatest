@@ -938,7 +938,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(mutils:hierhash-set! data (db:get-value-by-header run header "status")     targetstr runname "meta" "status"     )
 			(mutils:hierhash-set! data (db:get-value-by-header run header "state")      targetstr runname "meta" "state"      )
 			(mutils:hierhash-set! data (conc (db:get-value-by-header run header "id"))  targetstr runname "meta" "id"         )
-			(mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" ))
+			(mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" )
+			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    ))
 		       (else
 			(print "Run: " targetstr "/" runname 
 			       " status: " (db:get-value-by-header run header "state")
@@ -947,21 +948,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (lambda (test)
 		      	(handle-exceptions
 			 exn
-			 (debug:print 4 "ERROR: Bad data in test record? " test)
-			 (let ((test-id    (db:test-get-id test))
-			       (fullname   (conc (db:test-get-testname test)
-						 (if (equal? (db:test-get-item-path test) "")
-						     "" 
-						     (conc "(" (db:test-get-item-path test) ")"))))
-			       (tstate     (db:test-get-state test))
-			       (tstatus    (db:test-get-status test))
-			       (event-time (db:test-get-event_time test)))
+			 (begin
+			   (debug:print 0 "ERROR: Bad data in test record? " test)
+			   (print "exn=" (condition->list exn))
+			   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+			   (print-call-chain (current-error-port)))
+			 (let* ((test-id    (db:test-get-id         test))
+				(testname   (db:test-get-testname   test))
+				(itempath   (db:test-get-item-path  test))
+				(comment    (db:test-get-comment    test))
+				(tstate     (db:test-get-state      test))
+				(tstatus    (db:test-get-status     test))
+				(event-time (db:test-get-event_time test))
+				(rundir     (db:test-get-rundir     test))
+				(final_logf (db:test-get-final_logf test))
+				(run_duration (db:test-get-run_duration test))
+				(fullname   (conc testname
+						  (if (equal? itempath "")
+						      "" 
+						      (conc "(" itempath ")")))))
 			   (case dmode
 			     ((json)
-			      (mutils:hierhash-set! data  fullname   targetstr runname "data" (conc test-id) "tname"     )
+			      ;; (mutils:hierhash-set! data  fullname   targetstr runname "data" (conc test-id) "tname"     )
+			      (mutils:hierhash-set! data  testname   targetstr runname "data" (conc test-id) "testname"  )
+			      (mutils:hierhash-set! data  itempath   targetstr runname "data" (conc test-id) "itempath"  )
+			      (mutils:hierhash-set! data  comment    targetstr runname "data" (conc test-id) "comment"   )
 			      (mutils:hierhash-set! data  tstate     targetstr runname "data" (conc test-id) "state"     )
 			      (mutils:hierhash-set! data  tstatus    targetstr runname "data" (conc test-id) "status"    )
-			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-is) "event_time"))
+			      (mutils:hierhash-set! data  rundir     targetstr runname "data" (conc test-id) "rundir"    )
+			      (mutils:hierhash-set! data  final_logf targetstr runname "data" (conc test-id) "final_logf")
+			      (mutils:hierhash-set! data  run_duration targetstr runname "data" (conc test-id) "run_duration")
+			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time"))
 			     (else
 			      (format #t
 				      "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
