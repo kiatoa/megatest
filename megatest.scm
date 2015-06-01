@@ -939,7 +939,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			(mutils:hierhash-set! data (db:get-value-by-header run header "state")      targetstr runname "meta" "state"      )
 			(mutils:hierhash-set! data (conc (db:get-value-by-header run header "id"))  targetstr runname "meta" "id"         )
 			(mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" )
-			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    ))
+			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
+			;; add last entry twice - seems to be a bug in hierhash?
+			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
+			)
 		       (else
 			(print "Run: " targetstr "/" runname 
 			       " status: " (db:get-value-by-header run header "state")
@@ -978,7 +981,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			      (mutils:hierhash-set! data  rundir     targetstr runname "data" (conc test-id) "rundir"    )
 			      (mutils:hierhash-set! data  final_logf targetstr runname "data" (conc test-id) "final_logf")
 			      (mutils:hierhash-set! data  run_duration targetstr runname "data" (conc test-id) "run_duration")
-			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time"))
+			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
+			      ;; add last entry twice - seems to be a bug in hierhash?
+			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
+			      )
 			     (else
 			      (format #t
 				      "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
