@@ -228,14 +228,28 @@
 
     (if (tasks:need-server run-id area-dat)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
-    (set-signal-handler! signal/int
-			 (lambda (signum)
-			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
-			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
+    (let ((sighand (lambda (signum)
+		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+		     (if (eq? signum signal/stop)
+			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
+		     (set! *time-to-exit* #t)
+		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((tdbdat (tasks:open-db area-dat)))
-			     (rmt:tasks-set-state-given-param-key task-key "killed"))
-			   (print "Killed by signal " signum ". Exiting")
-			   (exit)))
+		     (let ((th1 (make-thread (lambda ()
+						 (rmt:tasks-set-state-given-param-key task-key "killed"))
+					       (print "Killed by signal " signum ". Exiting")
+					       (thread-sleep! 3)
+					       (exit))))
+			   (th2 (make-thread (lambda ()
+					       (thread-sleep! 5)
+					       (debug:print 0 "Done")
+					       (exit 4)))))
+		       (thread-start! th2)
+		       (thread-start! th1)
+		       (thread-join! th2)))))
+      (set-signal-handler! signal/int sighand)
+      (set-signal-handler! signal/term sighand)
+      (set-signal-handler! signal/stop sighand))
 
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key area-dat) ;; params)
