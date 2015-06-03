@@ -208,7 +208,7 @@
 						      (handle-exceptions
 						       exn
 						       (begin
-							 (release-dot-lock dbpath)
+							 ;; (release-dot-lock dbpath)
 							 (if (> attemptnum 2)
 							     (debug:print 0 "ERROR: tried twice, cannot create/initialize db for run-id " run-id ", at path " dbpath)
 							     (db:open-rundb dbstruct run-id attemptnum (+ attemptnum 1))))
