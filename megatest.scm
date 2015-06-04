@@ -947,11 +947,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (fields-spec (if (args:get-arg "-fields")
 				(extract-fields-constraints (args:get-arg "-fields"))
 				'(("runs"  "id" "target"   "runname")
-				  ("tests" "id" "testname" "test_path")
+				  (cons "tests"  db:test-record-fields) ;; "id" "testname" "test_path")
 				  ("steps" "id" "stepname"))))
-	       (runs-spec   (alist-ref "runs"  fields-spec equal?))
-	       (tests-spec  (alist-ref "tests" fields-spec equal?))
-	       (adj-tests-spec (delete-duplicates (cons "id" tests-spec)))
+	       (runs-spec   (let ((r (alist-ref "runs"  fields-spec equal?)))
+			      (if (and r (not (null? r))) r (list "id"))))
+	       (tests-spec  (let ((t (alist-ref "tests" fields-spec equal?)))
+			      (if (and t (null? t)) ;; all fields
+				  db:test-record-fields
+				  t)))
+	       (adj-tests-spec (delete-duplicates (if tests-spec (cons "id" tests-spec) db:test-record-fields))) ;; '("id"))))
 	       (steps-spec  (alist-ref "steps" fields-spec equal?))
 	       (test-field-index (make-hash-table)))
 	  (if (and tests-spec (not (null? tests-spec))) ;; do some validation and processing of the test-spec
@@ -987,6 +991,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
+								 ;; db:test-record-fields
 								 #f))
 				       '())))
 		     (case dmode
