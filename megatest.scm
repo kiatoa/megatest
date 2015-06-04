@@ -977,7 +977,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      (debug:print 0 "ERROR: Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
 		      (exit)))))
 
-	  (debug:print-info 0 "runs-spec: " runs-spec ", tests-spec: " tests-spec ", steps-spec: " steps-spec)
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
