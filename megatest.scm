@@ -130,6 +130,7 @@ Queries
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
   -since N                : get list of runs changed since time N (Unix seconds)
+  -fields fieldspec       : fields to include in json dump; runs:id,runame+tests:testname+steps
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -247,6 +248,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-log"
 			"-archive"
 			"-since"
+			"-fields"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -884,40 +886,88 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; Query runs
 ;;======================================================================
 
+;; -fields runs:id,target,runname,comment+tests:id,testname,item_path+steps
+;;
+;; csi> (extract-fields-constraints "runs:id,target,runname,comment+tests:id,testname,item_path+steps")
+;;         => (("runs" "id" "target" "runname" "comment") ("tests" "id" "testname" "item_path") ("steps"))
+;;
+;;   NOTE: remember that the cdr will be the list you expect (cdr ("runs" "id" "target" "runname" "comment")) => ("id" "target" "runname" "comment")
+;;         and so alist-ref will yield what you expect
+;;
+(define (extract-fields-constraints fields-spec)
+  (map (lambda (table-spec) ;; runs:id,target,runname
+	 (let ((dat (string-split table-spec ":"))) ;; ("runs" "id,target,runname")
+	   (if (> (length dat) 1)
+	       (cons (car dat)(string-split (cadr dat) ",")) ;; "id,target,runname"
+	       dat)))
+       (string-split fields-spec "+")))
+
+(define (get-value-by-fieldname datavec test-field-index fieldname)
+  (let ((indx (hash-table-ref/default test-field-index fieldname #f)))
+    (if indx
+	(if (>= indx (vector-length datavec))
+	    #f ;; index to high, should raise an error I suppose
+	    (vector-ref datavec indx))
+	#f)))
+
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (launch:setup-for-run)
-	(let* ((dbstruct (make-dbr:dbstruct path: *toppath* local: #t))
-	       (runpatt  (args:get-arg "-list-runs"))
-	       (testpatt (if (args:get-arg "-testpatt") 
-			     (args:get-arg "-testpatt") 
-			     "%"))
-	       (keys     (db:get-keys dbstruct))
-	       ;; (runsdat  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat  (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
-					 #f #f))
-	       (runstmp  (db:get-rows runsdat))
-	       (header   (db:get-header runsdat))
-	       (runs     (if (and (not (null? runstmp))
-				  (args:get-arg "-since"))
-			     (let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
-			       (let loop ((hed (car runstmp))
-					  (tal (cdr runstmp))
-					  (res '()))
-				 (let ((new-res (if (member (db:get-value-by-header hed header "id") changed-ids)
-						    (cons hed res)
-						    res)))
-				   (if (null? tal)
-				       (reverse new-res)
-				       (loop (car tal)(cdr tal) new-res)))))
-			     runstmp))
-	       (db-targets (args:get-arg "-list-db-targets"))
-	       (seen     (make-hash-table))
-	       (dmode    (let ((d (args:get-arg "-dumpmode")))
-			   (if d (string->symbol d) #f)))
-	       (data     (make-hash-table)))
+	(let* ((dbstruct    (make-dbr:dbstruct path: *toppath* local: #t))
+	       (runpatt     (args:get-arg "-list-runs"))
+	       (testpatt    (if (args:get-arg "-testpatt") 
+			        (args:get-arg "-testpatt") 
+			        "%"))
+	       (keys        (db:get-keys dbstruct))
+	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
+	       (runsdat     (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+			           	 #f #f))
+	       (runstmp     (db:get-rows runsdat))
+	       (header      (db:get-header runsdat))
+	       (runs        (if (and (not (null? runstmp))
+				     (args:get-arg "-since"))
+				(let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
+				  (let loop ((hed (car runstmp))
+					     (tal (cdr runstmp))
+					     (res '()))
+				    (let ((new-res (if (member (db:get-value-by-header hed header "id") changed-ids)
+						       (cons hed res)
+						       res)))
+				      (if (null? tal)
+					  (reverse new-res)
+					  (loop (car tal)(cdr tal) new-res)))))
+				runstmp))
+	       (db-targets  (args:get-arg "-list-db-targets"))
+	       (seen        (make-hash-table))
+	       (dmode       (let ((d (args:get-arg "-dumpmode")))
+			      (if d (string->symbol d) #f)))
+	       (data        (make-hash-table))
+	       (fields-spec (if (args:get-arg "-fields")
+				(extract-fields-constraints (args:get-arg "-fields"))
+				'(("runs"  "id" "target"   "runname")
+				  ("tests" "id" "testname" "test_path")
+				  ("steps" "id" "stepname"))))
+	       (runs-spec   (alist-ref "runs"  fields-spec equal?))
+	       (tests-spec  (alist-ref "tests" fields-spec equal?))
+	       (adj-tests-spec (delete-duplicates (cons "id" tests-spec)))
+	       (steps-spec  (alist-ref "steps" fields-spec equal?))
+	       (test-field-index (make-hash-table)))
+	  (if (and tests-spec (not (null? tests-spec))) ;; do some validation and processing of the test-spec
+	      (let ((invalid-tests-spec (filter (lambda (x)(not (member x db:test-record-fields))) tests-spec)))
+		(if (null? invalid-tests-spec)
+		    ;; generate the lookup map test-field-name => index-number
+		    (let loop ((hed (car adj-tests-spec))
+			       (tal (cdr adj-tests-spec))
+			       (idx 0))
+		      (hash-table-set! test-field-index hed idx)
+		      (if (not (null? tal))(loop (car tal)(cdr tal)(+ idx 1))))
+		    (begin
+		      (debug:print 0 "ERROR: Invalid test fields specified: " (string-intersperse invalid-tests-spec ", "))
+		      (exit)))))
+
+	  (debug:print-info 0 "runs-spec: " runs-spec ", tests-spec: " tests-spec ", steps-spec: " steps-spec)
 	  ;; Each run
 	  (for-each 
 	   (lambda (run)
@@ -932,17 +982,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			 (if (not dmode)(print targetstr))))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
-			  (tests  (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc #f)))
+			  (tests   (if tests-spec
+				       (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+							     ;; use qryvals if test-spec provided
+							     (if tests-spec
+								 (string-intersperse adj-tests-spec ",")
+								 #f))
+				       '())))
 		     (case dmode
 		       ((json)
-			(mutils:hierhash-set! data (db:get-value-by-header run header "status")     targetstr runname "meta" "status"     )
-			(mutils:hierhash-set! data (db:get-value-by-header run header "state")      targetstr runname "meta" "state"      )
-			(mutils:hierhash-set! data (conc (db:get-value-by-header run header "id"))  targetstr runname "meta" "id"         )
-			(mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" )
-			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
-			;; add last entry twice - seems to be a bug in hierhash?
-			(mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
-			)
+			(if runs-spec
+			    (for-each 
+			     (lambda (field-name)
+			       (mutils:hierhash-set! data (conc (db:get-value-by-header run header field-name)) targetstr runname "meta" field-name))
+			     runs-spec)))
+			;; (mutils:hierhash-set! data (db:get-value-by-header run header "status")     targetstr runname "meta" "status"     )
+			;; (mutils:hierhash-set! data (db:get-value-by-header run header "state")      targetstr runname "meta" "state"      )
+			;; (mutils:hierhash-set! data (conc (db:get-value-by-header run header "id"))  targetstr runname "meta" "id"         )
+			;; (mutils:hierhash-set! data (db:get-value-by-header run header "event_time") targetstr runname "meta" "event_time" )
+			;; (mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
+			;; ;; add last entry twice - seems to be a bug in hierhash?
+			;; (mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
 		       (else
 			(print "Run: " targetstr "/" runname 
 			       " status: " (db:get-value-by-header run header "state")
@@ -956,35 +1016,40 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (print "exn=" (condition->list exn))
 			   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
-			 (let* ((test-id    (db:test-get-id         test))
-				(testname   (db:test-get-testname   test))
-				(itempath   (db:test-get-item-path  test))
-				(comment    (db:test-get-comment    test))
-				(tstate     (db:test-get-state      test))
-				(tstatus    (db:test-get-status     test))
-				(event-time (db:test-get-event_time test))
-				(rundir     (db:test-get-rundir     test))
-				(final_logf (db:test-get-final_logf test))
-				(run_duration (db:test-get-run_duration test))
-				(fullname   (conc testname
-						  (if (equal? itempath "")
-						      "" 
-						      (conc "(" itempath ")")))))
+			 (let* ((test-id      (get-value-by-fieldname test test-field-index "id"       )) ;; (db:test-get-id         test))
+				(testname     (get-value-by-fieldname test test-field-index "testname" )) ;; (db:test-get-testname   test))
+				(itempath     (get-value-by-fieldname test test-field-index "item_path")) ;; (db:test-get-item-path  test))
+				(comment      (get-value-by-fieldname test test-field-index "comment"  )) ;; (db:test-get-comment    test))
+				(tstate       (get-value-by-fieldname test test-field-index "state"    )) ;; (db:test-get-state      test))
+				(tstatus      (get-value-by-fieldname test test-field-index "status"   )) ;; (db:test-get-status     test))
+				(event-time   (get-value-by-fieldname test test-field-index "event_time")) ;; (db:test-get-event_time test))
+				(rundir       (get-value-by-fieldname test test-field-index "rundir"    )) ;; (db:test-get-rundir     test))
+				(final_logf   (get-value-by-fieldname test test-field-index "final_logf")) ;; (db:test-get-final_logf test))
+				(run_duration (get-value-by-fieldname test test-field-index "run_duration")) ;; (db:test-get-run_duration test))
+				(fullname     (conc testname
+						    (if (equal? itempath "")
+							"" 
+							(conc "(" itempath ")")))))
 			   (case dmode
 			     ((json)
-			      ;; (mutils:hierhash-set! data  fullname   targetstr runname "data" (conc test-id) "tname"     )
-			      (mutils:hierhash-set! data  testname   targetstr runname "data" (conc test-id) "testname"  )
-			      (mutils:hierhash-set! data  itempath   targetstr runname "data" (conc test-id) "itempath"  )
-			      (mutils:hierhash-set! data  comment    targetstr runname "data" (conc test-id) "comment"   )
-			      (mutils:hierhash-set! data  tstate     targetstr runname "data" (conc test-id) "state"     )
-			      (mutils:hierhash-set! data  tstatus    targetstr runname "data" (conc test-id) "status"    )
-			      (mutils:hierhash-set! data  rundir     targetstr runname "data" (conc test-id) "rundir"    )
-			      (mutils:hierhash-set! data  final_logf targetstr runname "data" (conc test-id) "final_logf")
-			      (mutils:hierhash-set! data  run_duration targetstr runname "data" (conc test-id) "run_duration")
-			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
-			      ;; add last entry twice - seems to be a bug in hierhash?
-			      (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
-			      )
+			      (if tests-spec
+				  (for-each
+				   (lambda (field-name)
+				     (mutils:hierhash-set! data  (get-value-by-fieldname test test-field-index field-name) targetstr runname "data" (conc test-id) field-name))
+				   tests-spec)))
+			     ;; ;; (mutils:hierhash-set! data  fullname   targetstr runname "data" (conc test-id) "tname"     )
+			     ;;  (mutils:hierhash-set! data  testname   targetstr runname "data" (conc test-id) "testname"  )
+			     ;;  (mutils:hierhash-set! data  itempath   targetstr runname "data" (conc test-id) "itempath"  )
+			     ;;  (mutils:hierhash-set! data  comment    targetstr runname "data" (conc test-id) "comment"   )
+			     ;;  (mutils:hierhash-set! data  tstate     targetstr runname "data" (conc test-id) "state"     )
+			     ;;  (mutils:hierhash-set! data  tstatus    targetstr runname "data" (conc test-id) "status"    )
+			     ;;  (mutils:hierhash-set! data  rundir     targetstr runname "data" (conc test-id) "rundir"    )
+			     ;;  (mutils:hierhash-set! data  final_logf targetstr runname "data" (conc test-id) "final_logf")
+			     ;;  (mutils:hierhash-set! data  run_duration targetstr runname "data" (conc test-id) "run_duration")
+			     ;;  (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
+			     ;;  ;; add last entry twice - seems to be a bug in hierhash?
+			     ;;  (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
+			     ;;  )
 			     (else
 			      (format #t
 				      "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
