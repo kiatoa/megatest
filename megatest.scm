@@ -129,7 +129,7 @@ Queries
   -show-cmdinfo           : dump the command info for a test (run in test environment)
   -section sectionName
   -var varName            : for config and runconfig lookup value for sectionName varName
-  -since N   : get list of runs changed since time N (Unix seconds)
+  -since N                : get list of runs changed since time N (Unix seconds)
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -801,8 +801,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (pop-directory)))
 
 (if (args:get-arg "-show-cmdinfo")
-    (if (getenv "MT_CMDINFO")
-	(let ((data (common:read-encoded-string (getenv "MT_CMDINFO"))))
+    (if (or (args:get-arg ":value")(getenv "MT_CMDINFO"))
+	(let ((data (common:read-encoded-string (or (args:get-arg ":value")(getenv "MT_CMDINFO")))))
 	  (if (equal? (args:get-arg "-dumpmode") "json")
 	      (json-write data)
 	      (pp data))
