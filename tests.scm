@@ -141,7 +141,7 @@
 	  (db:test-get-rundir testdat)) ;; )
 	 (prev-rundir ;; (sdb:qry 'passstr 
 	  (db:test-get-rundir prev-testdat)) ;; )
-	 (waivers     (configf:section-vars testconfig "waivers"))
+	 (waivers     (if testconfig (configf:section-vars testconfig "waivers") '()))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
 	 (logpro-rule "diff %file1% %file2% | logpro %waivername%.logpro %waivername%.html"))

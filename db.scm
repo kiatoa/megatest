@@ -184,7 +184,7 @@
 	  ;; (release-dot-lock fname)
 	  db)
 	(begin
-	  (debug:print 0 "ERROR: no such db in non-writable dir " fname)
+	  (debug:print 2 "WARNING: opening db in non-writable dir " fname)
 	  (sqlite3:open-database fname))))) ;; )
 
 ;; This routine creates the db. It is only called if the db is not already opened
