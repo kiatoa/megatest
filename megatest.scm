@@ -928,7 +928,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			        "%"))
 	       (keys        (db:get-keys dbstruct))
 	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target)
+	       (runsdat     (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment")))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
@@ -992,7 +992,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
 			  (tests   (if tests-spec
-				       (rmt:get-tests-for-run run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
