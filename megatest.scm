@@ -952,11 +952,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (data        (make-hash-table))
 	       (fields-spec (if (args:get-arg "-fields")
 				(extract-fields-constraints (args:get-arg "-fields"))
-				(list (list "runs"  "id" "target"   "runname")
+				(list (cons "runs" (append keys (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))
 				      (cons "tests"  db:test-record-fields) ;; "id" "testname" "test_path")
 				      (list "steps" "id" "stepname"))))
-	       (runs-spec   (let ((r (alist-ref "runs"  fields-spec equal?)))
-			      (if (and r (not (null? r))) r (list "id"))))
+	       (runs-spec   (let ((r (alist-ref "runs"  fields-spec equal?))) ;; the check is now unnecessary
+			      (if (and r (not (null? r))) r (list "id" ))))
 	       (tests-spec  (let ((t (alist-ref "tests" fields-spec equal?)))
 			      (if (and t (null? t)) ;; all fields
 				  db:test-record-fields
