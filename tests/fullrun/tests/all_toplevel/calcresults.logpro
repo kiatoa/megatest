@@ -15,9 +15,9 @@
 		     ("priority_10_waiton_1"    1  20)
 		     ("priority_3"	        1  20)
 		     ("priority_4"	        1  20)
-		     ("priority_5"	        1  20)
+		     ;; ("priority_5"	        1  20)
 		     ("priority_6"	        1  20)
-		     ("priority_7"	        1  20)
+;;		     ("priority_7"	        1  20)
 		     ("priority_8"	        1  20)
 		     ("priority_9"	        1  20)
 		     ("runfirst"	        7  20)
@@ -42,11 +42,13 @@
 		     ("neverrun"	        1  20)))
 		     
 (define warn-specs   '(("ezlog_warn"	        1  20)))
+
 (define nost-specs   '(("wait_no_items1"        1  20)
 		       ("wait_no_items2"        1  20)
 		       ("wait_no_items3"        1  20)
 		       ("wait_no_items4"        1  20)
-		       ("no_items"              1  20)))
+		       ;; ("no_items"              1  20)
+		       ))
 
 (define (check-one-test estate estatus testname count runtime)
    (let* ((rxe      (regexp (conc "^\\s+Test: " testname "(\\(.*|\\s+)\\s+State: " estate "\\s+Status: " estatus "\\s+Runtime:\\s+(\\d+)s")))
@@ -58,10 +60,15 @@
 
 ;; Special cases
 ;;
+(expect:ignore   in logbody >= 0  "db_sync test might not have run"  #/Test: db_sync/)
 (expect:ignore   in logbody >= 0  "all_toplevel may not yet be done" #/Test: all_toplevel/)
 (expect:error    in logbody =  0  "tests left in RUNNING state"      #/State: RUNNING/)
-(expect:required in logbody =  1  "priority_2 is KILLED"             #/Test: priority_2\s+State: KILLED\s+Status: FAIL/)
+(expect:required in logbody =  1  "priority_2 is KILLED"             #/Test: priority_2\s+State: KILLED\s+Status: KILLED/)
+(expect:required in logbody =  1  "priority_5 is either PASS or SKIP" #/Test: priority_5\s+State: COMPLETED\s+Status: (SKIP|PASS)/)
+(expect:required in logbody =  1  "priority_7 is either PASS or SKIP" #/Test: priority_7\s+State: COMPLETED\s+Status: (SKIP|PASS)/)
 (expect:required in logbody =  1  "testxz has 1 NOT_STARTED test"    #/Test: testxz\s+State: NOT_STARTED/)
+(expect:required in logbody =  1  "no items"                         #/Test: no_items\s+State: NOT_STARTED\s+Status: ZERO_ITEMS/)
+(expect:warning  in logbody =  1  "dynamic waiton"                   #/Test: dynamic_waiton/)
 (expect:required in logbody = 29  "blocktestxz has 29 tests"         #/Test: blocktestxz/)
 
 ;; General cases
@@ -83,7 +90,7 @@
 
 (for-each 
  (lambda (testdat)
-   (apply check-one-test "NOT_STARTED" "n/a" testdat))
+   (apply check-one-test "NOT_STARTED" "PREQ_DISCARDED" testdat))
  nost-specs)
 
 ;; Catch all.

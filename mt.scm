@@ -43,7 +43,7 @@
 ;;  to extract info from the structure returned
 ;;
 (define (mt:get-runs-by-patt keys runnamepatt targpatt)
-  (let loop ((runsdat  (rmt:get-runs-by-patt keys runnamepatt targpatt 0 500))
+  (let loop ((runsdat  (rmt:get-runs-by-patt keys runnamepatt targpatt 0 500 #f))
 	     (res      '())
 	     (offset   0)
 	     (limit    500))
@@ -55,7 +55,7 @@
       ;; (debug:print 0 "header: " header " runslst: " runslst " have-more: " have-more)
       (if have-more 
 	  (let ((new-offset (+ offset limit))
-		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit)))
+		(next-batch (rmt:get-runs-by-patt keys runnamepatt targpatt offset limit #f)))
 	    (debug:print-info 4 "More than " limit " runs, have " (length full-list) " runs so far.")
 	    (debug:print-info 0 "next-batch: " next-batch)
 	    (loop next-batch

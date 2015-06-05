@@ -283,8 +283,19 @@
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
-(define (std-exit-procedure area-dat)
-  (let* ((no-hurry  (if *time-to-exit* ;; hurry up
+(define (common:legacy-sync-recommended)
+  (or (args:get-arg "-runtests")
+      (args:get-arg "-server")
+      (args:get-arg "-set-run-status")
+      (args:get-arg "-remove-runs")
+      (args:get-arg "-get-run-status")
+      ))
+
+(define (common:legacy-sync-required)
+  (configf:lookup *configdat* "setup" "megatest-db"))
+
+(define (std-exit-procedure)
+  (let ((no-hurry  (if *time-to-exit* ;; hurry up
 		       #f
 		       (begin
 			 (set! *time-to-exit* #t)
@@ -317,13 +328,13 @@
 			      (debug:print 4 "Attempting clean exit. Please be patient and wait a few seconds...")
 			      (if no-hurry
 				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
-				  (thread-sleep! 1))
-			      (debug:print 0 "       Done.")
+				  (thread-sleep! 2))
+			      (debug:print 4 " ... done")
 			      )
 			    "clean exit")))
-      (thread-start! th2)
       (thread-start! th1)
-      (thread-join! th2))))
+      (thread-start! th2)
+      (thread-join! th1))))
 
 (define (std-signal-handler signum)
   ;; (signal-mask! signum)

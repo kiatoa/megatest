@@ -218,6 +218,7 @@ Misc
 ;;
 (define (dashboard:area-display data adat window-id)
   (let* ((view-matrix     (iup:matrix
+			   ;; (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
 			   #:scrollbar "YES"
@@ -241,6 +242,10 @@ Misc
 ;;
 (define (runcontrol window-id)
   (iup:hbox))
+
+;; NB// Wierd conflict error here
+;;
+;;		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f #f))
 
 ;;======================================================================
 ;; A R E A S

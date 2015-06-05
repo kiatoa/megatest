@@ -561,7 +561,7 @@
 (define (rmt:update-run-event_time run-id area-dat)
   (rmt:send-receive 'update-run-event_time #f (list run-id) area-dat))
 
-(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit area-dat)
+(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit area-dat fields)
   (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit) area-dat))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime area-dat)
