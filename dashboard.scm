@@ -806,7 +806,7 @@ Misc
 					    (dashboard:update-run-command))))
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
-					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f))
+					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
 					    (runs-header   (vector-ref runs-for-targ 0))
 					    (runs-dat      (vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
@@ -1050,7 +1050,7 @@ Misc
 			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f))
+		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f #f))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
 			    (tests-dat    (let ((tdat (db:get-tests-for-run db run-id 

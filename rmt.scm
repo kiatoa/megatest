@@ -555,8 +555,8 @@
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
 
-(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
-  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
+(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit fields) ;; fields of #f uses default
+  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit fields)))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
