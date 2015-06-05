@@ -1871,8 +1871,8 @@
 ;; Use: (db:get-value-by-header (db:get-header runinfo)(db:get-rows runinfo))
 ;;  to extract info from the structure returned
 ;;
-(define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
-  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+(define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit fields) ;; test-name)
+  (let* ((tmp      (runs:get-std-run-fields keys (or fields '("id" "runname" "state" "status" "owner" "event_time"))))
 	 (keystr   (car tmp))
 	 (header   (cadr tmp))
 	 (res     '())
