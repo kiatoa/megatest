@@ -533,7 +533,7 @@
       (handle-exceptions
        exn
        (begin
-	 (db:move-and-recreate-db dbdat)
+	 ;; (db:move-and-recreate-db dbdat)
 	 (if (> numtries 0)
 	     (db:repair-db dbdat numtries: (- numtries 1))
 	     #f)
