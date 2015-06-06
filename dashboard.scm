@@ -211,8 +211,7 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 ;; (allruns     (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-	 (allruns     (rmt:get-runs runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+	 (allruns     (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
 				      *start-run-offset* keypatts))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
@@ -231,8 +230,7 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       ;; (tests       (db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
-		       (tests       (rmt:get-tests-for-run run-id testnamepatt states statuses
+		       (tests       (db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
 							  #f #f
 							  *hide-not-hide*
 							  sort-by
