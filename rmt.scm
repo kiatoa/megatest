@@ -158,9 +158,18 @@
 		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-		  (begin
-		    (server:kind-run run-id)
-		    (rmt:open-qry-close-locally cmd run-id params))))
+		  (let ((start-time (current-milliseconds))
+			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
+							"300")))
+			(newres     (rmt:open-qry-close-locally cmd run-id params)))
+		    (let ((delta (- (current-milliseconds) start-time)))
+		      (if (> delta max-query)
+			  (begin
+			    (debug:print-info 0 "Starting server as query time " delta " is over the limit of " max-query)
+			    (server:kind-run run-id)))
+		      ;; return the result!
+		      newres)
+		    )))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
