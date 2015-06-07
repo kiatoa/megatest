@@ -10,6 +10,8 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
+(define (toplevel-command . a) #f)
+
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
