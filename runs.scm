@@ -262,8 +262,8 @@
 
     ;; I think seeding required-tests with all test-names makes sense but lack analysis to back that up.
     ;;
-    ;; (set! required-tests     (lset-intersection equal? (string-split test-patts ",") all-test-names))
-    (set! required-tests     (lset-intersection equal? test-names all-test-names))
+    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") all-test-names))
+    ;; (set! required-tests     (lset-intersection equal? test-names all-test-names))
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
