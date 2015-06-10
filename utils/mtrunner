@@ -1,11 +1,14 @@
 #! /bin/bash
 
 # Run megatest from within megatest
+# Usage: mtrunner testsuite_dir megatest_bin_dir command args ....
 
 for var in $(env | egrep "^MT_"|cut -d= -f1);do
   unset ${var}
 done
 cd $1
 shift
+export PATH="$1:$PATH"
+shift 
 
 "$@"

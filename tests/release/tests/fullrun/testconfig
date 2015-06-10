@@ -1,8 +1,8 @@
 [ezsteps]
-cleantop $MTRUNNER $MTTESTDIR/fullrun megatest -remove-runs -target ubuntu/nfs/none -runname release_toplevel -testpatt %
-runall   $MTRUNNER $MTTESTDIR/fullrun megatest -runtests %  -target ubuntu/nfs/none -runname release_toplevel
-runtop   $MTRUNNER $MTTESTDIR/fullrun megatest -runtests all_toplevel -target ubuntu/nfs/none -runname release_toplevel -rerun FAIL -preclean
-results  $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs release_toplevel -target ubuntu/nfs/none -runname release_toplevel 
+cleantop $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -remove-runs -target ubuntu/nfs/none -runname release_toplevel -testpatt %
+runall   $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -run -testpatt %            -target ubuntu/nfs/none -runname release_toplevel
+runtop   $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -run -testpatt all_toplevel -target ubuntu/nfs/none -runname release_toplevel -rerun FAIL -preclean
+results  $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -list-runs release_toplevel -target ubuntu/nfs/none -runname release_toplevel 
 
 [requirements]
 # waiton  #{getenv ALL_TOPLEVEL_TESTS}
