@@ -1,0 +1,26 @@
+# test2 from the tests/Makefile
+
+[vars]
+tname test2
+
+[ezsteps]
+clean    $MTRUNNER $MTTESTDIR/fullrun megatest -remove-runs -testpatt %                    -target  ubuntu/nfs/none -runname #{get var tname}%
+part1    $MTRUNNER $MTTESTDIR/fullrun megatest -run         -testpatt ez_pass,runfirst/a/% -reqtarg ubuntu/nfs/none -runname #{get var tname}   -preclean
+part2    $MTRUNNER $MTTESTDIR/fullrun megatest -run         -testpatt  %/,%/ai             -reqtarg ubuntu/nfs/none -runname #{get var tname}_a -preclean
+part3    $MTRUNNER $MTTESTDIR/fullrun megatest -runtests %/,%/ai                           -reqtarg ubuntu/nfs/none -runname #{get var tname}_b -preclean
+part4    $MTRUNNER $MTTESTDIR/fullrun megatest -run         -testpatt  runfirst/%,%/ai     -reqtarg ubuntu/nfs/none -runname #{get var tname}_a -preclean
+part5    $MTRUNNER $MTTESTDIR/fullrun megatest -run         -testpatt %/,%/winter          -reqtarg ubuntu/nfs/none -runname #{get var tname}_a -preclean
+part6    $MTRUNNER $MTTESTDIR/fullrun megatest -set-state-status COMPLETED,FORCED :state COMPLETED :status PASS -testpatt ez_p%s,runfirst/ -target ubuntu/nfs/none -runname #{get var tname}
+
+results   $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs #{get var tname}   -target ubuntu/nfs/none
+results_a $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs #{get var tname}_a -target ubuntu/nfs/none
+results_b $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs #{get var tname}_b -target ubuntu/nfs/none
+
+[requirements]
+# waiton  #{getenv ALL_TOPLEVEL_TESTS}
+
+# This is a "toplevel" test, it does not require waitons to be non-FAIL to run
+# mode toplevel
+
+
+# test2 : fullprep
