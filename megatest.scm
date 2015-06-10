@@ -72,9 +72,7 @@ Usage: megatest [options]
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
-  -runall                 : run all tests that are not state COMPLETED and status PASS, 
-                            CHECK or KILLED
-  -runtests tst1,tst2 ... : run tests
+  -runall                 : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
@@ -284,7 +282,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
-			"-runall"    ;; run all tests
+			"-runall"    ;; run all tests, respects -testpatt
+			"-run"       ;; alias for -runall
 			"-remove-runs"
 			"-rebuild-db"
 			"-cleanup-db"
@@ -1129,7 +1128,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   process deferred tasks per above steps
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
-(if (args:get-arg "-runall")
+(if (or (args:get-arg "-runall")(args:get-arg "-run"))
     (general-run-call 
      "-runall"
      "run all tests"

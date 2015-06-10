@@ -1,6 +1,6 @@
 [ezsteps]
 runtem   $MTRUNNER $MTTESTDIR/fullrun megatest -runtests runfirst/%2 -target ubuntu/nfs/none -runname release_itempatt
-results  $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs release_toplevel -target ubuntu/nfs/none -runname release_itempatt
+results  $MTRUNNER $MTTESTDIR/fullrun megatest -list-runs release_itempatt -target ubuntu/nfs/none
 
 [requirements]
 # waiton  #{getenv ALL_TOPLEVEL_TESTS}
