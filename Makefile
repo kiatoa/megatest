@@ -38,7 +38,7 @@ ARCHSTR=$(shell lsb_release -sr)
 
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
-mtest: $(OFILES) megatest.o readline-fix.scm
+mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm
