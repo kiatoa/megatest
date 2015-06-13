@@ -140,13 +140,13 @@
      (test (conc "Item set to " state "/" status)
 	   (list state status)
 	   (get-state-status 1 "rollup" "item/4"))
-     (test (conc "Rollup of " state "/" status " correct")
+     (test (conc "Rollup of " state "/" status)
 	   (list rup-state rup-status)
 	   (get-state-status 1 "rollup" "")))
-   '("COMPLETED" "COMPLETED" "INCOMPLETE" "INCOMPLETE" "RUNNING" "RUNNING" "COMPLETED")
-   '("ABORT"     "FAIL"      "PASS"       "FAIL"       "PASS"    "FAIL"    "BLAH") 
-   '("COMPLETED" "COMPLETED" "COMPLETED"  "COMPLETED"  "RUNNING" "RUNNING" "COMPLETED")
-   '("FAIL"      "FAIL"      "FAIL"       "FAIL"       "PASS"    "FAIL"    "FAIL")))
+   '("COMPLETED" "COMPLETED" "INCOMPLETE" "INCOMPLETE" "RUNNING" "RUNNING" "COMPLETED" "COMPLETED")
+   '("ABORT"     "FAIL"      "PASS"       "FAIL"       "PASS"    "FAIL"    "BLAH"      "AUTO") 
+   '("COMPLETED" "COMPLETED" "COMPLETED"  "COMPLETED"  "RUNNING" "RUNNING" "COMPLETED" "COMPLETED")
+   '("ABORT"     "FAIL"      "FAIL"       "FAIL"       "PASS"    "FAIL"    "ABORT"     "AUTO")))
 
 
 (test "launch-test" #t
