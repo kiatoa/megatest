@@ -1,19 +1,19 @@
-(define keys (db:get-keys *db*))
+(define keys (rmt:get-keys))
 
 (test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
 
 (test "register-run" #t (number?
-			 (db:register-run *db*
+			 (rmt:register-run 
 					  '(("SYSTEM" "key1")("RELEASE" "key2"))
 					  "myrun" 
 					  "new"
 					  "n/a" 
 					  "bob")))
 
-(test #f #t             (cdb:tests-register-test *runremote* 1 "nada" ""))
-(test #f 1              (cdb:remote-run db:get-test-id #f 1 "nada" ""))
-(test #f "NOT_STARTED"  (vector-ref (open-run-close db:get-test-info #f 1 "nada" "") 3))
-(test #f "NOT_STARTED"  (vector-ref (cdb:get-test-info *runremote* 1 "nada" "") 3))
+(test #f #t             (rmt:tests-register-test 1 "nada" ""))
+(test #f 1              (rmt:get-test-id 1 "nada" ""))
+(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info 1 "nada" "") 3))
+(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info 1 "nada" "") 3))
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
 (test #f "key2" (vector-ref (car (vector-ref (runs:get-runs-by-patt *db* '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))
