@@ -1340,8 +1340,12 @@
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
 ;;	     (run-id    (list-ref toptest 5)))
-	  (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name)))) ;; (list run-id test-name))))
+	 (db:top-test-set-per-pf-counts db run-id test-name)))
      toplevels)))
+
+(define (db:top-test-set-per-pf-counts db run-id test-name)
+  (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name))) ;; (list run-id test-name))))
+ 
 		     
 ;; Clean out old junk and vacuum the database
 ;;
@@ -2816,15 +2820,17 @@
 	(db:general-call dbdat 'state-status     (list state status test-id)))))
 
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
-  (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
+  (if ;; (and
+      (not (equal? item-path ""))
+   ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
       (let ((dbdat (db:get-db dbstruct run-id)))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
 	(if (equal? status "RUNNING")
 	    (db:general-call dbdat 'top-test-set-running (list test-name))
 	    (if (equal? status "LAUNCHED")
 		(db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name))
-		(db:general-call dbdat 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
+		(let ((db (db:dbdat-get-db dbdat)))
+		  (db:top-test-set-per-pf-counts db run-id test-name))))
 	#f)
       #f))
 
@@ -2906,13 +2912,33 @@
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE run_id=? AND testname=?
                                               AND item_path != ''
-                                              AND state IN ('NOT_STARTED','BLOCKED')) > 0 THEN 'FAIL'
-                                  WHEN fail_count > 0 THEN 'FAIL' 
-                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
+                                              AND state IN ('NOT_STARTED','BLOCKED','INCOMPLETE')) > 0 THEN 'FAIL'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND status = 'ABORT') > 0 THEN 'ABORT'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND status = 'CHECK') > 0 THEN 'CHECK'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
                                               AND status = 'SKIP') > 0 THEN 'SKIP'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND status = 'AUTO') > 0 THEN 'AUTO'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND status IN ('STUCK/INCOMPLETE', 'INCOMPLETE')) > 0 THEN 'INCOMPLETE'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=? 
+                                              AND item_path != ''
+                                              AND (status NOT IN ('PASS','FAIL'))) > 0 THEN 'ABORT'
+                                  WHEN fail_count > 0 THEN 'FAIL' 
+                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
                        WHERE testname=? AND item_path='';") ;; DONE
 
