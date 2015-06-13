@@ -288,7 +288,7 @@
 	  ;;
 	  ;; (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
 	  
-	  ;; Now convert FAIL and anything in allow-auto-rerun to NOT_STARTED
+	  ;; Now convert anything in allow-auto-rerun to NOT_STARTED
 	  ;;
 	  (for-each (lambda (state)
 		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state))
@@ -720,7 +720,7 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (let register-loop ((numtries 15))
-	(rmt:general-call 'register-test run-id run-id test-name item-path)
+	(rmt:register-test run-id test-name item-path)
 	(if (rmt:get-test-id run-id test-name item-path)
 	    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'done)
 	    (if (> numtries 0)
@@ -730,7 +730,7 @@
 		(debug:print 0 "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
-	    (rmt:general-call 'register-test run-id run-id test-name "")
+	    (rmt:register-test run-id test-name "")
 	    (if (rmt:get-test-id run-id test-name "")
 		(hash-table-set! test-registry (db:test-make-full-name test-name "") 'done))))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
@@ -1004,7 +1004,7 @@
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f))
 	    (begin
-	      (rmt:general-call 'register-test run-id run-id test-name "")
+	      (rmt:register-test run-id test-name "")
 	      (hash-table-set! test-registry (db:test-make-full-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
@@ -1286,7 +1286,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rmt:general-call 'register-test run-id run-id test-name item-path)
+		  (rmt:register-test run-id test-name item-path)
 		  (set! test-id (rmt:get-test-id run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (rmt:get-test-info-by-id run-id test-id))
