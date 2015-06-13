@@ -360,6 +360,10 @@
 ;;  T E S T S
 ;;======================================================================
 
+;; Just some syntatic sugar
+(define (rmt:register-test run-id test-name item-path)
+  (rmt:general-call 'register-test run-id run-id test-name item-path))
+
 (define (rmt:get-test-id run-id testname item-path)
   (rmt:send-receive 'get-test-id run-id (list run-id testname item-path)))
 

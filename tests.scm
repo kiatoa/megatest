@@ -34,6 +34,9 @@
 (include "test_records.scm")
 
 ;; Call this one to do all the work and get a standardized list of tests
+;;   gets paths from configs and finds valid tests 
+;;   returns hash of testname --> fullpath
+;;
 (define (tests:get-all)
   (let* ((test-search-path   (tests:get-tests-search-path *configdat*)))
     (tests:get-valid-tests (make-hash-table) test-search-path)))
@@ -585,6 +588,7 @@
 ;; 	     (map (lambda (testp)
 ;; 		    (last (string-split testp "/")))
 ;; 		  tests)))))
+
 
 (define (tests:get-testconfig test-name test-registry system-allowed)
   (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))

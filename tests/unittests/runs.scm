@@ -1,6 +1,6 @@
 (define keys (rmt:get-keys))
 
-(test "get all legal tests" (list "test1" "test2") (sort (get-all-legal-tests) string<=?))
+(test "get all legal tests" (list "test1" "test2") (sort (hash-table-keys (tests:get-all)) string<=?))
 
 (test "register-run" #t (number?
 			 (rmt:register-run 
@@ -10,13 +10,12 @@
 					  "n/a" 
 					  "bob")))
 
-(test #f #t             (rmt:tests-register-test 1 "nada" ""))
-(test #f 1              (rmt:get-test-id 1 "nada" ""))
-(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info 1 "nada" "") 3))
-(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info 1 "nada" "") 3))
+(test #f #t             (rmt:register-test 1 "nada" ""))
+(test #f 30001          (rmt:get-test-id 1 "nada" ""))
+(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info-by-id 1 30001) 3)) ;; "nada" "") 3))
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
-(test #f "key2" (vector-ref (car (vector-ref (runs:get-runs-by-patt *db* '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))
+(test #f "key2" (vector-ref (car (vector-ref (mt:get-runs-by-patt '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))
 
 (test #f "SYSTEM,RELEASE,id,runname,state,status,owner,event_time" (car (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time"))))
 (test #f #t (runs:operate-on 'print "%" "%" "%"))
@@ -50,12 +49,14 @@
 ; (hash-table-set! args:arg-hash "-keepgoing" #t)
 (hash-table-set! args:arg-hash "-itempatt" "%")
 (hash-table-set! args:arg-hash "-testpatt" "%")
-(hash-table-set! args:arg-hash "-target" "ubuntu/r1.2")
-(test "Setup for a run"       #t (begin (setup-for-run) #t))
+(hash-table-set! args:arg-hash "-target" "ubuntu/r1.2") ;; SYSTEM/RELEASE
+(hash-table-set! args:arg-hash "-runname" "testrun")
+(test "Setup for a run"       #t (begin (launch:setup-for-run) #t))
 
 (define *tdb* #f)
 (define keyvals #f)
 (test "target->keyval" #t (let ((kv (keys:target->keyval keys (args:get-arg "-target"))))
+			    (print "keyvals=" kv ", keys=" keys)
 			    (set! keyvals kv)(list? keyvals)))
 
 (define testdbpath (conc "/tmp/" (getenv "USER") "/megatest_testing"))
@@ -69,34 +70,33 @@
 
 ;; (test "Remove the rollup run" #t (begin (remove-runs) #t))
 (define tconfig #f)
-(test "get a testconfig" #t (let ((tconf (tests:get-testconfig "test1" 'return-procs)))
+(test "get a testconfig" #t (let ((tconf (tests:get-testconfig "test1" (tests:get-all) 'return-procs )))
 			      (set! tconfig tconf)
 			      (hash-table? tconf)))
-(db:clean-all-caches)
 
 (test "set-megatest-env-vars"
       "ubuntu"
       (begin
-	(set-megatest-env-vars 1 inkeys: keys)
+	(runs:set-megatest-env-vars 1 inkeys: keys)
 	(get-environment-variable "SYSTEM")))
 (test "setup-env-defaults"
       "see this variable"
       (begin
-	(setup-env-defaults "runconfigs.config" 1 *already-seen-runconfig-info* keys keyvals "pre-launch-env-vars")
+	(setup-env-defaults "runconfigs.config" 1 *already-seen-runconfig-info* keyvals environ-patt: "pre-launch-env-vars")
 	(get-environment-variable "ALLTESTS")))
 
 (test #f "ubuntu" (car (keys:target-set-args keys (args:get-arg "-target") args:arg-hash)))
 
 (define rinfo #f)
-(test "get-run-info"  #f (vector? (vector-ref (let ((rinf (cdb:remote-run db:get-run-info #f 1)))
+(test "get-run-info"  #f (vector? (vector-ref (let ((rinf (rmt:get-run-info 1)))
 						(set! rinfo rinf)
 						rinf) 0)))
-(test "get-key-vals"  "key1" (car (cdb:remote-run db:get-key-vals #f 1)))
+;; (test "get-key-vals"  "key1" (car (db:get-key-vals *dbstruct* 1)))
 (test "tests:sort-by" '() (tests:sort-by-priority-and-waiton (make-hash-table)))
 
 (test "update-test_meta" "test1" (begin
 				   (runs:update-test_meta "test1" tconfig)
-				   (let ((dat (cdb:remote-run db:testmeta-get-record #f "test1")))
+				   (let ((dat (rmt:testmeta-get-record "test1")))
 				     (vector-ref dat 1))))
 
 (define test-path "tests/test1")
@@ -107,45 +107,50 @@
 (test "create-work-area" #t (symbolic-link? (car (create-work-area 1 rinfo keyvals 1 test-path disk-path "test1" '()))))
 (test #f "" (item-list->path '()))
 
-(test "launch-test" #t (string? (file-exists? (launch-test 1 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
+(test "launch-test" #t
+      (string? 
+       (file-exists?
+	;; (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
+	(launch-test 30001 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
 
 
-(test "Run a test" #t (general-run-call 
-		       "-runtests" 
-		       "run a test"
-		       (lambda (target runname keys keyvallst)
-			 (let ((test-patts "test%"))
-			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
-			   ;; (run:test run-id run-info key-vals runname test-record flags parent-test)
-			   ;; (set! *verbosity* 22) ;; (list 0 1 2))
-			   (run:test 1 ;; run-id
-				     #f        ;; run-info is yet only a dream
-				     keyvallst ;; (keys:target->keyval keys target)
-				     "run1"    ;; runname 
-				     (vector            ;; test_records.scm tests:testqueue
-				      "test1"           ;; testname
-				      tconfig           ;; testconfig
-				      '()               ;; waitons
-				      0                 ;; priority
-				      #f                ;; items
-				      #f                ;; itemsdat
-				      ""                ;; itempath
-				      )
-				     args:arg-hash      ;; flags (e.g. -itemspatt)
-				     #f)
-			   ;; (set! *verbosity* 0)
-			   ))))
+;; (test "Run a test" #t (general-run-call 
+;; 		       "-runtests" 
+;; 		       "run a test"
+;; 		       (lambda (target runname keys keyvallst)
+;; 			 (let ((test-patts "test%"))
+;; 			   ;; (runs:run-tests target runname test-patts user (make-hash-table))
+;; 			   ;; (run:test run-id run-info key-vals runname test-record flags parent-test)
+;; 			   ;; (set! *verbosity* 22) ;; (list 0 1 2))
+;; 			   (run:test 1 ;; run-id
+;; 				     #f        ;; run-info is yet only a dream
+;; 				     keyvallst ;; (keys:target->keyval keys target)
+;; 				     "run1"    ;; runname 
+;; 				     (vector            ;; test_records.scm tests:testqueue
+;; 				      "test1"           ;; testname
+;; 				      tconfig           ;; testconfig
+;; 				      (make-hash-table) ;; flags
+;; 				      #f                ;; parent test
+;; 				      (tests:get-all)   ;; test registry
+;; 				      0                 ;; priority
+;; 				      #f                ;; items
+;; 				      #f                ;; itemsdat
+;; 				      ""                ;; itempath
+;; 				      )
+;; 				     args:arg-hash      ;; flags (e.g. -itemspatt)
+;; 				     #f)
+;; 			   ;; (set! *verbosity* 0)
+;; 			   ))))
+;; 
+;; 
+;; 
+;; 
+;; 
+;; (test "server stop" #f (let ((hostname (car  *runremote*))
+;; 			     (port     (cadr *runremote*)))
+;; 			 (tasks:kill-server #t hostname port server-pid 'http)
+;; 			 (open-run-close tasks:get-best-server tasks:open-db)))
 
-
-
-
-
-(test "server stop" #f (let ((hostname (car  *runremote*))
-			     (port     (cadr *runremote*)))
-			 (tasks:kill-server #t hostname port server-pid 'http)
-			 (open-run-close tasks:get-best-server tasks:open-db)))
-
-(exit 1)
 ;; (test "cache is coherent" #t (let ((cached-info (db:get-test-info-cached-by-id db 2))
 ;; 				   (non-cached  (db:get-test-info-not-cached-by-id db 2)))
 ;; 			       (print "\nCached:    " cached-info)
