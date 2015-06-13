@@ -107,11 +107,60 @@
 (test "create-work-area" #t (symbolic-link? (car (create-work-area 1 rinfo keyvals 1 test-path disk-path "test1" '()))))
 (test #f "" (item-list->path '()))
 
+;;======================================================================
+;; Create a test with multiple items and verify that rollup logic works
+;;======================================================================
+
+(rmt:register-test 1 "rollup" "") ;; toplevel test
+(for-each
+ (lambda (itempath)
+   (rmt:register-test 1 "rollup" itempath)
+   (let ((test-id (rmt:get-test-id 1 "rollup" itempath))
+	 (comment (conc "This is a comment for itempath " itempath)))
+     ;; (rmt:test-set-state-status-by-id run-id test-id "COMPLETED" "PASS" comment)
+      (tests:test-set-status! 1 test-id "COMPLETED" "PASS" comment #f))) ;;  #!key (work-area #f))
+ '("item/1" "item/2" "item/3" "item/4" "item/5"))
+ 
+(test #f #t (number? (rmt:get-test-id 1 "rollup" "item/4")))
+
+(define (get-state-status run-id testname itempath)
+  (let ((tdat (rmt:get-test-info-by-id 1 (rmt:get-test-id run-id testname itempath))))
+    (list (db:test-get-state  tdat)
+	  (db:test-get-status tdat))))
+
+(test "Rollup PASS" '("COMPLETED" "PASS") (get-state-status 1 "rollup" ""))
+(let ((test-id (rmt:get-test-id 1 "rollup" "item/4"))
+      (top-id  (rmt:get-test-id 1 "rollup" "")))
+  (for-each 
+   (lambda (state status rup-state rup-status)
+     ;; reset to COMPLETED/PASS
+     (tests:test-set-status! 1 test-id "COMPLETED" "PASS" #f #f)
+     (test "Top reset to COMPLETED/PASS" '("COMPLETED" "PASS")(get-state-status 1 "rollup" ""))
+     (tests:test-set-status! 1 test-id state status #f #f)
+     (test (conc "Item set to " state "/" status)
+	   (list state status)
+	   (get-state-status 1 "rollup" "item/4"))
+     (test (conc "Rollup of " state "/" status " correct")
+	   (list rup-state rup-status)
+	   (get-state-status 1 "rollup" "")))
+   '("COMPLETED" "COMPLETED" "INCOMPLETE" "INCOMPLETE" "RUNNING" "RUNNING" "COMPLETED")
+   '("ABORT"     "FAIL"      "PASS"       "FAIL"       "PASS"    "FAIL"    "BLAH") 
+   '("COMPLETED" "COMPLETED" "COMPLETED"  "COMPLETED"  "RUNNING" "RUNNING" "COMPLETED")
+   '("FAIL"      "FAIL"      "FAIL"       "FAIL"       "PASS"    "FAIL"    "FAIL")))
+
+
 (test "launch-test" #t
       (string? 
        (file-exists?
 	;; (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
 	(launch-test 30001 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
+
+
+
+
+(exit 1)
+
+
 
 
 ;; (test "Run a test" #t (general-run-call 
@@ -158,12 +207,13 @@
 ;; 			       (equal? cached-info non-cached)))
 
 (change-directory test-work-dir)
+(test #f #t (> (length (mt:get-tests-for-run 1 "test1" '() '())) 0))
 (test "Add a step"  #t
       (begin
-	(db:teststep-set-status! db 2 "step1" "start" 0 "This is a comment" "mylogfile.html")
+	(rmt:teststep-set-status! 1 30002 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
-	(db:teststep-set-status! db 2 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (cdb:remote-run db:get-tests-for-run #f 1 "test1" '() '()))))
+	(rmt:teststep-set-status! 1 30002 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
+	(set! test-id (db:test-get-id (car (mt:get-tests-for-run 1 "test1" '() '()))))
 	(number? test-id)))
 
 (test "Get rundir"       #t (let ((rundir (cdb:remote-run db:test-get-rundir-from-test-id #f test-id)))
