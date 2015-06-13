@@ -28,7 +28,7 @@ unit : basicserver.log runs.log
 ## basicserver.log : unittests/basicserver.scm
 ## 	script -c "./rununittest.sh basicserver $(DEBUG)" basicserver.log
 
-%.log : unittests/%.scm
+%.log : unittests/%.scm ../*.scm
 	script -c "./rununittest.sh $* $(DEBUG)" $*.log
 	if logpro unit.logpro $*.html < $*.log > /dev/null;then echo ALLPASS;else echo ALLFAIL;mv $*.log $*.log.FAIL;fi
 
