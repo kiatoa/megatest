@@ -155,7 +155,7 @@ test11 :
 	 cd fullrun;time (for a in 1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10 ;do   (megatest -test-paths -target %/%/% > /dev/null ) & done; wait; )
 
 build : ../*.scm
-	killall mtest -v;if [ ! $$? ];then sleep 5;killall mtest -v -9;fi
+	if killall mtest -v ;then sleep 5;killall mtest -v -9;fi
 	cd ..;make -j && make install
 	touch build
 
