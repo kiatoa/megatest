@@ -1344,7 +1344,7 @@
      toplevels)))
 
 (define (db:top-test-set-per-pf-counts db run-id test-name)
-  (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name))) ;; (list run-id test-name))))
+  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name))) ;; (list run-id test-name))))
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2905,6 +2905,11 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
+                                                     AND status IN ('INCOMPLETE')
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'INCOMPLETE'
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE testname=?
+                                                     AND item_path != '' 
                                                      AND status NOT IN ('TEN_STRIKES','BLOCKED')
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
@@ -2916,27 +2921,34 @@
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
                                               AND status = 'ABORT') > 0 THEN 'ABORT'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
                                               AND status = 'CHECK') > 0 THEN 'CHECK'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+
                                               AND status = 'SKIP') > 0 THEN 'SKIP'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
                                               AND status = 'AUTO') > 0 THEN 'AUTO'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
                                               AND status IN ('STUCK/INCOMPLETE', 'INCOMPLETE')) > 0 THEN 'INCOMPLETE'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=? 
                                               AND item_path != ''
-                                              AND (status NOT IN ('PASS','FAIL'))) > 0 THEN 'ABORT'
+                                              AND state NOT IN ('DELETED')
+                                              AND status NOT IN ('PASS','FAIL')) > 0 THEN 'ABORT'
                                   WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
