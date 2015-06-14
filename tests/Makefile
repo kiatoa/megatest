@@ -23,7 +23,7 @@ TARGET     = "ubuntu/nfs/none"
 
 all : build unit test1 test2 test3 test4 test5 test6 test7 test8 test9
 
-unit : basicserver.log runs.log
+unit : basicserver.log runs.log misc.log
 
 ## basicserver.log : unittests/basicserver.scm
 ## 	script -c "./rununittest.sh basicserver $(DEBUG)" basicserver.log

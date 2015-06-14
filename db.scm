@@ -3179,7 +3179,7 @@
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
-(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode itemmap) ;; #!key (mode '(normal))(itemmap #f))
   (if (or (not waitons)
 	  (null? waitons))
       '()

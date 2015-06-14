@@ -12,6 +12,8 @@
 
 (define (toplevel-command . a) #f)
 
+(define (toplevel-command . a) #f)
+
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 

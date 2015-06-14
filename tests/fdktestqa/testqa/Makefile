@@ -25,6 +25,7 @@ bigrun3 :
 	$(MEGATEST) -runtests bigrun3 -target a/bigrun3 :runname $(RUNNAME)
 
 dashboard : 
+	mkdir -p ../simpleruns
 	$(DASHBOARD) -rows 20 &
 
 newdashboard :
