@@ -2720,6 +2720,20 @@
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
+;; This routine moved from tdb.scm, tdb:read-test-data
+;;
+(define (db:read-test-data dbstruct run-id test-id categorypatt)
+  (let* ((dbdat      (db:get-db dbstruct run-id))
+	 (db         (db:dbdat-get-db dbdat))
+	 (res '()))
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row 
+     (lambda (id test_id category variable value expected tol units comment status type)
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+     db
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+    (reverse res)))
+
 ;;======================================================================
 ;; Misc. test related queries
 ;;======================================================================

@@ -419,14 +419,14 @@
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
-	       (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
+	       ;; (tdb           (tdb:open-test-db-by-test-id-local dbstruct run-id test-id))
 	       ;; These next two are intentional bad values to ensure errors if they should not
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        (if testdat 
 				  (db:test-get-rundir testdat)
 				  logfile))
-	       (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
+	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
@@ -464,12 +464,12 @@
 				 (message-window  (conc "Directory " rundir " not found")))))
 	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
-			     (let* ((curr-mod-time (max (file-modification-time db-path)
-							(if (file-exists? testdat-path)
-							    (file-modification-time testdat-path)
-							    (begin
-							      (set! testdat-path (conc rundir "/testdat.db"))
-							      0))))
+			     (let* ((curr-mod-time (file-modification-time db-path))
+				                   ;;     (max ..... (if (file-exists? testdat-path)
+						   ;;      	      (file-modification-time testdat-path)
+						   ;;      	      (begin
+						   ;;      		(set! testdat-path (conc rundir "/testdat.db"))
+						   ;;      		0))))
 				    (need-update   (or (and (>= curr-mod-time db-mod-time)
 							    (> (current-milliseconds)(+ last-update 250))) ;; every half seconds if db touched
 						       (> (current-milliseconds)(+ last-update 10000))     ;; force update even 10 seconds
@@ -696,7 +696,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (tdb:open-run-close-db-by-test-id-local dbstruct run-id test-id #f tdb:read-test-data test-id "%")))
+										    (db:read-test-data dbstruct run-id test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
