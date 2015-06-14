@@ -500,8 +500,8 @@
 (define (rmt:get-run-ids-matching keynames target res)
   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
 
-(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
-  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode)))
+(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode itemmap)))
 
 (define (rmt:get-count-tests-running-for-run-id run-id)
   (rmt:send-receive 'get-count-tests-running-for-run-id run-id (list run-id)))
