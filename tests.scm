@@ -43,7 +43,13 @@
 
 (define (tests:get-tests-search-path cfgdat)
   (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
-    (append paths (list (conc *toppath* "/tests")))))
+    (filter (lambda (d)
+	      (if (directory-exists? d)
+		  d
+		  (begin
+		    (debug:print 0 "WARNING: problem with directory " d ", dropping it from tests path")
+		    #f)))
+	    (append paths (list (conc *toppath* "/tests"))))))
 
 (define (tests:get-valid-tests test-registry tests-paths)
   (if (null? tests-paths) 
