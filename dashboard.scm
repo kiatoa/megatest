@@ -1056,12 +1056,13 @@ Misc
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((run-path (tree:node->path obj id))
 			    (run-id   (tree-path->run-id (cdr run-path))))
-		       (if run-id
+		       (if (number? run-id)
 			   (begin
 			     (dboard:data-set-curr-run-id! *data* run-id)
-			     (dashboard:update-run-summary-tab)))
+			     (dashboard:update-run-summary-tab))
+			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
 		       ;; (print "path: " (tree:node->path obj id) " run-id: " run-id)
-		       ))))
+		       )))
 	 (cell-lookup (make-hash-table))
 	 (run-matrix (iup:matrix
 		      #:expand "YES"
@@ -1551,7 +1552,10 @@ Misc
 	  (print "ERROR: runid is not a number " (args:get-arg "-run"))
 	  (exit 1)))))
  ((args:get-arg "-test") ;; run-id,test-id
-  (let* ((dat     (map string->number (string-split (args:get-arg "-test") ",")))
+  (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
+		    (if (> (length d) 1)
+			d
+			(list #f #f))))
 	 (run-id  (car dat))
 	 (test-id (cadr dat)))
     (if (and (number? run-id)

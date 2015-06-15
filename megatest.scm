@@ -991,7 +991,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (begin
 			 (hash-table-set! seen targetstr #t)
 			 ;; (print "[" targetstr "]"))))
-			 (if (not dmode)(print targetstr))))
+			 (if (not dmode)
+			     (print targetstr)
+			     (hash-table-set! data "targets" (cons targetstr (hash-table-ref/default data "targets" '())))
+			     )))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
 			  (tests   (if tests-spec
