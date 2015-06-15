@@ -880,7 +880,7 @@
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
 		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
-		      (rmt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
+		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL") ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
@@ -902,7 +902,7 @@
 		(let ((state  (db:test-get-state t))
 		      (status (db:test-get-status t)))
 		  (case (string->symbol state)
-		    ((COMPLETED) #f)
+		    ((COMPLETED INCOMPLETE) #f)
 		    ((NOT_STARTED)
 		     (if (member status '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" ))
 			 #f
@@ -1181,7 +1181,7 @@
 (define (runs:calc-fails prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (equal? (db:test-get-state test) "COMPLETED")
+		 (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED"))
 		 (not (member (db:test-get-status test)
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
@@ -1198,15 +1198,15 @@
   (filter
    (lambda (t)
      (or (not (vector? t))
-	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+	 (not (member (db:test-get-state t) '("INCOMPLETE" "COMPLETED")))))
    prereqs-not-met))
 
-(define (runs:calc-not-completed prereqs-not-met)
-  (filter
-   (lambda (t)
-     (or (not (vector? t))
-	 (not (equal? "COMPLETED" (db:test-get-state t)))))
-   prereqs-not-met))
+;; (define (runs:calc-not-completed prereqs-not-met)
+;;   (filter
+;;    (lambda (t)
+;;      (or (not (vector? t))
+;; 	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+;;    prereqs-not-met))
 
 (define (runs:calc-runnable prereqs-not-met)
   (filter 
@@ -1310,13 +1310,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED DELETED)
+	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED" "INCOMPLETE"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
@@ -1374,7 +1374,7 @@
 		   ;; run-ids = #f means *all* runs
 		   (let* ((numseconds      (common:hms-string->seconds (configf:lookup test-conf "skip" "rundelay")))
 			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
-			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED") '("PASS" "FAIL" "ABORT") #f))
+			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED" "INCOMPLETE") '("PASS" "FAIL" "ABORT") #f)) ;; ironically INCOMPLETE is same as COMPLETED in this contex
 			  (last-run-times  (map db:mintest-get-event_time completed-tests))
 			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (apply max last-run-times)))))
 		     (if (or (not (null? running-tests)) ;; have to skip if test is running

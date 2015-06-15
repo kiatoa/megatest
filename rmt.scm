@@ -523,8 +523,10 @@
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup)))
 
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
-  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path status)))
+;; state and status are extra hints not usually used in the calculation
+;;
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status)
+  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
   (rmt:general-call 'update-fail-pass-counts run-id (list run-id test-name run-id test-name run-id test-name)))

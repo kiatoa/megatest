@@ -2833,20 +2833,24 @@
 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
 	(db:general-call dbdat 'state-status     (list state status test-id)))))
 
-(define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path status)
+(define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
   (if ;; (and
       (not (equal? item-path ""))
    ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
       (let ((dbdat (db:get-db dbstruct run-id)))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	(if (equal? status "RUNNING")
-	    (db:general-call dbdat 'top-test-set-running (list test-name))
-	    (if (equal? status "LAUNCHED")
-		(db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name))
-		(let ((db (db:dbdat-get-db dbdat)))
-		  (db:top-test-set-per-pf-counts db run-id test-name))))
+	;; NOTE: No else clause needed for this case
+	(case (string->symbol status)
+	 ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
+	 ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
+	 ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
+	(let ((db (db:dbdat-get-db dbdat)))
+	  (db:top-test-set-per-pf-counts db run-id test-name))
 	#f)
-      #f))
+      ;; if the test is not COMPLETED then this routine should not have been called
+      (begin
+	(debug:print 0 "ERROR: db:test-set-state-status called with state " state " and status " status)
+	#f)))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
@@ -2909,7 +2913,7 @@
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	;; stuff for roll-up-pass-fail-counts
 	'(update-pass-fail-counts "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
+             SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK','INCOMPLETE','ABORT')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE
