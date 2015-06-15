@@ -97,7 +97,7 @@
 			     (if *dashboard-comment-share-slot*
 				 (if (not (equal? (iup:attribute *dashboard-comment-share-slot* "VALUE")
 						  newcomment))
-				     (iup:attribute-set! *dashboard-comment-slot*
+				     (iup:attribute-set! *dashboard-comment-share-slot*
 							 "VALUE"
 							 newcomment)))
 			     newcomment)))
