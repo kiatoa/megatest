@@ -356,6 +356,12 @@
 (define (rmt:get-keys)
   (rmt:send-receive 'get-keys #f '()))
 
+(define (rmt:get-key-vals run-id)
+  (rmt:send-receive 'get-key-vals #f (list run-id)))
+
+(define (rmt:get-targets)
+  (rmt:send-receive 'get-targets #f '()))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
@@ -529,6 +535,9 @@
 
 (define (rmt:get-run-info run-id)
   (rmt:send-receive 'get-run-info run-id (list run-id)))
+
+(define (rmt:get-num-runs runpatt)
+  (rmt:send-receive 'get-num-runs #f (list runpatt)))
 
 ;; Use the special run-id == #f scenario here since there is no run yet
 (define (rmt:register-run keyvals runname state status user)
