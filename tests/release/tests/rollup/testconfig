@@ -7,7 +7,7 @@ tname rollup
 
 # Set things up
 clean    $MTRUNNER $MTTESTDIR/fullrun  $MTPATH megatest -remove-runs -testpatt %                    -target  ubuntu/nfs/none -runname #{get var tname}%
-runfirst $MTRUNNER $MTTESTDIR/fullrun  $MTPATH megatest -run         -testpatt runfirst/% -reqtarg ubuntu/nfs/none -runname #{get var tname}   -preclean
+runfirst $MTRUNNER $MTTESTDIR/fullrun  $MTPATH megatest -runtests runfirst/% -reqtarg ubuntu/nfs/none -runname #{get var tname}   -preclean
 firstres $MTRUNNER $MTTESTDIR/fullrun  $MTPATH megatest -list-runs #{get var tname}   -target ubuntu/nfs/none
 
 # Set one test item to INCOMPLETE

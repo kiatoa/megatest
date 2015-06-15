@@ -295,7 +295,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(rmt:roll-up-pass-fail-counts run-id test-name item-path status))
+	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -682,7 +682,7 @@
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
 				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
-					      (member (db:test-get-status wtdat) '("FAIL")))
+					      (member (db:test-get-status wtdat) '("FAIL" "ABORT")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
 					 (member (db:test-get-state wtdat)   '("INCOMPETE")))
 				 ;; (if (or (member (db:test-get-status wtdat)
