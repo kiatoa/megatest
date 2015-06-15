@@ -87,6 +87,9 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
+(define *useserver* (or (args:get-arg "-use-server")
+			(configf:lookup *configdat* "dashboard" "use-server")))
+
 (define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
 					     local: #t))
@@ -98,7 +101,9 @@ Misc
 (define toplevel #f)
 (define dlg      #f)
 (define max-test-num 0)
-(define *keys*   (db:get-keys *dbstruct-local*))
+(define *keys*   (if *useserver*
+		     (rmt:get-keys)
+		     (db:get-keys *dbstruct-local*)))
 
 (define *dbkeys*  (append *keys* (list "runname")))
 
@@ -111,7 +116,10 @@ Misc
 (define *alltestnamelst* '())
 (define *searchpatts*  (make-hash-table))
 (define *num-runs*      8)
-(define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
+(define *tot-run-count* (if *useserver*
+			    (rmt:get-num-runs "%")
+			    (db:get-num-runs *dbstruct-local* "%")))
+
 ;; (define *tot-run-count* (db:get-num-runs *dbstruct-local* "%"))
 
 ;; Update management
@@ -211,8 +219,10 @@ Misc
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
-	 (allruns     (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-				      *start-run-offset* keypatts))
+	 (allruns     (if *useserver*
+			  (rmt:get-runs runnamepatt numruns *start-run-offset* keypatts)
+			  (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
+				      *start-run-offset* keypatts)))
 	 (header      (db:get-header allruns))
 	 (runs        (db:get-rows   allruns))
 	 (result      '())
@@ -230,15 +240,24 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests       (db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
-							  #f #f
-							  *hide-not-hide*
-							  sort-by
-							  sort-order
-							  'shortlist))
+		       (tests       (if *useserver*
+					(rmt:get-tests-for-run run-id testnamepatt states statuses
+							       #f #f
+							       *hide-not-hide*
+							       sort-by
+							       sort-order
+							       'shortlist)
+					(db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
+							      #f #f
+							      *hide-not-hide*
+							      sort-by
+							      sort-order
+							      'shortlist)))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
-		       (key-vals    (db:get-key-vals *dbstruct-local* run-id)))
+		       (key-vals    (if *useserver* 
+					(rmt:get-key-vals run-id)
+					(db:get-key-vals *dbstruct-local* run-id))))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
@@ -574,7 +593,9 @@ Misc
 
 (define (dashboard:update-target-selector key-lbs #!key (action-proc #f))
   (let* ((runconf-targs (common:get-runconfig-targets))
-	 (db-target-dat (db:get-targets *dbstruct-local*))
+	 (db-target-dat (if *useserver* 
+			    (rmt:get-targets)
+			    (db:get-targets *dbstruct-local*)))
 	 (header        (vector-ref db-target-dat 0))
 	 (db-targets    (vector-ref db-target-dat 1))
 	 (all-targets   (append db-targets
@@ -806,7 +827,9 @@ Misc
 					    (dashboard:update-run-command))))
 		(refresh-runs-list (lambda ()
 				     (let* ((target        (dboard:data-get-target-string *data*))
-					    (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
+					    (runs-for-targ (if *useserver*
+							       (rmt:get-runs-by-patt *keys* "%" target #f #f #f)
+							       (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f)))
 					    (runs-header   (vector-ref runs-for-targ 0))
 					    (runs-dat      (vector-ref runs-for-targ 1))
 					    (run-names     (cons default-run-name 
