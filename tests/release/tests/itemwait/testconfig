@@ -1,0 +1,24 @@
+# test2 from the tests/Makefile
+
+[var]
+tname itemwait
+
+[prelaunch-env-vars]
+NUMTESTS 20
+
+[ezsteps]
+
+# Set things up
+clean      $MTRUNNER $MTTESTDIR/fdktestqa/testqa $MTPATH megatest -remove-runs -testpatt % -target  % -runname #{get var tname}%
+runbigrun3 $MTRUNNER $MTTESTDIR/fdktestqa/testqa $MTPATH megatest -run     -testpatt bigrun3 -target a/bigrun3 -runname #{get var tname}
+# watchrun watches until it sees at least one RUNNING in bigrun and one PASS in bigrun2
+watchrun   watchrun.sh #{get var tname}
+
+[requirements]
+# waiton  #{getenv ALL_TOPLEVEL_TESTS}
+
+# This is a "toplevel" test, it does not require waitons to be non-FAIL to run
+# mode toplevel
+
+
+# test2 : fullprep
