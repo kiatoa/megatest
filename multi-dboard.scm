@@ -70,16 +70,6 @@ Misc
 ;;       (set! (common:get-remote remote) (string-split (args:get-arg "-host" ":")))
 ;;       (client:launch))
 ;;     (client:launch))
-(define *useserver* (or (args:get-arg "-use-server")
-			(configf:lookup *configdat* "dashboard" "use-server")))
-
-(define *keys*   (if *useserver*
-		     (rmt:get-keys)
-		     (db:get-keys *dbstruct-local*)))
-(define *tot-run-count* (if *useserver*
-			    (rmt:get-num-runs "%")
-			    (db:get-num-runs *dbstruct-local* "%")))
-
 
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
@@ -117,26 +107,6 @@ Misc
 
 (define (pad-list l n)(append l (make-list (- n (length l)))))
 
-	 (allruns     (if *useserver*
-			  (rmt:get-runs runnamepatt numruns *start-run-offset* keypatts)
-			  (db:get-runs *dbstruct-local* runnamepatt numruns ;; (+ numruns 1) ;; (/ numruns 2))
-				      *start-run-offset* keypatts)))
-		       (tests       (if *useserver*
-					(rmt:get-tests-for-run run-id testnamepatt states statuses
-							       #f #f
-							       *hide-not-hide*
-							       sort-by
-							       sort-order
-							       'shortlist)
-					(db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
-							      #f #f
-							      *hide-not-hide*
-							      sort-by
-							      sort-order
-							      'shortlist)))
-		       (key-vals    (if *useserver* 
-					(rmt:get-key-vals run-id)
-					(db:get-key-vals *dbstruct-local* run-id))))
 
 (define (mkstr . x)
   (string-intersperse (map conc x) ","))
@@ -149,9 +119,6 @@ Misc
 ;; T E S T S
 ;;======================================================================
 
-	 (db-target-dat (if *useserver* 
-			    (rmt:get-targets)
-			    (db:get-targets *dbstruct-local*)))
 
 ;; Test browser
 (define (dashboard:tree-browser data adat window-id)
@@ -252,9 +219,6 @@ Misc
 (define (dashboard:area-display data adat window-id)
   (let* ((view-matrix     (iup:matrix
 			   ;; (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
-					    (runs-for-targ (if *useserver*
-							       (rmt:get-runs-by-patt *keys* "%" target #f #f #f)
-							       (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f)))
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
 			   #:scrollbar "YES"
@@ -286,10 +250,6 @@ Misc
 ;;======================================================================
 ;; A R E A S
 ;;======================================================================
-		       (if (number? run-id)
-			     (dashboard:update-run-summary-tab))
-			   (debug:print 0 "ERROR: tree-path->run-id returned non-number " run-id)))
-		       )))
 
 (define (dashboard:init-area data area-name apath)
   (let* ((mtconffile  (conc area-name "/megatest.config"))
@@ -380,10 +340,7 @@ Misc
     ;; (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
     (iup:show (dashboard:main-panel data (dboard:data-current-window-id data)))
     ;; Yes, running iup:show will pop up a new panel
-  (let* ((dat     (let ((d (map string->number (string-split (args:get-arg "-test") ","))))
-		    (if (> (length d) 1)
-			d
-			(list #f #f))))
+    ;; (iup:show (main-panel my-window-id))
     (iup:callback-set! *tim*
 		       "ACTION_CB"
 		       (lambda (x)

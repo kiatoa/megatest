@@ -24,8 +24,8 @@
       (loop (nn-recv soc)))
      ;;((and (>= (string-length msg-in)
      (else
-      (let ((this-task (random 15)))
-	(thread-sleep! this-task)
+      (let ((this-task (random 10)))
+	(thread-sleep! (/ this-task 10.0))
 	(nn-send soc (conc "hello " msg-in " this task took " this-task " seconds to complete"))
 	(loop (nn-recv soc)))))))
 

@@ -43,3 +43,6 @@
 (test #f "(testname GLOB 'a' AND item_path GLOB 'b') OR (testname LIKE 'a%' AND item_path LIKE '%') OR (testname LIKE '%' AND item_path LIKE 'b%')"
       (tests:match->sqlqry "a/b,a%,%/b%"))
 
+
+(exit)
+

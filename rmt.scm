@@ -165,9 +165,20 @@
 		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db area-dat)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 		    (rmt:send-receive cmd rid params area-dat attemptnum: (+ attemptnum 1)))
-		  (begin
-		    (server:kind-run run-id area-dat)
-		    (rmt:open-qry-close-locally cmd run-id area-dat params))))
+		  (let ((start-time (current-milliseconds))
+			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
+							"300")))
+			(newres     (rmt:open-qry-close-locally cmd run-id params)))
+		    (let ((delta (- (current-milliseconds) start-time)))
+		      (if (> delta max-query)
+			  (begin
+		    ;; (server:kind-run run-id area-dat)
+		    ;; (rmt:open-qry-close-locally cmd run-id area-dat params))))
+			    (debug:print-info 0 "Starting server as query time " delta " is over the limit of " max-query)
+			    (server:kind-run run-id)))
+		      ;; return the result!
+		      newres)
+		    )))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
@@ -356,9 +367,19 @@
 (define (rmt:get-keys area-dat)
   (rmt:send-receive 'get-keys #f '() area-dat))
 
+(define (rmt:get-key-vals run-id)
+  (rmt:send-receive 'get-key-vals #f (list run-id)))
+
+(define (rmt:get-targets)
+  (rmt:send-receive 'get-targets #f '()))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
+
+;; Just some syntatic sugar NOTE: Need to add area-dat
+(define (rmt:register-test run-id test-name item-path)
+  (rmt:general-call 'register-test run-id run-id test-name item-path))
 
 (define (rmt:get-test-id run-id testname item-path area-dat)
   (rmt:send-receive 'get-test-id run-id (list run-id testname item-path) area-dat))
@@ -496,8 +517,8 @@
 (define (rmt:get-run-ids-matching keynames target res area-dat)
   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res) area-dat) area-dat)
 
-(define (rmt:get-prereqs-not-met run-id waitons ref-item-path area-dat #!key (mode '(normal)))
-  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode) area-dat))
+(define (rmt:get-prereqs-not-met run-id waitons ref-item-path area-dat #!key (mode '(normal))(itemmap #f))
+  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode itemmap) area-dat))
 
 (define (rmt:get-count-tests-running-for-run-id run-id area-dat)
   (rmt:send-receive 'get-count-tests-running-for-run-id run-id (list run-id) area-dat))
@@ -513,8 +534,10 @@
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup area-dat)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup) area-dat))
 
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status area-dat)
-  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path status) area-dat))
+;; state and status are extra hints not usually used in the calculation
+;;
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status area-dat)
+  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status) area-dat))
 
 (define (rmt:update-pass-fail-counts run-id test-name area-dat)
   (rmt:general-call 'update-fail-pass-counts run-id (list run-id test-name run-id test-name run-id test-name) area-dat))
@@ -525,6 +548,9 @@
 
 (define (rmt:get-run-info run-id area-dat)
   (rmt:send-receive 'get-run-info run-id (list run-id) area-dat))
+
+(define (rmt:get-num-runs runpatt)
+  (rmt:send-receive 'get-num-runs #f (list runpatt)))
 
 ;; Use the special run-id == #f scenario here since there is no run yet
 (define (rmt:register-run keyvals runname state status user area-dat)

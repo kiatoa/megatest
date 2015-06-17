@@ -42,6 +42,7 @@
     get-tests-for-runs-mindata
     get-run-name-from-id
     get-runs
+    get-num-runs
     get-all-run-ids
     get-prev-run-ids
     get-run-ids-matching-target
@@ -176,6 +177,8 @@
 	    ;; KEYS
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct area-dat params))
 	    ((get-keys)                        (db:get-keys dbstruct area-dat))
+	    ((get-key-vals)                    (apply db:get-key-vals dbstruct params))
+	    ((get-targets)                     (db:get-targets  dbstruct))
 
 	    ;; ARCHIVES
 	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct area-dat params))
@@ -208,6 +211,7 @@
 	    ((get-tests-for-run-mindata)    (apply db:get-tests-for-run-mindata dbstruct area-dat params))
 	    ((get-runs)                     (apply db:get-runs dbstruct area-dat params))
 	    ((get-all-run-ids)              (db:get-all-run-ids dbstruct area-dat))
+	    ((get-num-runs)                 (apply db:get-num-runs dbstruct params))
 	    ((get-prev-run-ids)             (apply db:get-prev-run-ids dbstruct area-dat params))
 	    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct area-dat params))
 	    ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct area-dat params))

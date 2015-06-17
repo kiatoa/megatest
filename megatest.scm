@@ -10,6 +10,10 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
+(define (toplevel-command . a) #f)
+
+(define (toplevel-command . a) #f)
+
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
@@ -86,9 +90,7 @@ Usage: megatest [options]
   -version                : print megatest version (currently " megatest-version ")
 
 Launching and managing runs
-  -runall                 : run all tests that are not state COMPLETED and status PASS, 
-                            CHECK or KILLED
-  -runtests tst1,tst2 ... : run tests
+  -runall                 : run all tests or as specified by -testpatt
   -remove-runs            : remove the data for a run, requires -runname and -testpatt
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
@@ -298,7 +300,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
-			"-runall"    ;; run all tests
+			"-runall"    ;; run all tests, respects -testpatt
+			"-run"       ;; alias for -runall
 			"-remove-runs"
 			"-rebuild-db"
 			"-cleanup-db"
@@ -889,7 +892,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (let* ((runsdat  (rmt:get-runs-by-patt keys runname 
 					(common:args-get-target)
-					#f #f))
+					#f #f #f))
 	      (header   (vector-ref runsdat 0))
 	      (rows     (vector-ref runsdat 1)))
 	 (if (null? rows)
@@ -944,7 +947,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			        "%"))
 	       (keys        (db:get-keys dbstruct))
 	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target)
+	       (runsdat     (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment")))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
@@ -968,11 +971,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (data        (make-hash-table))
 	       (fields-spec (if (args:get-arg "-fields")
 				(extract-fields-constraints (args:get-arg "-fields"))
-				(list (list "runs"  "id" "target"   "runname")
+				(list (cons "runs" (append keys (list "id" "runname" "state" "status" "owner" "event_time" "comment" "fail_count" "pass_count")))
 				      (cons "tests"  db:test-record-fields) ;; "id" "testname" "test_path")
 				      (list "steps" "id" "stepname"))))
-	       (runs-spec   (let ((r (alist-ref "runs"  fields-spec equal?)))
-			      (if (and r (not (null? r))) r (list "id"))))
+	       (runs-spec   (let ((r (alist-ref "runs"  fields-spec equal?))) ;; the check is now unnecessary
+			      (if (and r (not (null? r))) r (list "id" ))))
 	       (tests-spec  (let ((t (alist-ref "tests" fields-spec equal?)))
 			      (if (and t (null? t)) ;; all fields
 				  db:test-record-fields
@@ -1004,11 +1007,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       (begin
 			 (hash-table-set! seen targetstr #t)
 			 ;; (print "[" targetstr "]"))))
-			 (if (not dmode)(print targetstr))))
+			 (if (not dmode)
+			     (print targetstr)
+			     (hash-table-set! data "targets" (cons targetstr (hash-table-ref/default data "targets" '())))
+			     )))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
 			  (tests   (if tests-spec
-				       (rmt:get-tests-for-run run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1143,7 +1149,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   process deferred tasks per above steps
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
-(if (args:get-arg "-runall")
+(if (or (args:get-arg "-runall")(args:get-arg "-run"))
     (general-run-call 
      "-runall"
      "run all tests"

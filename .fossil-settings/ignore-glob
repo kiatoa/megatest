@@ -41,3 +41,6 @@ tests/fdktestqa/simplelinks/*
 tests/fdktestqa/testqa/megatest.db
 tests/fdktestqa/testqa/monitor.db
 megatest-fossil-hash.scm
+tests/release/runs/*
+tests/release/links/*
+tests/release/megatest.db

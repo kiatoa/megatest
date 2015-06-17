@@ -324,7 +324,8 @@
 
 				 ;; (thread-sleep! 0.3)
 				 (tests:test-force-state-status! run-id test-id "RUNNING" "n/a")
-				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING" area-dat)
+;; 				 (rmt:roll-up-pass-fail-counts run-id test-name item-path "RUNNING" area-dat)
+				 (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "RUNNING" area-dat)
 				 ;; (thread-sleep! 0.3) ;; NFS slowness has caused grief here
 
 				 ;; if there is a runscript do it first
@@ -862,7 +863,8 @@
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
-    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED" area-dat)
+;;    (rmt:roll-up-pass-fail-counts run-id test-name item-path "LAUNCHED" area-dat)
+    (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED" area-dat)
     (set! diskpath (get-best-disk configdat))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))

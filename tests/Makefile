@@ -21,21 +21,27 @@ VER = $(shell fsl info|grep checkout|awk '{print $$2}'|cut -c 1-5)
 NEWTARGET  = "$(OS)/$(FS)/$(VER)"
 TARGET     = "ubuntu/nfs/none"
 
-all : unit test1 test2 test3 test4 test5 test6 test7 test8 test9
+all : build unit test1 test2 test3 test4 test5 test6 test7 test8 test9
 
-unit :
-	./rununittest.sh basicserver $(DEBUG)
+unit : basicserver.log runs.log misc.log
+
+rel : 
+	cd release;dashboard -rows 25 &
+
+## basicserver.log : unittests/basicserver.scm
+## 	script -c "./rununittest.sh basicserver $(DEBUG)" basicserver.log
+
+%.log : build unittests/%.scm
+	script -c "./rununittest.sh $* $(DEBUG)" $*.log
+	if logpro unit.logpro $*.html < $*.log > /dev/null;then echo ALLPASS;else echo ALLFAIL;mv $*.log $*.log.FAIL;fi
 
 server :
-	cd ..;make -j;make install
 	cd fullrun;$(MEGATEST) -server - -debug $(DEBUG) -run-id $(RUNID)
 
 stopserver :
-	cd ..;make -j && make install
 	cd fullrun;$(MEGATEST) -stop-server 0
 
 repl :
-	cd ..;make -j && make install
 	cd fullrun;$(MEGATEST) -:b -repl
 
 test0 : cleanprep
@@ -151,17 +157,23 @@ test10 :
 test11 :
 	 cd fullrun;time (for a in 1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10  1 2 3 4 5 6 7 8 9 10 ;do   (megatest -test-paths -target %/%/% > /dev/null ) & done; wait; )
 
-minsetup : 
+build : ../*.scm
+	if killall mtest -v ;then sleep 5;killall mtest -v -9;fi
 	cd ..;make -j && make install
+	touch build
+
+cleanstart :
+	killall mtest -v;if [ ! $$? ];then sleep 5;killall mtest -v -9;fi
+
+minsetup : build
 	mkdir -p mintest/runs mintest/links
 	cd mintest;$(MEGATEST) -stop-server 0
 	cd mintest;$(MEGATEST) -server - -debug $(DEBUG) > server.log 2> server.log & 
 	sleep 3
 	cd mintest;$(DASHBOARD) -rows 18 &
 
-cleanprep : ../*.scm Makefile */*.config
+cleanprep : ../*.scm Makefile */*.config build
 	mkdir -p fullrun/tmp/mt_runs fullrun/tmp/mt_links /tmp/$(USER)/adisk1
-	cd ..;make -j;make install
 	rm -f */logging.db
 	touch cleanprep
 

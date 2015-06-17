@@ -34,13 +34,21 @@
 (include "test_records.scm")
 
 ;; Call this one to do all the work and get a standardized list of tests
-(define (tests:get-all area-dat)
-  (let* ((test-search-path   (tests:get-tests-search-path (megatest:area-configdat area-dat) area-dat)))
+;;   gets paths from configs and finds valid tests 
+;;   returns hash of testname --> fullpath
+;;
     (tests:get-valid-tests (make-hash-table) test-search-path)))
 
 (define (tests:get-tests-search-path cfgdat area-dat)
   (let ((paths (map cadr (configf:get-section cfgdat "tests-paths"))))
-    (append paths (list (conc (megatest:area-path area-dat) "/tests")))))
+    (filter (lambda (d)
+;;     (append paths (list (conc (megatest:area-path area-dat) "/tests")))))
+	      (if (directory-exists? d)
+		  d
+		  (begin
+		    (debug:print 0 "WARNING: problem with directory " d ", dropping it from tests path")
+		    #f)))
+	    (append paths (list (conc *toppath* "/tests"))))))
 
 (define (tests:get-valid-tests test-registry tests-paths)
   (if (null? tests-paths) 
@@ -286,7 +294,7 @@
       
     ;; need to update the top test record if PASS or FAIL and this is a subtest
     (if (not (equal? item-path ""))
-	(rmt:roll-up-pass-fail-counts run-id test-name item-path status))
+	(rmt:roll-up-pass-fail-counts run-id test-name item-path state status))
 
     (if (or (and (string? comment)
 		 (string-match (regexp "\\S+") comment))
@@ -586,6 +594,7 @@
 ;; 		    (last (string-split testp "/")))
 ;; 		  tests)))))
 
+
 (define (tests:get-testconfig test-name test-registry system-allowed area-dat)
   (let* ((test-path    (hash-table-ref/default test-registry test-name (conc (megatest:area-path area-dat) "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
@@ -672,7 +681,7 @@
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
 				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id (common:get-remote remote) test-id)))
 				 (if (or (and (equal? (db:test-get-state wtdat) "COMPLETED")
-					      (member (db:test-get-status wtdat) '("FAIL")))
+					      (member (db:test-get-status wtdat) '("FAIL" "ABORT")))
 					 (member (db:test-get-status wtdat)  '("KILLED"))
 					 (member (db:test-get-state wtdat)   '("INCOMPETE")))
 				 ;; (if (or (member (db:test-get-status wtdat)

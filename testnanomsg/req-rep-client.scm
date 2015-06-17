@@ -11,7 +11,7 @@
   (nn-recv soc))
 
 (define ((talk-to-server soc))
-  (let loop ((cnt 20))
+  (let loop ((cnt 2000))
     (let ((name (list-ref '("Matt" "Tom" "Bob" "Jill" "James" "Jane")(random 6))))
       (print "Sending " name)
       (print (client-send-receive req name))

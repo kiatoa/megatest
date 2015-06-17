@@ -430,7 +430,9 @@
 ;;======================================================================
 
 (define (common:args-get-target #!key (split #f))
-  (let* ((target  (if (args:get-arg "-reqtarg")
+  (let* ((keys    (keys:config-get-fields *configdat*))
+	 (numkeys (length keys))
+	 (target  (if (args:get-arg "-reqtarg")
 		      (args:get-arg "-reqtarg")
 		      (if (args:get-arg "-target")
 			  (args:get-arg "-target")
@@ -438,6 +440,7 @@
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
 		      (and (not (null? tlist))
+			   (eq? numkeys (length tlist))
 			   (null? (filter string-null? tlist)))
 		      #f)))
     (if valid
@@ -446,7 +449,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\"")
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/"))
 	      #f)
 	    #f))))
 

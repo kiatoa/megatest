@@ -36,8 +36,9 @@ endif
 # Set this on the command line of your make call if needed: make PROXY=host.com:1234
 PROXY=
 
+# http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.9.0.1
+CHICKEN_VERSION=4.10.0rc1
 SQLITE3_VERSION=3080500
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 
@@ -137,6 +138,9 @@ chicken-4.9.0rc1.tar.gz :
 
 chicken-4.9.0.1.tar.gz :
 	wget http://code.call-cc.org/releases/4.9.0/chicken-4.9.0.1.tar.gz
+
+chicken-4.10.0rc1.tar.gz :
+	wget http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git

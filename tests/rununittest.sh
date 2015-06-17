@@ -3,9 +3,6 @@
 # Usage: rununittest.sh testname debuglevel
 #
 
-# Ensure all is made
-(cd ..;make && make install)
-
 # put megatest on path from correct location
 mtbindir=$(readlink -f ../bin)
 

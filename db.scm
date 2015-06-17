@@ -1352,8 +1352,12 @@
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
 ;;	     (run-id    (list-ref toptest 5)))
-	  (db:general-call db 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name)))) ;; (list run-id test-name))))
+	 (db:top-test-set-per-pf-counts db run-id test-name)))
      toplevels)))
+
+(define (db:top-test-set-per-pf-counts db run-id test-name)
+  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+ 
 		     
 ;; Clean out old junk and vacuum the database
 ;;
@@ -2727,6 +2731,20 @@
 			  test-id category variable value expected tol units (if comment comment "") status type)))
      csvlist)))
 
+;; This routine moved from tdb.scm, tdb:read-test-data
+;;
+(define (db:read-test-data dbstruct run-id test-id categorypatt)
+  (let* ((dbdat      (db:get-db dbstruct run-id))
+	 (db         (db:dbdat-get-db dbdat))
+	 (res '()))
+    (db:delay-if-busy dbdat)
+    (sqlite3:for-each-row 
+     (lambda (id test_id category variable value expected tol units comment status type)
+       (set! res (cons (vector id test_id category variable value expected tol units comment status type) res)))
+     db
+     "SELECT id,test_id,category,variable,value,expected,tol,units,comment,status,type FROM test_data WHERE test_id=? AND category LIKE ? ORDER BY category,variable;" test-id categorypatt)
+    (reverse res)))
+
 ;;======================================================================
 ;; Misc. test related queries
 ;;======================================================================
@@ -2826,18 +2844,25 @@
 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
 	(db:general-call dbdat 'state-status     (list state status test-id)))))
 
-(define (db:roll-up-pass-fail-counts dbstruct area-dat run-id test-name item-path status)
-  (if (and (not (equal? item-path ""))
-	   (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
+;; (define (db:roll-up-pass-fail-counts dbstruct area-dat run-id test-name item-path status)
+(define (db:roll-up-pass-fail-counts dbstruct area-dat run-id test-name item-path state status)
+  (if ;; (and
+      (not (equal? item-path ""))
       (let ((dbdat (db:get-db dbstruct area-dat run-id)))
+   ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	(if (equal? status "RUNNING")
-	    (db:general-call dbdat 'top-test-set-running (list test-name))
-	    (if (equal? status "LAUNCHED")
-		(db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name))
-		(db:general-call dbdat 'top-test-set-per-pf-counts (list test-name run-id test-name test-name test-name))))
+	;; NOTE: No else clause needed for this case
+	(case (string->symbol status)
+	 ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
+	 ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
+	 ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
+	(let ((db (db:dbdat-get-db dbdat)))
+	  (db:top-test-set-per-pf-counts db run-id test-name))
 	#f)
-      #f))
+      ;; if the test is not COMPLETED then this routine should not have been called
+      (begin
+	(debug:print 0 "ERROR: db:test-set-state-status called with state " state " and status " status)
+	#f)))
 
 (define (db:test-get-logfile-info dbstruct area-dat run-id test-name)
   (db:with-db
@@ -2900,13 +2925,18 @@
 	'(update-test-status      "UPDATE tests SET status=? WHERE status like ? AND run_id=? AND testname=? AND NOT (item_path='' AND testname IN (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")
 	;; stuff for roll-up-pass-fail-counts
 	'(update-pass-fail-counts "UPDATE tests 
-             SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK')),
+             SET fail_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('FAIL','CHECK','INCOMPLETE','ABORT')),
                  pass_count=(SELECT count(id) FROM tests WHERE testname=? AND item_path != '' AND status IN ('PASS','WARN','WAIVED'))
              WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set-per-pf-counts "UPDATE tests
                        SET state=CASE 
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE testname=?
+                                                     AND item_path != '' 
+                                                     AND status IN ('INCOMPLETE')
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'INCOMPLETE'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
@@ -2917,13 +2947,49 @@
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE run_id=? AND testname=?
                                               AND item_path != ''
-                                              AND state IN ('NOT_STARTED','BLOCKED')) > 0 THEN 'FAIL'
-                                  WHEN fail_count > 0 THEN 'FAIL' 
-                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
+                                              AND state IN ('NOT_STARTED','BLOCKED','INCOMPLETE')) > 0 THEN 'FAIL'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'ABORT') > 0 THEN 'ABORT'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'AUTO') > 0 THEN 'AUTO'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status IN ('STUCK/INCOMPLETE', 'INCOMPLETE')) > 0 THEN 'INCOMPLETE'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'CHECK') > 0 THEN 'CHECK'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
                                               AND status = 'SKIP') > 0 THEN 'SKIP'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'WARN') > 0 THEN 'WARN'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'WAIVED') > 0 THEN 'WAIVED'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=? 
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status NOT IN ('PASS','FAIL','WARN','WAIVED')) > 0 THEN 'ABORT'
+                                  WHEN fail_count > 0 THEN 'FAIL' 
+                                  WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
                        WHERE testname=? AND item_path='';") ;; DONE
 
@@ -3152,7 +3218,8 @@
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct area-dat run-id waitons ref-item-path mode)
-(define (db:get-prereqs-not-met dbstruct area-dat run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+;; (define (db:get-prereqs-not-met dbstruct area-dat run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+(define (db:get-prereqs-not-met dbstruct area-dat run-id waitons ref-item-path mode itemmap) ;; #!key (mode '(normal))(itemmap #f))
   (if (or (not waitons)
 	  (null? waitons))
       '()
