@@ -1,5 +1,5 @@
 ;; watch nanomsg's pipeline load-balancer in action.
-(use nanomsg)
+(use nanomsg posix regex)
 
 (define req   (nn-socket 'req))
 
@@ -11,10 +11,11 @@
   (nn-recv soc))
 
 (define ((talk-to-server soc))
-  (let loop ((cnt 2000))
+  (let loop ((cnt 200000))
     (let ((name (list-ref '("Matt" "Tom" "Bob" "Jill" "James" "Jane")(random 6))))
-      (print "Sending " name)
-      (print (client-send-receive req name))
+      ;; (print "Sending " name)
+      ;; (print
+      (client-send-receive req name) ;; )
       (if (> cnt 0)(loop (- cnt 1)))))
   (print (client-send-receive req "quit"))
   (nn-close req)

@@ -187,6 +187,9 @@ dashboard : cleanprep
 newdashboard : cleanprep
 	cd fullrun && $(BINPATH)/newdashboard &
 
+mdboard : cleanprep
+	cd fullrun && $(BINPATH)/mdboard &
+
 remove :
 	cd fullrun;$(MEGATEST) -remove-runs :runname $(RUN)  -testpatt % -itempatt % :sysname % :fsname % :datapath %
 

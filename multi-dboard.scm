@@ -14,23 +14,24 @@
 (import (prefix iup iup:))
 (use canvas-draw)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69)
-(import (prefix sqlite3 sqlite3:))
+(use sql-de-lite srfi-1 posix regex regex-case srfi-69)
+;; (import (prefix sqlite3 sqlite3:))
 
+;; (declare (unit multi-dboard))
 (declare (uses margs))
-(declare (uses launch))
+;; (declare (uses launch))
 (declare (uses megatest-version))
 (declare (uses gutils))
-(declare (uses db))
-(declare (uses server))
-(declare (uses synchash))
-(declare (uses dcommon))
+;; (declare (uses db))
+;; (declare (uses server))
+;; (declare (uses synchash))
+;; (declare (uses dcommon))
 (declare (uses tree))
 (declare (uses configf))
 
 (include "common_records.scm")
-(include "db_records.scm")
-(include "key_records.scm")
+;; (include "db_records.scm")
+;; (include "key_records.scm")
 
 (define help (conc 
 	      "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
@@ -116,11 +117,63 @@ Misc
 
 
 ;;======================================================================
-;; T E S T S
+;; R E C O R D S
 ;;======================================================================
 
+;; data for an area (regression or testsuite)
+;;
+(define-record area
+  name               ;; area name
+  path               ;; mt run area home
+  configdat          ;; megatest config
+  denoise            ;; focal point for not putting out same messages over and over
+  client-signature   ;; key for client-server conversation
+  remote             ;; hash of all the client side connnections
+  run-keys           ;; target keys for this area
+  rundat             ;; used in dashboard
+  read-only          ;; can I write to this area?
+  )
 
-;; Test browser
+;; general data for the dboard application
+;;
+(define-record data
+  cfgdat             ;; data from ~/.megatest/<group>.dat
+  areas              ;; hash of areaname -> area-rec
+  current-window-id  ;; 
+  current-tab-id     ;; 
+  update-needed      ;; flag to indicate that the tab pointed to by current tab id needs refreshing immediately
+  tab-ids            ;; hash of tab-id -> areaname
+  )
+
+;; all the components of an area display, all fits into a tab but
+;; parts may be swapped in/out as needed
+;;
+(define-record tab
+  tree
+  matrix    ;; the spreadsheet 
+  area-dat  ;; the one-structure (one day dbstruct will be put in here)
+  view-path ;; <target/path>/<runname>/...
+  view-type ;; standard, etc.
+  controls  ;; the controls
+  data      ;; all the data kept in sync with db
+  filters   ;; user filters, alist name -> filter record, eventually store these in ~/.megatest/<group>.dat?
+  run-id    ;; the current run-id
+  test-ids  ;; the current test id hash, run-id => test-id
+  command   ;; the command from the entry field
+  )
+
+(define-record filter
+  target    ;; hash of widgets for the target
+  runname   ;; the runname widget
+  testpatt  ;; the testpatt widget
+  )
+
+;;======================================================================
+;; T R E E 
+;;======================================================================
+
+;; <area> - <target - ... > - <runname> - <test> - <itempath - ...>
+
 (define (dashboard:tree-browser data adat window-id)
   ;; (iup:split
   (let* ((tb      (iup:treebox
@@ -142,81 +195,14 @@ Misc
     ;; (iup:attribute-set! tb "ADDEXPANDED" "NO")
     ;; (dboard:data-set-tests-tree! *data* tb)
     tb))
-;;   (test-panel window-id)))
-
-;; The function to update the fields in the test view panel
-(define (test-update window-id testdat run-info-matrix test-info-matrix test-run-matrix meta-dat-matrix steps-matrix data-matrix)
-  ;; get test-id
-  ;; then get test record
-  (if testdat
-      (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
-	     (test-data    (hash-table-ref/default testdat test-id #f))
-	     (run-id       (db:test-get-run_id test-data))
-	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
-						   run-id
-						   '()))
-	     (target       (if (null? targ/runname) "" (string-intersperse (reverse (cdr (reverse targ/runname))) "/")))
-	     (runname      (if (null? targ/runname) "" (car (cdr targ/runname))))
-	     (steps-dat    (tests:get-compressed-steps *dbstruct-local* run-id test-id)))
-	
-	(if test-data
-	    (begin
-	      ;; 
-	      (for-each 
-	       (lambda (data)
-		 (let ((mat    (car data))
-		       (vals   (cadr data))
-		       (rownum 1))
-		   (for-each 
-		    (lambda (key)
-		      (let ((cell   (conc rownum ":1")))
-			(if (not (equal? (iup:attribute mat cell)(conc key)))
-			    (begin
-			      ;; (print "setting cell " cell " in matrix " mat " to value " key)
-			      (iup:attribute-set! mat cell (conc key))
-			      (iup:attribute-set! mat "REDRAW" cell)))
-			(set! rownum (+ rownum 1))))
-		    vals)))
-	       (list 
-		(list run-info-matrix
-		      (if test-id
-			  (list (db:test-get-run_id test-data)
-				target
-				runname
-				"n/a")
-			  (make-list 4 "")))
-		(list test-info-matrix
-		      (if test-id
-			  (list test-id
-				(db:test-get-testname test-data)
-				(db:test-get-item-path test-data)
-				(db:test-get-state    test-data)
-				(db:test-get-status   test-data)
-				(seconds->string (db:test-get-event_time test-data))
-				(db:test-get-comment  test-data))
-			  (make-list 7 "")))
-		(list test-run-matrix
-		      (if test-id
-			  (list (db:test-get-host     test-data)
-				(db:test-get-uname    test-data)
-				(db:test-get-diskfree test-data)
-				(db:test-get-cpuload  test-data)
-				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
-			  (make-list 5 "")))
-		))
-	      (dcommon:populate-steps steps-dat steps-matrix))))))
-;;(list meta-dat-matrix
-;;      (if test-id
-;;	  (list (
- 
 
 ;;======================================================================
-;; R U N   C O N T R O L
+;; M A I N   M A T R I X
 ;;======================================================================
 
 ;; General displayer
 ;;
-(define (dashboard:area-display data adat window-id)
+(define (dashboard:main-matrix data adat window-id)
   (let* ((view-matrix     (iup:matrix
 			   ;; (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
 			   #:expand "YES"
@@ -238,15 +224,6 @@ Misc
       (iup:vbox
        view-matrix)))))
 
-;; Browse and control a single run
-;;
-(define (runcontrol window-id)
-  (iup:hbox))
-
-;; NB// Wierd conflict error here
-;;
-;;		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f #f))
-
 ;;======================================================================
 ;; A R E A S
 ;;======================================================================
@@ -254,11 +231,10 @@ Misc
 (define (dashboard:init-area data area-name apath)
   (let* ((mtconffile  (conc area-name "/megatest.config"))
 	 (mtconf      (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
-	 (area-dat    (let ((ad (make-megatest:area
+	 (area-dat    (let ((ad (make-area
 			       area-name ;; area name
 			       apath     ;; path to area
-			       'http     ;; transport
-			       (list apath mtconf) ;; configinfo (legacy)
+			       ;; 'http     ;; transport
 			       mtconf    ;; megatest.config
 			       (make-hash-table) ;; denoise hash
 			       #f        ;; client-signature
@@ -267,7 +243,7 @@ Misc
 			       (make-hash-table) ;; run-id -> (hash of test-ids => dat)
 			       (and (file-exists? apath)(file-write-access? apath)) ;; read-only
 			       )))
-		      (hash-table-set! (dboard:data-areas data) area-name ad)
+		      (hash-table-set! (data-areas data) area-name ad)
 		      ad)))
     area-dat))
 
@@ -275,49 +251,53 @@ Misc
 ;; D A S H B O A R D
 ;;======================================================================
 
+(define (dashboard:area-panel aname data window-id)
+  (let* ((apath      (configf:lookup (data-cfgdat data) aname "path")) ;;  (hash-table-ref (dboard:data-cfgdat data) area-name))
+	 ;;          (hash-table-ref (dboard:data-cfgdat data) aname))
+	 (area-dat   (dashboard:init-area data aname apath))
+	 (tb         (dashboard:tree-browser data area-dat window-id)) ;; (dboard:areas-tree-browser data)
+	 (ad         (dashboard:main-matrix  data area-dat window-id))
+	 (areas      (data-areas data))
+	 (dboard-dat (make-tab
+		      #f           ;; tree
+		      #f           ;; matrix
+		      area-dat     ;;
+		      #f           ;; view path
+		      'default     ;; view type
+		      #f           ;; controls
+		      #f           ;; cached data
+		      #f           ;; filters
+		      #f           ;; the run-id
+		      (make-hash-table) ;; run-id -> test-id, for current test id
+		      ""
+		      )))
+    (hash-table-set! (data-areas data) aname dboard-dat)
+    (tab-tree-set!   dboard-dat tb)
+    (tab-matrix-set! dboard-dat ad)
+    (iup:split
+     #:value 200
+     tb ad)))
+
+
 ;; Main Panel
 ;;
 (define (dashboard:main-panel data window-id)
   (iup:dialog
    #:title "Megatest Control Panel"
-   #:menu (dcommon:main-menu data)
+;;   #:menu (dcommon:main-menu data)
    #:shrink "YES"
    (iup:vbox
-    (let* ((area-names  (hash-table-keys (dboard:data-cfgdat data)))
+    (let* ((area-names  (hash-table-keys (data-cfgdat data)))
 	   (area-panels (map (lambda (aname)
-			       (let* ((apath      (configf:lookup (dboard:data-cfgdat data) aname "path")) ;;  (hash-table-ref (dboard:data-cfgdat data) area-name))
-				      ;;          (hash-table-ref (dboard:data-cfgdat data) aname))
-				      (area-dat   (dashboard:init-area data aname apath))
-				      (tb         (dashboard:tree-browser data area-dat window-id)) ;; (dboard:areas-tree-browser data)
-				      (ad         (dashboard:area-display data area-dat window-id))
-				      (areas      (dboard:data-areas data))
-				      (dboard-dat (make-dboard:tab
-						   #f           ;; tree
-						   #f           ;; matrix
-						   area-dat     ;;
-						   #f           ;; view path
-						   'default     ;; view type
-						   #f           ;; controls
-						   #f           ;; cached data
-						   #f           ;; filters
-						   #f           ;; the run-id
-						   (make-hash-table) ;; run-id -> test-id, for current test id
-						   ""
-						   )))
-				 (hash-table-set! (dboard:data-areas data) aname dboard-dat)
-				 (dboard:tab-tree-set!   dboard-dat tb)
-				 (dboard:tab-matrix-set! dboard-dat ad)
-				 (iup:split
-				  #:value 200
-				  tb ad)))
+			       (dashboard:area-panel aname data window-id))
 			     area-names))
 	   (tabtop      (apply iup:tabs  
 			       #:tabchangepos-cb (lambda (obj curr prev)
-						   (dboard:data-current-tab-id-set! data curr)
-						   (dboard:data-update-needed-set!  data #t)
+						   (data-current-tab-id-set! data curr)
+						   (data-update-needed-set!  data #t)
 						   (print "Tab is: " curr ", prev was " prev))
 			       area-panels))
-	   (tab-ids     (dboard:data-tab-ids data)))
+	   (tab-ids     (data-tab-ids data)))
       (let loop ((index 0)
 		 (hed   (car area-names))
 		 (tal   (cdr area-names)))
@@ -328,47 +308,26 @@ Misc
 	    (loop (+ index 1)(car tal)(cdr tal))))
       tabtop))))
 
-(define (newdashboard data window-id)
-  (let* (;; (keys     (db:get-keys *dbstruct-local* *area-dat*))
-	 ;; (runname  "%")
-	 ;; (testpatt "%")
-	 ;; (keypatts (map (lambda (k)(list k "%")) keys))
-	 ;; (states   '())
-	 ;; (statuses '())
-	 (nextmintime (current-milliseconds)))
-    (dboard:data-current-window-id-set! data (+ 1 (dboard:data-current-window-id data)))
-    ;; (dboard:data-set-runs! *data* data) ;; make this data available to the rest of the application
-    (iup:show (dashboard:main-panel data (dboard:data-current-window-id data)))
-    ;; Yes, running iup:show will pop up a new panel
-    ;; (iup:show (main-panel my-window-id))
-    (iup:callback-set! *tim*
-		       "ACTION_CB"
-		       (lambda (x)
-			 (let ((starttime (current-milliseconds)))
-			   ;; Want to dedicate no more than 50% of the time to this so skip if
-			   ;; 2x delta time has not passed since last query
-			   ;; (if (< (inexact->exact nextmintime)(inexact->exact starttime))
-			   ;;     (let* ((changes   (dcommon:run-update data)) ;;keys data runname keypatts testpatt states statuses 'full my-window-id))
-			   ;;            (endtime   (current-milliseconds)))
-			   ;;       (set! nextmintime (+ endtime (* 2.0 (- endtime starttime))))
-			   ;;       ;; (debug:print 11 "CHANGE(S): " (car changes) "...")
-			   ;;       )
-			   ;;     (debug:print-info 11 "Server overloaded")))))))
-			   (dcommon:run-update data))))))
 
 ;;; main. Theoretically could have multiple windows (each with a group of tags, thus window-id
 ;;;
-(let* ((window-id 0)
-       (groupn    (or (args:get-arg "-group") "default"))
-       (cfname    (conc (getenv "HOME") "/.megatest/" groupn ".dat"))
-       (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)))
-       (data      (make-dboard:data
-		   cfgdat ;; this is the data from ~/.megatest for the selected group
-		   (make-hash-table) ;; areaname -> area-rec
-		   0                 ;; current window id
-		   0                 ;; current tab id
-		   #f                ;; redraw needed for current tab id
-		   (make-hash-table) ;; tab-id -> areaname
-		   )))
-  (newdashboard data window-id)
-  (iup:main-loop))
+(define (dboard:make-window window-id)
+  (let* (;; (window-id 0)
+	 (groupn    (or (args:get-arg "-group") "default"))
+	 (cfname    (conc (getenv "HOME") "/.megatest/" groupn ".dat"))
+	 (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)))
+	 (data      (make-data
+		     cfgdat ;; this is the data from ~/.megatest for the selected group
+		     (make-hash-table) ;; areaname -> area-rec
+		     0                 ;; current window id
+		     0                 ;; current tab id
+		     #f                ;; redraw needed for current tab id
+		     (make-hash-table) ;; tab-id -> areaname
+		     )))
+    (iup:show (dashboard:main-panel data window-id))
+    (iup:main-loop)))
+
+
+
+(dboard:make-window 0)
+
