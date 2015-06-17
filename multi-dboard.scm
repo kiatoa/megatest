@@ -72,11 +72,6 @@ Misc
 ;;       (client:launch))
 ;;     (client:launch))
 
-;; ease debugging by loading ~/.dashboardrc
-(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
-  (if (file-exists? debugcontrolf)
-      (load debugcontrolf)))
-
 (define *runremote* #f)
 
 (debug:setup)
@@ -298,24 +293,66 @@ Misc
 						   (print "Tab is: " curr ", prev was " prev))
 			       area-panels))
 	   (tab-ids     (data-tab-ids data)))
-      (let loop ((index 0)
-		 (hed   (car area-names))
-		 (tal   (cdr area-names)))
-	(hash-table-set! tab-ids index hed)
-	(debug:print 0 "Adding area " hed " with index " index " to dashboard")
-	(iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
-	(if (not (null? tal))
-	    (loop (+ index 1)(car tal)(cdr tal))))
+      (if (not (null? area-names))
+	  (let loop ((index 0)
+		     (hed   (car area-names))
+		     (tal   (cdr area-names)))
+	    (hash-table-set! tab-ids index hed)
+	    (debug:print 0 "Adding area " hed " with index " index " to dashboard")
+	    (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
+	    (if (not (null? tal))
+		(loop (+ index 1)(car tal)(cdr tal)))))
       tabtop))))
 
+;;======================================================================
+;; C O N F I G U R A T I O N 
+;;======================================================================
+
+;; Get the configuration file for a group name, if the group name is "default" and it doesn't 
+;; exist, create it and add the current path if it contains megatest.config
+;;
+(define (dboard:get-config group-name)
+  (let* ((fname (conc (getenv "HOME") "/.megatest/" group-name ".dat")))
+    (if (file-exists? fname)
+	(read-config fname (make-hash-table) #t)
+	(if (dboard:create-config fname)
+	    (dboard:get-config group-name)
+	    (make-hash-table)))))
+
+(define (dboard:create-config fname)
+  ;; (handle-exceptions
+  ;;  exn
+  ;;  
+  ;;  #f ;; failed to create - just give up
+   (let* ((dirname       (pathname-directory fname))
+	  (file-name     (pathname-strip-directory fname))
+	  (curr-mtcfgdat (find-config "megatest.config"
+				      toppath: (or (get-environment-variable "MT_RUN_AREA_HOME")(current-directory))))
+	  (curr-mtcfg    (if (and curr-mtcfgdat (not (null? curr-mtcfgdat)))(cadr curr-mtcfgdat) #f))
+	  (curr-mtpath   (if curr-mtcfg (car curr-mtcfgdat) #f)))
+     (if curr-mtpath
+	 (begin
+	   (debug:print-info 0 "Creating config file " fname)
+	   (if (not (file-exists? dirname))
+	       (create-directory dirname #t))
+	   (with-output-to-file fname
+	     (lambda ()
+	       (let ((aname (pathname-strip-directory curr-mtpath)))
+		 (print "[" aname "]")
+		 (print  "path " curr-mtpath))))
+	   #t)
+	 (begin
+	   (debug:print-info 0 "Need to create a config but no megatest.config found: " curr-mtcfgdat)
+	   #f))))
+;; )
 
 ;;; main. Theoretically could have multiple windows (each with a group of tags, thus window-id
 ;;;
 (define (dboard:make-window window-id)
   (let* (;; (window-id 0)
 	 (groupn    (or (args:get-arg "-group") "default"))
-	 (cfname    (conc (getenv "HOME") "/.megatest/" groupn ".dat"))
-	 (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)))
+	 (cfgdat    (dboard:get-config groupn))
+	 ;; (cfgdat    (if (file-exists? cfname)(read-config cfname (make-hash-table) #t)(make-hash-table)))
 	 (data      (make-data
 		     cfgdat ;; this is the data from ~/.megatest for the selected group
 		     (make-hash-table) ;; areaname -> area-rec
@@ -328,6 +365,11 @@ Misc
     (iup:main-loop)))
 
 
+
+;; ease debugging by loading ~/.dashboardrc
+(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
+  (if (file-exists? debugcontrolf)
+      (load debugcontrolf)))
 
 (dboard:make-window 0)
 
