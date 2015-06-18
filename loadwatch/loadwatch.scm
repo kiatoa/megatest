@@ -52,4 +52,5 @@
 		   (processdat-count-set! pdat (+ (processdat-count pdat) 1))
 		   (loop (read-line) inbod)))))))))
 	   
+(define x (snagload))
 (processdat-%cpu (hash-table-ref (hash-table-ref x "matt") "evolution-calen"))
