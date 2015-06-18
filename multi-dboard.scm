@@ -9,13 +9,10 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format numbers)
+(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
-
-(use sql-de-lite srfi-1 posix regex regex-case srfi-69)
-;; (import (prefix sqlite3 sqlite3:))
 
 ;; (declare (unit multi-dboard))
 (declare (uses margs))
@@ -115,9 +112,11 @@ Misc
 ;; R E C O R D S
 ;;======================================================================
 
+;; NOTE: Consider switching to defstruct.
+
 ;; data for an area (regression or testsuite)
 ;;
-(define-record area
+(define-record areadat
   name               ;; area name
   path               ;; mt run area home
   configdat          ;; megatest config
@@ -125,8 +124,33 @@ Misc
   client-signature   ;; key for client-server conversation
   remote             ;; hash of all the client side connnections
   run-keys           ;; target keys for this area
-  rundat             ;; used in dashboard
+  runs               ;; used in dashboard, hash of run-ids -> rundat
   read-only          ;; can I write to this area?
+  monitordb          ;; db handle for monitor.db
+  maindb             ;; db handle for main.db
+  )
+
+;; rundat, basic run data
+;;
+(define-record rundat
+  id                 ;; the run-id
+  target             ;; val1/val2 ... corrosponding to run-keys in areadat
+  runname
+  state              ;; state of the run, symbol 
+  status             ;; status of the run, symbol
+  event-time         ;; when the run was initiated
+  tests              ;; hash of test-id -> testdat, QUESTION: separate by run-id?
+  db                 ;; db handle
+  )
+
+;; testdat, basic test data
+(define-record testdat
+  run-id             ;; what run is this from
+  id                 ;; test id
+  state              ;; test state, symbol
+  status             ;; test status, symbol
+  event-time         ;; when the test started
+  duration           ;; how long the test took
   )
 
 ;; general data for the dboard application
@@ -146,7 +170,7 @@ Misc
 (define-record tab
   tree
   matrix    ;; the spreadsheet 
-  area-dat  ;; the one-structure (one day dbstruct will be put in here)
+  areadat   ;; the one-structure (one day dbstruct will be put in here)
   view-path ;; <target/path>/<runname>/...
   view-type ;; standard, etc.
   controls  ;; the controls
@@ -164,6 +188,80 @@ Misc
   )
 
 ;;======================================================================
+;; D B
+;;======================================================================
+
+;; These are all using sqlite and independent of area so cannot use stuff 
+;; from db.scm
+
+;; NB// run-id=#f => return dbdir only
+;;
+(define (areadb:dbfile-path areadat run-id)
+  (let* ((cfgdat  (areadat-configdat areadat))
+	 (dbdir   (or (configf:lookup cfgdat "setup" "dbdir")
+		      (conc (configf:lookup cfgdat "setup" "linktree") "/.db")))
+	 (fname   (if run-id
+		      (case run-id
+			((-1) "monitor.db")
+			((0) "main.db")
+			(else (conc run-id ".db")))
+		      #f)))
+    (handle-exceptions
+     exn
+     (begin
+       (debug:print 0 "ERROR: Couldn't create path to " dbdir)
+       (exit 1))
+     (if (not (directory? dbdir))(create-directory dbdir #t)))
+    (if fname
+	(conc dbdir "/" fname)
+	dbdir)))
+
+;; -1 => monitor.db
+;;  0 => main.db
+;; >1 => <run-id>.db
+;;
+(define (areadb:open areadat run-id)
+  (let* ((runs   (areadat-runs areadat))
+	 (rundat (if (> run-id 0) ;; it is a run
+		     (hash-table-ref/default runs run-id #f)
+		     #f))
+	 (db     (case run-id ;; if already opened, get the db and return it
+		   ((-1) (areadat-monitordb areadat))
+		   ((0)  (areadat-maindb    areadat))
+		   (else (if run
+			     (rundat-db rundat)
+			     #f)))))
+    (if db
+	db ;; merely return the already opened db
+	(let* ((dbfile (areadb:dbfile-path areadat run-id)) ;; not already opened, so open it
+	       (db     (if (file-exists? dbfile)
+			   (open-database dbfile)
+			   (begin
+			     (debug:print 0 "ERROR: I was asked to open " dbfile ", but file does not exist or is not readable.")
+			     #f))))
+	  (case run-id
+	    ((-1)(areadat-monitordb-set! areadat db))
+	    ((0) (areadat-maindb-set!    areadat db))
+	    (else (rundat-db-set!        rundat  db)))
+	  db))))
+
+;; populate the areadat tests info, does NOT fill the tests data itself
+;;
+(define (areadb:populate-run-info areadat)
+  (let* ((runs   (or (areadat-tests areadat) (make-hash-table)))
+	 (keys   (areadat-run-keys areadat))
+	 (maindb (areadb:open areadat 0)))
+    (query (for-each-row (lambda (row)
+			   (let ((id  (list-ref row 0))
+				 (dat (apply make-rundat (append row (list #f #f))))) ;; add placeholders for tests and db
+			     (hash-table-set! runs id dat)))
+			 (sql maindb (conc "SELECT id,"
+					   (string-intersperse keys "'||/||'")
+					   ",runname,state,status,event_time FROM runs WHERE state != 'DELETED';"))))
+    areadat))
+					   
+
+;;======================================================================
 ;; T R E E 
 ;;======================================================================
 
@@ -177,7 +275,7 @@ Misc
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
 		     (let* ((tree-path (tree:node->path obj id))
 			    (area      (car tree-path))
-			    (area-path (cdr tree-path)))
+			    (areadat-path (cdr tree-path)))
 		       #f
 		       ;; (test-id  (tree-path->test-id (cdr run-path))))
 		       ;; (if test-id
@@ -224,22 +322,24 @@ Misc
 ;;======================================================================
 
 (define (dashboard:init-area data area-name apath)
-  (let* ((mtconffile  (conc area-name "/megatest.config"))
+  (let* ((mtconffile  (conc apath "/megatest.config"))
 	 (mtconf      (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
-	 (area-dat    (let ((ad (make-area
-			       area-name ;; area name
-			       apath     ;; path to area
-			       ;; 'http     ;; transport
-			       mtconf    ;; megatest.config
-			       (make-hash-table) ;; denoise hash
-			       #f        ;; client-signature
-			       #f        ;; remote connections
-			       #f        ;; run keys
-			       (make-hash-table) ;; run-id -> (hash of test-ids => dat)
-			       (and (file-exists? apath)(file-write-access? apath)) ;; read-only
-			       )))
-		      (hash-table-set! (data-areas data) area-name ad)
-		      ad)))
+	 (area-dat    (let ((ad (make-areadat
+				 area-name ;; area name
+				 apath     ;; path to area
+				 ;; 'http     ;; transport
+				 mtconf    ;; megatest.config
+				 (make-hash-table) ;; denoise hash
+				 #f        ;; client-signature
+				 #f        ;; remote connections
+				 #f        ;; run keys
+				 (make-hash-table) ;; run-id -> (hash of test-ids => dat)
+				 (and (file-exists? apath)(file-write-access? apath)) ;; read-only
+				 #f
+				 #f
+				 )))
+			(hash-table-set! (data-areas data) area-name ad)
+			ad)))
     area-dat))
 
 ;;======================================================================
