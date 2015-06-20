@@ -65,8 +65,8 @@
       (mutex-lock! *current-delay-mutex*)
       (let ((current-delay *current-delay*))
 	(mutex-unlock! *current-delay-mutex*)
-	(thread-sleep! current-delay)
-	(nn-send soc (conc "hello " msg-in " you waited " current-delay " seconds"))
+	;; (thread-sleep! current-delay)
+	(nn-send soc (conc current-delay " hello " msg-in " you waited " current-delay " seconds"))
 	(loop (nn-recv soc)(if (> count 20000000)
 			       0
 			       (+ count 1))))))))
