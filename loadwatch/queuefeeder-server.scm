@@ -28,17 +28,27 @@
 
 ;; get needed stuff from commandline
 ;;
+(define queuelen #f)
 (define cmd '()) ;; cmd is run to give a count of the queue length => returns number in queue
 
+(define usage "Usage: queuefeeder-server port target_queue_length command
+       where command is a script or program that gives an integer on stdout of current queue length")
+
 (let ((args (argv)))
-  (if (> (length args) 2)
+  (if (> (length args) 3)
       (begin
-	(set! port (cadr args))
-	(set! cmd  (caddr args))) ;; no params supported
+	(set! port     (cadr args))
+	(set! queuelen (string->number (caddr args)))
+	(set! cmd      (cadddr args))) ;; no params supported
       (begin
-	(print "Usage: queuefeeder-server port command")
-	(print "       where the command gives an integer on stdout indicating the queue load")
+	(print usage)
 	(exit))))
+
+(if (not queuelen)
+    (begin
+      (print "queuelen must be a number")
+      (print usage)
+      (exit)))
 
 (print "Running queue feeder with port=" port ", command=" cmd)
 
@@ -47,6 +57,25 @@
 (print "connecting, got: " (nn-bind    rep  (conc "tcp://" "*" ":" port)))
 
 (define *current-delay* 0)
+(define (exp-droop-calc x targ)
+  (cond
+   ((> (- x targ) 1) 136) ;; top off at 136 seconds
+   (else 
+    (let ((res (* 50 (exp (- x targ)))))
+      (cond
+       ((and (> res 0)(< res 0.01)) 0.01)
+       ((> res 45)                  45) ;; cap at 45 seconds
+       (else res))))))
+
+(define (piecewise-droop-calc x targ)
+  (let ((top 50))
+    (cond
+     ((> (- x targ) 0) top) ;; top off at 45 seconds
+     ((> x (- targ top))(+ (* 1 (- x (- targ top)))(/ (- top targ) targ)))
+     (else (let ((res (/ x targ)))
+	     (if (< res 0.01)
+		 0.01
+		 res))))))
 
 (define (server soc)
   (print "server starting")
@@ -130,7 +159,7 @@
 				   cmd
 				   (lambda ()
 				     (let* ((val       (read))
-					    (droop-val (if (number? val)(/ val 500) #f)))
+					    (droop-val (if (number? val)(piecewise-droop-calc val queuelen) #f)))
 				       ;; val is number of jobs in queue. Use a linear droop of val/40
 				       (mutex-lock! *current-delay-mutex*)
 				       (set! *current-delay* (or droop-val 30)) ;; (/ (or droop-val 100) 50))
