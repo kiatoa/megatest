@@ -55,10 +55,11 @@
 ;; 
 
 (thread-start! (lambda ()
-		 (thread-sleep! 20)
+		 (thread-sleep! 60)
 		 (print "Give up on waiting for the server")
 		 (nn-close req)
-		 (exit)))
+		 ;; (exit)
+		 ))
 (thread-join! (thread-start! (lambda ()
 			       (print (client-send-receive req (conc (current-user-name) "@" (get-host-name)))))))
 
