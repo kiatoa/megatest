@@ -1,3 +1,5 @@
+(use posix)
+
 (let loop ((count 0))
   (if (> count 500000)
       (print "DONE")

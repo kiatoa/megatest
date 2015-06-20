@@ -94,7 +94,7 @@
 	 (timeout (make-thread (lambda ()
 				 (let loop ((count 0))
 				   (thread-sleep! 1)
-				   (print "still waiting after count seconds...")
+				   (print "still waiting after " count " seconds...")
 				   (if (and keepwaiting (< count 10))
 				       (loop (+ count 1))))
 				 (if keepwaiting
@@ -124,16 +124,16 @@
 
 ;; update the *current-delay* value every minute or QUEUE_CHK_DELAY seconds
 (thread-start! (make-thread (lambda ()
-			      (let ((delay-time (string->number (or (get-environment-variable "QUEUE_CHK_DELAY") "60"))))
+			      (let ((delay-time (string->number (or (get-environment-variable "QUEUE_CHK_DELAY") "30"))))
 				(let loop ()
 				  (with-input-from-pipe 
 				   cmd
 				   (lambda ()
 				     (let* ((val       (read))
-					    (droop-val (if (number? val)(/ val 50) #f)))
-				       ;; val is number of jobs in queue. Use a linear droop of val/50
+					    (droop-val (if (number? val)(/ val 500) #f)))
+				       ;; val is number of jobs in queue. Use a linear droop of val/40
 				       (mutex-lock! *current-delay-mutex*)
-				       (set! *current-delay* (/ (or droop-val 100) 50))
+				       (set! *current-delay* (or droop-val 30)) ;; (/ (or droop-val 100) 50))
 				       (mutex-unlock! *current-delay-mutex*)
 				       (print "droop-val=" droop-val)
 				       (thread-sleep! delay-time))))
