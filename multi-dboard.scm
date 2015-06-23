@@ -271,7 +271,8 @@ Misc
 	    (current-tab  (if (null? tab-ids)
 			      #f
 			      (hash-table-ref tabs (car tab-ids))))
-	    (current-tree (if (null? tab-ids) #f (tab-tree current-tab))))
+	    (current-tree (if (null? tab-ids) #f (tab-tree current-tab)))
+	    (seen-nodes   (make-hash-table)))
        ;; now for each area in the window gather the data
        (for-each
 	(lambda (area-name)
@@ -286,7 +287,13 @@ Misc
 		      (target  (rundat-target run))
 		      (runname (rundat-runname run)))
 		 (if current-tree
-		     (tree:add-node current-tree area-name (append (string-split target "/")(list runname))))
+		     (let* ((partial-path (append (string-split target "/")(list runname)))
+			    (full-path    (cons area-name partial-path)))
+		       (if (not (hash-table-exists? seen-nodes full-path))
+			   (begin
+			     (print "INFO: Adding node " partial-path " to section " area-name)
+			     (tree:add-node current-tree "Areas" full-path)
+			     (hash-table-set! seen-nodes full-path #t)))))
 		 ))
 	     (hash-table-keys runs))))
 	(hash-table-keys areas))))
@@ -346,6 +353,10 @@ Misc
 (define (dashboard:tree-browser data adat window-id)
   ;; (iup:split
   (let* ((tb      (iup:treebox
+		   #:value 0
+		   #:title "Areas"
+		   #:expand "YES"
+		   #:addexpanded "NO"
 		   #:selection-cb
 		   (lambda (obj id state)
 		     ;; (print "obj: " obj ", id: " id ", state: " state)
