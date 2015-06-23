@@ -186,7 +186,7 @@ Misc
 ;; D B
 ;;======================================================================
 
-;; These are all using sqlite and independent of area so cannot use stuff 
+;; These are all using sql-de-lite and independent of area so cannot use stuff 
 ;; from db.scm
 
 ;; NB// run-id=#f => return dbdir only
@@ -254,7 +254,49 @@ Misc
 					   (string-intersperse keys "'||/||'")
 					   ",runname,state,status,event_time FROM runs WHERE state != 'DELETED';"))))
     areadat))
-					   
+			
+;;======================================================================
+;; D A S H B O A R D   D B 
+;;======================================================================
+		
+(define (mddb:open-db)
+  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+    (set-busy-handler! db (busy-timeout 10000))
+    (for-each
+     (lambda (qry)
+       (exec (sql db qry)))
+     (list 
+      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+      "CREATE TABLE IF NOT EXISTS dashboards (
+          id   INTEGER PRIMARY KEY,
+          pid  INTEGER,
+          user TEXT,
+          host TEXT,
+          port INTEGER,
+          start_time TIMESTAMP DEFAULT (strftime('%s','now'))
+        );"
+      ))
+    db))
+
+   
+;; register a dashboard 
+;;
+(define (mddb:register-dashboard port)
+  (let* ((pid      (current-process-id))
+	 (hostname (get-host-name))
+	 (username (current-user-name)) ;; (car userinfo)))
+	 (db      (mddb:open-db)))
+    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,user,host,port) VALUES (?,?,?,?);")
+	   pid hostname port username)))
+
+;; unregister a monitor
+;;
+(define (mddb:unregister-dashboard areadat host port)
+  (let* ((db      (mddb:open-db)))
+    (print "Register unregister monitor, host:port=" host ":" port)
+    (exec (sql db "DELETE FROM monitors WHERE host=? AND port=?;")
+	   host port)))
 
 ;;======================================================================
 ;; T R E E 
@@ -578,7 +620,10 @@ Misc
 
 (let-values 
  (((con port)(dboard:server-start #f)))
+ ;; got here, monitor/dashboard was started
+ (mddb:register-dashboard port)
  (thread-start! (make-thread (lambda ()(dboard:server-service con port)) "server service"))
  (dboard:make-window 0)
+ (mddb:unregister-dashboard (get-host-name) port)
  (dboard:server-close con port))
 
