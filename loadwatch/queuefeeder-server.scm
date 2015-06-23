@@ -67,11 +67,17 @@
        ((> res 45)                  45) ;; cap at 45 seconds
        (else res))))))
 
+;; x input value (current number in the queue)
+;; targ is the desired queue length
+;;
 (define (piecewise-droop-calc x targ)
   (let ((top 50))
     (cond
-     ((> (- x targ) 0) top) ;; top off at 45 seconds
-     ((> x (- targ top))(+ (* 1 (- x (- targ top)))(/ (- top targ) targ)))
+     ((> (- x targ) 0)
+      top) ;; top off at top seconds
+     ((> x (- targ top))
+      (+ (* 1 (- x (- targ top)))
+	 (/ (- top targ) targ)))
      (else (let ((res (/ x targ)))
 	     (if (< res 0.01)
 		 0.01
@@ -156,7 +162,7 @@
 			      (let ((delay-time (string->number (or (get-environment-variable "QUEUE_CHK_DELAY") "30"))))
 				(let loop ()
 				  (with-input-from-pipe 
-				   cmd
+				   cmd  ;;; my query to get queue length
 				   (lambda ()
 				     (let* ((val       (read))
 					    (droop-val (if (number? val)(piecewise-droop-calc val queuelen) #f)))

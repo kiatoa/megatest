@@ -80,7 +80,7 @@
   (thread-start! (lambda ()
 		   (thread-sleep! 60)
 		   (print "Give up on waiting for the server")
-		   (nn-close req)
+		   ;; (nn-close req)
 		   ;; (exit)
 		   ))
   (thread-join! (thread-start! (lambda ()
@@ -88,7 +88,8 @@
 				  (((delay-time msg)(get-delay signature)))
 				  (print "INFO: sleeping " delay-time " seconds per request of queuefeeder server")
 				  (thread-sleep! delay-time)
-				  (print "INFO: done waiting, now executing requested task."))))))
+				  (print "INFO: done waiting, now executing requested task.")))))
+  (nn-close req))
 
 (process-execute (car cmd) (cdr cmd))
 
