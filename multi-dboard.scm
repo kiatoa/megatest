@@ -268,12 +268,13 @@ Misc
      (list 
       "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
       "CREATE TABLE IF NOT EXISTS dashboards (
-          id   INTEGER PRIMARY KEY,
-          pid  INTEGER,
-          user TEXT,
-          host TEXT,
-          port INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now'))
+          id         INTEGER PRIMARY KEY,
+          pid        INTEGER,
+          username   TEXT,
+          hostname   TEXT,
+          portnum    INTEGER,
+          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+             CONSTRAINT hostport UNIQUE (hostname,portnum)
         );"
       ))
     db))
@@ -287,16 +288,17 @@ Misc
 	 (username (current-user-name)) ;; (car userinfo)))
 	 (db      (mddb:open-db)))
     (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,user,host,port) VALUES (?,?,?,?);")
-	   pid hostname port username)))
+    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,portnum) VALUES (?,?,?,?);")
+	   pid username hostname port)
+    (close-database db)))
 
 ;; unregister a monitor
 ;;
-(define (mddb:unregister-dashboard areadat host port)
+(define (mddb:unregister-dashboard host port)
   (let* ((db      (mddb:open-db)))
     (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM monitors WHERE host=? AND port=?;")
-	   host port)))
+    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+    (close-database db)))
 
 ;;======================================================================
 ;; T R E E 
@@ -620,10 +622,11 @@ Misc
 
 (let-values 
  (((con port)(dboard:server-start #f)))
- ;; got here, monitor/dashboard was started
- (mddb:register-dashboard port)
- (thread-start! (make-thread (lambda ()(dboard:server-service con port)) "server service"))
- (dboard:make-window 0)
- (mddb:unregister-dashboard (get-host-name) port)
- (dboard:server-close con port))
+ (let ((portnum   (if (string? port)(string->number port) port)))
+   ;; got here, monitor/dashboard was started
+   (mddb:register-dashboard portnum)
+   (thread-start! (make-thread (lambda ()(dboard:server-service con portnum)) "server service"))
+   (dboard:make-window 0)
+   (mddb:unregister-dashboard (get-host-name) portnum)
+   (dboard:server-close con port)))
 
