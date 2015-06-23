@@ -9,22 +9,17 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69)
+(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69 nanomsg srfi-18)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
 
-;; (declare (unit multi-dboard))
 (declare (uses margs))
-;; (declare (uses launch))
 (declare (uses megatest-version))
 (declare (uses gutils))
-;; (declare (uses db))
-;; (declare (uses server))
-;; (declare (uses synchash))
-;; (declare (uses dcommon))
 (declare (uses tree))
 (declare (uses configf))
+(declare (uses portlogger))
 
 (include "common_records.scm")
 ;; (include "db_records.scm")
@@ -404,6 +399,116 @@ Misc
 		(loop (+ index 1)(car tal)(cdr tal)))))
       tabtop))))
 
+
+;;======================================================================
+;; N A N O M S G   S E R V E R
+;;======================================================================
+
+(define (dboard:server-service soc port)
+  (print "server starting")
+  (let loop ((msg-in (nn-recv soc))
+	     (count  0))
+    (if (eq? 0 (modulo count 1000))
+	(print "server received: " msg-in ", count=" count))
+    (cond
+     ((equal? msg-in "quit")
+      (nn-send soc "Ok, quitting"))
+     ((and (>= (string-length msg-in) 4)
+	   (equal? (substring msg-in 0 4) "ping"))
+      (nn-send soc (conc (current-process-id)))
+      (loop (nn-recv soc)(+ count 1)))
+     (else
+      (mutex-lock! *current-delay-mutex*)
+      (let ((current-delay *current-delay*))
+	(mutex-unlock! *current-delay-mutex*)
+	;; (thread-sleep! current-delay)
+	(nn-send soc (conc current-delay " hello " msg-in " you waited " current-delay " seconds"))
+	(loop (nn-recv soc)(if (> count 20000000)
+			       0
+			       (+ count 1))))))))
+
+(define (dboard:one-time-ping-receive soc port)
+  (let ((msg-in (nn-recv soc)))
+    (if (and (>= (string-length msg-in) 4)
+	     (equal? (substring msg-in 0 4) "ping"))
+	(nn-send soc (conc (current-process-id))))))
+
+(define (dboard:server-start given-port #!key (num-tries 200))
+  (let* ((rep (nn-socket 'rep))
+	 (port (or given-port  (portlogger:main "find")))
+	 (con (conc "tcp://*:" port)))
+    ;; register this connect here ....
+    (nn-bind rep con)
+    (thread-start! 
+     (make-thread (lambda ()
+		    (dboard:one-time-ping-receive rep port))
+		  "one time receive thread"))
+    (if (dboard:ping-self "localhost" port)
+	(begin
+	  (print "INFO: dashboard nanomsg server started on " port)
+	  (values rep port))
+	(begin
+	  (print "WARNING: couldn't create server on port " port)
+	  (portlogger:main "set" "failed")
+	  (if (> num-tries 0)
+	      (dboard:server-start #f (- num-tries 1))
+	      (begin
+		(print "ERROR: failed to start nanomsg server")
+		(values #f #f)))))))
+
+(define (dboard:server-close con port)
+  (nn-close con)
+  (portlogger:main "set" port "released"))
+
+(define (dboard:ping-self host port #!key (return-socket #t))
+  ;; send a random number along with pid and check that we get it back
+  (let* ((req     (nn-socket 'req))
+	 (key     "ping")
+	 (success #f)
+	 (keepwaiting #t)
+	 (ping    (make-thread
+		   (lambda ()
+		     (print "ping: sending string \"" key "\", expecting " (current-process-id))
+		     (nn-send req key)
+		     (let ((result  (nn-recv req)))
+		       (if (equal? (conc (current-process-id)) result)
+			   (begin
+			     (print "ping, success: received \"" result "\"")
+			     (set! success #t))
+			   (begin
+			     (print "ping, failed: received key \"" result "\"")
+			     (set! keepwaiting #f)
+			     (set! success #f)))))
+		   "ping"))
+	 (timeout (make-thread (lambda ()
+				 (let loop ((count 0))
+				   (thread-sleep! 1)
+				   (print "still waiting after " count " seconds...")
+				   (if (and keepwaiting (< count 10))
+				       (loop (+ count 1))))
+				 (if keepwaiting
+				     (begin
+				       (print "timeout waiting for ping")
+				       (thread-terminate! ping))))
+			       "timeout")))
+    (nn-connect req (conc "tcp://" host ":" port))
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain)
+       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print "exn=" (condition->list exn))
+       (print "ping failed to connect to " host ":" port))
+     (thread-start! timeout)
+     (thread-start! ping)
+     (thread-join! ping)
+     (if success (thread-terminate! timeout)))
+    (if return-socket
+	(if success req #f)
+	(begin
+	  (nn-close req)
+	  success))))
+
 ;;======================================================================
 ;; C O N F I G U R A T I O N 
 ;;======================================================================
@@ -471,5 +576,9 @@ Misc
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(dboard:make-window 0)
+(let-values 
+ (((con port)(dboard:server-start #f)))
+ (thread-start! (make-thread (lambda ()(dboard:server-service con port)) "server service"))
+ (dboard:make-window 0)
+ (dboard:server-close con port))
 
