@@ -499,13 +499,13 @@
      "SELECT id,pid,hostname,last_update,strftime('%s','now')-last_update AS delta FROM monitors WHERE delta > 700;")
     (sqlite3:execute mdb (conc "DELETE FROM monitors WHERE id IN ('" (string-intersperse (map conc deadlist) "','") "');")))
   )
-(define (tasks:register-monitor db mdb)
+(define (tasks:register-monitor db port)
   (let* ((pid (current-process-id))
 	 (hostname (get-host-name))
 	 (userinfo (user-information (current-user-id)))
 	 (username (car userinfo)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", username: " username)
-    (sqlite3:execute mdb "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
+    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+    (sqlite3:execute db "INSERT INTO monitors (pid,start_time,last_update,hostname,username) VALUES (?,strftime('%s','now'),strftime('%s','now'),?,?);"
 		     pid hostname username)))
 
 (define (tasks:get-num-alive-monitors mdb)
