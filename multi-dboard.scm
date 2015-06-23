@@ -158,7 +158,7 @@ Misc
   current-window-id  ;; 
   current-tab-id     ;; 
   update-needed      ;; flag to indicate that the tab pointed to by current tab id needs refreshing immediately
-  tab-ids            ;; hash of tab-id -> areaname
+  tabs               ;; hash of tab-id -> areaname (??) should be of type "tab"
   )
 
 ;; all the components of an area display, all fits into a tab but
@@ -264,15 +264,31 @@ Misc
   (for-each
    (lambda (window-id)
      (print "Processing for window-id " window-id)
-     (let* ((window-dat (hash-table-ref *windows* window-id))
-	    (areas      (data-areas     window-dat)))
+     (let* ((window-dat   (hash-table-ref *windows* window-id))
+	    (areas        (data-areas     window-dat))
+	    (tabs         (data-tabs      window-dat))
+	    (tab-ids      (hash-table-keys tabs))
+	    (current-tab  (if (null? tab-ids)
+			      #f
+			      (hash-table-ref tabs (car tab-ids))))
+	    (current-tree (if (null? tab-ids) #f (tab-tree current-tab))))
        ;; now for each area in the window gather the data
        (for-each
 	(lambda (area-name)
 	  (print "Processing for area-name " area-name)
-	  (let ((area-dat (hash-table-ref areas area-name)))
+	  (let* ((area-dat (hash-table-ref areas area-name))
+		 (runs     (areadat-runs   area-dat)))
 	    (print "Processing " area-dat " for area-name " area-name)
-	    (areadb:populate-run-info area-dat)))
+	    (areadb:populate-run-info area-dat)
+	    (for-each 
+	     (lambda (run-id)
+	       (let* ((run     (hash-table-ref runs run-id))
+		      (target  (rundat-target run))
+		      (runname (rundat-runname run)))
+		 (if current-tree
+		     (tree:add-node current-tree area-name (append (string-split target "/")(list runname))))
+		 ))
+	     (hash-table-keys runs))))
 	(hash-table-keys areas))))
    (hash-table-keys *windows*)))
 
@@ -426,7 +442,7 @@ Misc
 		      ""
 		      )))
     (hash-table-set! (data-areas data) aname area-dat) ;; dboard-dat)
-    (hash-table-set! (data-tab-ids data) window-id dboard-dat)
+    (hash-table-set! (data-tabs data) window-id dboard-dat)
     (tab-tree-set!   dboard-dat tb)
     (tab-matrix-set! dboard-dat ad)
     (iup:split
@@ -452,12 +468,12 @@ Misc
 						   (data-update-needed-set!  data #t)
 						   (print "Tab is: " curr ", prev was " prev))
 			       area-panels))
-	   (tab-ids     (data-tab-ids data)))
+	   (tabs     (data-tabs data)))
       (if (not (null? area-names))
 	  (let loop ((index 0)
 		     (hed   (car area-names))
 		     (tal   (cdr area-names)))
-	    (hash-table-set! tab-ids index hed)
+	    ;; (hash-table-set! tabs index hed)
 	    (debug:print 0 "Adding area " hed " with index " index " to dashboard")
 	    (iup:attribute-set! tabtop (conc "TABTITLE" index) hed)
 	    (if (not (null? tal))
