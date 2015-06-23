@@ -162,16 +162,18 @@
 	     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 	     (print "exn=" (condition->list exn))
 	     (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
-	     (print-call-chain (current-error-port)))
-	   (cond
-	    ((> numargs 1) ;; most commands
-	     (case (string->symbol (car args)) ;; commands with two or more params
-	       ((take)(portlogger:take-port db (string->number (cadr args))))
-	       ((set) (portlogger:set-port db 
-					   (string->number (cadr args))
-					   (caddr args))
-		(caddr args))
-	       ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed)))))))
+	     (print-call-chain (current-error-port))
+	     #f)
+	   (case (string->symbol (car args)) ;; commands with two or more params
+	     ((take)(portlogger:take-port db (string->number (cadr args))))
+	     ((find)(portlogger:find-port db))
+	     ((set) (let ((port  (cadr  args))
+			  (state (caddr args)))
+		      (portlogger:set-port db 
+					   (if (number? port) port (string->number port))
+					   state)
+		      state))
+	     ((failed)(portlogger:set-failed db (string->number (cadr args))) 'failed)))))
     (sqlite3:finalize! db)
     result))
      
