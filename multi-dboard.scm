@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69 nanomsg srfi-18)
+(use format numbers sql-de-lite srfi-1 posix regex regex-case srfi-69 nanomsg srfi-18 call-with-environment-variables)
 (require-library iup)
 (import (prefix iup iup:))
 (use canvas-draw)
@@ -20,6 +20,7 @@
 (declare (uses tree))
 (declare (uses configf))
 (declare (uses portlogger))
+(declare (uses keys))
 
 (include "common_records.scm")
 ;; (include "db_records.scm")
@@ -65,6 +66,7 @@ Misc
 ;;     (client:launch))
 
 (define *runremote* #f)
+(define *windows* (make-hash-table))
 
 (debug:setup)
 
@@ -243,18 +245,37 @@ Misc
 ;; populate the areadat tests info, does NOT fill the tests data itself
 ;;
 (define (areadb:populate-run-info areadat)
-  (let* ((runs   (or (areadat-tests areadat) (make-hash-table)))
+  (let* ((runs   (or (areadat-runs areadat) (make-hash-table)))
 	 (keys   (areadat-run-keys areadat))
 	 (maindb (areadb:open areadat 0)))
     (query (for-each-row (lambda (row)
 			   (let ((id  (list-ref row 0))
 				 (dat (apply make-rundat (append row (list #f #f))))) ;; add placeholders for tests and db
-			     (hash-table-set! runs id dat)))
-			 (sql maindb (conc "SELECT id,"
-					   (string-intersperse keys "'||/||'")
-					   ",runname,state,status,event_time FROM runs WHERE state != 'DELETED';"))))
+			     (print row)
+			     (hash-table-set! runs id dat))))
+	   (sql maindb (conc "SELECT id,"
+			     (string-intersperse keys "||'/'||")
+			     ",runname,state,status,event_time FROM runs WHERE state != 'DELETED';")))
     areadat))
-			
+	
+;; initialize and refresh data
+;;		
+(define (dboard:general-updater con port)
+  (for-each
+   (lambda (window-id)
+     (print "Processing for window-id " window-id)
+     (let* ((window-dat (hash-table-ref *windows* window-id))
+	    (areas      (data-areas     window-dat)))
+       ;; now for each area in the window gather the data
+       (for-each
+	(lambda (area-name)
+	  (print "Processing for area-name " area-name)
+	  (let ((area-dat (hash-table-ref areas area-name)))
+	    (print "Processing " area-dat " for area-name " area-name)
+	    (areadb:populate-run-info area-dat)))
+	(hash-table-keys areas))))
+   (hash-table-keys *windows*)))
+
 ;;======================================================================
 ;; D A S H B O A R D   D B 
 ;;======================================================================
@@ -361,8 +382,7 @@ Misc
 ;;======================================================================
 
 (define (dashboard:init-area data area-name apath)
-  (let* ((mtconffile  (conc apath "/megatest.config"))
-	 (mtconf      (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
+  (let* ((mtconf      (dboard:read-mtconf apath))
 	 (area-dat    (let ((ad (make-areadat
 				 area-name ;; area name
 				 apath     ;; path to area
@@ -371,7 +391,7 @@ Misc
 				 (make-hash-table) ;; denoise hash
 				 #f        ;; client-signature
 				 #f        ;; remote connections
-				 #f        ;; run keys
+				 (keys:config-get-fields mtconf) ;; run keys
 				 (make-hash-table) ;; run-id -> (hash of test-ids => dat)
 				 (and (file-exists? apath)(file-write-access? apath)) ;; read-only
 				 #f
@@ -405,7 +425,8 @@ Misc
 		      (make-hash-table) ;; run-id -> test-id, for current test id
 		      ""
 		      )))
-    (hash-table-set! (data-areas data) aname dboard-dat)
+    (hash-table-set! (data-areas data) aname area-dat) ;; dboard-dat)
+    (hash-table-set! (data-tab-ids data) window-id dboard-dat)
     (tab-tree-set!   dboard-dat tb)
     (tab-matrix-set! dboard-dat ad)
     (iup:split
@@ -595,6 +616,19 @@ Misc
 	   #f))))
 ;; )
 
+(define (dboard:read-mtconf apath)
+  (let* ((mtconffile  (conc apath "/megatest.config")))
+    (call-with-environment-variables
+     (list (cons "MT_RUN_AREA_HOME" apath))
+     (lambda ()
+       (read-config mtconffile (make-hash-table) #f)) ;; megatest.config
+     )))
+	 
+
+;;======================================================================
+;; G U I   S T U F F 
+;;======================================================================
+
 ;;; main. Theoretically could have multiple windows (each with a group of tags, thus window-id
 ;;;
 (define (dboard:make-window window-id)
@@ -610,6 +644,7 @@ Misc
 		     #f                ;; redraw needed for current tab id
 		     (make-hash-table) ;; tab-id -> areaname
 		     )))
+    (hash-table-set! *windows* window-id data)
     (iup:show (dashboard:main-panel data window-id))
     (iup:main-loop)))
 
@@ -626,6 +661,11 @@ Misc
    ;; got here, monitor/dashboard was started
    (mddb:register-dashboard portnum)
    (thread-start! (make-thread (lambda ()(dboard:server-service con portnum)) "server service"))
+   (thread-start! (make-thread (lambda ()
+				 (let loop ()
+				   (dboard:general-updater con portnum)
+				   (thread-sleep! 1)
+				   (loop))) "general updater"))
    (dboard:make-window 0)
    (mddb:unregister-dashboard (get-host-name) portnum)
    (dboard:server-close con port)))
