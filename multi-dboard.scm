@@ -21,6 +21,7 @@
 (declare (uses configf))
 (declare (uses portlogger))
 (declare (uses keys))
+(declare (uses common))
 
 (include "common_records.scm")
 ;; (include "db_records.scm")
@@ -67,6 +68,8 @@ Misc
 
 (define *runremote* #f)
 (define *windows* (make-hash-table))
+(define *changed-main* (make-hash-table)) ;; set path/... => #t
+(define *changed-mutex* (make-mutex))     ;; use for all incoming change requests
 
 (debug:setup)
 
@@ -302,47 +305,8 @@ Misc
 ;;======================================================================
 ;; D A S H B O A R D   D B 
 ;;======================================================================
-		
-(define (mddb:open-db)
-  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
-    (set-busy-handler! db (busy-timeout 10000))
-    (for-each
-     (lambda (qry)
-       (exec (sql db qry)))
-     (list 
-      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
-      "CREATE TABLE IF NOT EXISTS dashboards (
-          id         INTEGER PRIMARY KEY,
-          pid        INTEGER,
-          username   TEXT,
-          hostname   TEXT,
-          portnum    INTEGER,
-          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
-             CONSTRAINT hostport UNIQUE (hostname,portnum)
-        );"
-      ))
-    db))
 
-   
-;; register a dashboard 
-;;
-(define (mddb:register-dashboard port)
-  (let* ((pid      (current-process-id))
-	 (hostname (get-host-name))
-	 (username (current-user-name)) ;; (car userinfo)))
-	 (db      (mddb:open-db)))
-    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
-    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,portnum) VALUES (?,?,?,?);")
-	   pid username hostname port)
-    (close-database db)))
-
-;; unregister a monitor
-;;
-(define (mddb:unregister-dashboard host port)
-  (let* ((db      (mddb:open-db)))
-    (print "Register unregister monitor, host:port=" host ":" port)
-    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
-    (close-database db)))
+;; All moved to common.scm		
 
 ;;======================================================================
 ;; T R E E 
