@@ -266,7 +266,7 @@ Misc
 (define (dboard:general-updater con port)
   (for-each
    (lambda (window-id)
-     (print "Processing for window-id " window-id)
+     ;; (print "Processing for window-id " window-id)
      (let* ((window-dat   (hash-table-ref *windows* window-id))
 	    (areas        (data-areas     window-dat))
 	    (tabs         (data-tabs      window-dat))
@@ -279,26 +279,30 @@ Misc
        ;; now for each area in the window gather the data
        (for-each
 	(lambda (area-name)
-	  (print "Processing for area-name " area-name)
-	  (let* ((area-dat (hash-table-ref areas area-name))
-		 (runs     (areadat-runs   area-dat)))
-	    (print "Processing " area-dat " for area-name " area-name)
-	    (areadb:populate-run-info area-dat)
-	    (for-each 
-	     (lambda (run-id)
-	       (let* ((run     (hash-table-ref runs run-id))
-		      (target  (rundat-target run))
-		      (runname (rundat-runname run)))
-		 (if current-tree
-		     (let* ((partial-path (append (string-split target "/")(list runname)))
-			    (full-path    (cons area-name partial-path)))
-		       (if (not (hash-table-exists? seen-nodes full-path))
-			   (begin
-			     (print "INFO: Adding node " partial-path " to section " area-name)
-			     (tree:add-node current-tree "Areas" full-path)
-			     (hash-table-set! seen-nodes full-path #t)))))
-		 ))
-	     (hash-table-keys runs))))
+	  ;; (print "Processing for area-name " area-name)
+	  (let* ((area-dat  (hash-table-ref areas area-name))
+		 (area-path (areadat-path   area-dat))
+		 (runs      (areadat-runs   area-dat)))
+	    (if (hash-table-ref/default *changed-main* area-path 'processed)
+		(begin
+		  (print "Processing " area-dat " for area-name " area-name)
+		  (hash-table-set! *changed-main* area-path #f)
+		  (areadb:populate-run-info area-dat)
+		  (for-each 
+		   (lambda (run-id)
+		     (let* ((run     (hash-table-ref runs run-id))
+			    (target  (rundat-target run))
+			    (runname (rundat-runname run)))
+		       (if current-tree
+			   (let* ((partial-path (append (string-split target "/")(list runname)))
+				  (full-path    (cons area-name partial-path)))
+			     (if (not (hash-table-exists? seen-nodes full-path))
+				 (begin
+				   (print "INFO: Adding node " partial-path " to section " area-name)
+				   (tree:add-node current-tree "Areas" full-path)
+				   (hash-table-set! seen-nodes full-path #t)))))
+		       ))
+		   (hash-table-keys runs))))))
 	(hash-table-keys areas))))
    (hash-table-keys *windows*)))
 
