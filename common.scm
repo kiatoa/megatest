@@ -9,8 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3)
-(require-extension sqlite3 regex posix)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 nanomsg sql-de-lite hostinfo)
+(require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
 
@@ -315,7 +315,7 @@
 (set-signal-handler! signal/stop std-signal-handler)  ;; ^Z
 
 ;;======================================================================
-;; Misc utils
+;; M I S C   U T I L S
 ;;======================================================================
 
 ;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
@@ -753,3 +753,80 @@
    ((equal? status "RUNNING") "blue")
    ((equal? status "ABORT")   "brown")
    (else "black")))
+
+;;======================================================================
+;; N A N O M S G   C L I E N T
+;;======================================================================
+
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
+
+(define (common:send-dboard-main-changed)
+  (let ((dashboard-ips (mddb:get-dashboards)))
+    #f))
+    
+
+;;======================================================================
+;; D A S H B O A R D   D B 
+;;======================================================================
+
+(define (mddb:open-db)
+  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+    (set-busy-handler! db (busy-timeout 10000))
+    (for-each
+     (lambda (qry)
+       (exec (sql db qry)))
+     (list 
+      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+      "CREATE TABLE IF NOT EXISTS dashboards (
+          id         INTEGER PRIMARY KEY,
+          pid        INTEGER,
+          username   TEXT,
+          hostname   TEXT,
+          ipaddr     TEXT,
+          portnum    INTEGER,
+          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+             CONSTRAINT hostport UNIQUE (hostname,portnum)
+        );"
+      ))
+    db))
+
+;; register a dashboard 
+;;
+(define (mddb:register-dashboard port)
+  (let* ((pid      (current-process-id))
+	 (hostname (get-host-name))
+	 (ipaddr   (server:get-best-guess-address hostname))
+	 (username (current-user-name)) ;; (car userinfo)))
+	 (db      (mddb:open-db)))
+    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+	   pid username hostname ipaddr port)
+    (close-database db)))
+
+;; unregister a monitor
+;;
+(define (mddb:unregister-dashboard host port)
+  (let* ((db      (mddb:open-db)))
+    (print "Register unregister monitor, host:port=" host ":" port)
+    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+    (close-database db)))
+
+;; get registered dashboards
+;;
+(define (mddb:get-dashboards)
+  (let ((db (mddb:open-db)))
+    (query fetch-column
+	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+    
+	
