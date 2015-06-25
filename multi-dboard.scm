@@ -147,6 +147,8 @@ Misc
 (define-record testdat
   run-id             ;; what run is this from
   id                 ;; test id
+  testname           ;; test name
+  itempath           ;; item path
   state              ;; test state, symbol
   status             ;; test status, symbol
   event-time         ;; when the test started
@@ -228,7 +230,7 @@ Misc
 	 (db     (case run-id ;; if already opened, get the db and return it
 		   ((-1) (areadat-monitordb areadat))
 		   ((0)  (areadat-maindb    areadat))
-		   (else (if run
+		   (else (if rundat
 			     (rundat-db rundat)
 			     #f)))))
     (if db
@@ -245,7 +247,7 @@ Misc
 	    (else (rundat-db-set!        rundat  db)))
 	  db))))
 
-;; populate the areadat tests info, does NOT fill the tests data itself
+;; populate the areadat tests info, does NOT fill the tests data itself unless asked
 ;;
 (define (areadb:populate-run-info areadat)
   (let* ((runs   (or (areadat-runs areadat) (make-hash-table)))
@@ -258,9 +260,42 @@ Misc
 			     (hash-table-set! runs id dat))))
 	   (sql maindb (conc "SELECT id,"
 			     (string-intersperse keys "||'/'||")
-			     ",runname,state,status,event_time FROM runs WHERE state != 'DELETED';")))
+			     ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
     areadat))
-	
+
+;; given an areadat and target/runname patt fill up runs data
+;;
+;; ?????/
+
+;; given a list of run-ids refresh/retrieve runs data into areadat
+;;
+(define (areadb:fill-tests areadat #!key (run-ids #f))
+  (let* ((runs   (or (areadat-runs areadat) (make-hash-table))))
+    (for-each
+     (lambda (run-id)
+       (let* ((rundat (hash-table-ref/default runs run-id #f))
+	      (tests  (if (and rundat
+			       (rundat-tests rundat)) ;; re-use existing hash table?
+			  (rundat-tests rundat)
+			  (let ((ht (make-hash-table)))
+			    (rundat-tests-set! rundat ht)
+			    ht)))
+	      (rundb  (areadb:open areadat run-id)))
+	 (query (for-each-row (lambda (row)
+				(let* ((id         (list-ref row 0))
+				       (testname   (list-ref row 1))
+				       (itempath   (list-ref row 2))
+				       (state      (list-ref row 3))
+				       (status     (list-ref row 4))
+				       (eventtim   (list-ref row 5))
+				       (duration   (list-ref row 6)))
+				  (hash-table-set! tests id
+						   (make-testdat run-id id testname itempath state status eventtim duration)))))
+		(sql rundb "SELECT id,testname,item_path,state,status,event_time,run_duration FROM tests WHERE state != 'DELETED';"))))
+     (or run-ids (hash-table-keys runs)))
+    areadat))
+    
+
 ;; initialize and refresh data
 ;;		
 (define (dboard:general-updater con port)
@@ -300,8 +335,8 @@ Misc
 				 (begin
 				   (print "INFO: Adding node " partial-path " to section " area-name)
 				   (tree:add-node current-tree "Areas" full-path)
+				   (areadb:fill-tests area-dat run-ids: (list run-id))))
 				   (hash-table-set! seen-nodes full-path #t)))))
-		       ))
 		   (hash-table-keys runs))))))
 	(hash-table-keys areas))))
    (hash-table-keys *windows*)))
