@@ -471,21 +471,34 @@ Misc
     (if (eq? 0 (modulo count 1000))
 	(print "server received: " msg-in ", count=" count))
     (cond
+     ;;
+     ;; quit
+     ;;
      ((equal? msg-in "quit")
       (nn-send soc "Ok, quitting"))
+     ;;
+     ;; ping
+     ;;
      ((and (>= (string-length msg-in) 4)
 	   (equal? (substring msg-in 0 4) "ping"))
       (nn-send soc (conc (current-process-id)))
       (loop (nn-recv soc)(+ count 1)))
+     ;;
+     ;; main changed
+     ;;
+     ((and (>= (string-length msg-in) 4)
+	   (equal? (substring msg-in 0 4) "main"))
+      (let ((parts (string-split msg-in " ")))
+	(hash-table-set! *changed-main* (cadr parts) #t)
+	(nn-send soc "got it!")))
+     ;;
+     ;; ??
+     ;;
      (else
-      (mutex-lock! *current-delay-mutex*)
-      (let ((current-delay *current-delay*))
-	(mutex-unlock! *current-delay-mutex*)
-	;; (thread-sleep! current-delay)
-	(nn-send soc (conc current-delay " hello " msg-in " you waited " current-delay " seconds"))
-	(loop (nn-recv soc)(if (> count 20000000)
-			       0
-			       (+ count 1))))))))
+      (nn-send soc "hello " msg-in " you got to the else clause!")))
+    (loop (nn-recv soc)(if (> count 20000000)
+			   0
+			   (+ count 1)))))
 
 (define (dboard:one-time-ping-receive soc port)
   (let ((msg-in (nn-recv soc)))

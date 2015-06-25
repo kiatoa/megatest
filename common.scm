@@ -160,7 +160,7 @@
 	#f)))
 
 (define (common:get-megatest-exe)
-  (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
+  (or (getenv "MT_MEGATEST") "megatest"))
 
 (define (common:read-encoded-string instr)
   (handle-exceptions
@@ -771,10 +771,111 @@
 	  (u8vector->list
 	   (if res res (hostname->ip hostname)))) ".")))
 
+(define (common:open-nm-req addr)
+  (let* ((req (nn-socket 'req))
+	 (res (nn-connect req addr)))
+    req))
+
+;; (with-output-to-string (lambda ()(serialize obj)))
+(define (common:nm-send-receive soc msg)
+  (nn-send soc msg)
+  (nn-recv soc))
+
+(define (common:close-nm-req soc)
+  (nn-close soc))
+
 (define (common:send-dboard-main-changed)
-  (let ((dashboard-ips (mddb:get-dashboards)))
-    #f))
+  (let* ((dashboard-ips (mddb:get-dashboards)))
+    (for-each
+     (lambda (ipadr)
+       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+	      (msg (conc "main " *toppath*))
+	      (res (common:nm-send-receive-timeout soc msg)))
+	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+	     (print "ERROR: couldn't reach dashboard " ipadr))
+	 res))
+     dashboard-ips)))
     
+(define (common:nm-send-receive-timeout req msg)
+  (let* ((key     "ping")
+	 (success #f)
+	 (keepwaiting #t)
+	 (result  #f)
+	 (sendrec (make-thread
+		   (lambda ()
+		     (nn-send req msg)
+		     (set! result (nn-recv req))
+		     (set! success #t))
+		   "send-receive"))
+	 (timeout (make-thread (lambda ()
+				 (let loop ((count 0))
+				   (thread-sleep! 1)
+				   (print "still waiting after count seconds...")
+				   (if (and keepwaiting (< count 10))
+				       (loop (+ count 1))))
+				 (if keepwaiting
+				     (begin
+				       (print "timeout waiting for reply")
+				       (thread-terminate! sendrec))))
+			       "timeout")))
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain)
+       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print "exn=" (condition->list exn)))
+     (thread-start! timeout)
+     (thread-start! sendrec)
+     (thread-join!  sendrec)
+     (if success (thread-terminate! timeout)))
+    result))
+    
+(define (common:ping-nm req)
+  ;; send a random number and check that we get it back
+  (let* ((key     "ping")
+	 (success #f)
+	 (keepwaiting #t)
+	 (ping    (make-thread
+		   (lambda ()
+		     (print "ping: sending string \"" key "\", expecting " (current-process-id))
+		     (nn-send req key)
+		     (let ((result  (nn-recv req)))
+		       (if (equal? (conc (current-process-id)) result)
+			   (begin
+			     (print "ping, success: received \"" result "\"")
+			     (set! success #t))
+			   (begin
+			     (print "ping, failed: received key \"" result "\"")
+			     (set! keepwaiting #f)
+			     (set! success #f)))))
+		   "ping"))
+	 (timeout (make-thread (lambda ()
+				 (let loop ((count 0))
+				   (thread-sleep! 1)
+				   (print "still waiting after count seconds...")
+				   (if (and keepwaiting (< count 10))
+				       (loop (+ count 1))))
+				 (if keepwaiting
+				     (begin
+				       (print "timeout waiting for ping")
+				       (thread-terminate! ping))))
+			       "timeout")))
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain)
+       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print "exn=" (condition->list exn))
+       (print "ping failed to connect to tcp://" hostport))
+     (thread-start! timeout)
+     (thread-start! ping)
+     (thread-join! ping)
+     (if success (thread-terminate! timeout)))
+    (if return-socket
+	(if success req #f)
+	(begin
+	  (nn-close req)
+	  success))))
 
 ;;======================================================================
 ;; D A S H B O A R D   D B 
