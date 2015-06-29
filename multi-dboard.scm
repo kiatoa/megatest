@@ -181,6 +181,8 @@ Misc
   run-id    ;; the current run-id
   test-ids  ;; the current test id hash, run-id => test-id
   command   ;; the command from the entry field
+  headers   ;; hash of header  -> colnum
+  rows      ;; hash of rowname -> rownum
   )
 
 (define-record filter
@@ -302,16 +304,30 @@ Misc
   (for-each
    (lambda (window-id)
      ;; (print "Processing for window-id " window-id)
-     (let* ((window-dat   (hash-table-ref *windows* window-id))
-	    (areas        (data-areas     window-dat))
-	    (tabs         (data-tabs      window-dat))
-	    (tab-ids      (hash-table-keys tabs))
-	    (current-tab  (if (null? tab-ids)
-			      #f
-			      (hash-table-ref tabs (car tab-ids))))
-	    (current-tree (if (null? tab-ids) #f (tab-tree current-tab)))
-	    (seen-nodes   (make-hash-table)))
+     (let* ((window-dat     (hash-table-ref *windows* window-id))
+	    (areas          (data-areas     window-dat))
+	    ;; (keys           (areadat-run-keys area-dat))
+	    (tabs           (data-tabs      window-dat))
+	    (tab-ids        (hash-table-keys tabs))
+	    (current-tab    (if (null? tab-ids)
+				#f
+				(hash-table-ref tabs (car tab-ids))))
+	    (current-tree   (if (null? tab-ids) #f (tab-tree   current-tab)))
+	    (current-node   (if (null? tab-ids) 0  (string->number (iup:attribute current-tree "VALUE"))))
+	    (current-path   (if (eq? current-node 0)
+				"Areas"
+				(string-intersperse (tree:node->path current-tree current-node) "/")))
+	    (current-matrix (if (null? tab-ids) #f (tab-matrix current-tab)))
+	    (seen-nodes     (make-hash-table))
+	    (path-changed   (if current-tab
+				(equal? current-path (tab-view-path current-tab))
+				#t)))
+       ;; (debug:print-info 0 "Current path: " current-path)
        ;; now for each area in the window gather the data
+       (if path-changed
+	   (begin
+	     (debug:print-info 0 "clearing matrix - path changed")
+	     (dboard:clear-matrix current-tab)))
        (for-each
 	(lambda (area-name)
 	  ;; (print "Processing for area-name " area-name)
@@ -337,7 +353,10 @@ Misc
 				   (tree:add-node current-tree "Areas" full-path)
 				   (areadb:fill-tests area-dat run-ids: (list run-id))))
 				   (hash-table-set! seen-nodes full-path #t)))))
-		   (hash-table-keys runs))))))
+		   (hash-table-keys runs))))
+	    (if (or (equal? "Areas" current-path)
+		    (string-match (conc "^Areas/" area-name "(|\\/.*)$") current-path))
+		(dboard:redraw-area area-name area-dat current-tab current-matrix current-path))))
 	(hash-table-keys areas))))
    (hash-table-keys *windows*)))
 
@@ -386,26 +405,28 @@ Misc
 ;; General displayer
 ;;
 (define (dashboard:main-matrix data adat window-id)
-  (let* ((view-matrix     (iup:matrix
+  (let* (;; (tab-dat         (areadat-
+	 (view-matrix     (iup:matrix
 			   ;; (runs-for-targ (db:get-runs-by-patt *dbstruct-local* *keys* "%" target #f #f #f))
 			   #:expand "YES"
 			   ;; #:fittosize "YES"
+			   #:resizematrix "YES"
 			   #:scrollbar "YES"
 			   #:numcol 100
 			   #:numlin 100
 			   #:numcol-visible 3
-			   #:numlin-visible 3
+			   #:numlin-visible 20
 			   #:click-cb (lambda (obj lin col status)
-					(print "obj: " obj " lin: " lin " col: " col " status: " status)))))
-
-    (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
+					(print "obj: " obj " lin: " lin " col: " col " status: " status " value: " (iup:attribute obj "VALUE"))))))
+    
+    ;; (iup:attribute-set! view-matrix "RESIZEMATRIX" "YES")
     (iup:attribute-set! view-matrix "WIDTH0" "100")
     ;; (dboard:data-set-runs-matrix! *data* runs-matrix)
-    (iup:hbox
-     (iup:frame 
-      #:title "Runs browser"
-      (iup:vbox
-       view-matrix)))))
+    ;; (iup:hbox
+    ;;  (iup:frame 
+    ;;   #:title "Runs browser"
+    ;;   (iup:vbox
+    view-matrix))
 
 ;;======================================================================
 ;; A R E A S
@@ -431,6 +452,67 @@ Misc
 			ad)))
     area-dat))
 
+;; given the keys for an area and a path from the tree browser
+;; return the level: areas area runs run tests test
+;;
+(define (dboard:get-view-type keys current-path)
+  (let* ((path-parts (string-split current-path "/"))
+	 (path-len   (length path-parts)))
+    (cond
+     ((equal? current-path "Areas")     'areas)
+     ((eq? path-len 2)                  'area)
+     ((<= (+ (length keys) 2) path-len) 'runs)
+     (else                              'run))))
+
+(define (dboard:clear-matrix tab)
+  (if tab
+      (begin
+	(iup:attribute-set! (tab-matrix tab) "CLEARVALUE" "ALL")
+	(tab-headers-set! tab (make-hash-table))
+	(tab-rows-set!    tab (make-hash-table)))))
+
+;; full redraw of a given area
+;;
+(define (dboard:redraw-area area-name area-dat tab-dat current-matrix current-path)
+  (let* ((keys      (areadat-run-keys area-dat))
+	 (runs      (areadat-runs     area-dat))
+	 (headers   (tab-headers   tab-dat))
+	 (rows      (tab-rows      tab-dat))
+	 (used-cols (hash-table-values headers))
+	 (used-rows (hash-table-values rows))
+	 (touched   (make-hash-table)) ;; (vector row col) ==> true, touched cell
+	 (view-type (dboard:get-view-type keys current-path))
+	 (changed   #f)
+	 (state-statuses  (list "PASS" "FAIL" "WARN" "CHECK" "SKIP" "RUNNING" "LAUNCHED")))
+    (debug:print 0 "current-matrix=" current-matrix)
+    (case view-type
+      ((areas) ;; find row for this area, if not found, create new entry
+       (let* ((curr-rownum (hash-table-ref/default rows area-name #f))
+	      (next-rownum (+ (apply max (cons 0 used-rows)) 1))
+	      (rownum      (or curr-rownum next-rownum))
+	      (coord       (conc rownum ":0")))
+	 (if (not curr-rownum)(hash-table-set! rows area-name rownum))
+	 (if (not (equal? (iup:attribute current-matrix coord) area-name))
+	     (begin
+	       (let loop ((hed  (car state-statuses))
+			  (tal  (cdr state-statuses))
+			  (count 1))
+		 (if (not (equal? (iup:attribute current-matrix (conc "0:" count)) hed))
+		     (iup:attribute-set! current-matrix (conc "0:" count) hed))
+		 (iup:attribute-set! current-matrix (conc rownum ":" count) "0")
+		 (if (not (null? tal))
+		     (loop (car tal)(cdr tal)(+ count 1))))
+	       (debug:print-info 0 "view-type=" view-type ", rownum=" rownum ", curr-rownum=" curr-rownum ", next-rownum=" next-rownum ", coord=" coord ", area-name=" area-name)
+	       (iup:attribute-set! current-matrix coord area-name)
+	       (set! changed #t))))))
+    (if changed (iup:attribute-set! current-matrix "REDRAW" "ALL"))))
+	     
+
+       
+   ;; (dboard:clear-matrix current-matrix used-cols used-rows touched) ;; clear all
+    
+	
+  
 ;;======================================================================
 ;; D A S H B O A R D
 ;;======================================================================
@@ -449,11 +531,13 @@ Misc
 		      #f           ;; view path
 		      'default     ;; view type
 		      #f           ;; controls
-		      #f           ;; cached data
+		      (make-hash-table) ;; cached data? not sure how to use this yet :)
 		      #f           ;; filters
 		      #f           ;; the run-id
 		      (make-hash-table) ;; run-id -> test-id, for current test id
 		      ""
+		      (make-hash-table) ;; headername -> colnum
+		      (make-hash-table) ;; rowname    -> rownum
 		      )))
     (hash-table-set! (data-areas data) aname area-dat) ;; dboard-dat)
     (hash-table-set! (data-tabs data) window-id dboard-dat)
