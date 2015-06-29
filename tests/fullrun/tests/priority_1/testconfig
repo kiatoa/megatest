@@ -12,3 +12,6 @@ description This test checks that a multi-lineitem test with mix of pass and non
 
 tags first,single
 reviewed 09/10/2011, by Matt
+
+[triggers]
+COMPLETED/ echo $MT_TEST_NAME > $MT_RUN_AREA_HOME/foo

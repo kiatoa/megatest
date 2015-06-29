@@ -529,7 +529,7 @@
   (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
-  (rmt:general-call 'update-fail-pass-counts run-id (list run-id test-name run-id test-name run-id test-name)))
+  (rmt:general-call 'update-pass-fail-counts run-id (list run-id test-name run-id test-name run-id test-name)))
 
 ;;======================================================================
 ;;  R U N S

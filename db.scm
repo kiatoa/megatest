@@ -2833,10 +2833,17 @@
 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
 	(db:general-call dbdat 'state-status     (list state status test-id)))))
 
+;; call with state = #f to roll up with out accounting for state/status of this item
+;;
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
-  (if ;; (and
-      (not (equal? item-path ""))
-   ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
+  (if (or (not state)
+	  (not (equal? item-path "")))
+      ;; just do a rollup
+      (begin
+	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
+	(db:top-test-set-per-pf-counts db run-id test-name)
+	#f)
+      ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
       (let ((dbdat (db:get-db dbstruct run-id)))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
 	;; NOTE: No else clause needed for this case
@@ -2847,10 +2854,7 @@
 	(let ((db (db:dbdat-get-db dbdat)))
 	  (db:top-test-set-per-pf-counts db run-id test-name))
 	#f)
-      ;; if the test is not COMPLETED then this routine should not have been called
-      (begin
-	(debug:print 0 "ERROR: db:test-set-state-status called with state " state " and status " status)
-	#f)))
+      ))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
@@ -2932,6 +2936,7 @@
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    ELSE 'COMPLETED' END,
                             status=CASE 
+                                  WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE run_id=? AND testname=?
                                               AND item_path != ''
@@ -2951,6 +2956,11 @@
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
                                               AND status IN ('STUCK/INCOMPLETE', 'INCOMPLETE')) > 0 THEN 'INCOMPLETE'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state NOT IN ('DELETED')
+                                              AND status = 'FAIL') > 0 THEN 'FAIL'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
@@ -2976,7 +2986,6 @@
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
                                               AND status NOT IN ('PASS','FAIL','WARN','WAIVED')) > 0 THEN 'ABORT'
-                                  WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
                        WHERE testname=? AND item_path='';") ;; DONE
