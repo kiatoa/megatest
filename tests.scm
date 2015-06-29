@@ -331,9 +331,13 @@
 	      (lockf         (conc outputfilename ".lock")))
 	  (let loop ((have-lock  (common:simple-file-lock lockf)))
 	    (if have-lock
-		(begin
+		(let ((script (configf:lookup *configdat* "testrollup" test-name)))
 		  (print "Obtained lock for " outputfilename)
-		  (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
+		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
+		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
+		  (if script
+		      (system (conc script " > " outputfilename " & "))
+		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))
 		  (common:simple-file-release-lock lockf)
 		  (change-directory orig-dir)
 		  ;; NB// tests:test-set-toplog! is remote internal...
