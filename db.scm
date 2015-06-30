@@ -1344,7 +1344,7 @@
      toplevels)))
 
 (define (db:top-test-set-per-pf-counts db run-id test-name)
-  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2836,25 +2836,26 @@
 ;; call with state = #f to roll up with out accounting for state/status of this item
 ;;
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
-  (if (or (not state)
-	  (not (equal? item-path "")))
-      ;; just do a rollup
-      (begin
-	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	(db:top-test-set-per-pf-counts db run-id test-name)
-	#f)
-      ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
-      (let ((dbdat (db:get-db dbstruct run-id)))
-	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	;; NOTE: No else clause needed for this case
-	(case (string->symbol status)
-	 ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
-	 ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
-	 ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
-	(let ((db (db:dbdat-get-db dbdat)))
-	  (db:top-test-set-per-pf-counts db run-id test-name))
-	#f)
-      ))
+  (let ((dbdat (db:get-db dbstruct run-id)))
+    (if (or (not state)
+	    (not (equal? item-path "")))
+	;; just do a rollup
+	(begin
+	  (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
+	  (db:top-test-set-per-pf-counts dbdat run-id test-name)
+	  #f)
+	(begin
+	  ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
+	  (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
+	  ;; NOTE: No else clause needed for this case
+	  (case (string->symbol status)
+	    ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
+	    ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
+	    ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
+	  (let ((db (db:dbdat-get-db dbdat)))
+	    (db:top-test-set-per-pf-counts dbdat run-id test-name))
+	  #f)
+	)))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
