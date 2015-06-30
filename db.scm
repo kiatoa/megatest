@@ -2935,7 +2935,11 @@
                                                      AND item_path != '' 
                                                      AND status NOT IN ('TEN_STRIKES','BLOCKED')
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
-                                   ELSE 'COMPLETED' END,
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE testname=?
+                                                     AND item_path != '' 
+                                                     AND status != 'COMPLETED') = 0 THEN 'COMPLETED'
+                                   ELSE 'NOT_STARTED' END,
                             status=CASE 
                                   WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN (SELECT count(id) FROM tests
@@ -2987,6 +2991,10 @@
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
                                               AND status NOT IN ('PASS','FAIL','WARN','WAIVED')) > 0 THEN 'ABORT'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state='NOT_STARTED') > 0 THEN 'n/a'
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
                        WHERE testname=? AND item_path='';") ;; DONE
