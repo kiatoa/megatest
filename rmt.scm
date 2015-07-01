@@ -22,7 +22,7 @@
 ;;
 
 ;; ;; For debugging add the following to ~/.megatestrc
-;;a
+;;
 ;; (require-library trace)
 ;; (import trace)
 ;; (trace

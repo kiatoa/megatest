@@ -1340,11 +1340,11 @@
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
 ;;	     (run-id    (list-ref toptest 5)))
-	 (db:top-test-set-per-pf-counts db run-id test-name)))
+	 (db:top-test-set-per-pf-counts dbdat run-id test-name)))
      toplevels)))
 
-(define (db:top-test-set-per-pf-counts db run-id test-name)
-  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+(define (db:top-test-set-per-pf-counts dbdat run-id test-name)
+  (db:general-call dbdat 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2836,11 +2836,12 @@
 ;; call with state = #f to roll up with out accounting for state/status of this item
 ;;
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
-  (let ((dbdat (db:get-db dbstruct run-id))
-	(db    (db:dbdat-get-db dbdat)))
-    (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-    (db:top-test-set-per-pf-counts db run-id test-name)))
-
+  (if (not (equal? item-path ""))
+      (let ((dbdat (db:get-db dbstruct run-id)))
+	;;	(db    (db:dbdat-get-db dbdat)))
+	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
+	(db:top-test-set-per-pf-counts dbdat run-id test-name))))
+  
 ;;     (case (string->symbol status)
 ;;       ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
 ;;       ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
@@ -3058,7 +3059,7 @@
  		 (if q (car q) #f))))
     (db:delay-if-busy dbdat)
     (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
-    #t)) ;; BUG or Sillyness, why do I return #t instead of the query result?
+    #t))
 
 ;; get a summary of state and status counts to calculate a rollup
 ;;
@@ -3095,7 +3096,7 @@
 
 
     (cond
-     ((> (find "COMPLETED" ".*") #f)))))
+     ((> (find "COMPLETED" ".*") 0) #f))))
 		   
     
 
