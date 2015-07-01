@@ -1344,7 +1344,7 @@
      toplevels)))
 
 (define (db:top-test-set-per-pf-counts db run-id test-name)
-  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name run-id test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+  (db:general-call db 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2836,26 +2836,30 @@
 ;; call with state = #f to roll up with out accounting for state/status of this item
 ;;
 (define (db:roll-up-pass-fail-counts dbstruct run-id test-name item-path state status)
-  (let ((dbdat (db:get-db dbstruct run-id)))
-    (if (or (not state)
-	    (not (equal? item-path "")))
-	;; just do a rollup
-	(begin
-	  (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	  (db:top-test-set-per-pf-counts dbdat run-id test-name)
-	  #f)
-	(begin
-	  ;; (not (member status '("PASS" "WARN" "FAIL" "WAIVED" "RUNNING" "CHECK" "SKIP" "LAUNCHED")))
-	  (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	  ;; NOTE: No else clause needed for this case
-	  (case (string->symbol status)
-	    ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
-	    ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
-	    ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
-	  (let ((db (db:dbdat-get-db dbdat)))
-	    (db:top-test-set-per-pf-counts dbdat run-id test-name))
-	  #f)
-	)))
+  (let ((dbdat (db:get-db dbstruct run-id))
+	(db    (db:dbdat-get-db dbdat)))
+    (db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
+    (db:top-test-set-per-pf-counts db run-id test-name)))
+
+;;     (case (string->symbol status)
+;;       ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
+;;       ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
+;;       ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
+    
+;;     (if (or (not state)
+;; 	    (not (equal? item-path "")))
+;; 	;; just do a rollup
+;; 	(begin
+;; 	  (db:top-test-set-per-pf-counts dbdat run-id test-name)
+;; 	  #f)
+;; 	(begin
+;; 	  ;; NOTE: No else clause needed for this case
+;; 	  (case (string->symbol status)
+;; 	    ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
+;; 	    ((LAUNCHED) (db:general-call dbdat 'top-test-set (list "LAUNCHED" test-name)))
+;; 	    ((ABORT INCOMPLETE) (db:general-call dbdat 'top-test-set (list status test-name))))
+;; 	  #f)
+;; 	)))
 
 (define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
@@ -2923,6 +2927,12 @@
              WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set          "UPDATE tests SET state=? WHERE testname=? AND item_path='';") ;; DONE
 	'(top-test-set-running  "UPDATE tests SET state='RUNNING' WHERE testname=? AND item_path='';") ;; DONE
+
+
+	;; Might be the following top-test-set-per-pf-counts query could be better based off of something like this:
+	;;
+	;; select state,status,count(state) from tests where run_id=59 AND testname='runfirst' group by state,status;
+	;;
 	'(top-test-set-per-pf-counts "UPDATE tests
                        SET state=CASE 
                                    WHEN (SELECT count(id) FROM tests 
@@ -2938,14 +2948,18 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND status != 'COMPLETED') = 0 THEN 'COMPLETED'
-                                   ELSE 'NOT_STARTED' END,
+                                                     AND state != 'COMPLETED') = 0 THEN 'COMPLETED'
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE testname=?
+                                                     AND item_path != '' 
+                                                     AND state = 'NOT_STARTED') > 0 THEN 'NOT_STARTED'
+                                   ELSE 'UNKNOWN' END,
                             status=CASE 
                                   WHEN fail_count > 0 THEN 'FAIL' 
                                   WHEN (SELECT count(id) FROM tests
-                                         WHERE run_id=? AND testname=?
+                                         WHERE testname=?
                                               AND item_path != ''
-                                              AND state IN ('NOT_STARTED','BLOCKED','INCOMPLETE')) > 0 THEN 'FAIL'
+                                              AND state IN ('BLOCKED','INCOMPLETE')) > 0 THEN 'FAIL'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
@@ -2964,7 +2978,7 @@
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
-                                              AND state NOT IN ('DELETED')
+                                              AND state IN ('COMPLETED','STUCK/INCOMPLETE','INCOMPLETE')
                                               AND status = 'FAIL') > 0 THEN 'FAIL'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
@@ -2995,6 +3009,11 @@
                                          WHERE testname=?
                                               AND item_path != ''
                                               AND state='NOT_STARTED') > 0 THEN 'n/a'
+                                  WHEN (SELECT count(id) FROM tests
+                                         WHERE testname=?
+                                              AND item_path != ''
+                                              AND state = 'COMPLETED'
+                                              AND status = 'PASS') > 0 THEN 'PASS'
                                   WHEN pass_count > 0 AND fail_count=0 THEN 'PASS' 
                                   ELSE 'UNKNOWN' END
                        WHERE testname=? AND item_path='';") ;; DONE
@@ -3040,6 +3059,45 @@
     (db:delay-if-busy dbdat)
     (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
     #t)) ;; BUG or Sillyness, why do I return #t instead of the query result?
+
+;; get a summary of state and status counts to calculate a rollup
+;;
+;; NOTE: takes a db, not a dbstruct
+;;
+(define (db:get-state-status-summary db run-id testname)
+  (let ((res   '()))
+    (sqlite3:for-each-row
+     (lambda (state status count)
+       (set! res (cons (vector state status count) res)))
+     db
+     "SELECT state,status,count(state) FROM tests WHERE run_id=? AND testname=? AND item_path='' GROUP BY state,status;"
+     run-id testname)
+    res))
+
+(define (db:set-top-level-from-items dbstruct run-id testname)
+  (let* ((dbdat (db:get-db dbstruct run-id))
+	 (db    (db:dbdat-get-db dbdat))
+	 (summ  (db:get-state-status-summary db run-id testname))
+	 (find  (lambda (state status)
+		  (if (null? summ) 
+		      #f
+		      (let loop ((hed (car summ))
+				 (tal (cdr summ)))
+			(if (and (string-match state  (vector-ref hed 0))
+				 (string-match status (vector-ref hed 1)))
+			    hed
+			    (if (null? tal)
+				#f
+				(loop (car tal)(cdr tal)))))))))
+
+
+      ;;;     E D I T M E ! !
+
+
+    (cond
+     ((> (find "COMPLETED" ".*") #f)))))
+		   
+    
 
 ;; get the previous records for when these tests were run where all keys match but runname
 ;; NB// Merge this with test:get-previous-test-run-records? This one looks for all matching tests
