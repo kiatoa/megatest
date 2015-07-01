@@ -185,6 +185,20 @@ COMPLETED/ xterm -e bash -s --
 
 NOTE: There is a trailing space after the --
 
+
+Override the Toplevel HTML File
+-------------------------------
+
+Megatest generates a simple html file summary for top level tests of
+iterated tests. The generation can be overridden.
+
+.For test "runfirst" override the toplevel generation with a script "mysummary.sh"
+-----------------
+# Override the rollup for specific tests
+[testrollup]
+runfirst mysummary.sh
+-----------------
+
 Programming API
 ---------------
 
