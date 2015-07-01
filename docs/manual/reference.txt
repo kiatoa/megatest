@@ -187,7 +187,7 @@ NOTE: There is a trailing space after the --
 
 
 Override the Toplevel HTML File
--------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Megatest generates a simple html file summary for top level tests of
 iterated tests. The generation can be overridden.
