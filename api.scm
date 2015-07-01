@@ -42,6 +42,7 @@
     get-tests-for-runs-mindata
     get-run-name-from-id
     get-runs
+    get-num-runs
     get-all-run-ids
     get-prev-run-ids
     get-run-ids-matching-target
@@ -133,7 +134,7 @@
 	    ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
 	    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))
-	    ((update-fail-pass-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
+	    ((update-pass-fail-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
 	    ((test-set-archive-block-id)       (apply db:test-set-archive-block-id dbstruct params))
 
 	    ;; RUNS
@@ -176,6 +177,8 @@
 	    ;; KEYS
 	    ((get-key-val-pairs)               (apply db:get-key-val-pairs dbstruct params))
 	    ((get-keys)                        (db:get-keys dbstruct))
+	    ((get-key-vals)                    (apply db:get-key-vals dbstruct params))
+	    ((get-targets)                     (db:get-targets  dbstruct))
 
 	    ;; ARCHIVES
 	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct params))
@@ -207,6 +210,7 @@
 	    ((get-test-id)                  (apply db:get-test-id dbstruct params))
 	    ((get-tests-for-run-mindata)    (apply db:get-tests-for-run-mindata dbstruct params))
 	    ((get-runs)                     (apply db:get-runs dbstruct params))
+	    ((get-num-runs)                 (apply db:get-num-runs dbstruct params))
 	    ((get-all-run-ids)              (db:get-all-run-ids dbstruct))
 	    ((get-prev-run-ids)             (apply db:get-prev-run-ids dbstruct params))
 	    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct params))

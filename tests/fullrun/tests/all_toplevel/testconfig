@@ -2,12 +2,7 @@
 calcresults megatest -list-runs $MT_RUNNAME -target $MT_TARGET
 
 [requirements]
-waiton all_toplevel         exit_0 exit_1  ez_exit2_fail  ez_fail        ez_pass              ezlog_fail \
-       ezlog_fail_then_pass ezlog_pass     ezlog_warn     lineitem_fail  lineitem_pass        logpro_required_fail \
-       manual_example       neverrun       priority_1     priority_10    priority_10_waiton_1 priority_2 \
-       priority_3           priority_4     priority_5     priority_6     priority_7           priority_8 \
-       priority_9           runfirst       singletest     singletest2    sqlitespeed          test_mt_vars \
-       ez_fail_quick        test1                test2          special        blocktestxz
+waiton  #{getenv ALL_TOPLEVEL_TESTS}
 
 # This is a "toplevel" test, it does not require waitons to be non-FAIL to run
 mode toplevel

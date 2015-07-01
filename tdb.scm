@@ -42,6 +42,10 @@
 ;;======================================================================
 
 ;; Create the sqlite db for the individual test(s)
+;;
+;; Moved these tables into <runid>.db
+;; THIS CODE TO BE REMOVED
+;;
 (define (open-test-db work-area) 
   (debug:print-info 11 "open-test-db " work-area)
   (if (and work-area 
@@ -171,6 +175,8 @@
               CONSTRAINT metadat_constraint UNIQUE (var));"))))
   (debug:print 11 "db:testdb-initialize END"))
 
+;; This routine moved to db:read-test-data
+;;
 (define (tdb:read-test-data tdb test-id categorypatt)
   (let ((res '()))
     (sqlite3:for-each-row 
@@ -223,6 +229,8 @@
   (seconds->time-string (tdb:step-get-event_time vec)))
 
 ;; get a pretty table to summarize steps
+;; 
+;; NOT USED, WILL BE REMOVED
 ;;
 (define (tdb:get-steps-table steps);; organise the steps for better readability
   (let ((res (make-hash-table)))

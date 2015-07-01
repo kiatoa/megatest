@@ -1,5 +1,5 @@
 ;; watch nanomsg's pipeline load-balancer in action.
-(use nanomsg)
+(use nanomsg posix regex)
 
 ;; (use trace)
 ;; (trace nn-bind nn-socket nn-assert nn-recv nn-send thread-terminate! nn-close )
@@ -13,21 +13,25 @@
 
 (define (server soc)
   (print "server starting")
-  (let loop ((msg-in (nn-recv soc)))
-    (print "server received: " msg-in)
+  (let loop ((msg-in (nn-recv soc))
+	     (count  0))
+    (if (eq? 0 (modulo count 1000))
+	(print "server received: " msg-in ", count=" count))
     (cond
      ((equal? msg-in "quit")
       (nn-send soc "Ok, quitting"))
      ((and (>= (string-length msg-in) 4)
 	   (equal? (substring msg-in 0 4) "ping"))
       (nn-send soc (conc (current-process-id)))
-      (loop (nn-recv soc)))
+      (loop (nn-recv soc)(+ count 1)))
      ;;((and (>= (string-length msg-in)
      (else
-      (let ((this-task (random 15)))
-	(thread-sleep! this-task)
+      (let ((this-task  (/ (random 10) 200.0))
+	    (start-time (current-milliseconds)))
+	;; (thread-sleep! this-task)
 	(nn-send soc (conc "hello " msg-in " this task took " this-task " seconds to complete"))
-	(loop (nn-recv soc)))))))
+	;; (print "Actual send-receive time: " (- (current-milliseconds) start-time));
+	(loop (nn-recv soc)(+ count 1)))))))
 
 (define (ping-self host port #!key (return-socket #t))
   ;; send a random number along with pid and check that we get it back

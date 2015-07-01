@@ -38,7 +38,7 @@ ARCHSTR=$(shell lsb_release -sr)
 
 all : $(PREFIX)/bin/.$(ARCHSTR) mtest dboard 
 
-mtest: $(OFILES) megatest.o readline-fix.scm
+mtest: $(OFILES) readline-fix.scm megatest.o
 	csc $(CSCOPTS) $(OFILES) megatest.o -o mtest
 
 dboard : $(OFILES) $(GOFILES) dashboard.scm
@@ -46,6 +46,9 @@ dboard : $(OFILES) $(GOFILES) dashboard.scm
 
 ndboard : newdashboard.scm $(OFILES) $(GOFILES)
 	csc $(OFILES) $(GOFILES) newdashboard.scm -o ndboard
+
+multi-dboard : multi-dboard.scm $(OFILES) $(GOFILES)
+	csc $(OFILES) $(GOFILES) multi-dboard.scm -o multi-dboard
 
 # 
 # $(PREFIX)/bin/revtagfsl : utils/revtagfsl.scm
@@ -85,6 +88,13 @@ $(PREFIX)/bin/.$(ARCHSTR)/ndboard : ndboard
 $(PREFIX)/bin/newdashboard : $(PREFIX)/bin/.$(ARCHSTR)/ndboard
 	utils/mk_wrapper $(PREFIX) ndboard $(PREFIX)/bin/newdashboard
 	chmod a+x $(PREFIX)/bin/newdashboard
+
+$(PREFIX)/bin/.$(ARCHSTR)/mdboard : multi-dboard
+	$(INSTALL) multi-dboard $(PREFIX)/bin/.$(ARCHSTR)/mdboard
+
+$(PREFIX)/bin/mdboard : $(PREFIX)/bin/.$(ARCHSTR)/mdboard
+	utils/mk_wrapper $(PREFIX) mdboard $(PREFIX)/bin/mdboard
+	chmod a+x $(PREFIX)/bin/mdboard
 
 # $(HELPERS) : utils/%
 # 	$(INSTALL) $< $@
@@ -140,7 +150,7 @@ $(PREFIX)/bin/.$(ARCHSTR)/dboard : dboard $(FILES)
 install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bin/megatest \
           $(PREFIX)/bin/.$(ARCHSTR)/dboard $(PREFIX)/bin/dashboard $(HELPERS) $(PREFIX)/bin/nbfake \
 	  $(PREFIX)/bin/nbfind $(PREFIX)/bin/loadrunner $(PREFIX)/bin/mt_xterm \
-          $(PREFIX)/bin/newdashboard
+          $(PREFIX)/bin/newdashboard $(PREFIX)/bin/mdboard
 
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)

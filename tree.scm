@@ -67,39 +67,41 @@
 
 ;; top is the top node name zeroeth node VALUE=0
 (define (tree:add-node obj top nodelst #!key (userdata #f))
-  (if (or (not (string? (iup:attribute obj "TITLE0")))
-	  (string-null? (iup:attribute obj "TITLE0")))
-      (iup:attribute-set! obj "ADDBRANCH0" top))
-  (cond
-   ((not (equal? top (iup:attribute obj "TITLE0")))
-    (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
-   ((null? nodelst))
-   (else
-    (let loop ((hed      (car nodelst))
-	       (tal      (cdr nodelst))
-	       (depth    1)
-	       (pathl    (list top)))
-      ;; Because the tree dialog changes node numbers when
-      ;; nodes are added or removed we must look up nodes
-      ;; each and every time. 0 is the top node so default
-      ;; to that.
-      (let* ((newpath    (append pathl (list hed)))
-	     (parentnode (tree:find-node obj pathl))
-	     (nodenum    (tree:find-node obj newpath)))
-	;; Add the branch under lastnode if not found
-	(if (not nodenum)
-	    (begin
-	      (iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
+  (let ((curr-top (iup:attribute obj "TITLE0")))
+    (if (or (not (string? curr-top))
+	    (string-null? curr-top)
+	    (string-match "^\\s*$" curr-top))
+	(iup:attribute-set! obj "ADDBRANCH0" top))
+    (cond
+     ((not (equal? top (iup:attribute obj "TITLE0")))
+      (print "ERROR: top name " top " doesn't match " (iup:attribute obj "TITLE0")))
+     ((null? nodelst))
+     (else
+      (let loop ((hed      (car nodelst))
+		 (tal      (cdr nodelst))
+		 (depth    1)
+		 (pathl    (list top)))
+	;; Because the tree dialog changes node numbers when
+	;; nodes are added or removed we must look up nodes
+	;; each and every time. 0 is the top node so default
+	;; to that.
+	(let* ((newpath    (append pathl (list hed)))
+	       (parentnode (tree:find-node obj pathl))
+	       (nodenum    (tree:find-node obj newpath)))
+	  ;; Add the branch under lastnode if not found
+	  (if (not nodenum)
+	      (begin
+		(iup:attribute-set! obj (conc "ADDBRANCH" parentnode) hed)
 		;; ERROR? ADDING DATA TO PARENT, DONT WE WANT IT ON CREATED NODE?
-	      (if userdata
-		  (iup:attribute-set! obj (conc "USERDATA"   parentnode) userdata))
-	      (if (null? tal)
+		(if userdata
+		    (iup:attribute-set! obj (conc "USERDATA"   parentnode) userdata))
+		(if (null? tal)
+		    #t
+		    ;; reset to top
+		    (loop (car nodelst)(cdr nodelst) 1 (list top)))) 
+	      (if (null? tal) ;; if null here then this path has already been added
 		  #t
-		  ;; reset to top
-		  (loop (car nodelst)(cdr nodelst) 1 (list top)))) 
-	    (if (null? tal) ;; if null here then this path has already been added
-		#t
-		(loop (car tal)(cdr tal)(+ depth 1) newpath))))))))
+		  (loop (car tal)(cdr tal)(+ depth 1) newpath)))))))))
 
 (define (tree:node->path obj nodenum)
   (let loop ((currnode 0)

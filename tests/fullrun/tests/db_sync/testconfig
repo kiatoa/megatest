@@ -1,0 +1,13 @@
+[pre-launch-env-vars]
+
+MT_DBDIR #{scheme (db:dbfile-path #f)}
+
+[ezsteps]
+calcresults csi -b dbdelta.scm
+showdiff    diff  current-db-dump legacy-db-dump
+
+[requirements]
+waiton  #{getenv ALL_TOPLEVEL_TESTS}
+
+# This is a "toplevel" test, it does not require waitons to be non-FAIL to run
+mode toplevel

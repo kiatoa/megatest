@@ -9,8 +9,8 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use sqlite3 srfi-1 posix regex-case base64 format dot-locking csv-xml z3)
-(require-extension sqlite3 regex posix)
+(use srfi-1 posix regex-case base64 format dot-locking csv-xml z3 nanomsg sql-de-lite hostinfo)
+(require-extension regex posix)
 
 (require-extension (srfi 18) extras tcp rpc)
 
@@ -23,6 +23,13 @@
 
 ;; (require-library margs)
 ;; (include "margs.scm")
+
+;; (define old-exit exit)
+;; 
+;; (define (exit . code)
+;;   (if (null? code)
+;;       (old-exit)
+;;       (old-exit code)))
 
 (define getenv get-environment-variable)
 (define (safe-setenv key val)
@@ -153,7 +160,7 @@
 	#f)))
 
 (define (common:get-megatest-exe)
-  (if (getenv "MT_MEGATEST") (getenv "MT_MEGATEST") "megatest"))
+  (or (getenv "MT_MEGATEST") "megatest"))
 
 (define (common:read-encoded-string instr)
   (handle-exceptions
@@ -244,39 +251,71 @@
 ;; E X I T   H A N D L I N G
 ;;======================================================================
 
+(define (common:legacy-sync-recommended)
+  (or (args:get-arg "-runtests")
+      (args:get-arg "-server")
+      (args:get-arg "-set-run-status")
+      (args:get-arg "-remove-runs")
+      (args:get-arg "-get-run-status")
+      ))
+
+(define (common:legacy-sync-required)
+  (configf:lookup *configdat* "setup" "megatest-db"))
+
 (define (std-exit-procedure)
-  (debug:print-info 2 "starting exit process, finalizing databases.")
-  (rmt:print-db-stats)
-  (let ((run-ids (hash-table-keys *db-local-sync*)))
-    (if (and (not (null? run-ids))
-	     (configf:lookup *configdat* "setup" "megatest-db"))
-	(db:multi-db-sync run-ids 'new2old)))
-  (if *dbstruct-db* (db:close-all *dbstruct-db*))
-  (if *inmemdb*     (db:close-all *inmemdb*))
-  (if (and *megatest-db*
-	   (sqlite3:database? *megatest-db*))
-      (begin
-	(sqlite3:interrupt! *megatest-db*)
-	(sqlite3:finalize! *megatest-db* #t)
-	(set! *megatest-db* #f)))
-  (if *task-db*     (let ((db (cdr *task-db*)))
-		      (if (sqlite3:database? db)
-			  (begin
-			    (sqlite3:interrupt! db)
-			    (sqlite3:finalize! db #t)
-			    (vector-set! *task-db* 0 #f))))))
+  (let ((no-hurry  (if *time-to-exit* ;; hurry up
+		       #f
+		       (begin
+			 (set! *time-to-exit* #t)
+			 #t))))
+    (debug:print-info 4 "starting exit process, finalizing databases.")
+    (if (and no-hurry (debug:debug-mode 18))
+	(rmt:print-db-stats))
+    (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
+			      (let ((run-ids (hash-table-keys *db-local-sync*)))
+				(if (and (not (null? run-ids))
+					 (configf:lookup *configdat* "setup" "megatest-db"))
+				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
+			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
+			      (if *inmemdb*     (db:close-all *inmemdb*))
+			      (if (and *megatest-db*
+				       (sqlite3:database? *megatest-db*))
+				  (begin
+				    (sqlite3:interrupt! *megatest-db*)
+				    (sqlite3:finalize! *megatest-db* #t)
+				    (set! *megatest-db* #f)))
+			      (if *task-db*    
+				  (let ((db (cdr *task-db*)))
+				    (if (sqlite3:database? db)
+					(begin
+					  (sqlite3:interrupt! db)
+					  (sqlite3:finalize! db #t)
+					  (vector-set! *task-db* 0 #f)))))) "Cleanup db exit thread"))
+	  (th2 (make-thread (lambda ()
+			      (debug:print 4 "Attempting clean exit. Please be patient and wait a few seconds...")
+			      (if no-hurry
+				  (thread-sleep! 5) ;; give the clean up few seconds to do it's stuff
+				  (thread-sleep! 2))
+			      (debug:print 4 " ... done")
+			      )
+			    "clean exit")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1))))
 
 (define (std-signal-handler signum)
-  (signal-mask! signum)
+  ;; (signal-mask! signum)
+  (set! *time-to-exit* #t)
   (debug:print 0 "ERROR: Received signal " signum " exiting promptly")
   ;; (std-exit-procedure) ;; shouldn't need this since we are exiting and it will be called anyway
   (exit))
 
-(set-signal-handler! signal/int std-signal-handler)
+(set-signal-handler! signal/int  std-signal-handler)  ;; ^C
 (set-signal-handler! signal/term std-signal-handler)
+(set-signal-handler! signal/stop std-signal-handler)  ;; ^Z
 
 ;;======================================================================
-;; Misc utils
+;; M I S C   U T I L S
 ;;======================================================================
 
 ;; Convert strings like "5s 2h 3m" => 60x60x2 + 3x60 + 5
@@ -358,7 +397,9 @@
 ;;======================================================================
 
 (define (common:args-get-target #!key (split #f))
-  (let* ((target  (if (args:get-arg "-reqtarg")
+  (let* ((keys    (keys:config-get-fields *configdat*))
+	 (numkeys (length keys))
+	 (target  (if (args:get-arg "-reqtarg")
 		      (args:get-arg "-reqtarg")
 		      (if (args:get-arg "-target")
 			  (args:get-arg "-target")
@@ -366,6 +407,7 @@
 	 (tlist   (if target (string-split target "/" #t) '()))
 	 (valid   (if target
 		      (and (not (null? tlist))
+			   (eq? numkeys (length tlist))
 			   (null? (filter string-null? tlist)))
 		      #f)))
     (if valid
@@ -374,7 +416,7 @@
 	    target)
 	(if target
 	    (begin
-	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\"")
+	      (debug:print 0 "ERROR: Invalid target, spaces or blanks not allowed \"" target "\", target should be: " (string-intersperse keys "/"))
 	      #f)
 	    #f))))
 
@@ -711,3 +753,181 @@
    ((equal? status "RUNNING") "blue")
    ((equal? status "ABORT")   "brown")
    (else "black")))
+
+;;======================================================================
+;; N A N O M S G   C L I E N T
+;;======================================================================
+
+(define (server:get-best-guess-address hostname)
+  (let ((res #f))
+    (for-each 
+     (lambda (adr)
+       (if (not (eq? (u8vector-ref adr 0) 127))
+	   (set! res adr)))
+     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
+     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
+    (string-intersperse 
+     (map number->string
+	  (u8vector->list
+	   (if res res (hostname->ip hostname)))) ".")))
+
+(define (common:open-nm-req addr)
+  (let* ((req (nn-socket 'req))
+	 (res (nn-connect req addr)))
+    req))
+
+;; (with-output-to-string (lambda ()(serialize obj)))
+(define (common:nm-send-receive soc msg)
+  (nn-send soc msg)
+  (nn-recv soc))
+
+(define (common:close-nm-req soc)
+  (nn-close soc))
+
+(define (common:send-dboard-main-changed)
+  (let* ((dashboard-ips (mddb:get-dashboards)))
+    (for-each
+     (lambda (ipadr)
+       (let* ((soc (common:open-nm-req (conc "tcp://" ipadr)))
+	      (msg (conc "main " *toppath*))
+	      (res (common:nm-send-receive-timeout soc msg)))
+	 (if (not res) ;; couldn't reach that dashboard - remove it from db
+	     (print "ERROR: couldn't reach dashboard " ipadr))
+	 res))
+     dashboard-ips)))
+    
+(define (common:nm-send-receive-timeout req msg)
+  (let* ((key     "ping")
+	 (success #f)
+	 (keepwaiting #t)
+	 (result  #f)
+	 (sendrec (make-thread
+		   (lambda ()
+		     (nn-send req msg)
+		     (set! result (nn-recv req))
+		     (set! success #t))
+		   "send-receive"))
+	 (timeout (make-thread (lambda ()
+				 (let loop ((count 0))
+				   (thread-sleep! 1)
+				   (print "still waiting after count seconds...")
+				   (if (and keepwaiting (< count 10))
+				       (loop (+ count 1))))
+				 (if keepwaiting
+				     (begin
+				       (print "timeout waiting for reply")
+				       (thread-terminate! sendrec))))
+			       "timeout")))
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain)
+       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print "exn=" (condition->list exn)))
+     (thread-start! timeout)
+     (thread-start! sendrec)
+     (thread-join!  sendrec)
+     (if success (thread-terminate! timeout)))
+    result))
+    
+(define (common:ping-nm req)
+  ;; send a random number and check that we get it back
+  (let* ((key     "ping")
+	 (success #f)
+	 (keepwaiting #t)
+	 (ping    (make-thread
+		   (lambda ()
+		     (print "ping: sending string \"" key "\", expecting " (current-process-id))
+		     (nn-send req key)
+		     (let ((result  (nn-recv req)))
+		       (if (equal? (conc (current-process-id)) result)
+			   (begin
+			     (print "ping, success: received \"" result "\"")
+			     (set! success #t))
+			   (begin
+			     (print "ping, failed: received key \"" result "\"")
+			     (set! keepwaiting #f)
+			     (set! success #f)))))
+		   "ping"))
+	 (timeout (make-thread (lambda ()
+				 (let loop ((count 0))
+				   (thread-sleep! 1)
+				   (print "still waiting after count seconds...")
+				   (if (and keepwaiting (< count 10))
+				       (loop (+ count 1))))
+				 (if keepwaiting
+				     (begin
+				       (print "timeout waiting for ping")
+				       (thread-terminate! ping))))
+			       "timeout")))
+    (handle-exceptions
+     exn
+     (begin
+       (print-call-chain)
+       (print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+       (print "exn=" (condition->list exn))
+       (print "ping failed to connect to tcp://" hostport))
+     (thread-start! timeout)
+     (thread-start! ping)
+     (thread-join! ping)
+     (if success (thread-terminate! timeout)))
+    (if return-socket
+	(if success req #f)
+	(begin
+	  (nn-close req)
+	  success))))
+
+;;======================================================================
+;; D A S H B O A R D   D B 
+;;======================================================================
+
+(define (mddb:open-db)
+  (let* ((db (open-database (conc (get-environment-variable "HOME") "/.dashboard.db"))))
+    (set-busy-handler! db (busy-timeout 10000))
+    (for-each
+     (lambda (qry)
+       (exec (sql db qry)))
+     (list 
+      "CREATE TABLE IF NOT EXISTS vars       (id INTEGER PRIMARY KEY,key TEXT, val TEXT, CONSTRAINT varsconstraint UNIQUE (key));"
+      "CREATE TABLE IF NOT EXISTS dashboards (
+          id         INTEGER PRIMARY KEY,
+          pid        INTEGER,
+          username   TEXT,
+          hostname   TEXT,
+          ipaddr     TEXT,
+          portnum    INTEGER,
+          start_time TIMESTAMP DEFAULT (strftime('%s','now')),
+             CONSTRAINT hostport UNIQUE (hostname,portnum)
+        );"
+      ))
+    db))
+
+;; register a dashboard 
+;;
+(define (mddb:register-dashboard port)
+  (let* ((pid      (current-process-id))
+	 (hostname (get-host-name))
+	 (ipaddr   (server:get-best-guess-address hostname))
+	 (username (current-user-name)) ;; (car userinfo)))
+	 (db      (mddb:open-db)))
+    (print "Register monitor, pid: " pid ", hostname: " hostname ", port: " port ", username: " username)
+    (exec (sql db "INSERT OR REPLACE INTO dashboards (pid,username,hostname,ipaddr,portnum) VALUES (?,?,?,?,?);")
+	   pid username hostname ipaddr port)
+    (close-database db)))
+
+;; unregister a monitor
+;;
+(define (mddb:unregister-dashboard host port)
+  (let* ((db      (mddb:open-db)))
+    (print "Register unregister monitor, host:port=" host ":" port)
+    (exec (sql db "DELETE FROM dashboards WHERE hostname=? AND portnum=?;") host port)
+    (close-database db)))
+
+;; get registered dashboards
+;;
+(define (mddb:get-dashboards)
+  (let ((db (mddb:open-db)))
+    (query fetch-column
+	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
+    
+	

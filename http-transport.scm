@@ -49,19 +49,6 @@
 
 (define *db:process-queue-mutex* (make-mutex))
 
-(define (server:get-best-guess-address hostname)
-  (let ((res #f))
-    (for-each 
-     (lambda (adr)
-       (if (not (eq? (u8vector-ref adr 0) 127))
-	   (set! res adr)))
-     ;; NOTE: This can fail when there is no mention of the host in /etc/hosts. FIXME
-     (vector->list (hostinfo-addresses (hostname->hostinfo hostname))))
-    (string-intersperse 
-     (map number->string
-	  (u8vector->list
-	   (if res res (hostname->ip hostname)))) ".")))
-
 (define (http-transport:run hostn run-id server-id)
   (debug:print 2 "Attempting to start the server ...")
   (let* ((db              #f) ;;        (open-db)) ;; we don't want the server to be opening and closing the db unnecesarily
@@ -424,7 +411,7 @@
 	      (exit)))
 	    (set! sync-time  (- (current-milliseconds) start-time))
 	    (set! rem-time (quotient (- 4000 sync-time) 1000))
-	    (debug:print 2 "SYNC: time= " sync-time ", rem-time=" rem-time)
+	    (debug:print 4 "SYNC: time= " sync-time ", rem-time=" rem-time)
 	    
 	    (if (and (<= rem-time 4)
 		     (> rem-time 0))

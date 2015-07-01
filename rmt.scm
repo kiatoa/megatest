@@ -22,7 +22,7 @@
 ;;
 
 ;; ;; For debugging add the following to ~/.megatestrc
-;;a
+;;
 ;; (require-library trace)
 ;; (import trace)
 ;; (trace
@@ -158,9 +158,18 @@
 		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
 		    (rmt:send-receive cmd rid params attemptnum: (+ attemptnum 1)))
-		  (begin
-		    (server:kind-run run-id)
-		    (rmt:open-qry-close-locally cmd run-id params))))
+		  (let ((start-time (current-milliseconds))
+			(max-query  (string->number (or (configf:lookup *configdat* "server" "server-query-threshold")
+							"300")))
+			(newres     (rmt:open-qry-close-locally cmd run-id params)))
+		    (let ((delta (- (current-milliseconds) start-time)))
+		      (if (> delta max-query)
+			  (begin
+			    (debug:print-info 0 "Starting server as query time " delta " is over the limit of " max-query)
+			    (server:kind-run run-id)))
+		      ;; return the result!
+		      newres)
+		    )))
 	    (begin
 	      ;; (debug:print 0 "ERROR: Communication failed!")
 	      ;; (mutex-unlock! *send-receive-mutex*)
@@ -347,9 +356,19 @@
 (define (rmt:get-keys)
   (rmt:send-receive 'get-keys #f '()))
 
+(define (rmt:get-key-vals run-id)
+  (rmt:send-receive 'get-key-vals #f (list run-id)))
+
+(define (rmt:get-targets)
+  (rmt:send-receive 'get-targets #f '()))
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
+
+;; Just some syntatic sugar
+(define (rmt:register-test run-id test-name item-path)
+  (rmt:general-call 'register-test run-id run-id test-name item-path))
 
 (define (rmt:get-test-id run-id testname item-path)
   (rmt:send-receive 'get-test-id run-id (list run-id testname item-path)))
@@ -487,8 +506,8 @@
 (define (rmt:get-run-ids-matching keynames target res)
   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
 
-(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal)))
-  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode)))
+(define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
+  (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode itemmap)))
 
 (define (rmt:get-count-tests-running-for-run-id run-id)
   (rmt:send-receive 'get-count-tests-running-for-run-id run-id (list run-id)))
@@ -504,11 +523,13 @@
 (define (rmt:get-count-tests-running-in-jobgroup run-id jobgroup)
   (rmt:send-receive 'get-count-tests-running-in-jobgroup run-id (list run-id jobgroup)))
 
-(define (rmt:roll-up-pass-fail-counts run-id test-name item-path status)
-  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path status)))
+;; state and status are extra hints not usually used in the calculation
+;;
+(define (rmt:roll-up-pass-fail-counts run-id test-name item-path state status)
+  (rmt:send-receive 'roll-up-pass-fail-counts run-id (list run-id test-name item-path state status)))
 
 (define (rmt:update-pass-fail-counts run-id test-name)
-  (rmt:general-call 'update-fail-pass-counts run-id (list run-id test-name run-id test-name run-id test-name)))
+  (rmt:general-call 'update-pass-fail-counts run-id (list run-id test-name run-id test-name run-id test-name)))
 
 ;;======================================================================
 ;;  R U N S
@@ -516,6 +537,9 @@
 
 (define (rmt:get-run-info run-id)
   (rmt:send-receive 'get-run-info run-id (list run-id)))
+
+(define (rmt:get-num-runs runpatt)
+  (rmt:send-receive 'get-num-runs #f (list runpatt)))
 
 ;; Use the special run-id == #f scenario here since there is no run yet
 (define (rmt:register-run keyvals runname state status user)
@@ -555,8 +579,8 @@
 (define (rmt:update-run-event_time run-id)
   (rmt:send-receive 'update-run-event_time #f (list run-id)))
 
-(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit)
-  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit)))
+(define (rmt:get-runs-by-patt  keys runnamepatt targpatt offset limit fields) ;; fields of #f uses default
+  (rmt:send-receive 'get-runs-by-patt #f (list keys runnamepatt targpatt offset limit fields)))
 
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))

@@ -224,14 +224,28 @@
 
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
-    (set-signal-handler! signal/int
-			 (lambda (signum)
-			   (signal-mask! signum)
-			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
-			   (let ((tdbdat (tasks:open-db)))
-			     (rmt:tasks-set-state-given-param-key task-key "killed"))
-			   (print "Killed by signal " signum ". Exiting")
-			   (exit)))
+    (let ((sighand (lambda (signum)
+		     ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+		     (if (eq? signum signal/stop)
+			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
+		     (set! *time-to-exit* #t)
+		     (print "Received signal " signum ", cleaning up before exit. Please wait...")
+		     (let ((th1 (make-thread (lambda ()
+					       (let ((tdbdat (tasks:open-db)))
+						 (rmt:tasks-set-state-given-param-key task-key "killed"))
+					       (print "Killed by signal " signum ". Exiting")
+					       (thread-sleep! 3)
+					       (exit))))
+			   (th2 (make-thread (lambda ()
+					       (thread-sleep! 5)
+					       (debug:print 0 "Done")
+					       (exit 4)))))
+		       (thread-start! th2)
+		       (thread-start! th1)
+		       (thread-join! th2)))))
+      (set-signal-handler! signal/int sighand)
+      (set-signal-handler! signal/term sighand)
+      (set-signal-handler! signal/stop sighand))
 
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
@@ -245,15 +259,20 @@
     (set! all-tests-registry (tests:get-all))
     (set! all-test-names     (hash-table-keys all-tests-registry))
     (set! test-names         (tests:filter-test-names all-test-names test-patts))
-    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") test-names))
+
+    ;; I think seeding required-tests with all test-names makes sense but lack analysis to back that up.
+    ;;
+    (set! required-tests     (lset-intersection equal? (string-split test-patts ",") all-test-names))
+    ;; (set! required-tests     (lset-intersection equal? test-names all-test-names))
     
     ;; look up all tests matching the comma separated list of globs in
     ;; test-patts (using % as wildcard)
 
     ;; (set! test-names (delete-duplicates (tests:get-valid-tests *toppath* test-patts)))
-    (debug:print-info 0 "tests search path: " (tests:get-tests-search-path *configdat*))
-    (debug:print-info 0 "all tests:  " (string-intersperse (sort all-test-names string<) " "))
-    (debug:print-info 0 "test names: " (string-intersperse (sort test-names string<) " "))
+    (debug:print-info 0 "tests search path: " (string-intersperse (tests:get-tests-search-path *configdat*) " "))
+    (debug:print-info 0 "all tests:         " (string-intersperse (sort all-test-names string<) " "))
+    (debug:print-info 0 "test names:        " (string-intersperse (sort test-names string<) " "))
+    (debug:print-info 0 "required tests:    " (string-intersperse (sort required-tests string<) " "))
 
     ;; on the first pass or call to run-tests set FAILS to NOT_STARTED if
     ;; -keepgoing is specified
@@ -269,7 +288,7 @@
 	  ;;
 	  ;; (rmt:general-call 'delete-tests-in-state run-id "NOT_STARTED")
 	  
-	  ;; Now convert FAIL and anything in allow-auto-rerun to NOT_STARTED
+	  ;; Now convert anything in allow-auto-rerun to NOT_STARTED
 	  ;;
 	  (for-each (lambda (state)
 		      (rmt:set-tests-state-status run-id test-names state #f "NOT_STARTED" state))
@@ -461,7 +480,7 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -546,7 +565,7 @@
 	;; We can get here when a prereq has not been run due to *it* having a prereq that failed.
 	;; We need to use this to dequeue this item as CANNOTRUN
 	;; 
-	(if (member testmode '(toplevel))
+	(if (member 'toplevel testmode) ;; '(toplevel)) ;; NOTE: this probably should be (member 'toplevel testmode)
 	    (for-each (lambda (prereq)
 			(if (eq? (hash-table-ref/default test-registry prereq 'justfine) 'CANNOTRUN)
 			    (set! give-up #t)))
@@ -649,10 +668,12 @@
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path testmode itemmap: itemmap))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
-	 (non-completed           (runs:calc-not-completed prereqs-not-met))
+	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!
+					    (not (equal? x hed)))
+					  (runs:calc-not-completed prereqs-not-met)))
 	 (loop-list               (list hed tal reg reruns))
 	 ;; configure the load runner
 	 (numcpus                 (common:get-num-cpus))
@@ -664,7 +685,11 @@
 			      (if (vector? t)
 				  (conc (db:test-get-state t) "/" (db:test-get-status t))
 				  (conc " WARNING: t is not a vector=" t )))
-			    prereqs-not-met) ", ") ") fails: " fails)
+			    prereqs-not-met)
+		       ", ") ") fails: " fails
+		       "\nregistered? " (hash-table-ref/default test-registry (db:test-make-full-name test-name item-path) #f))
+			    
+
     
     (if (and (not (null? prereqs-not-met))
 	     (runs:lownoise (conc "waiting on tests " prereqs-not-met hed) 60))
@@ -695,7 +720,7 @@
       (debug:print-info 4 "Pre-registering test " test-name "/" item-path " to create placeholder" )
       ;; always do firm registration now in v1.60 and greater ;; (eq? *transport-type* 'fs) ;; no point in parallel registration if use fs
       (let register-loop ((numtries 15))
-	(rmt:general-call 'register-test run-id run-id test-name item-path)
+	(rmt:register-test run-id test-name item-path)
 	(if (rmt:get-test-id run-id test-name item-path)
 	    (hash-table-set! test-registry (db:test-make-full-name test-name item-path) 'done)
 	    (if (> numtries 0)
@@ -705,7 +730,7 @@
 		(debug:print 0 "ERROR: failed to register test " (db:test-make-full-name test-name item-path)))))
       (if (not (eq? (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f) 'done))
 	  (begin
-	    (rmt:general-call 'register-test run-id run-id test-name "")
+	    (rmt:register-test run-id test-name "")
 	    (if (rmt:get-test-id run-id test-name "")
 		(hash-table-set! test-registry (db:test-make-full-name test-name "") 'done))))
       (runs:shrink-can-run-more-tests-count)   ;; DELAY TWEAKER (still needed?)
@@ -748,7 +773,7 @@
      ;;
      ((and have-resources
 	   (or (null? prereqs-not-met)
-	       (and (eq? testmode 'toplevel)
+	       (and (member 'toplevel testmode) ;;  'toplevel)
 		    (null? non-completed))))
       ;; (hash-table-delete! *max-tries-hash* (db:test-make-full-name test-name item-path))
       ;; we are going to reset all the counters for test retries by setting a new hash table
@@ -781,7 +806,8 @@
 	  (debug:print-info 1 "waiting on tests; " (string-intersperse 
 						    (runs:mixed-list-testname-and-testrec->list-of-strings 
 						     prereqs-not-met) ", ")))
-      (if (null? fails)
+      (if (or (null? fails)
+	      (member 'toplevel testmode))
 	  (begin
 	    ;; couldn't run, take a breather
 	    (if  (runs:lownoise "Waiting for more work to do..." 60)
@@ -853,7 +879,8 @@
 		      ;; (debug:print 0 "         prereqs: " prereqs-not-met)
 		      (hash-table-set! test-registry hed 'removed)
 		      (mt:test-set-state-status-by-testname run-id test-name item-path "NOT_STARTED" "TEN_STRIKES" #f)
-		      (mt:roll-up-pass-fail-counts run-id test-name item-path "FAIL") ;; treat as FAIL
+		      ;; I'm unclear on if this roll up is needed - it may be the root cause of the "all set to FAIL" bug.
+		      (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "FAIL") ;; treat as FAIL
 		      (list (if (null? tal)(car newtal)(car tal))
 			    tal
 			    reg
@@ -875,7 +902,7 @@
 		(let ((state  (db:test-get-state t))
 		      (status (db:test-get-status t)))
 		  (case (string->symbol state)
-		    ((COMPLETED) #f)
+		    ((COMPLETED INCOMPLETE) #f)
 		    ((NOT_STARTED)
 		     (if (member status '("TEN_STRIKES" "BLOCKED" "PREQ_FAIL" "ZERO_ITEMS" "PREQ_DISCARDED" "TIMED_OUT" ))
 			 #f
@@ -977,7 +1004,7 @@
 	;; and it is clear they *should* have run but did not.
 	(if (not (hash-table-ref/default test-registry (db:test-make-full-name test-name "") #f))
 	    (begin
-	      (rmt:general-call 'register-test run-id run-id test-name "")
+	      (rmt:register-test run-id test-name "")
 	      (hash-table-set! test-registry (db:test-make-full-name test-name "") 'done)))
 	
 	;; Fast skip of tests that are already "COMPLETED" - NO! Cannot do that as the items may not have been expanded yet :(
@@ -1154,7 +1181,7 @@
 (define (runs:calc-fails prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (equal? (db:test-get-state test) "COMPLETED")
+		 (member (db:test-get-state test) '("INCOMPLETE" "COMPLETED"))
 		 (not (member (db:test-get-status test)
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
@@ -1171,15 +1198,15 @@
   (filter
    (lambda (t)
      (or (not (vector? t))
-	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+	 (not (member (db:test-get-state t) '("INCOMPLETE" "COMPLETED")))))
    prereqs-not-met))
 
-(define (runs:calc-not-completed prereqs-not-met)
-  (filter
-   (lambda (t)
-     (or (not (vector? t))
-	 (not (equal? "COMPLETED" (db:test-get-state t)))))
-   prereqs-not-met))
+;; (define (runs:calc-not-completed prereqs-not-met)
+;;   (filter
+;;    (lambda (t)
+;;      (or (not (vector? t))
+;; 	 (not (equal? "COMPLETED" (db:test-get-state t)))))
+;;    prereqs-not-met))
 
 (define (runs:calc-runnable prereqs-not-met)
   (filter 
@@ -1259,7 +1286,7 @@
 	    (if (not test-id)
 		(begin
 		  (debug:print 2 "WARN: Test not pre-created? test-name=" test-name ", item-path=" item-path ", run-id=" run-id)
-		  (rmt:general-call 'register-test run-id run-id test-name item-path)
+		  (rmt:register-test run-id test-name item-path)
 		  (set! test-id (rmt:get-test-id run-id test-name item-path))))
 	    (debug:print-info 4 "test-id=" test-id ", run-id=" run-id ", test-name=" test-name ", item-path=\"" item-path "\"")
 	    (set! testdat (rmt:get-test-info-by-id run-id test-id))
@@ -1283,13 +1310,13 @@
 		    'failed-to-insert))
 	((failed-to-insert)
 	 (debug:print 0 "ERROR: Failed to insert the record into the db"))
-	((NOT_STARTED COMPLETED DELETED)
+	((NOT_STARTED COMPLETED DELETED INCOMPLETE)
 	 (let ((runflag #f))
 	   (cond
 	    ;; -force, run no matter what
 	    (force (set! runflag #t))
 	    ;; NOT_STARTED, run no matter what
-	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED"))(set! runflag #t))
+	    ((member (test:get-state testdat) '("DELETED" "NOT_STARTED" "INCOMPLETE"))(set! runflag #t))
 	    ;; not -rerun and PASS, WARN or CHECK, do no run
 	    ((and (or (not rerun)
 		      keepgoing)
@@ -1347,7 +1374,7 @@
 		   ;; run-ids = #f means *all* runs
 		   (let* ((numseconds      (common:hms-string->seconds (configf:lookup test-conf "skip" "rundelay")))
 			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
-			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED") '("PASS" "FAIL" "ABORT") #f))
+			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED" "INCOMPLETE") '("PASS" "FAIL" "ABORT") #f)) ;; ironically INCOMPLETE is same as COMPLETED in this contex
 			  (last-run-times  (map db:mintest-get-event_time completed-tests))
 			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (apply max last-run-times)))))
 		     (if (or (not (null? running-tests)) ;; have to skip if test is running
