@@ -8,7 +8,7 @@
 ;;  PURPOSE.
 
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils call-with-environment-variables)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit mt))
@@ -142,24 +142,29 @@
     (if (and test-rundir   ;; #f means no dir set yet
 	     (file-exists? test-rundir)
 	     (directory? test-rundir))
-	(begin
-	  (push-directory test-rundir)
-	  (set! tconfig (mt:lazy-read-test-config test-name))
-	  (pop-directory)
-	  (for-each (lambda (trigger)
-		      (let ((cmd  (configf:lookup tconfig "triggers" trigger))
-			    (logf (conc  test-rundir "/last-trigger.log")))
-			(if cmd
-			    ;; Putting the commandline into ( )'s means no control over the shell. 
-			    ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
-			    ;; or equivalent. No need to do this. Just run it?
-			    (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
-			      (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
-			      (process-run fullcmd)))))
-		    (list
-		     (conc state "/" status)
-		     (conc state "/")
-		     (conc "/" status)))))))
+	(call-with-environment-variables
+	 (list (cons "MT_TEST_NAME" test-name)
+	       (cons "MT_TEST_RUN_DIR" test-rundir)
+	       (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
+	 (lambda ()
+	   (push-directory test-rundir)
+	   (set! tconfig (mt:lazy-read-test-config test-name))
+	   (for-each (lambda (trigger)
+		       (let ((cmd  (configf:lookup tconfig "triggers" trigger))
+			     (logf (conc  test-rundir "/last-trigger.log")))
+			 (if cmd
+			     ;; Putting the commandline into ( )'s means no control over the shell. 
+			     ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
+			     ;; or equivalent. No need to do this. Just run it?
+			     (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
+			       (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
+			       (process-run fullcmd)))))
+		     (list
+		      (conc state "/" status)
+		      (conc state "/")
+		      (conc "/" status)))
+	   (pop-directory))
+	  ))))
 
 ;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
