@@ -67,7 +67,7 @@
 (define help (conc "
 Megatest, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright Matt Welland 2006-2012
+  license GPL, Copyright Matt Welland 2006-2015
 
 Usage: megatest [options]
   -h                      : this help
@@ -284,7 +284,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; queries
 			"-test-paths" ;; get path(s) to a test, ordered by youngest first
 
-			"-runall"    ;; run all tests, respects -testpatt
+			"-runall"    ;; run all tests, respects -testpatt, defaults to %
 			"-run"       ;; alias for -runall
 			"-remove-runs"
 			"-rebuild-db"
@@ -305,6 +305,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		       )
 		 args:arg-hash
 		 0))
+
+(if (and (not (null? remargs))
+	 (not (or
+	       (args:get-arg "-runstep"))
+	      ;; add more args that use remargs here
+	      ))
+    (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse remargs " ")))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
@@ -1140,7 +1147,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      (lambda (target runname keys keyvals)
        (runs:run-tests target
 		       runname
-		       (args:get-arg "-testpatt")
+		       (or (args:get-arg "-testpatt")
+			   "%")
 		       user
 		       args:arg-hash))))
 

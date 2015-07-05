@@ -7,6 +7,14 @@ step1 step1.sh
 waiton bigrun2
 priority 0
 mode itemwait
+# pattern replacement
+#
+# Remove everything up to the last /
+# itemmap .*/
+#
+# Replace foo/ with bar/
+# itemmap foo/ bar/
+# 
 itemmap .*/
 
 # Iteration for your tests are controlled by the items section
