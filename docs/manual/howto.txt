@@ -40,27 +40,68 @@ Examining The Environment
 During Config File Processing
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+It is often helpful to know the content of variables in various
+contexts as Megatest does the actions needed to run your tests. A handy technique is to force the startup of an xterm in the context being examined.
+
+For example, if an item list is not being generated as expected you
+can inject the startup of an xterm as if it were an item:
+
+.Original items table
+-----------------
+[items]
+CELLNAME [system getcellname.sh]
+-----------------
+
+.Items table modified for debug
+-----------------
+[items]
+DEBUG [system xterm]
+CELLNAME [system getcellnames.sh]
+-----------------
+
+When this test is run an xterm will pop up. In that xterm the
+environment is exactly that in which the script "getcellnames.sh"
+would run. You can now debug the script to find out why it isn't
+working as expected.
+
 Organising Your Tests and Tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+The default location "tests" for storing tests can be extended by
+adding to your tests-paths section.
+
 ----------------------------
+[misc]
+parent #{shell dirname $(readlink -f .)}
+
 [tests-paths]
 1 #{get misc parent}/simplerun/tests
 ----------------------------
 
+The above example shows how you can use addition sections in your
+config file to do complex processing. By putting results of relatively
+slow operations into variables the processing of your configs can be
+kept fast.
+
+Alternative Method for Running your Job Script
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Directly running job in testconfig
 -------------------
 [setup]
--------------------
-
-The runscript method is a brute force way to run scripts where the
-user is responsible for setting STATE and STATUS
-
--------------------
 runscript main.csh
 -------------------
 
+The runscript method is essentially a brute force way to run scripts where the
+user is responsible for setting STATE and STATUS and managing the details of running a test. 
+
 Debugging Server Problems
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some handy Unix commands to track down issues with servers not
+communicating with your test manager processes. Please put in tickets
+at https://www.kiatoa.com/fossils/megatest if you have problems with
+servers getting stuck.
 
 ----------------
 sudo lsof -i
