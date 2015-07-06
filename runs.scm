@@ -313,6 +313,7 @@
     ;; What happended, this code is now duplicated in tests!?
     ;;
     ;;======================================================================
+    
     (if (not (null? test-names))
 	(let loop ((hed (car test-names))
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
@@ -387,27 +388,51 @@
 	    (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
-		   (let ((new-test-patts (tests:extend-test-patts test-patts hed waiton #f)))
+		   (let* ((new-test-patts  (tests:extend-test-patts test-patts hed waiton #f))
+			  (waiton-record   (hash-table-ref/default test-records waiton #f))
+			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
+			  (waiton-itemized (and waiton-tconfig
+						(or (hash-table-ref/default waiton-tconfig "items" #f)
+						    (hash-table-ref/default waiton-tconfig "itemstable" #f)))))
+		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "no" "a") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
 		     ;; is this satisfied by merely appending "/" to the waiton name added to the list?
 		     ;;
 		     ;; This approach causes all of the items in an upstream test to be run 
 
-		     (debug:print-info 0 "new-test-patts: " new-test-patts ", prev test-patts: " test-patts)
-		     (if (equal? new-test-patts test-patts)
-			 (set! required-tests (cons waiton required-tests)) ;; (cons (conc waiton "/") required-tests))
-			 (set! test-patts new-test-patts))
-		     
+		     ;; if we have this waiton already processed once we can analzye it for extending
+		     ;; tests to be run, since we can't properly process waitons unless they have been
+		     ;; initially added we add them again to be processed on second round AND add the hed
+		     ;; back in to also be processed on second round
+		     ;;
+		     (if waiton-tconfig
+			 (begin
+			   (set! test-names (cons waiton test-names)) ;; need to process this one, only add once the waiton tconfig read
+			   (if waiton-itemized
+			       (begin
+				 (debug:print-info 0 "New test patts: " new-test-patts ", prev test patts: " test-patts)
+				 (set! required-tests (cons (conc waiton "/") required-tests))
+				 (set! test-patts new-test-patts))
+			       (begin
+				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
+				 (set! required-tests (cons waiton required-tests)))))
+			 (begin
+			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
+			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
+			 
 		     ;; NOPE: didn't work. required needs to be plain test names. Try tacking on to test-patts
 		     ;;  - doesn't work
 		     ;; (set! test-patts (conc test-patts "," waiton "/"))
 		     
-		     (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+		     ;; (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
+		     )))
 	     waitons)
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
-		  (loop (car remtests)(cdr remtests)))))))
+		  (begin
+		    (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
+		    (loop (car remtests)(cdr remtests))))))))
 
     (if (not (null? required-tests))
 	(debug:print-info 1 "Adding \"" (string-intersperse required-tests " ") "\" to the run queue"))

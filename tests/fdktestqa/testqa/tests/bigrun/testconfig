@@ -7,7 +7,7 @@ step1 #{get vars step1var}
 
 # Test requirements are specified here
 [requirements]
-# waiton setup
+waiton setup
 priority 0
 
 # Iteration for your tests are controlled by the items section
