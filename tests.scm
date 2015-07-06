@@ -81,14 +81,14 @@
 	 (test-b-len (+ (string-length test-b) 1))
 	 (patts-b    (map (lambda (x)
 			    (let ((newpatt (conc test-a "/" (substring x test-b-len (string-length x)))))
-			      (print "in map, x=" x ", newpatt=" newpatt)
+			      ;; (print "in map, x=" x ", newpatt=" newpatt)
 			      newpatt))
 			  (filter (lambda (x)
 				    (eq? (substring-index (conc test-b "/") x) 0))
 				  patts))))
     (string-intersperse (delete-duplicates (append patts patts-b)) ",")))
 
-;; tests:glob-like-match
+;; tests:glob-like-match 
 (define (tests:glob-like-match patt str) 
   (let ((like (substring-index "%" patt)))
     (let* ((notpatt  (equal? (substring-index "~" patt) 0))
