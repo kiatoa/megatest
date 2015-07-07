@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="generator" content="AsciiDoc 8.6.9">
+<meta name="generator" content="AsciiDoc 8.6.7">
 <title>The Megatest Users Manual</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -86,15 +86,9 @@ ul, ol, li > p {
 ul > li     { color: #aaa; }
 ul > li > * { color: black; }
 
-.monospaced, code, pre {
-  font-family: "Courier New", Courier, monospace;
-  font-size: inherit;
-  color: navy;
+pre {
   padding: 0;
   margin: 0;
-}
-pre {
-  white-space: pre-wrap;
 }
 
 #author {
@@ -224,7 +218,7 @@ div.exampleblock > div.content {
 }
 
 div.imageblock div.content { padding-left: 0; }
-span.image img { border-style: none; vertical-align: text-bottom; }
+span.image img { border-style: none; }
 a.image:visited { color: white; }
 
 dl {
@@ -420,6 +414,12 @@ div.unbreakable { page-break-inside: avoid; }
  *
  * */
 
+tt {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
+
 div.tableblock {
   margin-top: 1.0em;
   margin-bottom: 1.5em;
@@ -452,6 +452,12 @@ div.tableblock > table[frame="vsides"] {
  * html5 specific
  *
  * */
+
+.monospaced {
+  font-family: "Courier New", Courier, monospace;
+  font-size: inherit;
+  color: navy;
+}
 
 table.tableblock {
   margin-top: 1.0em;
@@ -532,8 +538,6 @@ body.manpage div.sectionbody {
 @media print {
   body.manpage div#toc { display: none; }
 }
-
-
 @media screen {
   body {
     max-width: 50em; /* approximately 80 characters wide */
@@ -1225,7 +1229,7 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/usr/images/icons/note.png" alt="Note">
+<img src="/nfs/pdx/disks/ice.disk.001/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
 </td>
 <td class="content">There is a trailing space after the --</td>
 </tr></table>
@@ -1343,7 +1347,7 @@ width:70%;
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
-<img src="/usr/images/icons/note.png" alt="Note">
+<img src="/nfs/pdx/disks/ice.disk.001/icfadm/pkgs/asciidoc/8.6.7/images/icons/note.png" alt="Note">
 </td>
 <td class="content">Preface and appendix subsections start out of sequence at level
 2 (level 1 is skipped).  This only applies to multi-part book
@@ -1415,8 +1419,7 @@ A second glossary term
 <div id="footer">
 <div id="footer-text">
 Version 1.0<br>
-Last updated
- 2015-06-02 21:29:49 MST
+Last updated 2015-06-22 12:55:58 PDT
 </div>
 </div>
 </body>
