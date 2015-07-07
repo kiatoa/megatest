@@ -231,7 +231,9 @@ Override the Toplevel HTML File
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Megatest generates a simple html file summary for top level tests of
-iterated tests. The generation can be overridden.
+iterated tests. The generation can be overridden. NOTE: the output of
+the script is captured from stdout to create the html.
+
 
 .For test "runfirst" override the toplevel generation with a script "mysummary.sh"
 -----------------
