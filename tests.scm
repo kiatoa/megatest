@@ -86,8 +86,11 @@
 			  (filter (lambda (x)
 				    (eq? (substring-index (conc test-b "/") x) 0))
 				  patts))))
-    (string-intersperse (delete-duplicates (append patts patts-b)) ",")))
-
+    (string-intersperse (delete-duplicates (append patts (if (null? patts-b)
+							     (list (conc test-a "/%"))
+							     patts-b)))
+			",")))
+  
 ;; tests:glob-like-match 
 (define (tests:glob-like-match patt str) 
   (let ((like (substring-index "%" patt)))

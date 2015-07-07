@@ -394,7 +394,7 @@
 			  (waiton-itemized (and waiton-tconfig
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f)))))
-		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "no" "a") " waiton-record and" (if waiton-itemized " " " no ") "items")
+		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
 		     ;; is this satisfied by merely appending "/" to the waiton name added to the list?
