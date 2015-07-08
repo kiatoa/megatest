@@ -1173,7 +1173,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-(if (args:get-arg "-runtests")
+(if (or (args:get-arg "-run")(args:get-arg "-runtests"))
   (general-run-call 
    "-runtests" 
    "run a test" 
@@ -1610,7 +1610,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (and (args:get-arg "-run-wait")
-	 (not (args:get-arg "-runtests"))) ;; run-wait is built into runtests now
+	 (not (or (args:get-arg "-run")
+		  (args:get-arg "-runtests")))) ;; run-wait is built into runtests now
     (begin
       (if (not (launch:setup-for-run))
 	  (begin
@@ -1681,7 +1682,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (thread-join! *watchdog*)
 
 (if (not (eq? *globalexitstatus* 0))
-    (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
+    (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
            (debug:print 0 "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
            (exit 0))
