@@ -405,7 +405,8 @@
 
 (define (common:args-get-testpatt)
   (let* ((args-testpatt (or (args:get-arg "-testpatt")
-			    (args:get-arg "-runtests")))
+			    (args:get-arg "-runtests")
+			    "%"))
 	 (testpatt    (or (and (equal? args-testpatt "%")
 			       (getenv "TESTPATT"))
 			  args-testpatt)))
