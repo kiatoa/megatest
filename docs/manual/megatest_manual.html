@@ -827,65 +827,33 @@ sqlite3 database.</p></div>
 <div class="sectionbody">
 <div class="sect2">
 <h3 id="_ww05_migrate_to_inmem_db">ww05 - migrate to inmem-db</h3>
-<div class="paragraph"><p>Keep as much the same as possible. Add internal reference to almost
-eliminate contention on db(s).</p></div>
 <div class="olist arabic"><ol class="arabic">
 <li>
 <p>
-Add internal reference db
+Switch to inmem db with fast sync to on disk db&#8217;s [DONE]
 </p>
 </li>
 <li>
 <p>
-Verify that actions are accessing correct db
+Server polls tasks table for next action
 </p>
 <div class="olist loweralpha"><ol class="loweralpha">
 <li>
 <p>
--runtests  - inmem
+Task table used for tracking runner process [DONE]
 </p>
 </li>
 <li>
 <p>
--list-runs - local (but not megatest.db)
+Task table used for jobs to run
 </p>
 </li>
 <li>
 <p>
-dashboard  - local (but not megatest.db)
+Task table used for queueing runner actions (remove runs, cleanRunExecute, etc)
 </p>
 </li>
 </ol></div>
-</li>
-<li>
-<p>
-Mirror db to /var/tmp&#8230;
-</p>
-</li>
-<li>
-<p>
-Dashboard read db from per-run db.
-</p>
-</li>
-<li>
-<p>
-Dashboard read db from /var/tmp
-</p>
-</li>
-<li>
-<p>
-Runs register in tasks table in monitor.db
-</p>
-</li>
-<li>
-<p>
-Server polls tasks table for next action (in addition?)
-</p>
-</li>
-<li>
-<p>
-Change run loop to execute in server, triggered by call to polling of tasks table
-</p>
 </li>
 </ol></div>
 </div>
@@ -907,84 +875,44 @@ Megatest. See the script installall.sch in the utils directory of the
 distribution for a mostly automated way to install everything needed
 for building Megatest on Linux.</p></div>
 <div class="paragraph"><p><span class="footnote"><br>[An example footnote.]<br></span></p></div>
-<div class="paragraph"><p>And now for something completely different: monkeys, lions and
-tigers (Bengal and Siberian) using the alternative syntax index
-entries.
-
-
-
-Note that multi-entry terms generate separate index entries.</p></div>
-<div class="paragraph"><p>Here are a couple of image examples: an <span class="image">
-<img src="images/smallnew.png" alt="images/smallnew.png">
-</span>
-example inline image followed by an example block image:</p></div>
-<div class="imageblock">
-<div class="content">
-<img src="images/tiger.png" alt="Tiger image">
 </div>
-<div class="title">Figure 1. Tiger block image</div>
-</div>
-<div class="paragraph"><p>Followed by an example table:</p></div>
-<table class="tableblock frame-all grid-all"
-style="
-width:60%;
-">
-<caption class="title">Table 1. An example table</caption>
-<col style="width:50%;">
-<col style="width:50%;">
-<thead>
-<tr>
-<th class="tableblock halign-left valign-top" > Option          </th>
-<th class="tableblock halign-left valign-top" > Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="tableblock halign-left valign-top" ><p class="tableblock">-a <em>USER GROUP</em></p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock">Add <em>USER</em> to <em>GROUP</em>.</p></td>
-</tr>
-<tr>
-<td class="tableblock halign-left valign-top" ><p class="tableblock">-R <em>GROUP</em></p></td>
-<td class="tableblock halign-left valign-top" ><p class="tableblock">Disables access to <em>GROUP</em>.</p></td>
-</tr>
-</tbody>
-</table>
-<div class="exampleblock">
-<div class="title">Example 1. An example example</div>
-<div class="content">
-<div class="paragraph"><p>Lorum ipum&#8230;</p></div>
-</div></div>
-</div>
-<div class="sect2">
-<h3 id="X1">Sub-section with Anchor</h3>
-<div class="paragraph"><p>Sub-section at level 2.</p></div>
-<div class="sect3">
-<h4 id="_chapter_sub_section">Chapter Sub-section</h4>
-<div class="paragraph"><p>Sub-section at level 3.</p></div>
-<div class="sect4">
-<h5 id="_chapter_sub_section_2">Chapter Sub-section</h5>
-<div class="paragraph"><p>Sub-section at level 4.</p></div>
-<div class="paragraph"><p>This is the maximum sub-section depth supported by the distributed
-AsciiDoc configuration.
-<span class="footnote"><br>[A second example footnote.]<br></span></p></div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_the_second_chapter">The Second Chapter</h2>
-<div class="sectionbody">
-<div class="paragraph"><p>An example link to anchor at start of the <a href="#X1">first sub-section</a>.</p></div>
-<div class="paragraph"><p>An example link to a bibliography entry <a href="#taoup">[taoup]</a>.</p></div>
 </div>
 </div>
 <h1 id="_writing_tests">Writing Tests</h1>
 <div class="sect1">
-<h2 id="_the_first_chapter_of_the_second_part">The First Chapter of the Second Part</h2>
+<h2 id="_creating_a_new_test">Creating a new Test</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>Chapters grouped into book parts are at level 1 and can contain
-sub-sections.</p></div>
+<div class="paragraph"><p>The following steps will add a test "yourtestname" to your testsuite. This assumes
+starting from a directory where you already have a megatest.config and
+runconfigs.config.</p></div>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+Create a directory tests/yourtestname
+</p>
+</li>
+<li>
+<p>
+Create a file tests/yourtestname/testconfig
+</p>
+</li>
+</ol></div>
+<div class="listingblock">
+<div class="title">Contents of minimal testconfig</div>
+<div class="content monospaced">
+<pre>[ezsteps]
+stepname1 stepname.sh
+
+# test_meta is a section for storing additional data on your test
+[test_meta]
+author myname
+owner  myname
+description An example test
+reviewed never</pre>
+</div></div>
+<div class="paragraph"><p>This test runs a single step called "stepname1" which runs a script
+"stepname.sh". Note that although it is common to put the actions
+needed for a test step into a script it is not necessary.</p></div>
 </div>
 </div>
 <h1 id="_how_to_do_things">How To Do Things</h1>
@@ -1021,28 +949,63 @@ custdes 4</pre>
 <h3 id="_examining_the_environment">Examining The Environment</h3>
 <div class="sect3">
 <h4 id="_during_config_file_processing">During Config File Processing</h4>
+<div class="paragraph"><p>It is often helpful to know the content of variables in various
+contexts as Megatest does the actions needed to run your tests. A handy technique is to force the startup of an xterm in the context being examined.</p></div>
+<div class="paragraph"><p>For example, if an item list is not being generated as expected you
+can inject the startup of an xterm as if it were an item:</p></div>
+<div class="listingblock">
+<div class="title">Original items table</div>
+<div class="content monospaced">
+<pre>[items]
+CELLNAME [system getcellname.sh]</pre>
+</div></div>
+<div class="listingblock">
+<div class="title">Items table modified for debug</div>
+<div class="content monospaced">
+<pre>[items]
+DEBUG [system xterm]
+CELLNAME [system getcellnames.sh]</pre>
+</div></div>
+<div class="paragraph"><p>When this test is run an xterm will pop up. In that xterm the
+environment is exactly that in which the script "getcellnames.sh"
+would run. You can now debug the script to find out why it isn&#8217;t
+working as expected.</p></div>
 </div>
 <div class="sect3">
 <h4 id="_organising_your_tests_and_tasks">Organising Your Tests and Tasks</h4>
+<div class="paragraph"><p>The default location "tests" for storing tests can be extended by
+adding to your tests-paths section.</p></div>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>[tests-paths]
+<pre>[misc]
+parent #{shell dirname $(readlink -f .)}
+
+[tests-paths]
 1 #{get misc parent}/simplerun/tests</pre>
 </div></div>
+<div class="paragraph"><p>The above example shows how you can use addition sections in your
+config file to do complex processing. By putting results of relatively
+slow operations into variables the processing of your configs can be
+kept fast.</p></div>
+</div>
+<div class="sect3">
+<h4 id="_alternative_method_for_running_your_job_script">Alternative Method for Running your Job Script</h4>
 <div class="listingblock">
+<div class="title">Directly running job in testconfig</div>
 <div class="content monospaced">
-<pre>[setup]</pre>
+<pre>[setup]
+runscript main.csh</pre>
 </div></div>
-<div class="paragraph"><p>The runscript method is a brute force way to run scripts where the
-user is responsible for setting STATE and STATUS</p></div>
-<div class="listingblock">
-<div class="content monospaced">
-<pre>runscript main.csh</pre>
-</div></div>
+<div class="paragraph"><p>The runscript method is essentially a brute force way to run scripts where the
+user is responsible for setting STATE and STATUS and managing the details of running a test.</p></div>
 </div>
 </div>
 <div class="sect2">
 <h3 id="_debugging_server_problems">Debugging Server Problems</h3>
+<div class="paragraph"><p>Some handy Unix commands to track down issues with servers not
+communicating with your test manager processes. Please put in tickets
+at <a href="https://www.kiatoa.com/fossils/megatest">https://www.kiatoa.com/fossils/megatest</a> if you have problems with
+servers getting stuck.</p></div>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>sudo lsof -i
@@ -1108,23 +1071,51 @@ waiton test1 test2</pre>
 must be COMPLETED and PASS, CHECK or WAIVED before the test will start</p></div>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>mode   normal</pre>
+<pre>[requirements]
+mode   normal</pre>
 </div></div>
 <div class="paragraph"><p>The toplevel mode requires only that the prior tests are COMPLETED.</p></div>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>mode toplevel</pre>
+<pre>[requirements]
+mode toplevel</pre>
 </div></div>
-<div class="paragraph"><p>A item based waiton will start items in a test when the
-same-named item is COMPLETED and PASS, CHECK or WAIVED
-in the prior test</p></div>
+<div class="paragraph"><p>A item based waiton will start items in a test when the same-named
+item is COMPLETED and PASS, CHECK or WAIVED in the prior test. This
+was historically called "itemwait" mode. The terms "itemwait" and
+"itemmatch" are synonyms.</p></div>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>mode itemmatch</pre>
+<pre>[requirements]
+mode itemmatch</pre>
 </div></div>
+</div>
+<div class="sect3">
+<h4 id="_itemmap">Itemmap</h4>
+<div class="paragraph"><p>For cases were the dependent test has a similar but not identical
+itempath to the downstream test an itemmap can allow for itemmatch
+mode</p></div>
 <div class="listingblock">
 <div class="content monospaced">
-<pre># With a toplevel test you may wish to generate your list
+<pre>[requirements]
+mode itemmatch
+itemmap .*x/ y/
+
+# ## pattern replacement notes
+#
+# ## Example
+# ## Remove everything up to the last /
+itemmap .*/
+#
+# ## Example
+# ## Replace foo/ with bar/
+itemmap foo/ bar/</pre>
+</div></div>
+<div class="listingblock">
+<div class="title">Autogeneration waiton list for dynamic flow dependency trees</div>
+<div class="content monospaced">
+<pre>[requirements]
+# With a toplevel test you may wish to generate your list
 # of tests to run dynamically
 #
 # waiton #{shell get-valid-tests-to-run.sh}</pre>
@@ -1139,12 +1130,13 @@ in the prior test</p></div>
 </div>
 <div class="sect3">
 <h4 id="_skip">Skip</h4>
-</div>
-<div class="sect3">
-<h4 id="_header_3">Header</h4>
+<div class="paragraph"><p>A test with a skip section will conditional skip running.</p></div>
 <div class="listingblock">
+<div class="title">Skip section example</div>
 <div class="content monospaced">
-<pre>[skip]</pre>
+<pre>[skip]
+prevrunning x
+# rundelay 30m 15s</pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1152,8 +1144,11 @@ in the prior test</p></div>
 <div class="listingblock">
 <div class="content monospaced">
 <pre># NB// If the prevrunning line exists with *any* value the test will
-# automatically SKIP if the same-named test is currently RUNNING
+# automatically SKIP if the same-named test is currently RUNNING. The
+# "x" can be any string. Comment out the prevrunning line to turn off
+# skip.
 
+[skip]
 prevrunning x</pre>
 </div></div>
 </div>
@@ -1161,7 +1156,17 @@ prevrunning x</pre>
 <h4 id="_skip_if_a_file_exists">Skip if a File Exists</h4>
 <div class="listingblock">
 <div class="content monospaced">
-<pre>fileexists /path/to/a/file # skip if /path/to/a/file exists</pre>
+<pre>[skip]
+fileexists /path/to/a/file # skip if /path/to/a/file exists</pre>
+</div></div>
+</div>
+<div class="sect3">
+<h4 id="_skip_if_test_ran_more_recently_than_specified_time">Skip if test ran more recently than specified time</h4>
+<div class="listingblock">
+<div class="title">Skip if this test has been run in the past fifteen minutes and 15 seconds.</div>
+<div class="content monospaced">
+<pre>[skip]
+rundelay 15m 15s</pre>
 </div></div>
 </div>
 <div class="sect3">
@@ -1233,7 +1238,8 @@ COMPLETED/ xterm -e bash -s --</pre>
 <div class="sect2">
 <h3 id="_override_the_toplevel_html_file">Override the Toplevel HTML File</h3>
 <div class="paragraph"><p>Megatest generates a simple html file summary for top level tests of
-iterated tests. The generation can be overridden.</p></div>
+iterated tests. The generation can be overridden. NOTE: the output of
+the script is captured from stdout to create the html.</p></div>
 <div class="listingblock">
 <div class="title">For test "runfirst" override the toplevel generation with a script "mysummary.sh"</div>
 <div class="content monospaced">
@@ -1252,7 +1258,7 @@ runfirst mysummary.sh</pre>
 style="
 width:70%;
 ">
-<caption class="title">Table 2. API Server Management Calls</caption>
+<caption class="title">Table 1. API Server Management Calls</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">
@@ -1292,7 +1298,7 @@ width:70%;
 style="
 width:70%;
 ">
-<caption class="title">Table 3. API Keys Related Calls</caption>
+<caption class="title">Table 2. API Keys Related Calls</caption>
 <col style="width:14%;">
 <col style="width:28%;">
 <col style="width:28%;">

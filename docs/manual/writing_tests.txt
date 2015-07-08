@@ -2,12 +2,32 @@
 Writing Tests
 =============
 
-The First Chapter of the Second Part
-------------------------------------
-Chapters grouped into book parts are at level 1 and can contain
-sub-sections.
+Creating a new Test
+-------------------
 
+The following steps will add a test "yourtestname" to your testsuite. This assumes
+starting from a directory where you already have a megatest.config and
+runconfigs.config.
 
+. Create a directory tests/yourtestname
+. Create a file tests/yourtestname/testconfig
+
+.Contents of minimal testconfig
+--------------------
+[ezsteps]
+stepname1 stepname.sh
+
+# test_meta is a section for storing additional data on your test
+[test_meta]
+author myname
+owner  myname
+description An example test
+reviewed never
+--------------------
+
+This test runs a single step called "stepname1" which runs a script
+"stepname.sh". Note that although it is common to put the actions
+needed for a test step into a script it is not necessary.
 
 :numbered!:
 

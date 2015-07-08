@@ -58,32 +58,58 @@ The default (i.e. if mode is not specified) is normal. All pre-dependent tests
 must be COMPLETED and PASS, CHECK or WAIVED before the test will start
 
 -------------------
+[requirements]
 mode   normal
 -------------------
 
 The toplevel mode requires only that the prior tests are COMPLETED.
 
 -------------------
+[requirements]
 mode toplevel
 -------------------
 
-A item based waiton will start items in a test when the
-same-named item is COMPLETED and PASS, CHECK or WAIVED
-in the prior test
+A item based waiton will start items in a test when the same-named
+item is COMPLETED and PASS, CHECK or WAIVED in the prior test. This
+was historically called "itemwait" mode. The terms "itemwait" and
+"itemmatch" are synonyms.
 
 -------------------
+[requirements]
 mode itemmatch
 -------------------
 
+Itemmap
+^^^^^^^
+
+For cases were the dependent test has a similar but not identical
+itempath to the downstream test an itemmap can allow for itemmatch
+mode
+
+-------------------
+[requirements]
+mode itemmatch
+itemmap .*x/ y/
+
+# ## pattern replacement notes
+#
+# ## Example
+# ## Remove everything up to the last /
+itemmap .*/
+#
+# ## Example
+# ## Replace foo/ with bar/
+itemmap foo/ bar/
 -------------------
 
+.Autogeneration waiton list for dynamic flow dependency trees
+-------------------
+[requirements]
 # With a toplevel test you may wish to generate your list 
 # of tests to run dynamically
 #
 # waiton #{shell get-valid-tests-to-run.sh}
-------------------
-
-
+-------------------
 
 Run time limit
 ^^^^^^^^^^^^^^
@@ -95,20 +121,25 @@ runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more
 Skip
 ^^^^
 
-Header
-^^^^^^
+A test with a skip section will conditional skip running.
 
+.Skip section example
 -----------------
 [skip]
+prevrunning x
+# rundelay 30m 15s
 -----------------
 
 Skip on Still-running Tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 -----------------
-# NB// If the prevrunning line exists with *any* value the test will 
-# automatically SKIP if the same-named test is currently RUNNING
+# NB// If the prevrunning line exists with *any* value the test will
+# automatically SKIP if the same-named test is currently RUNNING. The
+# "x" can be any string. Comment out the prevrunning line to turn off
+# skip.
 
+[skip]
 prevrunning x
 -----------------
 
@@ -116,7 +147,17 @@ Skip if a File Exists
 ^^^^^^^^^^^^^^^^^^^^^
 
 -----------------
+[skip]
 fileexists /path/to/a/file # skip if /path/to/a/file exists
+-----------------
+
+Skip if test ran more recently than specified time
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.Skip if this test has been run in the past fifteen minutes and 15 seconds.
+-----------------
+[skip]
+rundelay 15m 15s
 -----------------
 
 Controlled waiver propagation
@@ -190,7 +231,9 @@ Override the Toplevel HTML File
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Megatest generates a simple html file summary for top level tests of
-iterated tests. The generation can be overridden.
+iterated tests. The generation can be overridden. NOTE: the output of
+the script is captured from stdout to create the html.
+
 
 .For test "runfirst" override the toplevel generation with a script "mysummary.sh"
 -----------------

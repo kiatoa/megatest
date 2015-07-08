@@ -74,7 +74,24 @@
 	     (tests:match test-patts testname #f))
 	   test-names)))
 
-;; tests:glob-like-match
+;; given test-b that is waiting on test-a extend test-patt appropriately
+;;
+(define (tests:extend-test-patts test-patt test-b test-a itemmap)
+  (let* ((patts      (string-split test-patt ","))
+	 (test-b-len (+ (string-length test-b) 1))
+	 (patts-b    (map (lambda (x)
+			    (let ((newpatt (conc test-a "/" (substring x test-b-len (string-length x)))))
+			      ;; (print "in map, x=" x ", newpatt=" newpatt)
+			      newpatt))
+			  (filter (lambda (x)
+				    (eq? (substring-index (conc test-b "/") x) 0))
+				  patts))))
+    (string-intersperse (delete-duplicates (append patts (if (null? patts-b)
+							     (list (conc test-a "/%"))
+							     patts-b)))
+			",")))
+  
+;; tests:glob-like-match 
 (define (tests:glob-like-match patt str) 
   (let ((like (substring-index "%" patt)))
     (let* ((notpatt  (equal? (substring-index "~" patt) 0))

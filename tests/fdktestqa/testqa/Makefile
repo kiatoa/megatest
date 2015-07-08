@@ -15,6 +15,14 @@ bigbig :
 	   ($(MEGATEST) -runtests % -target a/b :runname $tn & ) ; \
 	done
 
+waitonpatt :
+	megatest -remove-runs -runname waitonpatt -target a/b -testpatt %
+	NUMTESTS=15 megatest -run -target a/b -runname waitonpatt -testpatt bigrun3/%8
+
+waitonall :
+	megatest -remove-runs -runname waitonall -target a/b -testpatt %
+	NUMTESTS=20 megatest -run -target a/b -runname waitonall -testpatt alltop
+
 bigrun :
 	NUMTESTS=$(NUMTESTS) $(MEGATEST) -runtests bigrun -target a/bigrun :runname a$(shell date +%V)
 
@@ -36,4 +44,3 @@ compile :
 
 clean :
 	rm -rf ../simple*/*/* megatest.db db/* ../simple*/.db/* logs/* monitor.db
-

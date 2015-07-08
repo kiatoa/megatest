@@ -2260,7 +2260,9 @@
 		 run-id
 		 #t
 		 (lambda (db)
-		   (sqlite3:execute db qry newstate newstatus run-id testname)))))
+		   (sqlite3:execute db qry newstate newstatus run-id testname)
+		   (mt:process-triggers run-id test-id newstate newstatus)
+		   ))))
 	    testnames))
 
 ;; speed up for common cases with a little logic
@@ -2831,7 +2833,8 @@
 	(db:general-call dbdat 'set-test-start-time (list test-id)))
     (if msg
 	(db:general-call dbdat 'state-status-msg (list state status msg test-id))
-	(db:general-call dbdat 'state-status     (list state status test-id)))))
+	(db:general-call dbdat 'state-status     (list state status test-id)))
+     (mt:process-triggers run-id test-id state status)))
 
 ;; call with state = #f to roll up with out accounting for state/status of this item
 ;;
