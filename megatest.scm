@@ -437,6 +437,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
+
+
 (on-exit std-exit-procedure)
 
 ;;======================================================================
@@ -1189,7 +1191,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
      ;;    	     #f))))
      (runs:run-tests target
 		     runname
-		     (args:get-arg "-runtests")
+		     (common:args-get-testpatt) ;; (args:get-arg "-runtests")
 		     user
 		     args:arg-hash))))
 
