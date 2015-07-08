@@ -311,7 +311,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	       (args:get-arg "-runstep"))
 	      ;; add more args that use remargs here
 	      ))
-    (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse remargs " ")))
+    (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
