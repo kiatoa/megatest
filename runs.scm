@@ -89,6 +89,10 @@
 	  (if db (sqlite3:finalize! db))
 	  (exit 1)))
     ;; Now have runconfigs data loaded, set environment vars
+
+    ;; Only now can we calculate the testpatt
+    (set! testpatt (common:args-get-testpatt))
+    
     (for-each (lambda (section)
 		(for-each (lambda (varval)
 			    (set! envdat (append envdat (list varval)))
