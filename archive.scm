@@ -237,9 +237,9 @@
 	 ;;
 	 (if (and prev-test-physical-path
 		  (file-exists? prev-test-physical-path)) ;; what to do? abort or clean up or link it in?
-	     (let ((base (pathname-directory prev-test-physical-path))
-		   (dirn (pathname-file      prev-test-physical-path))
-		   (newn (conc base "/." dirn)))
+	     (let* ((base (pathname-directory prev-test-physical-path))
+		    (dirn (pathname-file      prev-test-physical-path))
+		    (newn (conc base "/." dirn)))
 	       (debug:print 0 "ERROR: the old directory " prev-test-physical-path ", still exists! Moving it to " newn)
 	       (file-move prev-test-physical-path newn)))
 
