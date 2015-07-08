@@ -855,10 +855,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  ;; put test parameters into convenient variables
 	  (runs:operate-on  action
 			    target
-			    (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			    (args:get-arg "-testpatt")
-			    state: (or (args:get-arg "-state")(args:get-arg ":state") )
-			    status: (or (args:get-arg "-status")(args:get-arg ":status"))
+			    (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			    (common:args-get-testpatt) ;; (args:get-arg "-testpatt")
+			    state: (common:args-get-state)
+			    status: (common:args-get-status)
 			    new-state-status: (args:get-arg "-set-state-status")))
       (set! *didsomething* #t)))))
 	  
