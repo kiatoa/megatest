@@ -403,13 +403,15 @@
 (define (common:args-get-status)
   (or (args:get-arg "-status")(args:get-arg ":status")))
 
-(define (common:args-get-testpatt)
-  (let* ((args-testpatt (or (args:get-arg "-testpatt")
+(define (common:args-get-testpatt rconf)
+  (let* ((rtestpatt     (if rconf (runconfigs-get rconf "TESTPATT") #f))
+	 (args-testpatt (or (args:get-arg "-testpatt")
 			    (args:get-arg "-runtests")
 			    "%"))
 	 (testpatt    (or (and (equal? args-testpatt "%")
-			       (getenv "TESTPATT"))
+			       rtestpatt)
 			  args-testpatt)))
+    (if rtestpatt (debug:print-info 0 "TESTPATT from runconfigs: " rtestpatt))
     testpatt))
 
 (define (common:args-get-runname)
