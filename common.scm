@@ -393,8 +393,28 @@
    "disks" '("none" "")))
 
 ;;======================================================================
-;; T A R G E T S
+;; T A R G E T S  ,   S T A T E ,   S T A T U S ,   
+;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
+
+(define (common:args-get-state)
+  (or (args:get-arg "-state")(args:get-arg ":state")))
+
+(define (common:args-get-status)
+  (or (args:get-arg "-status")(args:get-arg ":status")))
+
+(define (common:args-get-testpatt)
+  (let* ((args-testpatt (or (args:get-arg "-testpatt")
+			    (args:get-arg "-runtests")
+			    "%"))
+	 (testpatt    (or (and (equal? args-testpatt "%")
+			       (getenv "TESTPATT"))
+			  args-testpatt)))
+    testpatt))
+
+(define (common:args-get-runname)
+  (or (args:get-arg "-runname")
+      (args:get-arg ":runname")))
 
 (define (common:args-get-target #!key (split #f))
   (let* ((keys    (keys:config-get-fields *configdat*))
