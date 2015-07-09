@@ -242,6 +242,26 @@ the script is captured from stdout to create the html.
 runfirst mysummary.sh
 -----------------
 
+Archiving Setup
+---------------
+
+In megatest.config add the following sections:
+
+.megatest.config
+--------------
+[archive]
+# where to get bup executable
+# bup /path/to/bup
+
+[archive-disks]
+
+# Archives will be organised under these paths like this:
+#  <testsuite>/<creationdate>
+# Within the archive the data is structured like this:
+#  <target>/<runname>/<test>/
+archive0 /mfs/myarchive-data/adisk1
+--------------
+
 Programming API
 ---------------
 

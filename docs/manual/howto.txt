@@ -2,6 +2,56 @@
 How To Do Things
 ================
 
+Remove Runs
+-----------
+
+From the dashboard click on the button (PASS/FAIL...) for one of the tests. From the test control panel that 
+comes up push the clean test button. The command field will be prefilled with a template command for removing 
+that test. You can edit the command, for example change the argument to -testpatt to "%" to remove all tests.
+
+.Remove the test diskperf and all it's items
+----------------
+megatest -remove-runs -target ubuntu/nfs/none -runname ww28.1a -testpatt diskperf/% -v
+----------------
+
+.Remove all tests for all runs and all targets
+----------------
+megatest -remove-runs -target %/%/% -runname % -testpatt % -v
+----------------
+
+Archive Runs
+------------
+
+Megatest supports using the bup backup tool (https://bup.github.io/) to archive your tests for efficient storage
+and retrieval. Archived data can be rapidly retrieved if needed. The metadata for the run (PASS/FAIL status, run 
+durations, time stamps etc.) are all preserved in the megatest database.
+
+For setup information see the Archiving topic in the reference section of this manual.
+
+To Archive
+~~~~~~~~~~
+
+Hint: use the test control panel to create a template command by pushing the "Archive Tests" button.
+
+.Archive a full run
+----------------
+megatest -target ubuntu/nfs/none -runname ww28.1a -archive save-remove -testpatt %
+----------------
+
+To Restore
+~~~~~~~~~~
+
+.Retrieve a single test
+----------------
+megatest -target ubuntu/nfs/none -runname ww28.1a -archive restore -testpatt diskperf/%
+----------------
+
+Hint: You can browse the archive using bup commands directly.
+
+----------------
+bup -d /path/to/bup/archive ftp
+----------------
+
 Tricks
 ------
 
@@ -36,6 +86,14 @@ Debugging Tricks
 
 Examining The Environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test Control Panel - xterm
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+From the dashboard click on a test PASS/FAIL button. This brings up a test control panel. Aproximately near the center left of the 
+window there is a button "Start Xterm". Push this to get an xterm with the full context and environment loaded for that test. You can run
+scripts or ezsteps by copying from the testconfig (hint, load up the testconfig in a separate gvim or emacs window). This is the easiest way
+to debug your tests.
 
 During Config File Processing
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
