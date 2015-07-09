@@ -56,7 +56,9 @@
 		    sections)
 	  (debug:print 2 "---")
 	  (set! *already-seen-runconfig-info* #t)))
-    finaldat))
+    ;; finaldat ;; was returning this "finaldat" which would be good but conflicts with other uses
+    confdat
+    ))
 
 (define (set-run-config-vars run-id keyvals targ-from-db)
   (push-directory *toppath*) ;; the push/pop doesn't appear to do anything ...
