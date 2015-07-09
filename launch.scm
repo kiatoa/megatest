@@ -557,7 +557,8 @@
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
   (if (and *configdat* 
-	   (args:get-arg "-runtests"))
+	   (or (args:get-arg "-run")
+	       (args:get-arg "-runtests")))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target))
 	     (runname  (or (args:get-arg "-runname")
