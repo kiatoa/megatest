@@ -560,7 +560,8 @@
   ;; if we have a linktree and -runtests and -target and the directory exists dump the config
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
   (if (and *configdat* 
-	   (args:get-arg "-runtests"))
+	   (or (args:get-arg "-run")
+	       (args:get-arg "-runtests")))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target))
 	     (runname  (or (args:get-arg "-runname")
@@ -800,7 +801,6 @@
 				    #f
 				    ush)
 				#t)))     ;; default is yes
-	 (launcher        (config-lookup *configdat* "jobtools"     "launcher"))
 	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
 	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
 	 (diskspace       (config-lookup test-conf   "requirements" "diskspace"))
@@ -822,7 +822,8 @@
 				    ((mtest)     "../megatest")
 				    ((dashboard) "megatest")
 				    (else exe)))))
-	 (item-path  (item-list->path itemdat))
+	 (item-path       (item-list->path itemdat))
+	 (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
 	 (test-sig   (conc test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	 (work-area  #f)
 	 (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all

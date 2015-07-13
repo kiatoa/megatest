@@ -49,10 +49,8 @@
 		                 (exit 1)))))
 	  (runrec      (runs:runrec-make-record))
 	  (target      (common:args-get-target))
-	  (runname     (or (args:get-arg "-runname")
-		           (args:get-arg ":runname")))
-	  (testpatt    (or (args:get-arg "-testpatt")
-		           (args:get-arg "-runtests")))
+	  (runname     (common:args-get-runname))
+	  (testpatt    (common:args-get-testpatt #f))
 	  (keys        (keys:config-get-fields mconfig))
 	  (keyvals     (keys:target->keyval keys target))
 	  (toppath     *toppath*)
@@ -86,6 +84,10 @@
 	  (if db (sqlite3:finalize! db))
 	  (exit 1)))
     ;; Now have runconfigs data loaded, set environment vars
+
+    ;; Only now can we calculate the testpatt
+    (set! testpatt (common:args-get-testpatt runconfig))
+    
     (for-each (lambda (section)
 		(for-each (lambda (varval)
 			    (set! envdat (append envdat (list varval)))
@@ -249,13 +251,19 @@
       (set-signal-handler! signal/term sighand)
       (set-signal-handler! signal/stop sighand))
 
+    (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
+    (set! runconf (if (file-exists? runconfigf)
+		      (setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
+		      (begin
+			(debug:print 0 "WARNING: You do not have a run config file: " runconfigf)
+			#f)))
+
     ;; register this run in monitor.db
     (rmt:tasks-add "run-tests" user target runname test-patts task-key) ;; params)
     (rmt:tasks-set-state-given-param-key task-key "running")
-    (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
-    (if (file-exists? runconfigf)
-	(setup-env-defaults runconfigf run-id *already-seen-runconfig-info* keyvals target)
-	(debug:print 0 "WARNING: You do not have a run config file: " runconfigf))
+
+    (if (not test-patts) ;; first time in - adjust testpatt
+	(set! test-patts (common:args-get-testpatt runconf)))
 
     ;; Now generate all the tests lists
     (set! all-tests-registry (tests:get-all))
@@ -431,7 +439,7 @@
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
 		  (begin
-		    (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
+		    ;; (debug:print-info 0 "Preprocessing continues for " (string-intersperse remtests ", "))
 		    (loop (car remtests)(cdr remtests))))))))
 
     (if (not (null? required-tests))

@@ -1,9 +1,12 @@
 
 Writing Tests
-=============
+-------------
+// =============
 
 Creating a new Test
--------------------
+~~~~~~~~~~~~~~~~~~~
+
+//-------------------
 
 The following steps will add a test "yourtestname" to your testsuite. This assumes
 starting from a directory where you already have a megatest.config and

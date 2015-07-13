@@ -437,6 +437,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
       (hash-table-set! args:arg-hash "-testpatt" newval)
       (hash-table-delete! args:arg-hash "-itempatt")))
 
+
+
 (on-exit std-exit-procedure)
 
 ;;======================================================================
@@ -855,10 +857,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  ;; put test parameters into convenient variables
 	  (runs:operate-on  action
 			    target
-			    (or (args:get-arg "-runname")(args:get-arg ":runname"))
-			    (args:get-arg "-testpatt")
-			    state: (or (args:get-arg "-state")(args:get-arg ":state") )
-			    status: (or (args:get-arg "-status")(args:get-arg ":status"))
+			    (common:args-get-runname)  ;; (or (args:get-arg "-runname")(args:get-arg ":runname"))
+			    (common:args-get-testpatt #f) ;; (args:get-arg "-testpatt")
+			    state: (common:args-get-state)
+			    status: (common:args-get-status)
 			    new-state-status: (args:get-arg "-set-state-status")))
       (set! *didsomething* #t)))))
 	  
@@ -933,9 +935,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (if (launch:setup-for-run)
 	(let* ((dbstruct    (make-dbr:dbstruct path: *toppath* local: #t))
 	       (runpatt     (args:get-arg "-list-runs"))
-	       (testpatt    (if (args:get-arg "-testpatt") 
-			        (args:get-arg "-testpatt") 
-			        "%"))
+	       (testpatt    (common:args-get-testpatt #f))
+	       ;; (if (args:get-arg "-testpatt") 
+	       ;;  	        (args:get-arg "-testpatt") 
+	       ;;  	        "%"))
 	       (keys        (db:get-keys dbstruct))
 	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
 	       (runsdat     (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
@@ -1140,15 +1143,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;   process deferred tasks per above steps
 
 ;; run all tests are are Not COMPLETED and PASS or CHECK
-(if (or (args:get-arg "-runall")(args:get-arg "-run"))
+(if (or (args:get-arg "-runall")
+	(args:get-arg "-run")
+	(args:get-arg "-runtests"))
     (general-run-call 
      "-runall"
      "run all tests"
      (lambda (target runname keys keyvals)
        (runs:run-tests target
 		       runname
-		       (or (args:get-arg "-testpatt")
-			   "%")
+		       #f ;; (common:args-get-testpatt #f)
+		       ;; (or (args:get-arg "-testpatt")
+		       ;;     "%")
 		       user
 		       args:arg-hash))))
 
@@ -1169,27 +1175,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;    - if test run time > allowed run time then kill job
 ;;    - if cannot access db > allowed disconnect time then kill job
 
-(if (args:get-arg "-runtests")
-  (general-run-call 
-   "-runtests" 
-   "run a test" 
-   (lambda (target runname keys keyvals)
-     ;;
-     ;; May or may not implement it this way ...
-     ;;
-     ;; Insert this run into the tasks queue
-     ;; (open-run-close tasks:add tasks:open-db 
-     ;;    	     "runtests" 
-     ;;    	     user
-     ;;    	     target
-     ;;    	     runname
-     ;;    	     (args:get-arg "-runtests")
-     ;;    	     #f))))
-     (runs:run-tests target
-		     runname
-		     (args:get-arg "-runtests")
-		     user
-		     args:arg-hash))))
+;; == duplicated == (if (or (args:get-arg "-run")(args:get-arg "-runtests"))
+;; == duplicated ==   (general-run-call 
+;; == duplicated ==    "-runtests" 
+;; == duplicated ==    "run a test" 
+;; == duplicated ==    (lambda (target runname keys keyvals)
+;; == duplicated ==      ;;
+;; == duplicated ==      ;; May or may not implement it this way ...
+;; == duplicated ==      ;;
+;; == duplicated ==      ;; Insert this run into the tasks queue
+;; == duplicated ==      ;; (open-run-close tasks:add tasks:open-db 
+;; == duplicated ==      ;;    	     "runtests" 
+;; == duplicated ==      ;;    	     user
+;; == duplicated ==      ;;    	     target
+;; == duplicated ==      ;;    	     runname
+;; == duplicated ==      ;;    	     (args:get-arg "-runtests")
+;; == duplicated ==      ;;    	     #f))))
+;; == duplicated ==      (runs:run-tests target
+;; == duplicated == 		     runname
+;; == duplicated == 		     (common:args-get-testpatt #f) ;; (args:get-arg "-runtests")
+;; == duplicated == 		     user
+;; == duplicated == 		     args:arg-hash))))
 
 ;;======================================================================
 ;; Rollup into a run
@@ -1606,7 +1612,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (and (args:get-arg "-run-wait")
-	 (not (args:get-arg "-runtests"))) ;; run-wait is built into runtests now
+	 (not (or (args:get-arg "-run")
+		  (args:get-arg "-runtests")))) ;; run-wait is built into runtests now
     (begin
       (if (not (launch:setup-for-run))
 	  (begin
@@ -1677,7 +1684,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (thread-join! *watchdog*)
 
 (if (not (eq? *globalexitstatus* 0))
-    (if (or (args:get-arg "-runtests")(args:get-arg "-runall"))
+    (if (or (args:get-arg "-run")(args:get-arg "-runtests")(args:get-arg "-runall"))
         (begin
            (debug:print 0 "NOTE: Subprocesses with non-zero exit code detected: " *globalexitstatus*)
            (exit 0))
