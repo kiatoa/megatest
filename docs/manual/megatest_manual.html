@@ -915,8 +915,10 @@ needed for a test step into a script it is not necessary.</p></div>
 </div>
 <h1 id="_how_to_do_things">How To Do Things</h1>
 <div class="sect1">
-<h2 id="_remove_runs">Remove Runs</h2>
+<h2 id="_process_runs">Process Runs</h2>
 <div class="sectionbody">
+<div class="sect2">
+<h3 id="_remove_runs">Remove Runs</h3>
 <div class="paragraph"><p>From the dashboard click on the button (PASS/FAIL&#8230;) for one of the tests. From the test control panel that
 comes up push the clean test button. The command field will be prefilled with a template command for removing
 that test. You can edit the command, for example change the argument to -testpatt to "%" to remove all tests.</p></div>
@@ -931,16 +933,14 @@ that test. You can edit the command, for example change the argument to -testpat
 <pre>megatest -remove-runs -target %/%/% -runname % -testpatt % -v</pre>
 </div></div>
 </div>
-</div>
-<div class="sect1">
-<h2 id="_archive_runs">Archive Runs</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="_archive_runs">Archive Runs</h3>
 <div class="paragraph"><p>Megatest supports using the bup backup tool (<a href="https://bup.github.io/">https://bup.github.io/</a>) to archive your tests for efficient storage
 and retrieval. Archived data can be rapidly retrieved if needed. The metadata for the run (PASS/FAIL status, run
 durations, time stamps etc.) are all preserved in the megatest database.</p></div>
 <div class="paragraph"><p>For setup information see the Archiving topic in the reference section of this manual.</p></div>
-<div class="sect2">
-<h3 id="_to_archive">To Archive</h3>
+<div class="sect3">
+<h4 id="_to_archive">To Archive</h4>
 <div class="paragraph"><p>Hint: use the test control panel to create a template command by pushing the "Archive Tests" button.</p></div>
 <div class="listingblock">
 <div class="title">Archive a full run</div>
@@ -948,8 +948,8 @@ durations, time stamps etc.) are all preserved in the megatest database.</p></di
 <pre>megatest -target ubuntu/nfs/none -runname ww28.1a -archive save-remove -testpatt %</pre>
 </div></div>
 </div>
-<div class="sect2">
-<h3 id="_to_restore">To Restore</h3>
+<div class="sect3">
+<h4 id="_to_restore">To Restore</h4>
 <div class="listingblock">
 <div class="title">Retrieve a single test</div>
 <div class="content monospaced">
@@ -962,10 +962,8 @@ durations, time stamps etc.) are all preserved in the megatest database.</p></di
 </div></div>
 </div>
 </div>
-</div>
-<div class="sect1">
-<h2 id="_submit_jobs_to_host_types_based_on_test_name">Submit jobs to Host Types based on Test Name</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="_submit_jobs_to_host_types_based_on_test_name">Submit jobs to Host Types based on Test Name</h3>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
 <div class="content monospaced">
@@ -987,6 +985,7 @@ launcher bsub
 # match.
 flexi-launcher yes</pre>
 </div></div>
+</div>
 </div>
 </div>
 <div class="sect1">
@@ -1106,11 +1105,8 @@ sudo netstat -tulpn</pre>
 <pre>[configf:settings trim-trailing-spaces yes]</pre>
 </div></div>
 </div>
-</div>
-</div>
-<div class="sect1">
-<h2 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h2>
-<div class="sectionbody">
+<div class="sect2">
+<h3 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h3>
 <div class="listingblock">
 <div class="title">In megatest.config</div>
 <div class="content monospaced">
@@ -1128,8 +1124,8 @@ launcher bsub
 # match.
 flexi-launcher yes</pre>
 </div></div>
-<div class="sect2">
-<h3 id="_host_types">host-types</h3>
+<div class="sect3">
+<h4 id="_host_types">host-types</h4>
 <div class="paragraph"><p>List of host types and the commandline to run a job on that host type.</p></div>
 <div class="listingblock">
 <div class="title">host-type &#8658; launch command</div>
@@ -1137,13 +1133,14 @@ flexi-launcher yes</pre>
 <pre>general nbfake</pre>
 </div></div>
 </div>
-<div class="sect2">
-<h3 id="_launchers">launchers</h3>
+<div class="sect3">
+<h4 id="_launchers">launchers</h4>
 <div class="listingblock">
 <div class="title">test/itempath &#8658; host-type</div>
 <div class="content monospaced">
 <pre>runfirst/sum% remote</pre>
 </div></div>
+</div>
 </div>
 </div>
 </div>
