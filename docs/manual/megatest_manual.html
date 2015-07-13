@@ -964,6 +964,32 @@ durations, time stamps etc.) are all preserved in the megatest database.</p></di
 </div>
 </div>
 <div class="sect1">
+<h2 id="_submit_jobs_to_host_types_based_on_test_name">Submit jobs to Host Types based on Test Name</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="title">In megatest.config</div>
+<div class="content monospaced">
+<pre>[host-types]
+general ssh #{getbgesthost general}
+nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
+
+[hosts]
+general cubian xena
+
+[launchers]
+envsetup general
+xor/%/n 4C16G
+% nbgeneral
+
+[jobtools]
+launcher bsub
+# if defined and not "no" flexi-launcher will bypass launcher unless there is no
+# match.
+flexi-launcher yes</pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
 <h2 id="_tricks">Tricks</h2>
 <div class="sectionbody">
 <div class="paragraph"><p>This section is a compendium of a various useful tricks for debugging,
@@ -1071,13 +1097,52 @@ sudo netstat -tulpn</pre>
 </div>
 <h1 id="_reference">Reference</h1>
 <div class="sect1">
-<h2 id="_config_file_settings">Config File Settings</h2>
+<h2 id="_megatest_config_file_settings">Megatest Config File Settings</h2>
 <div class="sectionbody">
 <div class="sect2">
 <h3 id="_trim_trailing_spaces">Trim trailing spaces</h3>
 <div class="listingblock">
 <div class="content monospaced">
 <pre>[configf:settings trim-trailing-spaces yes]</pre>
+</div></div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_submit_jobs_to_host_types_based_on_test_name_2">Submit jobs to Host Types based on Test Name</h2>
+<div class="sectionbody">
+<div class="listingblock">
+<div class="title">In megatest.config</div>
+<div class="content monospaced">
+<pre>[host-types]
+general   nbfake
+remote    bsub
+
+[launchers]
+runfirst/sum% remote
+% general
+
+[jobtools]
+launcher bsub
+# if defined and not "no" flexi-launcher will bypass launcher unless there is no
+# match.
+flexi-launcher yes</pre>
+</div></div>
+<div class="sect2">
+<h3 id="_host_types">host-types</h3>
+<div class="paragraph"><p>List of host types and the commandline to run a job on that host type.</p></div>
+<div class="listingblock">
+<div class="title">host-type &#8658; launch command</div>
+<div class="content monospaced">
+<pre>general nbfake</pre>
+</div></div>
+</div>
+<div class="sect2">
+<h3 id="_launchers">launchers</h3>
+<div class="listingblock">
+<div class="title">test/itempath &#8658; host-type</div>
+<div class="content monospaced">
+<pre>runfirst/sum% remote</pre>
 </div></div>
 </div>
 </div>
