@@ -2,8 +2,11 @@
 How To Do Things
 ================
 
+Process Runs
+------------
+
 Remove Runs
------------
+~~~~~~~~~~~
 
 From the dashboard click on the button (PASS/FAIL...) for one of the tests. From the test control panel that 
 comes up push the clean test button. The command field will be prefilled with a template command for removing 
@@ -20,7 +23,7 @@ megatest -remove-runs -target %/%/% -runname % -testpatt % -v
 ----------------
 
 Archive Runs
-------------
+~~~~~~~~~~~~
 
 Megatest supports using the bup backup tool (https://bup.github.io/) to archive your tests for efficient storage
 and retrieval. Archived data can be rapidly retrieved if needed. The metadata for the run (PASS/FAIL status, run 
@@ -29,7 +32,7 @@ durations, time stamps etc.) are all preserved in the megatest database.
 For setup information see the Archiving topic in the reference section of this manual.
 
 To Archive
-~~~~~~~~~~
+^^^^^^^^^^
 
 Hint: use the test control panel to create a template command by pushing the "Archive Tests" button.
 
@@ -39,7 +42,7 @@ megatest -target ubuntu/nfs/none -runname ww28.1a -archive save-remove -testpatt
 ----------------
 
 To Restore
-~~~~~~~~~~
+^^^^^^^^^^
 
 .Retrieve a single test
 ----------------
@@ -53,7 +56,7 @@ bup -d /path/to/bup/archive ftp
 ----------------
 
 Submit jobs to Host Types based on Test Name
---------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .In megatest.config
 ------------------------
