@@ -952,4 +952,53 @@
     (query fetch-column
 	   (sql db "SELECT ipaddr || ':' || portnum FROM dashboards;"))))
     
-	
+;;======================================================================
+;;  T E S T   L A U N C H I N G   P E R   I T E M   W I T H   H O S T   T Y P E S
+;;======================================================================
+;; 
+;; [host-types]
+;; general ssh #{getbgesthost general}
+;; nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
+;; 
+;; [hosts]
+;; general cubian xena
+;; 
+;; [launchers]
+;; envsetup general
+;; xor/%/n 4C16G
+;; % nbgeneral
+;; 
+;; [jobtools]
+;; launcher bsub
+;; # if defined and not "no" flexi-launcher will bypass launcher unless there is no
+;; # match.
+;; flexi-launcher yes  
+
+(define (common:get-launcher configdat testname itempath)
+  (let ((fallback-launcher (configf:lookup configdat "jobtools" "launcher")))
+    (if (and (configf:lookup configdat "jobtools" "flexi-launcher") ;; overrides launcher
+	     (not (equal? (configf:lookup configdat "jobtools" "flexi-launcher") "no")))
+	(let* ((launchers         (hash-table-ref/default configdat "launchers" '())))
+	  (if (null? launchers)
+	      fallback-launcher
+	      (let loop ((hed (car launchers))
+			 (tal (cdr launchers)))
+		(let ((patt      (car hed))
+		      (host-type (cadr hed)))
+		  (if (tests:match patt testname itempath)
+		      (begin
+			(debug:print-info 0 "Have flexi-launcher match for " testname "/" itempath " = " host-type)
+			(let ((launcher (configf:lookup configdat "host-types" host-type)))
+			  (if launcher
+			      launcher
+			      (begin
+				(debug:print-info 0 "WARNING: no launcher found for host-type " host-type)
+				(if (null? tal)
+				    fallback-launcher
+				    (loop (car tal)(cdr tal)))))))
+		      ;; no match, try again
+		      (if (null? tal)
+			  fallback-launcher
+			  (loop (car tal)(cdr tal))))))))
+	fallback-launcher)))
+  

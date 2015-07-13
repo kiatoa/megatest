@@ -52,6 +52,30 @@ Hint: You can browse the archive using bup commands directly.
 bup -d /path/to/bup/archive ftp
 ----------------
 
+Submit jobs to Host Types based on Test Name
+--------------------------------------------
+
+.In megatest.config
+------------------------
+[host-types]
+general ssh #{getbgesthost general}
+nbgeneral nbjob run JOBCOMMAND -log $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME.$MT_TESTNAME-$MT_ITEM_PATH.lgo
+
+[hosts]
+general cubian xena
+
+[launchers]
+envsetup general
+xor/%/n 4C16G
+% nbgeneral
+
+[jobtools]
+launcher bsub
+# if defined and not "no" flexi-launcher will bypass launcher unless there is no
+# match.
+flexi-launcher yes
+------------------------
+
 Tricks
 ------
 
