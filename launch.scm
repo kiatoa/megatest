@@ -477,7 +477,8 @@
 	      ;; (if (and (not (equal? item-path ""))
 	      ;;      (< (random (rmt:get-count-tests-running-for-testname run-id test-name)) 5))
 	      (tests:summarize-items run-id test-id test-name #f)
-	      (tests:summarize-test run-id test-id)) ;; don't force - just update if no
+	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
+	      )
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
@@ -496,7 +497,7 @@
 				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
 							    (get-environment-variable "MT_TARGET")   "/"
 							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg")))
+							    ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 				     (if (file-exists? alistconfig)
 					 (list (configf:read-alist alistconfig)
 					       (get-environment-variable "MT_RUN_AREA_HOME"))
@@ -575,7 +576,7 @@
 		       runname
 		       (file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg")))
+			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
 		    (configf:write-alist *configdat* tmpfile)
 		    (system (conc "ln -sf " tmpfile " " targfile))

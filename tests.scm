@@ -352,6 +352,7 @@
 		  (print "Obtained lock for " outputfilename)
 		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
+		  (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))

@@ -80,7 +80,7 @@ flexi-launcher yes
 ------------------------
 
 Tricks
-------
+======
 
 This section is a compendium of a various useful tricks for debugging,
 configuring and generally getting the most out of Megatest.
