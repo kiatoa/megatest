@@ -147,20 +147,22 @@
 						partial-path-index)
 				     #f)))
 	 
- 	 (if (or toplevel/children
-		 (not (file-exists? test-path)))
-	     #f
-	     (begin
-	       (debug:print 0
-			    "From test-dat=" test-dat " derived the following:\n"
-			    "test-partial-path  = " test-partial-path "\n"
-			    "test-path          = " test-path "\n"
-			    "test-physical-path = " test-physical-path "\n"
-			    "partial-path-index = " partial-path-index "\n"
-			    "test-base          = " test-base)
-	       (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
-	       (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
-	       test-path))))
+ 	 (cond
+	  (toplevel/children
+	   (debug:print 0 "ERROR: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
+	  ((not (file-exists? test-path))
+	   (debug:print 0 "ERROR: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
+	  (else
+	   (debug:print 0
+			"From test-dat=" test-dat " derived the following:\n"
+			"test-partial-path  = " test-partial-path "\n"
+			"test-path          = " test-path "\n"
+			"test-physical-path = " test-physical-path "\n"
+			"partial-path-index = " partial-path-index "\n"
+			"test-base          = " test-base)
+	   (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
+	   (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
+	   test-path))))
      tests)
     ;; for each disk-group
     (for-each 
