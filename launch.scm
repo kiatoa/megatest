@@ -497,7 +497,7 @@
 				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
 							    (get-environment-variable "MT_TARGET")   "/"
 							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg")))
+							    ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 				     (if (file-exists? alistconfig)
 					 (list (configf:read-alist alistconfig)
 					       (get-environment-variable "MT_RUN_AREA_HOME"))
@@ -576,7 +576,7 @@
 		       runname
 		       (file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg")))
+			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
 		    (configf:write-alist *configdat* tmpfile)
 		    (system (conc "ln -sf " tmpfile " " targfile))
