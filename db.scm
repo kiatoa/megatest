@@ -1340,11 +1340,11 @@
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
 ;;	     (run-id    (list-ref toptest 5)))
-	 (db:top-test-set-per-pf-counts dbdat run-id test-name)))
+	 (db:top-test-set-per-pf-counts dbstruct run-id test-name)))
      toplevels)))
 
-(define (db:top-test-set-per-pf-counts dbdat run-id test-name)
-  (db:general-call dbdat 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+(define (db:top-test-set-per-pf-counts dbstruct run-id test-name)
+  (db:general-call (db:get-db dbstruct run-id) 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2843,7 +2843,7 @@
       (let ((dbdat (db:get-db dbstruct run-id)))
 	;;	(db    (db:dbdat-get-db dbdat)))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	(db:top-test-set-per-pf-counts dbdat run-id test-name))))
+	(db:top-test-set-per-pf-counts dbstruct run-id test-name))))
   
 ;;     (case (string->symbol status)
 ;;       ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
@@ -2943,7 +2943,7 @@
                                                 WHERE testname=?
                                                      AND item_path != '' 
                                                      AND status IN ('INCOMPLETE')
-                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'INCOMPLETE'
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
@@ -2968,7 +2968,7 @@
                                          WHERE testname=?
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
-                                              AND status = 'ABORT') > 0 THEN 'ABORT'
+                                              AND status IN ('INCOMPLETE','ABORT')) > 0 THEN 'ABORT'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
