@@ -477,7 +477,8 @@
 	      ;; (if (and (not (equal? item-path ""))
 	      ;;      (< (random (rmt:get-count-tests-running-for-testname run-id test-name)) 5))
 	      (tests:summarize-items run-id test-id test-name #f)
-	      (tests:summarize-test run-id test-id)) ;; don't force - just update if no
+	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
+	      )
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")

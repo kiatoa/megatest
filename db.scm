@@ -2943,7 +2943,7 @@
                                                 WHERE testname=?
                                                      AND item_path != '' 
                                                      AND status IN ('INCOMPLETE')
-                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'INCOMPLETE'
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
@@ -2968,7 +2968,7 @@
                                          WHERE testname=?
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
-                                              AND status = 'ABORT') > 0 THEN 'ABORT'
+                                              AND status IN ('INCOMPLETE','ABORT')) > 0 THEN 'ABORT'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
