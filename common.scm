@@ -590,6 +590,9 @@
 	"unknown"
 	(caar uname-res))))
 
+(define (common:real-path inpath)
+  (with-input-from-pipe (conc "readlink -f " inpath) read-line))
+
 ;;======================================================================
 ;; D I S K   S P A C E 
 ;;======================================================================

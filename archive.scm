@@ -225,7 +225,10 @@
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
 	      ;; if the old path was not deleted then prev-test-physical-path will end up pointing to a real directory
-	      (prev-test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
+	      (prev-test-physical-path (if (file-exists? test-path)
+					   ;; (read-symbolic-link test-path #t)
+					   (common:real-path test-path)
+					   #f))
 
 	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
 	      (archive-block-id        (db:test-get-archived test-dat))
