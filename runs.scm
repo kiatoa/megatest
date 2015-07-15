@@ -1525,7 +1525,9 @@
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
 	 (statuses     (if status (string-split status ",") '()))
-	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f))))
+	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f)))
+	 (rp-mutex     (make-mutex))
+	 (bup-mutex    (make-mutex)))
     (debug:print-info 4 "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))
 	(begin
@@ -1574,8 +1576,8 @@
 		    (debug:print 1 "Archiving/restoring (" (args:get-arg "-archive") ") data for run: " runkey " " (db:get-value-by-header run header "runname"))
 		    (set! worker-thread (make-thread (lambda ()
 						       (case (string->symbol (args:get-arg "-archive"))
-							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests))
-							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests))
+							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
+							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
 							 (else 
 							  (debug:print 0 "ERROR: unrecognised sub command to -archive. Run \"megatest\" to see help")
 							  (exit))))
