@@ -149,9 +149,9 @@
 	 
  	 (cond
 	  (toplevel/children
-	   (debug:print 0 "ERROR: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
+	   (debug:print 0 "WARNING: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
 	  ((not (file-exists? test-path))
-	   (debug:print 0 "ERROR: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
+	   (debug:print 0 "WARNING: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
 	  (else
 	   (debug:print 0
 			"From test-dat=" test-dat " derived the following:\n"
