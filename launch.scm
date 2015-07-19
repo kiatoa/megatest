@@ -55,16 +55,28 @@
 	'())))
 
 
-(define (launch:runstep ezstep run-id test-id exit-info m tal)
-  (let* ((stepname  (car ezstep))  ;; do stuff to run the step
-	 (stepinfo  (cadr ezstep))
-	 (stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
-	 (stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
-	 (stepcmd   (list-ref stepparts 3))
-	 (script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
-	 (logpro-file (conc stepname ".logpro"))
-	 (html-file   (conc stepname ".html"))
-	 (logpro-used (file-exists? logpro-file)))
+(define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
+  (let* ((stepname       (car ezstep))  ;; do stuff to run the step
+	 (stepinfo       (cadr ezstep))
+	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
+	 (stepparms      (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
+	 (stepcmd        (list-ref stepparts 3))
+	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
+	 (logpro-file    (conc stepname ".logpro"))
+	 (html-file      (conc stepname ".html"))
+	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
+	 (logpro-used    (file-exists? logpro-file)))
+
+    (if (and tconfig-logpro
+	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
+	(begin
+	  (with-output-to-file logpro-file
+	    (lambda ()
+	      (print ";; logpro file extracted from testconfig\n"
+		     ";;")
+	      (print tconfig-logpro)))
+	  (set! logpro-used #t)))
+    
     ;; NB// can safely assume we are in test-area directory
     (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 		 " stepparms: " stepparms " stepcmd: " stepcmd)
@@ -357,7 +369,7 @@
 						      (prevstep #f))
 					     ;; check exit-info (vector-ref exit-info 1)
 					     (if (vector-ref exit-info 1)
-						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal)))
+						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig)))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
