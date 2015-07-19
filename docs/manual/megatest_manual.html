@@ -1308,6 +1308,17 @@ waiver_1         logpro        lookittmp.log
 </div>
 <div class="sect2">
 <h3 id="_ezsteps">Ezsteps</h3>
+<div class="listingblock">
+<div class="title">Example ezsteps with logpro rules</div>
+<div class="content monospaced">
+<pre>[ezsteps]
+lookittmp   ls /tmp
+
+[logpro]
+lookittmp ;; Note: config file format supports multi-line entries where leading whitespace is removed from each line
+  ;;     a blank line indicates the end of the block of text
+  (expect:required in "LogFileBody" &gt; 0 "A file name that should never exist!" #/This is a awfully stupid file name that should never be found in the temp dir/)</pre>
+</div></div>
 <div class="paragraph"><p>To transfer the environment to the next step you can do the following:</p></div>
 <div class="listingblock">
 <div class="content monospaced">

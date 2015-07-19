@@ -226,6 +226,18 @@ waiver_1         logpro        lookittmp.log
 Ezsteps
 ~~~~~~~
 
+.Example ezsteps with logpro rules
+-----------------
+[ezsteps]
+lookittmp   ls /tmp
+
+[logpro]
+lookittmp ;; Note: config file format supports multi-line entries where leading whitespace is removed from each line
+  ;;     a blank line indicates the end of the block of text 
+  (expect:required in "LogFileBody" > 0 "A file name that should never exist!" #/This is a awfully stupid file name that should never be found in the temp dir/)
+
+-----------------
+
 To transfer the environment to the next step you can do the following:
 
 ----------------------------
