@@ -1,0 +1,4 @@
+[itemstable]
+VIEW   layout layout layout schematic schematic schematic
+CELL   ntran  ptran  diode  ntran     ptran     diode
+
