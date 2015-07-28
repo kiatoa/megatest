@@ -1560,9 +1560,9 @@
 		   ((remove-runs)
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
-		    (if (equal? testpatt "%")
-			(tasks:kill-runner target run-name)
-			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
+		    ;; (if (equal? testpatt "%")
+		    (tasks:kill-runner target run-name testpatt)
+		    ;; (debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))

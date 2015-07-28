@@ -725,7 +725,6 @@
                                params LIKE ? AND state LIKE ? AND action LIKE ? AND testpatt LIKE ?;"
 			 param-key state-patt action-patt test-patt)))))
 
-
 (define (tasks:find-task-queue-records dbstruct target run-name test-patt state-patt action-patt)
   ;; (handle-exceptions
   ;;  exn
@@ -746,11 +745,11 @@
 ;; 
 ;; do a remote call to get the task queue info but do the killing as self here.
 ;;
-(define (tasks:kill-runner target run-name)
+(define (tasks:kill-runner target run-name testpatt)
   (let ((records    (rmt:tasks-find-task-queue-records target run-name "%" "running" "run-tests"))
 	(hostpid-rx (regexp "\\s+(\\w+)\\s+(\\d+)$"))) ;; host pid is at end of param string
     (if (null? records)
-	(debug:print 0 "No run launching processes found for " target " / " run-name)
+	(debug:print 0 "No run launching processes found for " target " / " run-name " with testpatt " (or testpatt "* no testpatt specified! *"))
 	(debug:print 0 "Found " (length records) " run(s) to kill."))
     (for-each 
      (lambda (record)
