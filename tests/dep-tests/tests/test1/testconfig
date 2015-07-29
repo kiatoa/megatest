@@ -4,4 +4,4 @@
 
 [requirements]
 waiton #{get #{getenv DEPS} test1}
-
+itemmap /.*

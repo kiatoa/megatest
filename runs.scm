@@ -424,7 +424,8 @@
 				 (set! test-patts new-test-patts))
 			       (begin
 				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
-				 (set! required-tests (cons waiton required-tests)))))
+				 (set! required-tests (cons waiton required-tests))
+				 (set! test-patts new-test-patts))))
 			 (begin
 			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
 			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))

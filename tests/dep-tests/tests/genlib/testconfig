@@ -5,4 +5,4 @@ VIEWTYPE layout schematic
 
 [requirements]
 waiton #{get #{getenv DEPS} genlib}
-
+itemmap /.*
