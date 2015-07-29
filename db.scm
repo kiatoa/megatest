@@ -3276,6 +3276,20 @@
 		    (string-substitute pattern "" pathb))))
       (equal? patha pathb)))
 
+;; A routine to convert test/itempath using a itemmap
+(define (db:convert-test-itempath path-in itemmap)
+  (debug:print-info 6 "ITEMMAP is " itemmap)
+  (let* ((mapparts    (string-split itemmap))
+	 (pattern     (car mapparts))
+	 (replacement (if (> (length mapparts) 1) (cadr mapparts) ""))
+	 (path-parts  (string-split path-in "/"))
+	 (test-name   (car path-parts))
+	 (item-path   (string-intersperse (cdr path-parts) "/")))
+    (conc test-name "/" 
+	  (if replacement
+	      (string-substitute pattern replacement item-path)
+	      (string-substitute pattern "" path-in)))))
+
 ;; the new prereqs calculation, looks also at itempath if specified
 ;; all prereqs must be met:
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
