@@ -776,8 +776,6 @@ Misc
     (iup:show (dashboard:main-panel data window-id))
     (iup:main-loop)))
 
-
-
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
   (if (file-exists? debugcontrolf)
