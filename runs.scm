@@ -396,12 +396,13 @@
 	    (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
-		   (let* ((new-test-patts  (tests:extend-test-patts test-patts hed waiton #f))
-			  (waiton-record   (hash-table-ref/default test-records waiton #f))
+		   (let* ((waiton-record   (hash-table-ref/default test-records waiton #f))
 			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
 			  (waiton-itemized (and waiton-tconfig
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
-						    (hash-table-ref/default waiton-tconfig "itemstable" #f)))))
+						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
+			  (waiton-itemmap  (configf:lookup waiton-tconfig "requirements" "itemmap"))
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton waiton-itemmap)))
 		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -424,7 +425,8 @@
 				 (set! test-patts new-test-patts))
 			       (begin
 				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
-				 (set! required-tests (cons waiton required-tests)))))
+				 (set! required-tests (cons waiton required-tests))
+				 (set! test-patts new-test-patts))))
 			 (begin
 			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
 			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
