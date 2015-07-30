@@ -76,6 +76,15 @@
 
 ;; given test-b that is waiting on test-a extend test-patt appropriately
 ;;
+;;  genlib/testconfig               sim/testconfig
+;;  genlib/sch                      sim/sch/cell1
+;;
+;;  [requirements]                  [requirements]
+;;                                  mode itemwait
+;;                                  # trim off the cell to determine what to run for genlib
+;;                                  itemmap /.*
+;;
+;;                                  test-a is waiting on test-b so we need to create a pattern for test-b given test-a and itemmap
 (define (tests:extend-test-patts test-patt test-b test-a itemmap)
   (let* ((patts      (string-split test-patt ","))
 	 (test-b-len (+ (string-length test-b) 1))
