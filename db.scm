@@ -2158,7 +2158,6 @@
 	  (vector-ref inrec 3) ;; item-path
 	  -1 "-" "-"))
 
-
 (define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
 	 (tests-match-qry (tests:match->sqlqry testpatt))
