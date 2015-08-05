@@ -220,7 +220,7 @@
     (for-each
      (lambda (test-dat)
        ;; When restoring test-dat will initially contain an old and invalid path to the test
-       (let* ((best-disk         (get-best-disk *configdat*))
+       (let* ((best-disk         (get-best-disk *configdat* #f)) ;; BUG: get the testconfig and use it here. Otherwise data pulled out of archive could end up on the wrong kind of disk.
 	      (item-path         (db:test-get-item-path test-dat))
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))

@@ -594,8 +594,9 @@
 		    (system (conc "ln -sf " tmpfile " " targfile))
 		    )))))))
 
-(define (get-best-disk confdat)
-  (let* ((disks    (hash-table-ref/default confdat "disks" #f))
+(define (get-best-disk confdat testconfig)
+  (let* ((disks   (or (hash-table-ref/default confdat "disks" #f)
+		      (hash-table-ref/default confdat "disks" #f)))
 	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
 		     (string->number (or m "10000")))))
     (if disks 
@@ -862,7 +863,7 @@
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED")
-    (set! diskpath (get-best-disk *configdat*))
+    (set! diskpath (get-best-disk *configdat* test-conf))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
