@@ -197,6 +197,13 @@ Skip if test ran more recently than specified time
 rundelay 15m 15s
 -----------------
 
+Disks
+^^^^^
+
+A disks section in testconfig will override the disks section in
+megatest.config. This can be used to allocate disks on a per-test or per item
+basis.
+
 Controlled waiver propagation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
