@@ -595,7 +595,7 @@
 		    )))))))
 
 (define (get-best-disk confdat testconfig)
-  (let* ((disks   (or (hash-table-ref/default confdat "disks" #f)
+  (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
 		      (hash-table-ref/default confdat "disks" #f)))
 	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
 		     (string->number (or m "10000")))))
