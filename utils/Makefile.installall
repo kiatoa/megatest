@@ -1,5 +1,5 @@
 
-# Copyright 2013,2014 Matthew Welland.
+# Copyright 2013-2015 Matthew Welland.
 # 
 #  This program is made available under the GNU GPL version 2.0 or
 #  greater. See the accompanying file COPYING for details.
@@ -12,9 +12,14 @@
 
 help :
 	@echo You may need to do the following first:
+	@echo
 	@echo sudo apt-get install libreadline-dev
-	@echo sudo apt-get install libwebkitgtk-dev libfreetype6-dev libx11-dev libxpm-dev libxmu-dev libxft-dev libgtk2.0-dev libgl1-mesa-dev libglu1-mesa-dev libpangox-1.0-dev bison
+	@echo sudo apt-get install libwebkitgtk-dev libfreetype6-dev libx11-dev libxpm-dev libxmu-dev \
+	           libxft-dev libgtk2.0-dev libgl1-mesa-dev libglu1-mesa-dev libpangox-1.0-dev bison \
+                   libwebkitgtk-3.0-dev
+	@echo   -- nb// adding monodevelop gets more packages of which some might be needed...
 	@echo sudo apt-get install libmotif3
+	@echo
 	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
 	@echo You are using PREFIX=$(PREFIX)
 	@echo You are using PROXY="$(PROXY)"
@@ -26,7 +31,7 @@ help :
 	@echo 
 	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
 
-# FPIC=-C "-fPIC"
+FPIC=-C "-fPIC"
 
 # Put the installation here
 ifeq ($(PREFIX),)
@@ -37,13 +42,14 @@ endif
 PROXY=
 
 # http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
+# http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
-CHICKEN_VERSION=4.10.0rc1
-SQLITE3_VERSION=3080500
+CHICKEN_VERSION=4.10.0
+SQLITE3_VERSION=3081101
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
-
+# http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
 # Override IUPBRANCH to use other than trunk
-IUPBRANCH=iup-3.10.1
+IUPBRANCH=iup-3.15
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -142,6 +148,9 @@ chicken-4.9.0.1.tar.gz :
 chicken-4.10.0rc1.tar.gz :
 	wget http://code.call-cc.org/dev-snapshots/2015/06/07/chicken-4.10.0rc1.tar.gz
 
+chicken-4.10.0.tar.gz :
+	wget http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
+
 # git clone git://code.call-cc.org/chicken-core
 # git clone http://code.call-cc.org/git/chicken-core.git
 
@@ -169,17 +178,20 @@ $(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
 # N  A N O M S G
 #======================================================================
 
-nanomsg-0.5-beta.tar.gz :
-	wget http://download.nanomsg.org/nanomsg-0.5-beta.tar.gz
+# https://github.com/nanomsg/nanomsg/releases/download/0.6-beta/nanomsg-0.6-beta.tar.gz
+nanomsg-0.6-beta.tar.gz :
+	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
 
-nanomsg-0.5-beta/COPYING : nanomsg-0.5-beta.tar.gz
-	tar xfvz nanomsg-0.5-beta.tar.gz
+nanomsg-0.6-beta/COPYING : nanomsg-0.6-beta.tar.gz
+	tar xfvz nanomsg-0.6-beta.tar.gz
 
-$(PREFIX)/bin/nanocat : nanomsg-0.5-beta/COPYING
-	cd nanomsg-0.5-beta;./configure --prefix=$(PREFIX);make;make install
+$(PREFIX)/bin/nanocat : nanomsg-0.6-beta/COPYING
+	cd nanomsg-0.6-beta;./configure --prefix=$(PREFIX);make;make install
 
 $(PREFIX)/lib/nanomsg.so : $(PREFIX)/bin/nanocat
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) nanomsg
+
+# LD_LIBRARY_PATH=/mfs/pkgs/chicken/4.10.0-amd64/lib CSC_OPTIONS="-I/mfs/pkgs/chicken/4.10.0-amd64/include -L/mfs/pkgs/chicken/4.10.0-amd64/lib -C \"-fPIC\"" /mfs/pkgs/chicken/4.10.0-amd64/bin/chicken-install  -D no-library-checks nanomsg
 
 #======================================================================
 # M A T T S   U T I L S
@@ -239,7 +251,7 @@ ffcall/README : ffcall.fossil
 # NOTE: This worked fine *without* the enable-shared
 #
 $(PREFIX)/lib/libavcall.a : ffcall/README
-	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make && make install
+	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make CC="gcc -fPIC" && make install
 
 iuplib.fossil :
 	fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
@@ -258,7 +270,9 @@ $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
 #	touch -c $(PREFIX)/lib/libiup.so
 
 $(CHICKEN_EGG_DIR)/iup.so : $(PREFIX)/lib/libiup.so  $(PREFIX)/lib/libavcall.a 
-	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks -feature disable-iup-web iup
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks iup
+
+# -feature disable-iup-web
 
 $(CHICKEN_EGG_DIR)/canvas-draw.so :  $(PREFIX)/lib/libiup.so  $(PREFIX)/lib/libavcall.a 
 	CSC_OPTIONS=$(CSC_OPTIONS) $(CHICKEN_INSTALL) $(PROX) -D no-library-checks canvas-draw
