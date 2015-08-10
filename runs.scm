@@ -10,7 +10,9 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils
+     pathname-expand)
+
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit runs))
@@ -453,17 +455,18 @@
 	  (let* ((keep-going        #t)
 		 (run-queue-retries 5)
 		 (th1        (make-thread (lambda ()
-					    (handle-exceptions
-					     exn
-					     (begin
-					       (print-call-chain (current-error-port))
-					       (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
-					       (if (> run-queue-retries 0)
-						   (begin
-						     (set! run-queue-retries (- run-queue-retries 1))
-						     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
-					     (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry)))
-					  "runs:run-tests-queue"))
+				(handle-exceptions
+				 exn
+				 (begin
+				   (print-call-chain (current-error-port))
+				   (debug:print 0 "ERROR: failure in runs:run-tests-queue thread, error: " ((condition-property-accessor 'exn 'message) exn))
+				   (debug:print 0 " exn=" (condition->list exn))
+				   (if (> run-queue-retries 0)
+				       (begin
+					 (set! run-queue-retries (- run-queue-retries 1))
+					 (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))))
+				 (runs:run-tests-queue run-id runname test-records keyvals flags test-patts required-tests (any->number reglen) all-tests-registry))
+				"runs:run-tests-queue")))
 		 (th2        (make-thread (lambda ()				    
 					    ;; (rmt:find-and-mark-incomplete-all-runs))))) CAN'T INTERRUPT IT ...
 					    (let ((run-ids (rmt:get-all-run-ids)))
@@ -1711,7 +1714,7 @@
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
-			    (resolve-pathname run-dir)
+			    (resolve-pathname (pathname-expand run-dir))
 			    #f)))
     (case mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))

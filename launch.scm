@@ -13,7 +13,8 @@
 ;;
 ;;======================================================================
 
-(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
+(use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables
+     pathname-expand)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -724,7 +725,7 @@
 	  ;; NB// Was this for the test or for the parent in an iterated test?
 	  (rmt:general-call 'test-set-rundir-shortdir run-id lnkpath 
 			    (if (file-exists? lnkpath)
-				(resolve-pathname lnkpath)
+				(resolve-pathname (pathname-expand lnkpath))
 				lnkpath)
 			    testname "")
 	  ;; (rmt:general-call 'test-set-rundir run-id lnkpath testname "") ;; toptest-path)

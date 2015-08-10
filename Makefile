@@ -11,6 +11,7 @@ SRCFILES = common.scm items.scm launch.scm \
 	   tree.scm ezsteps.scm lock-queue.scm sdb.scm \
 	   rmt.scm api.scm tdb.scm rpc-transport.scm \
 	   portlogger.scm archive.scm
+MTQA_FOSSIL=$(HOME)/fossils/megatest_qa.fossil
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -155,8 +156,15 @@ install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bi
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
 
-test: tests/tests.scm
+test: tests/tests.scm tests/.fslckout
 	cd tests;csi -I .. -b -n tests.scm
+
+tests/.fslckout tests/tests.scm : $(MTQA_FOSSIL)
+	mkdir -p tests
+	cd tests;fossil open --nested $(MTQA_FOSSIL)
+
+$(MTQA_FOSSIL) :
+	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)
 
 clean : 
 	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o

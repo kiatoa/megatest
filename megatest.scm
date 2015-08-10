@@ -18,7 +18,7 @@
 (define (toplevel-command . a) #f)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+     http-client srfi-18 extras format pathname-expand posix-utils) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
 ;;

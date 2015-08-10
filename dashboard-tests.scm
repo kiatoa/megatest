@@ -464,7 +464,9 @@
 				 (message-window  (conc "Directory " rundir " not found")))))
 	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
-			     (let* ((curr-mod-time (file-modification-time db-path))
+			     (let* ((curr-mod-time (if (file-exists? db-path)
+						       (file-modification-time db-path)
+						       0))
 				                   ;;     (max ..... (if (file-exists? testdat-path)
 						   ;;      	      (file-modification-time testdat-path)
 						   ;;      	      (begin
