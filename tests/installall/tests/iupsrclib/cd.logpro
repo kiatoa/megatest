@@ -1,3 +1,0 @@
-(expect:ignore in "LogFileBody" >= 0 "Ignore these binary operator errors for now" #/error: missing binary operator/)
-
-(load "compile.logpro")

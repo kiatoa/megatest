@@ -1,0 +1,7 @@
+(use readline apropos)
+(import readline)
+(import apropos)
+(import csi)
+(current-input-port (make-readline-port))
+(install-history-file #f "/.csi.history")
+(repl)

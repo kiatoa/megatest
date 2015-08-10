@@ -1,1 +1,0 @@
-(expect:error in "LogFileBody" = 0 "a file that should never exist" #/what a dumb filename this is/)

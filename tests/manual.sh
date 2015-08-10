@@ -1,1 +1,0 @@
-(cd ..;make install) && `realpath ../bin/megatest` -runtests manual_example :sysname ubuntu :fsname afs :datapath none :runname testing -setvars TARGETDISPLAY=:0,TARGETHOST=localhost,TARGETDIR=/tmp/blah,TARGETUSER=matt 

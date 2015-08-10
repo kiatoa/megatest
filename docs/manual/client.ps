@@ -1,0 +1,693 @@
+%!PS-Adobe-3.0
+%%Creator: graphviz version 2.38.0 (20140413.2041)
+%%Title: G
+%%Pages: (atend)
+%%BoundingBox: (atend)
+%%EndComments
+save
+%%BeginProlog
+/DotDict 200 dict def
+DotDict begin
+
+/setupLatin1 {
+mark
+/EncodingVector 256 array def
+ EncodingVector 0
+
+ISOLatin1Encoding 0 255 getinterval putinterval
+EncodingVector 45 /hyphen put
+
+% Set up ISO Latin 1 character encoding
+/starnetISO {
+        dup dup findfont dup length dict begin
+        { 1 index /FID ne { def }{ pop pop } ifelse
+        } forall
+        /Encoding EncodingVector def
+        currentdict end definefont
+} def
+/Times-Roman starnetISO def
+/Times-Italic starnetISO def
+/Times-Bold starnetISO def
+/Times-BoldItalic starnetISO def
+/Helvetica starnetISO def
+/Helvetica-Oblique starnetISO def
+/Helvetica-Bold starnetISO def
+/Helvetica-BoldOblique starnetISO def
+/Courier starnetISO def
+/Courier-Oblique starnetISO def
+/Courier-Bold starnetISO def
+/Courier-BoldOblique starnetISO def
+cleartomark
+} bind def
+
+%%BeginResource: procset graphviz 0 0
+/coord-font-family /Times-Roman def
+/default-font-family /Times-Roman def
+/coordfont coord-font-family findfont 8 scalefont def
+
+/InvScaleFactor 1.0 def
+/set_scale {
+       dup 1 exch div /InvScaleFactor exch def
+       scale
+} bind def
+
+% styles
+/solid { [] 0 setdash } bind def
+/dashed { [9 InvScaleFactor mul dup ] 0 setdash } bind def
+/dotted { [1 InvScaleFactor mul 6 InvScaleFactor mul] 0 setdash } bind def
+/invis {/fill {newpath} def /stroke {newpath} def /show {pop newpath} def} bind def
+/bold { 2 setlinewidth } bind def
+/filled { } bind def
+/unfilled { } bind def
+/rounded { } bind def
+/diagonals { } bind def
+/tapered { } bind def
+
+% hooks for setting color 
+/nodecolor { sethsbcolor } bind def
+/edgecolor { sethsbcolor } bind def
+/graphcolor { sethsbcolor } bind def
+/nopcolor {pop pop pop} bind def
+
+/beginpage {	% i j npages
+	/npages exch def
+	/j exch def
+	/i exch def
+	/str 10 string def
+	npages 1 gt {
+		gsave
+			coordfont setfont
+			0 0 moveto
+			(\() show i str cvs show (,) show j str cvs show (\)) show
+		grestore
+	} if
+} bind def
+
+/set_font {
+	findfont exch
+	scalefont setfont
+} def
+
+% draw text fitted to its expected width
+/alignedtext {			% width text
+	/text exch def
+	/width exch def
+	gsave
+		width 0 gt {
+			[] 0 setdash
+			text stringwidth pop width exch sub text length div 0 text ashow
+		} if
+	grestore
+} def
+
+/boxprim {				% xcorner ycorner xsize ysize
+		4 2 roll
+		moveto
+		2 copy
+		exch 0 rlineto
+		0 exch rlineto
+		pop neg 0 rlineto
+		closepath
+} bind def
+
+/ellipse_path {
+	/ry exch def
+	/rx exch def
+	/y exch def
+	/x exch def
+	matrix currentmatrix
+	newpath
+	x y translate
+	rx ry scale
+	0 0 1 0 360 arc
+	setmatrix
+} bind def
+
+/endpage { showpage } bind def
+/showpage { } def
+
+/layercolorseq
+	[	% layer color sequence - darkest to lightest
+		[0 0 0]
+		[.2 .8 .8]
+		[.4 .8 .8]
+		[.6 .8 .8]
+		[.8 .8 .8]
+	]
+def
+
+/layerlen layercolorseq length def
+
+/setlayer {/maxlayer exch def /curlayer exch def
+	layercolorseq curlayer 1 sub layerlen mod get
+	aload pop sethsbcolor
+	/nodecolor {nopcolor} def
+	/edgecolor {nopcolor} def
+	/graphcolor {nopcolor} def
+} bind def
+
+/onlayer { curlayer ne {invis} if } def
+
+/onlayers {
+	/myupper exch def
+	/mylower exch def
+	curlayer mylower lt
+	curlayer myupper gt
+	or
+	{invis} if
+} def
+
+/curlayer 0 def
+
+%%EndResource
+%%EndProlog
+%%BeginSetup
+14 default-font-family set_font
+1 setmiterlimit
+% /arrowlength 10 def
+% /arrowwidth 5 def
+
+% make sure pdfmark is harmless for PS-interpreters other than Distiller
+/pdfmark where {pop} {userdict /pdfmark /cleartomark load put} ifelse
+% make '<<' and '>>' safe on PS Level 1 devices
+/languagelevel where {pop languagelevel}{1} ifelse
+2 lt {
+    userdict (<<) cvn ([) cvn load put
+    userdict (>>) cvn ([) cvn load put
+} if
+
+%%EndSetup
+setupLatin1
+%%Page: 1 1
+%%PageBoundingBox: 36 36 450 550
+%%PageOrientation: Portrait
+0 0 1 beginpage
+gsave
+36 36 414 514 boxprim clip newpath
+1 1 set_scale 0 rotate 40 40 translate
+% cluster_2
+gsave
+1 setlinewidth
+0.33333 1 1 graphcolor
+newpath 8 8 moveto
+8 498 lineto
+341 498 lineto
+341 8 lineto
+closepath stroke
+0 0 0 graphcolor
+14 /Times-Roman set_font
+143 482.8 moveto 63 (client:setup) alignedtext
+grestore
+% cluster_3
+gsave
+1 setlinewidth
+0 0 0 graphcolor
+newpath 16 342 moveto
+16 467 lineto
+166 467 lineto
+166 342 lineto
+closepath stroke
+grestore
+% client:setup start
+gsave
+0 0 0.82745 nodecolor
+newpath 282 386 moveto
+176 386 lineto
+176 350 lineto
+282 350 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 282 386 moveto
+176 386 lineto
+176 350 lineto
+282 350 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+184 364.3 moveto 90 (client:setup start) alignedtext
+grestore
+% runremote_lookup_server
+gsave
+0 0 0.82745 nodecolor
+newpath 217.5 313 moveto
+60.5 313 lineto
+60.5 277 lineto
+217.5 277 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 217.5 313 moveto
+60.5 313 lineto
+60.5 277 lineto
+217.5 277 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+68.5 291.3 moveto 141 (runremote_lookup_server) alignedtext
+grestore
+% client:setup start->runremote_lookup_server
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 207.21 349.81 moveto
+195.61 340.66 181.16 329.26 168.56 319.32 curveto
+stroke
+0 0 0 edgecolor
+newpath 170.6 316.47 moveto
+160.59 313.03 lineto
+166.27 321.97 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 170.6 316.47 moveto
+160.59 313.03 lineto
+166.27 321.97 lineto
+closepath stroke
+grestore
+% login_attempt
+gsave
+0 0 0.82745 nodecolor
+newpath 324 139 moveto
+232 139 lineto
+232 103 lineto
+324 103 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 324 139 moveto
+232 139 lineto
+232 103 lineto
+324 103 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+240 117.3 moveto 76 (login_attempt) alignedtext
+grestore
+% runremote_lookup_server->login_attempt
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 190.79 276.8 moveto
+200.53 272.04 210.12 266.16 218 259 curveto
+250.85 229.16 251.17 213.46 267 172 curveto
+269.79 164.69 271.96 156.5 273.61 148.9 curveto
+stroke
+0 0 0 edgecolor
+newpath 277.06 149.52 moveto
+275.54 139.03 lineto
+270.19 148.17 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 277.06 149.52 moveto
+275.54 139.03 lineto
+270.19 148.17 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+261 204.3 moveto 63 (have server) alignedtext
+grestore
+% monitordb_lookup_server
+gsave
+0 0 0.82745 nodecolor
+newpath 194 226 moveto
+36 226 lineto
+36 190 lineto
+194 190 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 194 226 moveto
+36 226 lineto
+36 190 lineto
+194 190 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+44 204.3 moveto 142 (monitordb_lookup_server) alignedtext
+grestore
+% runremote_lookup_server->monitordb_lookup_server
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 134.14 276.8 moveto
+130.83 265.05 126.36 249.24 122.58 235.84 curveto
+stroke
+0 0 0 edgecolor
+newpath 125.94 234.85 moveto
+119.85 226.18 lineto
+119.2 236.75 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 125.94 234.85 moveto
+119.85 226.18 lineto
+119.2 236.75 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+129 247.8 moveto 51 (no server) alignedtext
+grestore
+% rmt:send-receive_start
+gsave
+0 0 0.82745 nodecolor
+newpath 289 52 moveto
+151 52 lineto
+151 16 lineto
+289 16 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 289 52 moveto
+151 52 lineto
+151 16 lineto
+289 16 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+159 30.3 moveto 122 (rmt:send-receive_start) alignedtext
+grestore
+% login_attempt->rmt:send-receive_start
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 266.26 102.8 moveto
+258.01 90.7 246.82 74.3 237.51 60.67 curveto
+stroke
+0 0 0 edgecolor
+newpath 240.25 58.46 moveto
+231.72 52.18 lineto
+234.47 62.41 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 240.25 58.46 moveto
+231.72 52.18 lineto
+234.47 62.41 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+253 73.8 moveto 82 (login sucessful) alignedtext
+grestore
+% clear_runremote
+gsave
+0 0 0.82745 nodecolor
+newpath 151 459 moveto
+45 459 lineto
+45 423 lineto
+151 423 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 151 459 moveto
+45 459 lineto
+45 423 lineto
+151 423 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+53 437.3 moveto 90 (clear_runremote) alignedtext
+grestore
+% login_attempt->clear_runremote
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 294.97 139.02 moveto
+306.47 151.83 320.7 170.47 327 190 curveto
+354.2 274.29 351.99 321.78 291 386 curveto
+257.73 421.03 203.76 433.95 161.34 438.43 curveto
+stroke
+0 0 0 edgecolor
+newpath 161.01 434.95 moveto
+151.38 439.36 lineto
+161.66 441.92 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 161.01 434.95 moveto
+151.38 439.36 lineto
+161.66 441.92 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+343 291.3 moveto 63 (login failed) alignedtext
+grestore
+% monitordb_lookup_server->login_attempt
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 115.13 189.95 moveto
+116.14 179.1 119.27 165.52 128 157 curveto
+141.39 143.95 184.91 134.71 221.65 129.01 curveto
+stroke
+0 0 0 edgecolor
+newpath 222.43 132.44 moveto
+231.81 127.5 lineto
+221.4 125.51 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 222.43 132.44 moveto
+231.81 127.5 lineto
+221.4 125.51 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+128 160.8 moveto 63 (have server) alignedtext
+grestore
+% server_start_remote
+gsave
+0 0 0.82745 nodecolor
+newpath 161.5 139 moveto
+36.5 139 lineto
+36.5 103 lineto
+161.5 103 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 161.5 139 moveto
+36.5 139 lineto
+36.5 103 lineto
+161.5 103 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+44.5 117.3 moveto 109 (server_start_remote) alignedtext
+grestore
+% monitordb_lookup_server->server_start_remote
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 71.66 189.93 moveto
+64.6 185.19 58.22 179.29 54 172 curveto
+48.62 162.72 52.9 153.65 60.6 145.85 curveto
+stroke
+0 0 0 edgecolor
+newpath 63.17 148.26 moveto
+68.45 139.07 lineto
+58.59 142.96 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 63.17 148.26 moveto
+68.45 139.07 lineto
+58.59 142.96 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+54 160.8 moveto 51 (no server) alignedtext
+grestore
+% delay_2_sec
+gsave
+0 0 0.82745 nodecolor
+newpath 116.5 52 moveto
+33.5 52 lineto
+33.5 16 lineto
+116.5 16 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 116.5 52 moveto
+33.5 52 lineto
+33.5 16 lineto
+116.5 16 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+41.5 30.3 moveto 67 (delay_2_sec) alignedtext
+grestore
+% server_start_remote->delay_2_sec
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 94.14 102.8 moveto
+90.83 91.05 86.36 75.24 82.58 61.84 curveto
+stroke
+0 0 0 edgecolor
+newpath 85.94 60.85 moveto
+79.85 52.18 lineto
+79.2 62.75 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 85.94 60.85 moveto
+79.85 52.18 lineto
+79.2 62.75 lineto
+closepath stroke
+grestore
+% delay_2_sec->runremote_lookup_server
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 58.78 52.17 moveto
+47.77 65.05 34.14 83.72 28 103 curveto
+12.8 150.76 20.08 213.71 27 226 curveto
+38.66 246.72 59.47 261.86 80.02 272.52 curveto
+stroke
+0 0 0 edgecolor
+newpath 78.57 275.71 moveto
+89.09 276.96 lineto
+81.65 269.42 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 78.57 275.71 moveto
+89.09 276.96 lineto
+81.65 269.42 lineto
+closepath stroke
+grestore
+% rmt:send-receive_start->runremote_lookup_server
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 218.57 52.19 moveto
+214.71 98.36 204.3 221.87 203 226 curveto
+197.91 242.14 195.11 246.23 184 259 curveto
+180.6 262.91 176.7 266.69 172.65 270.22 curveto
+stroke
+0 0 0 edgecolor
+newpath 170.29 267.64 moveto
+164.79 276.69 lineto
+174.73 273.05 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 170.29 267.64 moveto
+164.79 276.69 lineto
+174.73 273.05 lineto
+closepath stroke
+0 0 0 edgecolor
+14 /Times-Roman set_font
+210 160.8 moveto 53 (exception) alignedtext
+grestore
+% rmt:send-receive_start->rmt:send-receive_start
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 289.27 41.18 moveto
+299.83 40.09 307 37.69 307 34 curveto
+307 31.64 304.06 29.8 299.17 28.5 curveto
+stroke
+0 0 0 edgecolor
+newpath 299.72 25.05 moveto
+289.27 26.82 lineto
+298.55 31.95 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 299.72 25.05 moveto
+289.27 26.82 lineto
+298.55 31.95 lineto
+closepath stroke
+grestore
+% remove_running > 5s
+gsave
+0 0 0.82745 nodecolor
+newpath 158 386 moveto
+24 386 lineto
+24 350 lineto
+158 350 lineto
+closepath fill
+1 setlinewidth
+filled
+0 0 0 nodecolor
+newpath 158 386 moveto
+24 386 lineto
+24 350 lineto
+158 350 lineto
+closepath stroke
+0 0 0 nodecolor
+14 /Times-Roman set_font
+32 364.3 moveto 118 (remove_running > 5s) alignedtext
+grestore
+% clear_runremote->remove_running > 5s
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 96.31 422.81 moveto
+95.51 414.79 94.55 405.05 93.67 396.07 curveto
+stroke
+0 0 0 edgecolor
+newpath 97.14 395.64 moveto
+92.68 386.03 lineto
+90.18 396.32 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 97.14 395.64 moveto
+92.68 386.03 lineto
+90.18 396.32 lineto
+closepath stroke
+grestore
+% remove_running > 5s->runremote_lookup_server
+gsave
+1 setlinewidth
+0 0 0 edgecolor
+newpath 102.62 349.81 moveto
+108.4 341.27 115.49 330.77 121.88 321.32 curveto
+stroke
+0 0 0 edgecolor
+newpath 124.79 323.27 moveto
+127.49 313.03 lineto
+118.99 319.35 lineto
+closepath fill
+1 setlinewidth
+solid
+0 0 0 edgecolor
+newpath 124.79 323.27 moveto
+127.49 313.03 lineto
+118.99 319.35 lineto
+closepath stroke
+grestore
+endpage
+showpage
+grestore
+%%PageTrailer
+%%EndPage: 1
+%%Trailer
+%%Pages: 1
+%%BoundingBox: 36 36 450 550
+end
+restore
+%%EOF

@@ -1,3 +1,0 @@
-This test used to look for envfile.txt but that file should NOT have been there.
-
-By changing to lookithome.log it is possible that an error is masked.
