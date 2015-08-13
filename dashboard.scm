@@ -1487,9 +1487,12 @@ Misc
    (begin
      (debug:print 0 "WARNING: error in accessing databases in get-youngest-run-db-mod-time: " ((condition-property-accessor 'exn 'message) exn))
      (current-seconds)) ;; something went wrong - just print an error and return current-seconds
-   (apply max (map (lambda (filen)
-		     (file-modification-time filen))
-		   (glob (conc *dbdir* "/*.db"))))))
+   (let ((dbfiles (map (lambda (filen)
+			 (file-modification-time filen))
+		       (glob (conc *dbdir* "/*.db")))))
+     (if (not (null? dbfiles))
+	 (apply max dbfiles)
+	 9e99))))
 
 (define (dashboard:run-update x)
   (let* ((modtime         (dashboard:get-youngest-run-db-mod-time)) ;; (file-modification-time *db-file-path*))

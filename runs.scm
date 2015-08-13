@@ -10,8 +10,8 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils
-     pathname-expand)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking (srfi 18) posix-extras directory-utils)
+;;     pathname-expand) ;; pathname-expand will be needed in switch to chicken 4.10
 
 (import (prefix sqlite3 sqlite3:))
 
@@ -1714,7 +1714,7 @@
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
   (let* ((run-dir       (db:test-get-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
-			    (resolve-pathname (pathname-expand run-dir))
+			    (resolve-pathname run-dir)
 			    #f)))
     (case mode
       ((remove-data-only)(mt:test-set-state-status-by-id (db:test-get-run_id test)(db:test-get-id test) "CLEANING" "LOCKED" #f))
