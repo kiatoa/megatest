@@ -1,0 +1,3 @@
+[include #{getenv MT_RUN_AREA_HOME}/common.testconfig]
+
+[include #{getenv MT_RUN_AREA_HOME}/common_itemstable.testconfig]

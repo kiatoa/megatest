@@ -1,0 +1,17 @@
+[setup]
+runscript main.sh
+
+[requirements]
+priority 7
+
+[skip]
+# Run only if this much time since last run of this test
+rundelay 10m 5s
+
+[test_meta]
+author matt
+owner  bob
+description This test checks that a multi-lineitem test with mix of pass and non-fail rolls up a PASS
+
+tags first,single
+reviewed 09/10/2011, by Matt

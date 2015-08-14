@@ -1,0 +1,11 @@
+[ezsteps]
+cleantop $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -remove-runs -target ubuntu/nfs/none -runname release_toplevel -testpatt %
+runall   $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -run -testpatt %            -target ubuntu/nfs/none -runname release_toplevel -runwait
+runtop   $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -run -testpatt all_toplevel -target ubuntu/nfs/none -runname release_toplevel -rerun FAIL -preclean -runwait
+results  $MTRUNNER $MTTESTDIR/fullrun $MTPATH megatest -list-runs release_toplevel -target ubuntu/nfs/none -runname release_toplevel 
+
+[requirements]
+# waiton  #{getenv ALL_TOPLEVEL_TESTS}
+
+# This is a "toplevel" test, it does not require waitons to be non-FAIL to run
+# mode toplevel

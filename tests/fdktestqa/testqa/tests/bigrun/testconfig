@@ -1,0 +1,23 @@
+# Add additional steps here. Format is "stepname script"
+[vars]
+step1var step1.sh
+
+[ezsteps]
+step1 #{get vars step1var}
+
+# Test requirements are specified here
+[requirements]
+waiton setup
+priority 0
+
+# Iteration for your tests are controlled by the items section
+[items]
+NUMBER #{scheme (string-intersperse (map number->string (sort (let loop ((a 0)(res '()))(if (<= a (or (any->number (get-environment-variable "NUMTESTS")) 2500))(loop (+ a 1)(cons a res)) res)) <)) " ")}
+
+# test_meta is a section for storing additional data on your test
+[test_meta]
+author matt
+owner  matt
+description An example test
+tags tagone,tagtwo
+reviewed never

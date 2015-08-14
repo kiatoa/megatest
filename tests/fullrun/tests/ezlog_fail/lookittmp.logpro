@@ -1,0 +1,6 @@
+;; (c) 2006,2007,2008,2009 Matthew Welland matt@kiatoa.com
+;;  
+;;   License GPL.
+
+(expect:warning  in "LogFileBody"  = 0 "Any warning" #/WARNING/)
+(expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/.*/)) ;; force an error

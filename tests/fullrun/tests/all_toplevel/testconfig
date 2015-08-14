@@ -1,0 +1,8 @@
+[ezsteps]
+calcresults megatest -list-runs $MT_RUNNAME -target $MT_TARGET
+
+[requirements]
+waiton  #{getenv ALL_TOPLEVEL_TESTS}
+
+# This is a "toplevel" test, it does not require waitons to be non-FAIL to run
+mode toplevel

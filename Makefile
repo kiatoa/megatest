@@ -156,12 +156,12 @@ install : $(PREFIX)/bin/.$(ARCHSTR) $(PREFIX)/bin/.$(ARCHSTR)/mtest $(PREFIX)/bi
 $(PREFIX)/bin/.$(ARCHSTR) : 
 	mkdir -p $(PREFIX)/bin/.$(ARCHSTR)
 
-test: tests/tests.scm tests/.fslckout
-	cd tests;csi -I .. -b -n tests.scm
+test: ext-tests/.fslckout
+	cd ext-tests;csi -I .. -b -n tests.scm
 
-tests/.fslckout tests/tests.scm : $(MTQA_FOSSIL)
-	mkdir -p tests
-	cd tests;fossil open --nested $(MTQA_FOSSIL)
+ext-tests/.fslckout : $(MTQA_FOSSIL)
+	mkdir -p ext-tests
+	cd ext-tests;fossil open --nested $(MTQA_FOSSIL)
 
 $(MTQA_FOSSIL) :
 	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)

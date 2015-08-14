@@ -1,0 +1,15 @@
+[setup]
+
+[ezsteps]
+exit2       exit 2
+lookithome  ls /home
+
+[test_meta]
+author matt
+owner  bob
+description This test runs two steps; the first exits with\
+ code 2 (a fail because not using logpro) and the second\
+ is a pass
+
+tags first,single
+reviewed 09/10/2011, by Matt

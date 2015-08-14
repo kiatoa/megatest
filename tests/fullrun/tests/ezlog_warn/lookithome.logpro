@@ -1,0 +1,11 @@
+;; (c) 2006,2007,2008,2009 Matthew Welland matt@kiatoa.com
+;;  
+;;   License GPL.
+
+
+;; Force a warn for this test
+(expect:required in "LogFileBody" > 0 "Must be some files in the dir" #/.*/)
+
+(expect:ignore   in "LogFileBody"  < 99 "Ignore the word error in comments" #/^\/\/.*error/)
+(expect:warning  in "LogFileBody"  = 0 "Any warning" #/warn/)
+(expect:error    in "LogFileBody"  = 0 "Any error"  (list #/ERROR/ #/error/)) ;; but disallow any other errors

@@ -1,0 +1,34 @@
+[ezsteps]
+delay    sleep $SPEED;echo "Delayed $SPEED seconds"
+
+# lookup table for waitons
+#
+[std]
+genlib    setup
+test1     genlib
+aggregate test1
+test2     aggregate
+results   test2
+
+# simple removes the challenging "aggregate" dependency between test1 and test2.
+# and the itempatt irregularity from genlib -> test1
+#
+[simple]
+test1     setup
+test2     test1
+results   test2
+
+[test_meta]
+author matt
+owner  matt
+description This is a common testconfig shared by all the tests
+
+[logpro]
+delay ;; Delay step logpro
+  (expect:required in "LogFileBody" > 0 "Delayed message" #/Delayed \d+ seconds/)
+
+reviewed 09/10/2011, by Matt
+
+[requirements]
+mode itemwait
+

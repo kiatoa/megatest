@@ -1,0 +1,40 @@
+[setup]
+
+[ezsteps]
+lookittmp   ls /tmp
+lookithome  ls /home
+# $CURRENT should be /tmp/nada
+currentisblah currentisblah.sh
+
+# $BOGOUS should NOT be set
+bogousnotset bogousnotset.sh
+
+# ALT_VAR should NOT be set
+altvarnotset altvarnotset.sh
+
+# EMPTY_VAR should be an empty string
+empty_var empty_var.sh
+
+# VACKYVAR should be set to a path
+vackyvar vackyvar.sh
+
+# test-path and test-file
+test-path test-path-file.sh
+
+# verify that vars with $ signs get expanded
+varwithdollar eval_vars.sh
+
+[requirements]
+waiton runfirst
+priority 0
+
+[items]
+NUMNUM [system cat $MT_RUN_AREA_HOME/tmp/$USER/$sysname/$fsname/$datapath/$MT_RUNNAME/$PREDICTABLE]
+
+[test_meta]
+author matt
+owner  bob
+description This test runs a single ezstep which is expected to pass, no logpro file.
+
+tags first,single
+reviewed 09/10/2011, by Matt

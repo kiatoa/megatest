@@ -1,0 +1,24 @@
+[setup]
+runscript main.sh
+
+[pre-launch-env-vars]
+# These are set before the test is launched on the originating
+# host. This can be used to control remote launch tools, e.g. to
+# to choose the target host, select the launch tool etc.
+SPECIAL_ENV_VAR override with everything after the first space.
+
+[items]
+SEASON summer winter fall spring 
+
+[itemstable]
+BLOCK a  b
+TOCK  1  2
+
+[test_meta]
+author matt
+owner  bob
+description This test must\
+ be run before the other tests
+
+tags first,single
+reviewed 1/1/1965
