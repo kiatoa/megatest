@@ -3278,16 +3278,31 @@
 ;; A routine to convert test/itempath using a itemmap
 (define (db:convert-test-itempath path-in itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
-  (let* ((mapparts    (string-split itemmap))
-	 (pattern     (car mapparts))
-	 (replacement (if (> (length mapparts) 1) (cadr mapparts) ""))
-	 (path-parts  (string-split path-in "/"))
+  (let* ((path-parts  (string-split path-in "/"))
 	 (test-name   (car path-parts))
 	 (item-path   (string-intersperse (cdr path-parts) "/")))
     (conc test-name "/" 
-	  (if replacement
-	      (string-substitute pattern replacement item-path)
-	      (string-substitute pattern "" path-in)))))
+	  (db:multi-pattern-apply item-path itemmap))))
+
+;; patterns are:
+;;    "rx1"  "replacement1"\n
+;;    "rx2"  "replacement2"
+;; etc.
+;;
+(define (db:multi-pattern-apply item-path itemmap)
+  (let ((all-patts (string-split itemmap "\n")))
+    (if (null? all-patts)
+	item-path
+	(let loop ((hed (car all-patts))
+		   (tal (cdr all-patts))
+		   (res item-path))
+	  (let* ((parts (string-split hed))
+		 (patt  (car parts))
+		 (repl  (if (> (length parts) 1)(cadr parts) ""))
+		 (newr  (string-substitute patt repl res)))
+	    (if (null? tal)
+		newr
+		(loop (car tal)(cdr tal) newr)))))))
 
 ;; the new prereqs calculation, looks also at itempath if specified
 ;; all prereqs must be met:
