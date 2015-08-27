@@ -3265,22 +3265,26 @@
 (define (db:compare-itempaths patha pathb itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (if itemmap
-      (let* ((mapparts    (string-split itemmap))
-	     (pattern     (car mapparts))
-	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
-	(if replacement
-	    (equal? (string-substitute pattern replacement patha)
-		    (string-substitute pattern replacement pathb))
-	    (equal? (string-substitute pattern "" patha)
-		    (string-substitute pattern "" pathb))))
+      (let ((path-b-mapped (db:convert-test-itempath pathb itemmap)))
+	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " path-b-mapped)
+	(equal? patha pathb))
       (equal? patha pathb)))
+
+;; (let* ((mapparts    (string-split itemmap))
+;; 	     (pattern     (car mapparts))
+;; 	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
+;; 	(if replacement
+;; 	    (equal? (string-substitute pattern replacement patha)
+;; 		    (string-substitute pattern replacement pathb))
+;; 	    (equal? (string-substitute pattern "" patha)
+;; 		    (string-substitute pattern "" pathb))))
 
 ;; A routine to convert test/itempath using a itemmap
 (define (db:convert-test-itempath path-in itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (let* ((path-parts  (string-split path-in "/"))
-	 (test-name   (car path-parts))
-	 (item-path   (string-intersperse (cdr path-parts) "/")))
+	 (test-name   (if (null? path-parts) "" (car path-parts)))
+	 (item-path   (string-intersperse (if (null? path-parts) '() (cdr path-parts)) "/")))
     (conc test-name "/" 
 	  (db:multi-pattern-apply item-path itemmap))))
 
@@ -3299,13 +3303,17 @@
 	  (let* ((parts (string-split hed))
 		 (patt  (car parts))
 		 (repl  (if (> (length parts) 1)(cadr parts) ""))
-		 (newr  (string-substitute patt repl res)))
+		 (newr  (if (and patt repl)
+			    (string-substitute patt repl res)
+			    (begin
+			      (debug:print 0 "WARNING: itemmap has problem \"" itemmap "\", patt: " patt ", repl: " repl)
+			      res))))
 	    (if (null? tal)
 		newr
 		(loop (car tal)(cdr tal) newr)))))))
 
 ;; the new prereqs calculation, looks also at itempath if specified
-;; all prereqs must be met:
+;; all prereqs must be met
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;
