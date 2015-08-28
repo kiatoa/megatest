@@ -49,6 +49,17 @@ launchers
 runfirst/sum% remote
 ------------
 
+Miscellaneous Setup Items
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
+
+.In megatest.config
+------------------
+[setup]
+reruns 5
+------------------
+
 The testconfig File
 -------------------
 

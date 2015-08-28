@@ -657,7 +657,7 @@ Version: " megatest-fossil-hash)) ;; "
 (define (datashare:gui configdat)
   (iup:show
    (iup:dialog 
-    #:title (conc "DataShare dashboard " (current-user-name) ":" (current-directory))
+    #:title (conc "DataShare dashboard " (current-user-name) ":" (current-directory))   
     #:menu (datashare:main-menu)
     (let* ((tabs (iup:tabs
 		  #:tabchangepos-cb (lambda (obj curr prev)
