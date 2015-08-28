@@ -224,8 +224,15 @@
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
 	 (required-tests     #f)  ;; Put fully qualified test/testpath names in this list to be done
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
-	 (tdbdat             (tasks:open-db)))
+	 (tdbdat             (tasks:open-db))
+	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
+			       (if x (string->number x) #f))))
 
+    ;; override the number of reruns from the configs
+    (if (and config-reruns
+	     (> run-count config-reruns))
+	(set! run-count config-reruns))
+    
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
@@ -481,7 +488,7 @@
 	    (set! keep-going #f)
 	    (thread-join! th2)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
-	    (if (> run-count 0)
+	    (if (> run-count 0) ;; handle reruns
 		(begin
 		  (if (not (hash-table-ref/default flags "-preclean" #f))
 		      (hash-table-set! flags "-preclean" #t))
