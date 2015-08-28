@@ -532,7 +532,7 @@
   (rmt:general-call 'update-pass-fail-counts run-id (list run-id test-name run-id test-name run-id test-name)))
 
 (define (rmt:top-test-set-per-pf-counts run-id test-name)
-  (rmt:general-call 'top-test-set-per-pf-counts run-id (list run-id test-name)))
+  (rmt:send-receive 'top-test-set-per-pf-counts run-id (list run-id test-name)))
 
 ;;======================================================================
 ;;  R U N S
