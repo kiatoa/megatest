@@ -155,8 +155,12 @@
 	;; (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
 	(launch-test 30001 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
 
+;;======================================================================
+;; M O R E   R E M O T E   C A L  L S
+;;======================================================================
 
-
+(test #f #f (rmt:set-tests-state-status 1 '("runfirst") "RUNNING" "WARN" "COMPLETED" "FAIL"))
+(test #f #f (rmt:top-test-set-per-pf-counts 1 "runfirst"))
 
 (exit 1)
 
@@ -322,11 +326,6 @@
 			 (tasks:kill-server #t hostname port server-pid 'http)
 			 (open-run-close tasks:get-best-server tasks:open-db)))
 
-;;======================================================================
-;; M O R E   R E M O T E   C A L  L S
-;;======================================================================
-
-(test #f #f (rmt:set-tests-state-status 1 '("runfirst") "RUNNING" "WARN" "COMPLETED" "FAIL"))
 
 ;; (cdb:kill-server *runremote*)
 
