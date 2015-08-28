@@ -629,7 +629,9 @@
 
 
 (define (tests:get-testconfig test-name test-registry system-allowed)
-  (let* ((test-path    (hash-table-ref/default test-registry test-name (conc *toppath* "/tests/" test-name)))
+  (let* ((test-path         (hash-table-ref/default 
+			     test-registry test-name 
+			     (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (tcfg         (if testexists
