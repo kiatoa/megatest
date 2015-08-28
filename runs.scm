@@ -96,8 +96,9 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target    (or (common:args-get-target)
+(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f)(intarget #f))
+  (let* ((target    (or intarget 
+			(common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
 	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))

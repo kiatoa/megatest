@@ -486,9 +486,8 @@
 		    ;; NO NEED TO CALL roll-up-pass-fail-counts HERE, THIS IS DONE IN roll-up-pass-fail-counts called by tests:test-set-status!
 		    ))
 	      ;; for automated creation of the rollup html file this is a good place...
-	      ;; (if (and (not (equal? item-path ""))
-	      ;;      (< (random (rmt:get-count-tests-running-for-testname run-id test-name)) 5))
-	      (tests:summarize-items run-id test-id test-name #f)
+	      (if (not (equal? item-path ""))
+		  (tests:summarize-items run-id test-id test-name #f))
 	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
