@@ -70,6 +70,7 @@ Misc
 (define *windows* (make-hash-table))
 (define *changed-main* (make-hash-table)) ;; set path/... => #t
 (define *changed-mutex* (make-mutex))     ;; use for all incoming change requests
+(define *searchpatts*   (make-hash-table))
 
 (debug:setup)
 
@@ -775,25 +776,24 @@ Misc
     (iup:show (dashboard:main-panel data window-id))
     (iup:main-loop)))
 
-
-
 ;; ease debugging by loading ~/.dashboardrc
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.dashboardrc")))
   (if (file-exists? debugcontrolf)
       (load debugcontrolf)))
 
-(let-values 
- (((con port)(dboard:server-start #f)))
- (let ((portnum   (if (string? port)(string->number port) port)))
-   ;; got here, monitor/dashboard was started
-   (mddb:register-dashboard portnum)
-   (thread-start! (make-thread (lambda ()(dboard:server-service con portnum)) "server service"))
-   (thread-start! (make-thread (lambda ()
-				 (let loop ()
-				   (dboard:general-updater con portnum)
-				   (thread-sleep! 1)
-				   (loop))) "general updater"))
-   (dboard:make-window 0)
-   (mddb:unregister-dashboard (get-host-name) portnum)
-   (dboard:server-close con port)))
+(define (main)
+  (let-values 
+      (((con port)(dboard:server-start #f)))
+    (let ((portnum   (if (string? port)(string->number port) port)))
+      ;; got here, monitor/dashboard was started
+      (mddb:register-dashboard portnum)
+      (thread-start! (make-thread (lambda ()(dboard:server-service con portnum)) "server service"))
+      (thread-start! (make-thread (lambda ()
+				    (let loop ()
+				      (dboard:general-updater con portnum)
+				      (thread-sleep! 1)
+				      (loop))) "general updater"))
+      (dboard:make-window 0)
+      (mddb:unregister-dashboard (get-host-name) portnum)
+      (dboard:server-close con port))))
 

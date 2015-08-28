@@ -1,0 +1,4 @@
+[include #{getenv MT_RUN_AREA_HOME}/common.testconfig]
+
+[requirements]
+waiton #{get #{getenv DEPS} aggregate}

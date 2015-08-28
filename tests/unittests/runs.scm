@@ -322,6 +322,12 @@
 			 (tasks:kill-server #t hostname port server-pid 'http)
 			 (open-run-close tasks:get-best-server tasks:open-db)))
 
+;;======================================================================
+;; M O R E   R E M O T E   C A L  L S
+;;======================================================================
+
+(test #f #f (rmt:set-tests-state-status 1 '("runfirst") "RUNNING" "WARN" "COMPLETED" "FAIL"))
+
 ;; (cdb:kill-server *runremote*)
 
 ;; (thread-join! th1 th2 th3)

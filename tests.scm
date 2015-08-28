@@ -76,11 +76,21 @@
 
 ;; given test-b that is waiting on test-a extend test-patt appropriately
 ;;
+;;  genlib/testconfig               sim/testconfig
+;;  genlib/sch                      sim/sch/cell1
+;;
+;;  [requirements]                  [requirements]
+;;                                  mode itemwait
+;;                                  # trim off the cell to determine what to run for genlib
+;;                                  itemmap /.*
+;;
+;;                                  test-a is waiting on test-b so we need to create a pattern for test-b given test-a and itemmap
 (define (tests:extend-test-patts test-patt test-b test-a itemmap)
   (let* ((patts      (string-split test-patt ","))
 	 (test-b-len (+ (string-length test-b) 1))
 	 (patts-b    (map (lambda (x)
-			    (let ((newpatt (conc test-a "/" (substring x test-b-len (string-length x)))))
+			    (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
+				   (newpatt (conc test-a "/," test-a "/" (substring modpatt test-b-len (string-length modpatt)))))
 			      ;; (print "in map, x=" x ", newpatt=" newpatt)
 			      newpatt))
 			  (filter (lambda (x)
@@ -352,6 +362,7 @@
 		  (print "Obtained lock for " outputfilename)
 		  ;; (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (rmt:roll-up-pass-fail-counts run-id test-name "" #f #f)
+		  (rmt:top-test-set-per-pf-counts run-id test-name)
 		  (if script
 		      (system (conc script " > " outputfilename " & "))
 		      (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename))

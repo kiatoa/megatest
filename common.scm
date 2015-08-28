@@ -590,6 +590,26 @@
 	"unknown"
 	(caar uname-res))))
 
+;; for reasons I don't understand multiple calls to real-path in parallel threads
+;; must be protected by mutexes
+;;
+(define (common:real-path inpath)
+  ;; (cmd-run-with-stderr->list "readlink" "-f" inpath)) ;; cmd . params)
+  ;; (let-values 
+  ;;  (((inp oup pid) (process "readlink" (list "-f" inpath))))
+  ;;  (with-input-from-port inp
+  ;;    (let loop ((inl (read-line))
+  ;;       	(res #f))
+  ;;      (print "inl=" inl)
+  ;;      (if (eof-object? inl)
+  ;;          (begin
+  ;;            (close-input-port inp)
+  ;;            (close-output-port oup)
+  ;;            ;; (process-wait pid)
+  ;;            res)
+  ;;          (loop (read-line) inl))))))
+  (with-input-from-pipe (conc "readlink -f " inpath) read-line))
+
 ;;======================================================================
 ;; D I S K   S P A C E 
 ;;======================================================================

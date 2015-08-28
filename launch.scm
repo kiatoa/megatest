@@ -55,16 +55,28 @@
 	'())))
 
 
-(define (launch:runstep ezstep run-id test-id exit-info m tal)
-  (let* ((stepname  (car ezstep))  ;; do stuff to run the step
-	 (stepinfo  (cadr ezstep))
-	 (stepparts (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
-	 (stepparms (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
-	 (stepcmd   (list-ref stepparts 3))
-	 (script    "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
-	 (logpro-file (conc stepname ".logpro"))
-	 (html-file   (conc stepname ".html"))
-	 (logpro-used (file-exists? logpro-file)))
+(define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
+  (let* ((stepname       (car ezstep))  ;; do stuff to run the step
+	 (stepinfo       (cadr ezstep))
+	 (stepparts      (string-match (regexp "^(\\{([^\\}]*)\\}\\s*|)(.*)$") stepinfo))
+	 (stepparms      (list-ref stepparts 2)) ;; for future use, {VAR=1,2,3}, run step for each 
+	 (stepcmd        (list-ref stepparts 3))
+	 (script         "") ; "#!/bin/bash\n") ;; yep, we depend on bin/bash FIXME!!!\
+	 (logpro-file    (conc stepname ".logpro"))
+	 (html-file      (conc stepname ".html"))
+	 (tconfig-logpro (configf:lookup testconfig "logpro" stepname))
+	 (logpro-used    (file-exists? logpro-file)))
+
+    (if (and tconfig-logpro
+	     (not logpro-used)) ;; no logpro file found but have a defn in the testconfig
+	(begin
+	  (with-output-to-file logpro-file
+	    (lambda ()
+	      (print ";; logpro file extracted from testconfig\n"
+		     ";;")
+	      (print tconfig-logpro)))
+	  (set! logpro-used #t)))
+    
     ;; NB// can safely assume we are in test-area directory
     (debug:print 4 "ezsteps:\n stepname: " stepname " stepinfo: " stepinfo " stepparts: " stepparts
 		 " stepparms: " stepparms " stepcmd: " stepcmd)
@@ -360,7 +372,7 @@
 						      (prevstep #f))
 					     ;; check exit-info (vector-ref exit-info 1)
 					     (if (vector-ref exit-info 1)
-						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal)))
+						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig)))
 						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
@@ -480,7 +492,8 @@
 	      ;; (if (and (not (equal? item-path ""))
 	      ;;      (< (random (rmt:get-count-tests-running-for-testname run-id test-name)) 5))
 	      (tests:summarize-items run-id test-id test-name #f)
-	      (tests:summarize-test run-id test-id)) ;; don't force - just update if no
+	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
+	      )
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
 			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
@@ -499,7 +512,7 @@
 				   (let ((alistconfig (conc (get-environment-variable "MT_LINKTREE") "/"
 							    (get-environment-variable "MT_TARGET")   "/"
 							    (get-environment-variable "MT_RUNNAME")  "/"
-							    ".megatest.cfg")))
+							    ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 				     (if (file-exists? alistconfig)
 					 (list (configf:read-alist alistconfig)
 					       (get-environment-variable "MT_RUN_AREA_HOME"))
@@ -578,14 +591,15 @@
 		       runname
 		       (file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg")))
+			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
 		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
 		    (configf:write-alist *configdat* tmpfile)
 		    (system (conc "ln -sf " tmpfile " " targfile))
 		    )))))))
 
-(define (get-best-disk confdat)
-  (let* ((disks    (hash-table-ref/default confdat "disks" #f))
+(define (get-best-disk confdat testconfig)
+  (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
+		      (hash-table-ref/default confdat "disks" #f)))
 	 (minspace (let ((m (configf:lookup confdat "setup" "minspace")))
 		     (string->number (or m "10000")))))
     (if disks 
@@ -852,7 +866,7 @@
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED")
-    (set! diskpath (get-best-disk *configdat*))
+    (set! diskpath (get-best-disk *configdat* test-conf))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))

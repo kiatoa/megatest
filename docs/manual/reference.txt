@@ -49,6 +49,17 @@ launchers
 runfirst/sum% remote
 ------------
 
+Miscellaneous Setup Items
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
+
+.In megatest.config
+------------------
+[setup]
+reruns 5
+------------------
+
 The testconfig File
 -------------------
 
@@ -197,6 +208,13 @@ Skip if test ran more recently than specified time
 rundelay 15m 15s
 -----------------
 
+Disks
+^^^^^
+
+A disks section in testconfig will override the disks section in
+megatest.config. This can be used to allocate disks on a per-test or per item
+basis.
+
 Controlled waiver propagation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -225,6 +243,18 @@ waiver_1         logpro        lookittmp.log
 
 Ezsteps
 ~~~~~~~
+
+.Example ezsteps with logpro rules
+-----------------
+[ezsteps]
+lookittmp   ls /tmp
+
+[logpro]
+lookittmp ;; Note: config file format supports multi-line entries where leading whitespace is removed from each line
+  ;;     a blank line indicates the end of the block of text 
+  (expect:required in "LogFileBody" > 0 "A file name that should never exist!" #/This is a awfully stupid file name that should never be found in the temp dir/)
+
+-----------------
 
 To transfer the environment to the next step you can do the following:
 

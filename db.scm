@@ -1340,11 +1340,11 @@
      (lambda (toptest)
        (let ((test-name (list-ref toptest 3)))
 ;;	     (run-id    (list-ref toptest 5)))
-	 (db:top-test-set-per-pf-counts dbdat run-id test-name)))
+	 (db:top-test-set-per-pf-counts dbstruct run-id test-name)))
      toplevels)))
 
-(define (db:top-test-set-per-pf-counts dbdat run-id test-name)
-  (db:general-call dbdat 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
+(define (db:top-test-set-per-pf-counts dbstruct run-id test-name)
+  (db:general-call (db:get-db dbstruct run-id) 'top-test-set-per-pf-counts (list test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name test-name))) 
  
 		     
 ;; Clean out old junk and vacuum the database
@@ -2158,7 +2158,6 @@
 	  (vector-ref inrec 3) ;; item-path
 	  -1 "-" "-"))
 
-
 (define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
 	 (tests-match-qry (tests:match->sqlqry testpatt))
@@ -2245,10 +2244,12 @@
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
 ;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
 ;;
-		;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-		;;(debug:print 0 "QRY: " qry)
-		;; (db:delay-if-busy)
-
+;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+;;  (debug:print 0 "QRY: " qry)
+;;  (db:delay-if-busy)
+;;
+;; NB// This call only operates on toplevel tests. Consider replacing it with more general call
+;;
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
@@ -2260,8 +2261,9 @@
 		 run-id
 		 #t
 		 (lambda (db)
-		   (sqlite3:execute db qry newstate newstatus run-id testname)
-		   (mt:process-triggers run-id test-id newstate newstatus)
+		   (let ((test-id (db:get-test-id dbstruct run-id testname "")))
+		     (sqlite3:execute db qry newstate newstatus run-id testname)
+		     (if test-id (mt:process-triggers run-id test-id newstate newstatus)))
 		   ))))
 	    testnames))
 
@@ -2843,7 +2845,7 @@
       (let ((dbdat (db:get-db dbstruct run-id)))
 	;;	(db    (db:dbdat-get-db dbdat)))
 	(db:general-call dbdat 'update-pass-fail-counts (list test-name test-name test-name))
-	(db:top-test-set-per-pf-counts dbdat run-id test-name))))
+	(db:top-test-set-per-pf-counts dbstruct run-id test-name))))
   
 ;;     (case (string->symbol status)
 ;;       ((RUNNING)  (db:general-call dbdat 'top-test-set-running (list test-name)))
@@ -2943,7 +2945,7 @@
                                                 WHERE testname=?
                                                      AND item_path != '' 
                                                      AND status IN ('INCOMPLETE')
-                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'INCOMPLETE'
+                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
@@ -2968,7 +2970,7 @@
                                          WHERE testname=?
                                               AND item_path != ''
                                               AND state NOT IN ('DELETED')
-                                              AND status = 'ABORT') > 0 THEN 'ABORT'
+                                              AND status IN ('INCOMPLETE','ABORT')) > 0 THEN 'ABORT'
                                   WHEN (SELECT count(id) FROM tests
                                          WHERE testname=?
                                               AND item_path != ''
@@ -3266,18 +3268,55 @@
 (define (db:compare-itempaths patha pathb itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (if itemmap
-      (let* ((mapparts    (string-split itemmap))
-	     (pattern     (car mapparts))
-	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
-	(if replacement
-	    (equal? (string-substitute pattern replacement patha)
-		    (string-substitute pattern replacement pathb))
-	    (equal? (string-substitute pattern "" patha)
-		    (string-substitute pattern "" pathb))))
+      (let ((path-b-mapped (db:convert-test-itempath pathb itemmap)))
+	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " path-b-mapped)
+	(equal? patha pathb))
       (equal? patha pathb)))
 
+;; (let* ((mapparts    (string-split itemmap))
+;; 	     (pattern     (car mapparts))
+;; 	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
+;; 	(if replacement
+;; 	    (equal? (string-substitute pattern replacement patha)
+;; 		    (string-substitute pattern replacement pathb))
+;; 	    (equal? (string-substitute pattern "" patha)
+;; 		    (string-substitute pattern "" pathb))))
+
+;; A routine to convert test/itempath using a itemmap
+(define (db:convert-test-itempath path-in itemmap)
+  (debug:print-info 6 "ITEMMAP is " itemmap)
+  (let* ((path-parts  (string-split path-in "/"))
+	 (test-name   (if (null? path-parts) "" (car path-parts)))
+	 (item-path   (string-intersperse (if (null? path-parts) '() (cdr path-parts)) "/")))
+    (conc test-name "/" 
+	  (db:multi-pattern-apply item-path itemmap))))
+
+;; patterns are:
+;;    "rx1"  "replacement1"\n
+;;    "rx2"  "replacement2"
+;; etc.
+;;
+(define (db:multi-pattern-apply item-path itemmap)
+  (let ((all-patts (string-split itemmap "\n")))
+    (if (null? all-patts)
+	item-path
+	(let loop ((hed (car all-patts))
+		   (tal (cdr all-patts))
+		   (res item-path))
+	  (let* ((parts (string-split hed))
+		 (patt  (car parts))
+		 (repl  (if (> (length parts) 1)(cadr parts) ""))
+		 (newr  (if (and patt repl)
+			    (string-substitute patt repl res)
+			    (begin
+			      (debug:print 0 "WARNING: itemmap has problem \"" itemmap "\", patt: " patt ", repl: " repl)
+			      res))))
+	    (if (null? tal)
+		newr
+		(loop (car tal)(cdr tal) newr)))))))
+
 ;; the new prereqs calculation, looks also at itempath if specified
-;; all prereqs must be met:
+;; all prereqs must be met
 ;;    if prereq test with itempath='' is COMPLETED and PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;    if prereq test with itempath=ref-item-path and COMPLETED with PASS, WARN, CHECK, or WAIVED then prereq is met
 ;;

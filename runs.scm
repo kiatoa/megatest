@@ -224,8 +224,15 @@
 	 (test-names         #f)  ;; (tests:filter-test-names all-test-names test-patts))
 	 (required-tests     #f)  ;; Put fully qualified test/testpath names in this list to be done
 	 (task-key           (conc (hash-table->alist flags) " " (get-host-name) " " (current-process-id)))
-	 (tdbdat             (tasks:open-db)))
+	 (tdbdat             (tasks:open-db))
+	 (config-reruns      (let ((x (configf:lookup *configdat* "setup" "reruns")))
+			       (if x (string->number x) #f))))
 
+    ;; override the number of reruns from the configs
+    (if (and config-reruns
+	     (> run-count config-reruns))
+	(set! run-count config-reruns))
+    
     (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 
     (let ((sighand (lambda (signum)
@@ -396,12 +403,13 @@
 	    (for-each 
 	     (lambda (waiton)
 	       (if (and waiton (not (member waiton test-names)))
-		   (let* ((new-test-patts  (tests:extend-test-patts test-patts hed waiton #f))
-			  (waiton-record   (hash-table-ref/default test-records waiton #f))
+		   (let* ((waiton-record   (hash-table-ref/default test-records waiton #f))
 			  (waiton-tconfig  (if waiton-record (vector-ref waiton-record 1) #f))
 			  (waiton-itemized (and waiton-tconfig
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
-						    (hash-table-ref/default waiton-tconfig "itemstable" #f)))))
+						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
+			  (itemmap         (configf:lookup config "requirements" "itemmap"))
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmap)))
 		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -424,7 +432,8 @@
 				 (set! test-patts new-test-patts))
 			       (begin
 				 (debug:print-info 0 "Adding non-itemized test " waiton " to required-tests")
-				 (set! required-tests (cons waiton required-tests)))))
+				 (set! required-tests (cons waiton required-tests))
+				 (set! test-patts new-test-patts))))
 			 (begin
 			   (debug:print-info 0 "No testconfig info yet for " waiton ", setting up to re-process it")
 			   (set! tal (append (cons waiton tal)(list hed))))) ;; (cons (conc waiton "/") required-tests))
@@ -479,7 +488,7 @@
 	    (set! keep-going #f)
 	    (thread-join! th2)
 	    ;; if run-count > 0 call, set -preclean and -rerun STUCK/DEAD
-	    (if (> run-count 0)
+	    (if (> run-count 0) ;; handle reruns
 		(begin
 		  (if (not (hash-table-ref/default flags "-preclean" #f))
 		      (hash-table-set! flags "-preclean" #t))
@@ -1525,7 +1534,9 @@
 	 (runs         (vector-ref rundat 1))
 	 (states       (if state  (string-split state  ",") '()))
 	 (statuses     (if status (string-split status ",") '()))
-	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f))))
+	 (state-status (if (string? new-state-status) (string-split new-state-status ",") '(#f #f)))
+	 (rp-mutex     (make-mutex))
+	 (bup-mutex    (make-mutex)))
     (debug:print-info 4 "runs:operate-on => Header: " header " action: " action " new-state-status: " new-state-status)
     (if (> 2 (length state-status))
 	(begin
@@ -1558,9 +1569,9 @@
 		   ((remove-runs)
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
 		    ;; seek and kill in flight -runtests with % as testpatt here
-		    (if (equal? testpatt "%")
-			(tasks:kill-runner target run-name)
-			(debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
+		    ;; (if (equal? testpatt "%")
+		    (tasks:kill-runner target run-name testpatt)
+		    ;; (debug:print 0 "not attempting to kill any run launcher processes as testpatt is " testpatt))
 		    (debug:print 1 "Removing tests for run: " runkey " " (db:get-value-by-header run header "runname")))
 		   ((set-state-status)
 		    (if (tasks:need-server run-id)(tasks:start-and-wait-for-server tdbdat run-id 10))
@@ -1574,8 +1585,8 @@
 		    (debug:print 1 "Archiving/restoring (" (args:get-arg "-archive") ") data for run: " runkey " " (db:get-value-by-header run header "runname"))
 		    (set! worker-thread (make-thread (lambda ()
 						       (case (string->symbol (args:get-arg "-archive"))
-							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests))
-							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests))
+							 ((save save-remove keep-html)(archive:run-bup (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
+							 ((restore)(archive:bup-restore (args:get-arg "-archive") run-id run-name tests rp-mutex bup-mutex))
 							 (else 
 							  (debug:print 0 "ERROR: unrecognised sub command to -archive. Run \"megatest\" to see help")
 							  (exit))))

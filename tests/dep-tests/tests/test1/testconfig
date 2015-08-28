@@ -1,0 +1,11 @@
+[include #{getenv MT_RUN_AREA_HOME}/common.testconfig]
+
+[include #{getenv MT_RUN_AREA_HOME}/common_itemstable.testconfig]
+
+[requirements]
+waiton #{get #{getenv DEPS} test1}
+
+# itemmap maps these items back to previous test
+# NB// mapping is in reverse - NOT forwards!
+#
+itemmap /.*

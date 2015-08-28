@@ -9,7 +9,7 @@
 
 ;;  strftime('%m/%d/%Y %H:%M:%S','now','localtime')
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format md5 message-digest)
+(use sqlite3 srfi-1 posix regex regex-case srfi-69 dot-locking format md5 message-digest srfi-18)
 (import (prefix sqlite3 sqlite3:))
 
 (declare (unit archive))
@@ -101,7 +101,7 @@
 ;; 3. gen index
 ;; 4. save
 ;;
-(define (archive:run-bup archive-command run-id run-name tests)
+(define (archive:run-bup archive-command run-id run-name tests rp-mutex bup-mutex)
   ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
@@ -138,7 +138,11 @@
 	      (test-partial-path (conc target "/" run-name "/" (db:test-make-full-name test-name item-path)))
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
-	      (test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
+	      (mutex-lock! rp-mutex)
+	      (test-physical-path (if (file-exists? test-path) 
+				      (common:real-path test-path)
+				      #f))
+	      (mutex-unlock! rp-mutex)
 	      (partial-path-index (if test-physical-path (substring-index test-partial-path test-physical-path) #f))
 	      (test-base         (if (and partial-path-index 
 					  test-physical-path )
@@ -147,20 +151,22 @@
 						partial-path-index)
 				     #f)))
 	 
- 	 (if (or toplevel/children
-		 (not (file-exists? test-path)))
-	     #f
-	     (begin
-	       (debug:print 0
-			    "From test-dat=" test-dat " derived the following:\n"
-			    "test-partial-path  = " test-partial-path "\n"
-			    "test-path          = " test-path "\n"
-			    "test-physical-path = " test-physical-path "\n"
-			    "partial-path-index = " partial-path-index "\n"
-			    "test-base          = " test-base)
-	       (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
-	       (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
-	       test-path))))
+ 	 (cond
+	  (toplevel/children
+	   (debug:print 0 "WARNING: cannot archive " test-name " with id " test-id " as it is a toplevel test with children"))
+	  ((not (file-exists? test-path))
+	   (debug:print 0 "WARNING: Cannot archive " test-name "/" item-path " as path " test-path " does not exist"))
+	  (else
+	   (debug:print 0
+			"From test-dat=" test-dat " derived the following:\n"
+			"test-partial-path  = " test-partial-path "\n"
+			"test-path          = " test-path "\n"
+			"test-physical-path = " test-physical-path "\n"
+			"partial-path-index = " partial-path-index "\n"
+			"test-base          = " test-base)
+	   (hash-table-set! disk-groups test-base (cons test-physical-path (hash-table-ref/default disk-groups test-base '())))
+	   (hash-table-set! test-groups test-base (cons test-dat (hash-table-ref/default test-groups test-base '())))
+	   test-path))))
      tests)
     ;; for each disk-group
     (for-each 
@@ -182,11 +188,16 @@
 	     (begin
 	       ;; replace this with jobrunner stuff enventually
 	       (debug:print-info 0 "Init bup in " archive-dir)
-	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)))
+	       ;; (mutex-lock! bup-mutex)
+	       (run-n-wait bup-exe params: bup-init-params print-cmd: print-prefix)
+	       ;; (mutex-unlock! bup-mutex)
+	       ))
 	 (debug:print-info 0 "Indexing data to be archived")
+	 ;; (mutex-lock! bup-mutex)
 	 (run-n-wait bup-exe params: bup-index-params print-cmd: print-prefix)
 	 (debug:print-info 0 "Archiving data with bup")
 	 (run-n-wait bup-exe params: bup-save-params print-cmd: print-prefix)
+	 ;; (mutex-unlock! bup-mutex)
 	 (for-each
 	  (lambda (test-dat)
 	    (let ((test-id           (db:test-get-id        test-dat))
@@ -198,7 +209,7 @@
      (hash-table-keys disk-groups))
     #t))
 
-(define (archive:bup-restore archive-command run-id run-name tests)  ;; move the getting of archive space down into the below block so that a single run can 
+(define (archive:bup-restore archive-command run-id run-name tests rp-mutex bup-mutex)  ;; move the getting of archive space down into the below block so that a single run can 
   ;; allocate as needed should a disk fill up
   ;;
   (let* ((bup-exe      (or (configf:lookup *configdat* "archive" "bup") "bup"))
@@ -209,7 +220,7 @@
     (for-each
      (lambda (test-dat)
        ;; When restoring test-dat will initially contain an old and invalid path to the test
-       (let* ((best-disk         (get-best-disk *configdat*))
+       (let* ((best-disk         (get-best-disk *configdat* #f)) ;; BUG: get the testconfig and use it here. Otherwise data pulled out of archive could end up on the wrong kind of disk.
 	      (item-path         (db:test-get-item-path test-dat))
 	      (test-name         (db:test-get-testname  test-dat))
 	      (test-id           (db:test-get-id        test-dat))
@@ -223,8 +234,12 @@
 	      ;; note the trailing slash to get the dir inspite of it being a link
 	      (test-path         (conc linktree "/" test-partial-path))
 	      ;; if the old path was not deleted then prev-test-physical-path will end up pointing to a real directory
-	      (prev-test-physical-path (if (file-exists? test-path) (read-symbolic-link test-path #t) #f))
-
+	      (mutex-lock! rp-mutex)
+	      (prev-test-physical-path (if (file-exists? test-path)
+					   ;; (read-symbolic-link test-path #t)
+					   (common:real-path test-path)
+					   #f))
+	      (mutex-unlock! rp-mutex)
 	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
 	      (archive-block-id        (db:test-get-archived test-dat))
 	      (archive-block-info      (rmt:test-get-archive-block-info archive-block-id))
@@ -268,7 +283,9 @@
 		      ;; new-test-path won't work - must use best-disk instead? Nope, new-test-path but tack on /..
 		      (bup-restore-params  (list "-d" archive-path "restore" "-C" (conc new-test-path "/..") archive-internal-path)))
 		 (debug:print-info 0 "Restoring archived data to " new-test-physical-path " from archive in " archive-path " ... " archive-internal-path)
+		 ;; (mutex-lock! bup-mutex)
 		 (run-n-wait bup-exe params: bup-restore-params print-cmd: #f)
+		 ;; (mutex-unlock! bup-mutex)
 		 (mt:test-set-state-status-by-id run-id test-id "COMPLETED" #f #f)))
 	     (debug:print 0 "ERROR: No archive path in the record for run-id=" run-id " test-id=" test-id))))
      (filter vector? tests))))
