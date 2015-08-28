@@ -2244,10 +2244,12 @@
 ;; use currstate = #f and or currstatus = #f to apply to any state or status respectively
 ;; WARNING: SQL injection risk. NB// See new but not yet used "faster" version below
 ;;
-		;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
-		;;(debug:print 0 "QRY: " qry)
-		;; (db:delay-if-busy)
-
+;;  AND NOT (item_path='' AND testname in (SELECT DISTINCT testname FROM tests WHERE testname=? AND item_path != ''));")))
+;;  (debug:print 0 "QRY: " qry)
+;;  (db:delay-if-busy)
+;;
+;; NB// This call only operates on toplevel tests. Consider replacing it with more general call
+;;
 (define (db:set-tests-state-status dbstruct run-id testnames currstate currstatus newstate newstatus)
   (for-each (lambda (testname)
 	      (let ((qry (conc "UPDATE tests SET state=?,status=? WHERE "
@@ -2259,8 +2261,9 @@
 		 run-id
 		 #t
 		 (lambda (db)
-		   (sqlite3:execute db qry newstate newstatus run-id testname)
-		   (mt:process-triggers run-id test-id newstate newstatus)
+		   (let ((test-id (db:get-test-id dbstruct run-id testname "")))
+		     (sqlite3:execute db qry newstate newstatus run-id testname)
+		     (if test-id (mt:process-triggers run-id test-id newstate newstatus)))
 		   ))))
 	    testnames))
 
