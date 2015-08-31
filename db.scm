@@ -3353,7 +3353,7 @@
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-		       (same-itempath     (db:compare-itempaths ref-item-path item-path itemmap))) ;; (equal? ref-item-path item-path)))
+		       (same-itempath     (db:compare-itempaths item-path ref-item-path itemmap))) ;; (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 

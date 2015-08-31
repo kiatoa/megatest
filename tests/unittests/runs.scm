@@ -172,6 +172,13 @@
 (test #f "a/b/c"       (db:multi-pattern-apply   "d/e/f" "d a\ne b\nf c"))
 (test #f "blah/foo/bar/baz" (db:convert-test-itempath "blah/baz/bar/foo" "^([^/]+)/([^/]+)/([^/]+)$ \\3/\\2/\\1"))
 (test #f #t (db:compare-itempaths "abc/def/123" "abc/ghi/123" "ghi def"))
+(test #f #f (db:compare-itempaths "some/5" "item/5" ".*/"))
+(test #f #t (db:compare-itempaths "some/5" "item/5" ".*/ some/"))
+
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(toplevel)  itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(normal)    itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(itemmatch) itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(itemwait)  itemmap: ".*/" "/"))
 
 (exit 1)
 
