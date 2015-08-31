@@ -101,7 +101,7 @@
 
 (define test-path "tests/test1")
 (define disk-path #f)
-(test "get-best-disk"    #t (string? (file-exists? (let ((d (get-best-disk *configdat*)))
+(test "get-best-disk"    #t (string? (file-exists? (let ((d (get-best-disk *configdat* #f)))
 						     (set! disk-path d)
 						     d))))
 (test "create-work-area" #t (symbolic-link? (car (create-work-area 1 rinfo keyvals 1 test-path disk-path "test1" '()))))
@@ -159,8 +159,19 @@
 ;; M O R E   R E M O T E   C A L  L S
 ;;======================================================================
 
-(test #f #f (rmt:set-tests-state-status 1 '("runfirst") "RUNNING" "WARN" "COMPLETED" "FAIL"))
-(test #f #f (rmt:top-test-set-per-pf-counts 1 "runfirst"))
+(test #f '("COMPLETED" "PASS")
+      (begin
+	(rmt:set-tests-state-status 1 '("rollup") "COMPLETED" "AUTO" "COMPLETED" "PASS")
+	(get-state-status 1 "rollup" "")))
+(test #f #t (rmt:top-test-set-per-pf-counts 1 "rollup"))
+
+;;======================================================================
+;; T E S T   I T E M M A P
+;;======================================================================
+
+(test #f "a/b/c"       (db:multi-pattern-apply   "d/e/f" "d a\ne b\nf c"))
+(test #f "blah/foo/bar/baz" (db:convert-test-itempath "blah/baz/bar/foo" "^([^/]+)/([^/]+)/([^/]+)$ \\3/\\2/\\1"))
+(test #f #t (db:compare-itempaths "abc/def/123" "abc/ghi/123" "ghi def"))
 
 (exit 1)
 
