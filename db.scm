@@ -3268,9 +3268,9 @@
 (define (db:compare-itempaths patha pathb itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (if itemmap
-      (let ((path-b-mapped (db:convert-test-itempath pathb itemmap)))
-	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " path-b-mapped)
-	(equal? patha pathb))
+      (let ((pathb-mapped (db:multi-pattern-apply pathb itemmap)))
+	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " pathb-mapped)
+	(equal? patha pathb-mapped))
       (equal? patha pathb)))
 
 ;; (let* ((mapparts    (string-split itemmap))
@@ -3283,6 +3283,9 @@
 ;; 		    (string-substitute pattern "" pathb))))
 
 ;; A routine to convert test/itempath using a itemmap
+;; NOTE: to process only an itempath (i.e. no prepended testname)
+;;       just call db:multi-pattern-apply
+;;
 (define (db:convert-test-itempath path-in itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (let* ((path-parts  (string-split path-in "/"))
