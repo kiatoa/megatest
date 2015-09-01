@@ -333,8 +333,8 @@
 (define (rmt:general-call stmtname run-id . params)
   (rmt:send-receive 'general-call run-id (append (list stmtname run-id) params)))
 
-(define (rmt:sync-inmem->db run-id)
-  (rmt:send-receive 'sync-inmem->db run-id '()))
+;; (define (rmt:sync-inmem->db run-id)
+;;   (rmt:send-receive 'sync-inmem->db run-id '()))
 
 (define (rmt:sdb-qry qry val run-id)
   ;; add caching if qry is 'getid or 'getstr
@@ -503,8 +503,8 @@
 		  (rmt:send-receive 'test-get-paths-matching-keynames-target-new run-id (list run-id keynames target res testpatt statepatt statuspatt runname)))
 	   run-ids))))
 
-(define (rmt:get-run-ids-matching keynames target res)
-  (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
+;; (define (rmt:get-run-ids-matching keynames target res)
+;;   (rmt:send-receive #f 'get-run-ids-matching (list keynames target res)))
 
 (define (rmt:get-prereqs-not-met run-id waitons ref-item-path #!key (mode '(normal))(itemmap #f))
   (rmt:send-receive 'get-prereqs-not-met run-id (list run-id waitons ref-item-path mode itemmap)))
@@ -556,9 +556,6 @@
 
 (define (rmt:delete-old-deleted-test-records)
   (rmt:send-receive 'delete-old-deleted-test-records #f '()))
-
-(define (rmt:get-runs runpatt count offset keypatts)
-  (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
 
 (define (rmt:get-runs runpatt count offset keypatts)
   (rmt:send-receive 'get-runs #f (list runpatt count offset keypatts)))
