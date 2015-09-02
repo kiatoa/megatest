@@ -2698,7 +2698,7 @@
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
 		  (or (not units)   (equal? expected "")))
-	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test tdb test-id category variable)))
+	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test #f test-id category variable)))
 			 (set! expected new-expected)
 			 (set! tol      new-tol)
 			 (set! units    new-units)))
