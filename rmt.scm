@@ -673,8 +673,10 @@
 (define (rmt:test-data-rollup run-id test-id status)
   (rmt:send-receive 'test-data-rollup run-id (list run-id test-id status)))
 
-(define (rmt:csv->test-data run-id test-id csvdata)
-  (rmt:send-receive 'csv->test-data run-id (list run-id test-id csvdata)))
+;; Unfinished and unused
+;;
+;; (define (rmt:csv->test-data run-id test-id csvdata)
+;;   (rmt:send-receive 'csv->test-data run-id (list run-id test-id csvdata)))
 
 ;;======================================================================
 ;;  T A S K S

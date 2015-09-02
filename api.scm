@@ -151,7 +151,8 @@
 
 	    ;; TEST DATA
 	    ((test-data-rollup)             (apply db:test-data-rollup dbstruct params))
-	    ((csv->test-data)               (apply db:csv->test-data dbstruct params))
+	    ;; unfinished and unused
+	    ;; ((csv->test-data)               (apply db:csv->test-data dbstruct params))
 
 	    ;; MISC
 	    ((sync-inmem->db)               (let ((run-id (car params)))
