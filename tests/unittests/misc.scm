@@ -197,8 +197,7 @@
   (test #f (vector 1 "atest" "" "" "" "" "" "" "" "" "default") (rmt:testmeta-get-record testname))
   (test #f #t (begin (rmt:testmeta-update-field test-name fld val) #t))
   (test #f #t (rmt:test-data-rollup run-id test-id status))
-  ;; disabled as the function is unfinished and unused
-  ;; (test #f #f (rmt:csv->test-data run-id test-id csvdata))
+  (test #f #t (begin (rmt:csv->test-data run-id test-id csvdata) #t))
   (test #f '() (rmt:tasks-find-task-queue-records target runname testpatt statepatt action-patt))
   (test #f #t (begin (rmt:tasks-add "action" owner target runname testpatt "params") #t))
   (test #f #t (begin (rmt:tasks-set-state-given-param-key param-key newstate) #t))
