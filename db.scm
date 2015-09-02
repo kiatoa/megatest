@@ -2665,6 +2665,8 @@
     ;; if the test is not FAIL then set status based on the fail and pass counts.
     (db:general-call dbdat 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
+;; NOT USED!?
+;;
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
