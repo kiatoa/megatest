@@ -2947,12 +2947,12 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND status IN ('INCOMPLETE')
-                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
+                                                     AND status NOT IN ('n/a')
+                                                     AND state in ('NOT_STARTED')) > 0 THEN 'UNKNOWN'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND status NOT IN ('TEN_STRIKES','BLOCKED')
+                                                     AND (status NOT IN ('TEN_STRIKES','BLOCKED') OR status IN ('INCOMPLETE'))
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
