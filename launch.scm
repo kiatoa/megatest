@@ -898,7 +898,9 @@
 
     ;; clean out step records from previous run if they exist
     ;; (rmt:delete-test-step-records run-id test-id)
-    (change-directory work-area) ;; so that log files from the launch process don't clutter the test dir
+    ;; if the dir does not exist we may have a itempath where individual variables are a path, launch anyway
+    (if (file-exists? work-area)
+	(change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
       (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))

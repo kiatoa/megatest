@@ -2957,7 +2957,7 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND state != 'COMPLETED') = 0 THEN 'COMPLETED'
+                                                     AND state NOT IN ('COMPLETED','DELETED')) = 0 THEN 'COMPLETED'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
