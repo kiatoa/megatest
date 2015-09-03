@@ -100,7 +100,7 @@
   (let* ((target    (or intarget 
 			(common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
+	 (keys      (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
 	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
