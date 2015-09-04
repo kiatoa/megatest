@@ -1222,6 +1222,7 @@
 	 )))
     ;; now *if* -run-wait we wait for all tests to be done
     ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
+    (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
     (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
 		    (prev-num-running 0))
       ;; (debug:print 0 "num-running=" num-running ", prev-num-running=" prev-num-running)
