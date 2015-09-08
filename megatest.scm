@@ -79,7 +79,7 @@ Launching and managing runs
                             Optionally use :state and :status
   -set-state-status X,Y   : set state to X and status to Y, requires controls per -remove-runs
   -rerun FAIL,WARN...     : force re-run for tests with specificed status(s)
-  -clean-rerun            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
+  -rerun-clean            : set all tests not COMPLETED+PASS,WARN,WAIVED to NOT_STARTED,n/a
                             and then run the specified testpatt with -preclean
   -lock                   : lock run specified by target and runname
   -unlock                 : unlock run specified by target and runname
@@ -267,7 +267,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		        "-gui"
 			"-daemonize"
 			"-preclean"
-			"-clean-rerun"
+			"-rerun-clean"
 
 			;; misc
 			"-repl"
@@ -1150,13 +1150,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; run all tests are are Not COMPLETED and PASS or CHECK
 (if (or (args:get-arg "-runall")
 	(args:get-arg "-run")
-	(args:get-arg "-clean-rerun")
+	(args:get-arg "-rerun-clean")
 	(args:get-arg "-runtests"))
     (general-run-call 
      "-runall"
      "run all tests"
      (lambda (target runname keys keyvals)
-       (if (args:get-arg "-clean-rerun") ;; first set states/statuses correct
+       (if (args:get-arg "-rerun-clean") ;; first set states/statuses correct
 	   (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
 			       "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
 		 (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
