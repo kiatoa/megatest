@@ -96,7 +96,7 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f)(intarget #f))
+(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f)(intarget #f)(testname #f)(itempath #f))
   (let* ((target    (or intarget 
 			(common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
@@ -129,7 +129,20 @@
       (if runname
 	  (setenv "MT_RUNNAME" runname)
 	  (debug:print 0 "ERROR: no value for runname for id " run-id)))
-    (setenv "MT_RUN_AREA_HOME" *toppath*)))
+    (setenv "MT_RUN_AREA_HOME" *toppath*)
+    ;; if a testname and itempath are available set the remaining appropriate variables
+    (if testname (setenv "MT_TEST_NAME" testname))
+    (if itempath (setenv "MT_ITEMPATH"  itempath))
+    (if (and testname link-tree)
+	(setenv "MT_TEST_RUN_DIR" (conc (getenv "MT_LINKTREE")  "/"
+					(getenv "MT_TARGET")    "/"
+					(getenv "MT_RUNNAME")   "/"
+					(getenv "MT_TEST_NAME")
+					(if (and itempath
+						 (not (equal? itempath "")))
+					    (conc "/" itempath)
+					    ""))))
+    ))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)

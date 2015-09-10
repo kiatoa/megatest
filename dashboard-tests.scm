@@ -458,14 +458,14 @@
 				   (cadr keyval))
 				 keydat)
 			    "/"))
+	       (item-path  (db:test-get-item-path testdat))
 	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
 			     (if (file-exists? runconfigf)
 				 (setup-env-defaults runconfigf run-id (make-hash-table) keydat keystring)
 				 (make-hash-table))))
 	       (testconfig    (begin
-				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring) ;; these may be needed by the launching process
+				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(tests:get-testconfig (db:test-get-testname testdat) test-registry #t)))
-	       (item-path  (db:test-get-item-path testdat))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
