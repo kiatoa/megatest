@@ -104,6 +104,9 @@
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
 	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
+    (if testname (setenv "MT_TEST_NAME" testname))
+    (if itempath (setenv "MT_ITEMPATH"  itempath))
+
     ;; get the info from the db and put it in the cache
     (if link-tree
 	(setenv "MT_LINKTREE" link-tree)
@@ -1331,10 +1334,10 @@
 		      "\n   itemdat: " itemdat
 		      )
     (debug:print 2 "Attempting to launch test " full-test-name)
-    (setenv "MT_TEST_NAME" test-name) ;; 
-    (setenv "MT_ITEMPATH"  item-path)
-    (setenv "MT_RUNNAME"   runname)
-    (runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+    ;; (setenv "MT_TEST_NAME" test-name) ;; 
+    ;; (setenv "MT_ITEMPATH"  item-path)
+    ;; (setenv "MT_RUNNAME"   runname)
+    (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated

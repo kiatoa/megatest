@@ -10,9 +10,12 @@
 
 (include "common_records.scm")
 
+;; NB// to process a runconfig ensure to use environ-patt with target!
+;;
 (define (setup-env-defaults fname run-id already-seen keyvals #!key (environ-patt #f)(change-env #t))
   (let* ((keys    (map car keyvals))
-	 (thekey  (if keyvals (string-intersperse (map (lambda (x)(if x x "-na-")) (map cadr keyvals)) "/")
+	 (thekey  (if keyvals 
+		      (string-intersperse (map (lambda (x)(if x x "-na-")) (map cadr keyvals)) "/")
 		      (or (common:args-get-target)
 			  (get-environment-variable "MT_TARGET")
 			  (begin

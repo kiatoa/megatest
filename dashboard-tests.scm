@@ -459,13 +459,22 @@
 				 keydat)
 			    "/"))
 	       (item-path  (db:test-get-item-path testdat))
+	       ;; this next block was added to fix a bug where variables were
+               ;; needed. Revisit this.
 	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
-			     (if (file-exists? runconfigf)
-				 (setup-env-defaults runconfigf run-id (make-hash-table) keydat keystring)
-				 (make-hash-table))))
+	 		     (if (file-exists? runconfigf)
+	 			 (handle-exceptions
+                                   exn
+                                   #f  ;; do nothing, just keep on trucking ....
+                                   (setup-env-defaults runconfigf run-id (make-hash-table) keydat environ-patt: keystring))
+	 			 (make-hash-table))))
 	       (testconfig    (begin
+				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
-				(tests:get-testconfig (db:test-get-testname testdat) test-registry #t)))
+				(handle-exceptions
+				 exn
+				 #f
+				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
@@ -596,7 +605,7 @@
 									  item-path))
 				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
+				     (let ((cmd (conc "bmegatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%"
 											   item-path))
