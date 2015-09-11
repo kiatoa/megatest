@@ -60,6 +60,14 @@ Attempt to rerun tests in "STUCK/DEAD", "n/a", "ZERO_ITEMS" states.
 reruns 5
 ------------------
 
+Run time limit
+^^^^^^^^^^^^^^
+
+-----------------
+[setup]
+runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s
+-----------------
+
 The testconfig File
 -------------------
 
