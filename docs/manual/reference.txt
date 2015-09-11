@@ -156,8 +156,23 @@ itemmap .*/
 # ## Example
 # ## Replace foo/ with bar/
 itemmap foo/ bar/
+
+# multi-line; matches are applied in the listed order
+# The following would map:
+#   a123b321 to b321fooa123 then to 321fooa123p
+#
+itemmap (a\d+)(b\d+) \2foo\1
+  b(.*) \1p
 -------------------
 
+Complex mappings
+^^^^^^^^^^^^^^^^
+
+Complex mappings can be handled with the [itemmap] section
+
+image::itemmap.png[]
+
+.Complex mapping from 
 .Autogeneration waiton list for dynamic flow dependency trees
 -------------------
 [requirements]
