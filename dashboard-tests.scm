@@ -211,10 +211,6 @@
 			  (db:test-get-host testdat) ;; )
 			  #:expand "HORIZONTAL")
 			 (lambda (testdat)(db:test-get-host testdat)))
-	    (store-label "Uname"
-			 (iup:label "                                                   " #:expand "HORIZONTAL")
-			 (lambda (testdat) ;; (sdb:qry 'getstr 
-			   (db:test-get-uname testdat))) ;; )
 	    (store-label "DiskFree"
 			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))
@@ -230,7 +226,26 @@
 	    (store-label "ProcessId"
 			 (iup:label (conc (db:test-get-process_id testdat)) #:expand "HORIZONTAL")
 			 (lambda (testdat)(conc (db:test-get-process_id testdat))))
+	    (store-label "Uname"
+			 (iup:label "                                                   " #:expand "HORIZONTAL") ;;  #:wordwrap "YES")
+			 (lambda (testdat) ;; (sdb:qry 'getstr 
+			   (db:test-get-uname testdat))) ;; )
 	    )))))
+
+;; if there is a submegatest create a button to launch dashboard in that area
+;;
+(define (submegatest-panel dbstruct keydat testdat runname testconfig)
+  (let* ((subarea (configf:lookup testconfig "setup" "submegatest"))
+	 (area-exists (and subarea (file-exists? subarea))))
+    (debug:print-info 0 "Megatest subarea=" subarea ", area-exists=" area-exists)
+    (if subarea
+	(iup:frame 
+	 #:title "Megatest Run Info" ; #:expand "YES"
+	 (iup:button
+	  "Launch Dashboard"
+	  #:action (lambda (obj)
+		     (system (conc "cd " subarea ";env -i PATH=$PATH DISPLAY=$DISPLAY HOME=$HOME USER=$USER dashboard &")))))
+	(iup:vbox))))
 
 ;; use a global for setting the buttons colors
 ;;                           state status teststeps
@@ -414,6 +429,7 @@
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
+	       (test-registry (tests:get-all))
 	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
 	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
@@ -430,6 +446,7 @@
 	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
+	       ;; (tests:get-testconfig testdat testname 'return-procs))
 	       (testmeta      (if testdat 
 				  (let ((tm (db:testmeta-get-record dbstruct testname)))
 				    (if tm tm (make-db:testmeta)))
@@ -442,6 +459,22 @@
 				 keydat)
 			    "/"))
 	       (item-path  (db:test-get-item-path testdat))
+	       ;; this next block was added to fix a bug where variables were
+               ;; needed. Revisit this.
+	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
+	 		     (if (file-exists? runconfigf)
+	 			 (handle-exceptions
+                                   exn
+                                   #f  ;; do nothing, just keep on trucking ....
+                                   (setup-env-defaults runconfigf run-id (make-hash-table) keydat environ-patt: keystring))
+	 			 (make-hash-table))))
+	       (testconfig    (begin
+				;; (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path)
+				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
+				(handle-exceptions
+				 exn
+				 #f
+				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
@@ -572,7 +605,7 @@
 									  item-path))
 				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
+				     (let ((cmd (conc "bmegatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%"
 											   item-path))
@@ -614,7 +647,9 @@
 				(run-info-panel dbstruct keydat testdat runname)
 				(test-info-panel testdat store-label widgets)
 				(test-meta-panel testmeta store-meta))
-			       (host-info-panel testdat store-label)
+			       (iup:hbox
+				(host-info-panel testdat store-label)
+				(submegatest-panel dbstruct keydat testdat runname testconfig))
 			       ;; The controls
 			       (iup:frame #:title "Actions" 
 					  (iup:vbox

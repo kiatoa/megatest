@@ -1,3 +1,12 @@
+;; Ignore initial errors
+(trigger "ScriptStart" #/^Script started/)
+(trigger "TestStart"   #/^megatest> \(/)
+(section "startup"     "ScriptStart" "TestStart")
+
+(expect:ignore in "startup" >= 0 "Ignore startup errors" #/error/i)
+
+(expect:ignore in "LogFileBody" >= 0 "Ignore .so files with error in name" #/loading.*error.*\.so/)
+; loading /usr/local/lib/chicken/7/type-errors.import.so ..
 ;; You should have at least one expect:required. This ensures that your process ran
 (expect:required in "LogFileBody" > 0 "At least one PASS" #/\[.{0,4}PASS.{0,4}\]/)
 

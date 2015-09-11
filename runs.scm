@@ -96,13 +96,17 @@
 	      (list "default" target))
     (vector target runname testpatt keys keyvals envdat mconfig runconfig serverdat transport db toppath run-id)))
 
-(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f))
-  (let* ((target    (or (common:args-get-target)
+(define (runs:set-megatest-env-vars run-id #!key (inkeys #f)(inrunname #f)(inkeyvals #f)(intarget #f)(testname #f)(itempath #f))
+  (let* ((target    (or intarget 
+			(common:args-get-target)
 			(get-environment-variable "MT_TARGET")))
-	 (keys    (if inkeys    inkeys    (rmt:get-keys)))
+	 (keys      (if inkeys    inkeys    (rmt:get-keys)))
 	 (keyvals   (if inkeyvals inkeyvals (keys:target->keyval keys target)))
 	 (vals      (hash-table-ref/default *env-vars-by-run-id* run-id #f))
 	 (link-tree (configf:lookup *configdat* "setup" "linktree")))
+    (if testname (setenv "MT_TEST_NAME" testname))
+    (if itempath (setenv "MT_ITEMPATH"  itempath))
+
     ;; get the info from the db and put it in the cache
     (if link-tree
 	(setenv "MT_LINKTREE" link-tree)
@@ -128,7 +132,20 @@
       (if runname
 	  (setenv "MT_RUNNAME" runname)
 	  (debug:print 0 "ERROR: no value for runname for id " run-id)))
-    (setenv "MT_RUN_AREA_HOME" *toppath*)))
+    (setenv "MT_RUN_AREA_HOME" *toppath*)
+    ;; if a testname and itempath are available set the remaining appropriate variables
+    (if testname (setenv "MT_TEST_NAME" testname))
+    (if itempath (setenv "MT_ITEMPATH"  itempath))
+    (if (and testname link-tree)
+	(setenv "MT_TEST_RUN_DIR" (conc (getenv "MT_LINKTREE")  "/"
+					(getenv "MT_TARGET")    "/"
+					(getenv "MT_RUNNAME")   "/"
+					(getenv "MT_TEST_NAME")
+					(if (and itempath
+						 (not (equal? itempath "")))
+					    (conc "/" itempath)
+					    ""))))
+    ))
 
 (define (set-item-env-vars itemdat)
   (for-each (lambda (item)
@@ -1221,6 +1238,7 @@
 	 )))
     ;; now *if* -run-wait we wait for all tests to be done
     ;; Now wait for any RUNNING tests to complete (if in run-wait mode)
+    (thread-sleep! 5) ;; I think there is a race condition here. Let states/statuses settle
     (let wait-loop ((num-running      (rmt:get-count-tests-running-for-run-id run-id))
 		    (prev-num-running 0))
       ;; (debug:print 0 "num-running=" num-running ", prev-num-running=" prev-num-running)
@@ -1316,10 +1334,10 @@
 		      "\n   itemdat: " itemdat
 		      )
     (debug:print 2 "Attempting to launch test " full-test-name)
-    (setenv "MT_TEST_NAME" test-name) ;; 
-    (setenv "MT_ITEMPATH"  item-path)
-    (setenv "MT_RUNNAME"   runname)
-    (runs:set-megatest-env-vars run-id inrunname: runname) ;; these may be needed by the launching process
+    ;; (setenv "MT_TEST_NAME" test-name) ;; 
+    ;; (setenv "MT_ITEMPATH"  item-path)
+    ;; (setenv "MT_RUNNAME"   runname)
+    (runs:set-megatest-env-vars run-id inrunname: runname testname: test-name itempath: item-path) ;; these may be needed by the launching process
     (change-directory *toppath*)
 
     ;; Here is where the test_meta table is best updated

@@ -101,7 +101,7 @@
 
 (define test-path "tests/test1")
 (define disk-path #f)
-(test "get-best-disk"    #t (string? (file-exists? (let ((d (get-best-disk *configdat*)))
+(test "get-best-disk"    #t (string? (file-exists? (let ((d (get-best-disk *configdat* #f)))
 						     (set! disk-path d)
 						     d))))
 (test "create-work-area" #t (symbolic-link? (car (create-work-area 1 rinfo keyvals 1 test-path disk-path "test1" '()))))
@@ -155,8 +155,30 @@
 	;; (launch-test test-id run-id run-info keyvals runname test-conf test-name test-path itemdat params)
 	(launch-test 30001 1 rinfo keyvals "run1" tconfig "test1" test-path '() (make-hash-table)))))
 
+;;======================================================================
+;; M O R E   R E M O T E   C A L  L S
+;;======================================================================
 
+(test #f '("COMPLETED" "PASS")
+      (begin
+	(rmt:set-tests-state-status 1 '("rollup") "COMPLETED" "AUTO" "COMPLETED" "PASS")
+	(get-state-status 1 "rollup" "")))
+(test #f #t (rmt:top-test-set-per-pf-counts 1 "rollup"))
 
+;;======================================================================
+;; T E S T   I T E M M A P
+;;======================================================================
+
+(test #f "a/b/c"       (db:multi-pattern-apply   "d/e/f" "d a\ne b\nf c"))
+(test #f "blah/foo/bar/baz" (db:convert-test-itempath "blah/baz/bar/foo" "^([^/]+)/([^/]+)/([^/]+)$ \\3/\\2/\\1"))
+(test #f #t (db:compare-itempaths "abc/def/123" "abc/ghi/123" "ghi def"))
+(test #f #f (db:compare-itempaths "some/5" "item/5" ".*/"))
+(test #f #t (db:compare-itempaths "some/5" "item/5" ".*/ some/"))
+
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(toplevel)  itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(normal)    itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(itemmatch) itemmap: ".*/" "/"))
+(test #f '() (rmt:get-prereqs-not-met 1 '("rollup") "some/5" mode: '(itemwait)  itemmap: ".*/" "/"))
 
 (exit 1)
 
@@ -322,11 +344,6 @@
 			 (tasks:kill-server #t hostname port server-pid 'http)
 			 (open-run-close tasks:get-best-server tasks:open-db)))
 
-;;======================================================================
-;; M O R E   R E M O T E   C A L  L S
-;;======================================================================
-
-(test #f #f (rmt:set-tests-state-status 1 '("runfirst") "RUNNING" "WARN" "COMPLETED" "FAIL"))
 
 ;; (cdb:kill-server *runremote*)
 

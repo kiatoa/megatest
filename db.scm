@@ -1726,41 +1726,41 @@
 ;;
 ;; NOTE: THIS IS COMPLETELY UNFINISHED. IT GOES WITH rmt:get-get-paths-matching-keynames
 ;;
-(define (db:get-run-ids-matching dbstruct keynames target res)
-;; (define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
-  (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
-	 (keystr   (car tmp))
-	 (header   (cadr tmp))
-	 (res     '())
-	 (key-patt "")
-	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
-	 (qry-str  #f)
-	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
-    (for-each (lambda (keyval)
-		(let* ((key    (car keyval))
-		       (patt   (cadr keyval))
-		       (fulkey (conc ":" key))
-		       (wildtype (if (substring-index "%" patt) "like" "glob")))
-		  (if patt
-		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
-		      (begin
-			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
-			(exit 6)))))
-	      keyvals)
-    (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
-			(if limit  (conc " LIMIT " limit)   "")
-			(if offset (conc " OFFSET " offset) "")
-			";"))
-    (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
-    (db:with-db dbstruct #f #f ;; reads db, does not write to it.
-		(lambda (db)
-		  (sqlite3:for-each-row
-		   (lambda (a . r)
-		     (set! res (cons (list->vector (cons a r)) res)))
-		   (db:get-db dbstruct #f)
-		   qry-str
-		   runnamepatt)))
-    (vector header res)))
+;; (define (db:get-run-ids-matching dbstruct keynames target res)
+;; ;; (define (db:get-runs-by-patt dbstruct keys runnamepatt targpatt offset limit) ;; test-name)
+;;   (let* ((tmp      (runs:get-std-run-fields keys '("id" "runname" "state" "status" "owner" "event_time")))
+;; 	 (keystr   (car tmp))
+;; 	 (header   (cadr tmp))
+;; 	 (res     '())
+;; 	 (key-patt "")
+;; 	 (runwildtype (if (substring-index "%" runnamepatt) "like" "glob"))
+;; 	 (qry-str  #f)
+;; 	 (keyvals  (if targpatt (keys:target->keyval keys targpatt) '())))
+;;     (for-each (lambda (keyval)
+;; 		(let* ((key    (car keyval))
+;; 		       (patt   (cadr keyval))
+;; 		       (fulkey (conc ":" key))
+;; 		       (wildtype (if (substring-index "%" patt) "like" "glob")))
+;; 		  (if patt
+;; 		      (set! key-patt (conc key-patt " AND " key " " wildtype " '" patt "'"))
+;; 		      (begin
+;; 			(debug:print 0 "ERROR: searching for runs with no pattern set for " fulkey)
+;; 			(exit 6)))))
+;; 	      keyvals)
+;;     (set! qry-str (conc "SELECT " keystr " FROM runs WHERE state != 'deleted' AND runname " runwildtype " ? " key-patt " ORDER BY event_time "
+;; 			(if limit  (conc " LIMIT " limit)   "")
+;; 			(if offset (conc " OFFSET " offset) "")
+;; 			";"))
+;;     (debug:print-info 4 "runs:get-runs-by-patt qry=" qry-str " " runnamepatt)
+;;     (db:with-db dbstruct #f #f ;; reads db, does not write to it.
+;; 		(lambda (db)
+;; 		  (sqlite3:for-each-row
+;; 		   (lambda (a . r)
+;; 		     (set! res (cons (list->vector (cons a r)) res)))
+;; 		   (db:get-db dbstruct #f)
+;; 		   qry-str
+;; 		   runnamepatt)))
+;;     (vector header res)))
 
 ;; Get all targets from the db
 ;;
@@ -2372,7 +2372,8 @@
 		(conc "SELECT count(id) FROM tests WHERE state in ('RUNNING','LAUNCHED','REMOTEHOSTSTART') AND testname in ('"
 		      (string-intersperse testnames "','")
 		      "') AND NOT (uname = 'n/a' AND item_path='');")) ;; should this include the (uname = 'n/a' ...) ???
-	       )))))))
+	       ))
+	    0)))))
              ;; DEBUG FIXME - need to merge this v.155 query correctly   
              ;; AND testname in (SELECT testname FROM test_meta WHERE jobgroup=?)
              ;; AND NOT (uname = 'n/a' AND item_path = '');"
@@ -2664,6 +2665,8 @@
     ;; if the test is not FAIL then set status based on the fail and pass counts.
     (db:general-call dbdat 'test_data-pf-rollup (list test-id test-id test-id test-id))))
 
+;; NOT USED!?
+;;
 (define (db:csv->test-data dbstruct run-id test-id csvdata)
   (debug:print 4 "test-id " test-id ", csvdata: " csvdata)
   (let* ((dbdat   (db:get-db dbstruct run-id))
@@ -2695,7 +2698,7 @@
 	 (if (and (or (not expected)(equal? expected ""))
 		  (or (not tol)     (equal? expected ""))
 		  (or (not units)   (equal? expected "")))
-	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test tdb test-id category variable)))
+	     (let-values (((new-expected new-tol new-units)(tdb:get-prev-tol-for-test #f test-id category variable)))
 			 (set! expected new-expected)
 			 (set! tol      new-tol)
 			 (set! units    new-units)))
@@ -2944,17 +2947,17 @@
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND status IN ('INCOMPLETE')
+                                                     AND status NOT IN ('n/a')
+                                                     AND state in ('NOT_STARTED')) > 0 THEN 'UNKNOWN'
+                                   WHEN (SELECT count(id) FROM tests 
+                                                WHERE testname=?
+                                                     AND item_path != '' 
+                                                     AND (status NOT IN ('TEN_STRIKES','BLOCKED') OR status IN ('INCOMPLETE'))
                                                      AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
-                                                     AND status NOT IN ('TEN_STRIKES','BLOCKED')
-                                                     AND state in ('RUNNING','NOT_STARTED','LAUNCHED','REMOTEHOSTSTART')) > 0 THEN 'RUNNING'
-                                   WHEN (SELECT count(id) FROM tests 
-                                                WHERE testname=?
-                                                     AND item_path != '' 
-                                                     AND state != 'COMPLETED') = 0 THEN 'COMPLETED'
+                                                     AND state NOT IN ('COMPLETED','DELETED')) = 0 THEN 'COMPLETED'
                                    WHEN (SELECT count(id) FROM tests 
                                                 WHERE testname=?
                                                      AND item_path != '' 
@@ -3115,8 +3118,8 @@
   (let* ((dbdat   (db:get-db dbstruct #f))
 	 (db      (db:dbdat-get-db dbdat))
 	 (keys    (db:get-keys db))
-	 (selstr  (string-intersperse (map (lambda (x)(vector-ref x 0)) keys) ","))
-	 (qrystr  (string-intersperse (map (lambda (x)(conc (vector-ref x 0) "=?")) keys) " AND "))
+	 (selstr  (string-intersperse keys ","))
+	 (qrystr  (string-intersperse (map (lambda (x)(conc x "=?")) keys) " AND "))
 	 (keyvals #f)
 	 (tests-hash (make-hash-table)))
     ;; first look up the key values from the run selected by run-id
@@ -3141,7 +3144,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run dbstruct run-id hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination
@@ -3268,9 +3271,9 @@
 (define (db:compare-itempaths patha pathb itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (if itemmap
-      (let ((path-b-mapped (db:convert-test-itempath pathb itemmap)))
-	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " path-b-mapped)
-	(equal? patha pathb))
+      (let ((pathb-mapped (db:multi-pattern-apply pathb itemmap)))
+	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " pathb-mapped)
+	(equal? patha pathb-mapped))
       (equal? patha pathb)))
 
 ;; (let* ((mapparts    (string-split itemmap))
@@ -3283,6 +3286,9 @@
 ;; 		    (string-substitute pattern "" pathb))))
 
 ;; A routine to convert test/itempath using a itemmap
+;; NOTE: to process only an itempath (i.e. no prepended testname)
+;;       just call db:multi-pattern-apply
+;;
 (define (db:convert-test-itempath path-in itemmap)
   (debug:print-info 6 "ITEMMAP is " itemmap)
   (let* ((path-parts  (string-split path-in "/"))
@@ -3350,7 +3356,7 @@
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-		       (same-itempath     (db:compare-itempaths ref-item-path item-path itemmap))) ;; (equal? ref-item-path item-path)))
+		       (same-itempath     (db:compare-itempaths item-path ref-item-path itemmap))) ;; (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 

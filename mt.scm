@@ -132,39 +132,40 @@
 ;;======================================================================
 
 (define (mt:process-triggers run-id test-id newstate newstatus)
-  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id))
-	 (test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
-	  (db:test-get-rundir test-dat)) ;; ) ;; )
-	 (test-name     (db:test-get-testname test-dat))
-	 (tconfig       #f)
-	 (state         (if newstate  newstate  (db:test-get-state  test-dat)))
-	 (status        (if newstatus newstatus (db:test-get-status test-dat))))
-    (if (and test-rundir   ;; #f means no dir set yet
-	     (file-exists? test-rundir)
-	     (directory? test-rundir))
-	(call-with-environment-variables
-	 (list (cons "MT_TEST_NAME" test-name)
-	       (cons "MT_TEST_RUN_DIR" test-rundir)
-	       (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
-	 (lambda ()
-	   (push-directory test-rundir)
-	   (set! tconfig (mt:lazy-read-test-config test-name))
-	   (for-each (lambda (trigger)
-		       (let ((cmd  (configf:lookup tconfig "triggers" trigger))
-			     (logf (conc  test-rundir "/last-trigger.log")))
-			 (if cmd
-			     ;; Putting the commandline into ( )'s means no control over the shell. 
-			     ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
-			     ;; or equivalent. No need to do this. Just run it?
-			     (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
-			       (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
-			       (process-run fullcmd)))))
-		     (list
-		      (conc state "/" status)
-		      (conc state "/")
-		      (conc "/" status)))
-	   (pop-directory))
-	  ))))
+  (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id)))
+    (if test-dat
+	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
+		(db:test-get-rundir test-dat)) ;; ) ;; )
+	       (test-name     (db:test-get-testname test-dat))
+	       (tconfig       #f)
+	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
+	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
+	  (if (and test-rundir   ;; #f means no dir set yet
+		   (file-exists? test-rundir)
+		   (directory? test-rundir))
+	      (call-with-environment-variables
+	       (list (cons "MT_TEST_NAME" test-name)
+		     (cons "MT_TEST_RUN_DIR" test-rundir)
+		     (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
+	       (lambda ()
+		 (push-directory test-rundir)
+		 (set! tconfig (mt:lazy-read-test-config test-name))
+		 (for-each (lambda (trigger)
+			     (let ((cmd  (configf:lookup tconfig "triggers" trigger))
+				   (logf (conc  test-rundir "/last-trigger.log")))
+			       (if cmd
+				   ;; Putting the commandline into ( )'s means no control over the shell. 
+				   ;; stdout and stderr will be caught in the NBFAKE or mt_launch.log files
+				   ;; or equivalent. No need to do this. Just run it?
+				   (let ((fullcmd (conc cmd " " test-id " " test-rundir " " trigger "&")))
+				     (debug:print-info 0 "TRIGGERED on " trigger ", running command " fullcmd)
+				     (process-run fullcmd)))))
+			   (list
+			    (conc state "/" status)
+			    (conc state "/")
+			    (conc "/" status)))
+		 (pop-directory))
+	       ))))))
 
 ;;======================================================================
 ;;  S T A T E   A N D   S T A T U S   F O R   T E S T S 
