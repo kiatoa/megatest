@@ -1,0 +1,35 @@
+digraph G {
+
+    // put client after server so server_start node is visible
+    //
+    subgraph cluster_2 {
+        node [style=filled,shape=box];
+	
+	"test1"                  -> test2;
+	runremote_lookup_server  -> login_attempt [label="have server"];
+	runremote_lookup_server  -> monitordb_lookup_server [label="no server"];
+
+	monitordb_lookup_server  -> login_attempt [label="have server"];
+	monitordb_lookup_server  -> server_start_remote [label="no server"];
+
+	server_start_remote      -> delay_2_sec;
+	delay_2_sec              -> runremote_lookup_server;
+
+	login_attempt            -> "rmt:send-receive_start" [label="login sucessful"];
+	"rmt:send-receive_start" -> "rmt:send-receive_start";
+
+	"rmt:send-receive_start" -> runremote_lookup_server [label=exception];
+	login_attempt            -> clear_runremote [label="login failed"];
+
+	"remove_running > 5s"    -> runremote_lookup_server;
+
+	subgraph cluster_3 {
+		node [style=filled];
+		clear_runremote          -> "remove_running > 5s";
+	}
+
+        label = "client:setup";
+        color=green;
+    }
+
+}
