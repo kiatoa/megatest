@@ -170,9 +170,44 @@ Complex mappings
 
 Complex mappings can be handled with the [itemmap] section
 
-image::itemmap.png[]
+// image::itemmap.png[]
+image::complex-itemmap.png[]
 
-.Complex mapping from 
+Example:
+
+. Request to run D/1/res
+. Megatest calculates all posible items for Test C and filters down to: C/1/aa
+. Full list to be run is now: D/1/res, C/1/aa
+. Megatest calculates all posible items for Test A and filters down to: A/aa/1
+. Full list to be run is now: D/1/res, C/1/aa, A/aa/1
+
+.Testconfig for Test C
+----------------------
+[requirements]
+waiton A B
+
+[itemmap]
+A (\d+)/aa aa/\1
+B (\d+)/bb bb/\1
+----------------------
+
+.Testconfig for Test D
+----------------------
+[requirements]
+waiton C
+itemmap (\d+)/res \1/aa
+----------------------
+
+.Testconfig for Test E
+----------------------
+[requirements]
+waiton C
+itemmap (\d+)/res \1/bb
+----------------------
+
+Dynamic Flow Dependency Tree
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .Autogeneration waiton list for dynamic flow dependency trees
 -------------------
 [requirements]

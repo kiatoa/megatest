@@ -1254,9 +1254,64 @@ itemmap (a\d+)(b\d+) \2foo\1
 <div class="paragraph"><p>Complex mappings can be handled with the [itemmap] section</p></div>
 <div class="imageblock">
 <div class="content">
-<img src="itemmap.png" alt="itemmap.png">
+<img src="complex-itemmap.png" alt="complex-itemmap.png">
 </div>
 </div>
+<div class="paragraph"><p>Example:</p></div>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+Request to run D/1/res
+</p>
+</li>
+<li>
+<p>
+Megatest calculates all posible items for Test C and filters down to: C/1/aa
+</p>
+</li>
+<li>
+<p>
+Full list to be run is now: D/1/res, C/1/aa
+</p>
+</li>
+<li>
+<p>
+Megatest calculates all posible items for Test A and filters down to: A/aa/1
+</p>
+</li>
+<li>
+<p>
+Full list to be run is now: D/1/res, C/1/aa, A/aa/1
+</p>
+</li>
+</ol></div>
+<div class="listingblock">
+<div class="title">Testconfig for Test C</div>
+<div class="content monospaced">
+<pre>[requirements]
+waiton A B
+
+[itemmap]
+A (\d+)/aa aa/\1
+B (\d+)/bb bb/\1</pre>
+</div></div>
+<div class="listingblock">
+<div class="title">Testconfig for Test D</div>
+<div class="content monospaced">
+<pre>[requirements]
+waiton C
+itemmap (\d+)/res \1/aa</pre>
+</div></div>
+<div class="listingblock">
+<div class="title">Testconfig for Test E</div>
+<div class="content monospaced">
+<pre>[requirements]
+waiton C
+itemmap (\d+)/res \1/bb</pre>
+</div></div>
+</div>
+<div class="sect3">
+<h4 id="_dynamic_flow_dependency_tree">Dynamic Flow Dependency Tree</h4>
 <div class="listingblock">
 <div class="title">Autogeneration waiton list for dynamic flow dependency trees</div>
 <div class="content monospaced">

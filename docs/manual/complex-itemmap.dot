@@ -2,33 +2,45 @@ digraph G {
 
     // put client after server so server_start node is visible
     //
-    subgraph cluster_2 {
+    subgraph cluster_1 {
         node [style=filled,shape=box];
 	
-	"test1"                  -> test2;
-	runremote_lookup_server  -> login_attempt [label="have server"];
-	runremote_lookup_server  -> monitordb_lookup_server [label="no server"];
-
-	monitordb_lookup_server  -> login_attempt [label="have server"];
-	monitordb_lookup_server  -> server_start_remote [label="no server"];
-
-	server_start_remote      -> delay_2_sec;
-	delay_2_sec              -> runremote_lookup_server;
-
-	login_attempt            -> "rmt:send-receive_start" [label="login sucessful"];
-	"rmt:send-receive_start" -> "rmt:send-receive_start";
-
-	"rmt:send-receive_start" -> runremote_lookup_server [label=exception];
-	login_attempt            -> clear_runremote [label="login failed"];
-
-	"remove_running > 5s"    -> runremote_lookup_server;
-
 	subgraph cluster_3 {
 		node [style=filled];
-		clear_runremote          -> "remove_running > 5s";
+		label = "Test B";
+		"B/bb/2";
+		"B/bb/1";
+	}
+	subgraph cluster_2 {
+		node [style=filled];
+		label = "Test A";
+		"A/aa/2";
+		"A/aa/1" [color=cyan];
+	}
+	subgraph cluster_4 {
+		node [style=filled];
+		label = "Test C";
+		"C/1/aa" [color=cyan];
+		"A/aa/1" -> "C/1/aa";
+		"B/bb/1" -> "C/1/bb";
+		"A/aa/2" -> "C/2/aa";
+		"B/bb/2" -> "C/2/bb";
+	}
+	subgraph cluster_5 {
+		node [style=filled];
+		label = "Test D";
+		 "D/1/res" [color=cyan];
+		"C/1/aa" -> "D/1/res";
+		"C/2/aa" -> "D/2/res";
+	}
+	subgraph cluster_6 {
+		node [style=filled];
+		label = "Test E";
+		"C/1/bb" -> "E/1/res";
+		"C/2/bb" -> "E/2/res";
 	}
 
-        label = "client:setup";
+        label = "Complex Itemmapping";
         color=green;
     }
 
