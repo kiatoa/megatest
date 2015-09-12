@@ -74,6 +74,34 @@
 	     (tests:match test-patts testname #f))
 	   test-names)))
 
+;; itemmap is a list of testname patterns to maps
+;;     test1 .*/bar/(\d+) foo/\1
+;;     %     foo/([^/]+)  \1/bar
+;;
+;; # NOTE: the line with the single % could be the result of
+;; #       itemmap entry in requirements (legacy). The itemmap
+;; #       requirements entry is deprecated
+;;
+(define (tests:get-itemmaps tconfig)
+  (let ((base-itemmap  (configf:lookup tconfig "requirements" "itemmap"))
+	(itemmap-table (configf:get-section tconfig "itemmap")))
+    (append (if base-itemmap
+		(list (cons "%" base-itemmap))
+		'())
+	    (if itemmap-table
+		itemmap-table
+		'()))))
+
+;; given a list of itemmaps (testname . map), return the first match
+;;
+(define (tests:lookup-itemmap itemmaps testname)
+  (let ((best-matches (filter (lambda (itemmap)
+				(tests:match (car itemmap) testname))
+			      itemmaps)))
+    (if (null? best-matches)
+	#f
+	(car best-matches))))
+					     
 ;; given test-b that is waiting on test-a extend test-patt appropriately
 ;;
 ;;  genlib/testconfig               sim/testconfig
@@ -85,8 +113,9 @@
 ;;                                  itemmap /.*
 ;;
 ;;                                  test-a is waiting on test-b so we need to create a pattern for test-b given test-a and itemmap
-(define (tests:extend-test-patts test-patt test-b test-a itemmap)
-  (let* ((patts      (string-split test-patt ","))
+(define (tests:extend-test-patts test-patt test-b test-a itemmaps)
+  (let* ((itemmap    (tests:lookup-itemmap itemmaps test-b))
+	 (patts      (string-split test-patt ","))
 	 (test-b-len (+ (string-length test-b) 1))
 	 (patts-b    (map (lambda (x)
 			    (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 

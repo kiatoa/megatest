@@ -3268,22 +3268,17 @@
 ;;======================================================================
 
 ;; A routine to map itempaths using a itemmap
-(define (db:compare-itempaths patha pathb itemmap)
-  (debug:print-info 6 "ITEMMAP is " itemmap)
-  (if itemmap
-      (let ((pathb-mapped (db:multi-pattern-apply pathb itemmap)))
-	(debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " pathb-mapped)
-	(equal? patha pathb-mapped))
-      (equal? patha pathb)))
-
-;; (let* ((mapparts    (string-split itemmap))
-;; 	     (pattern     (car mapparts))
-;; 	     (replacement (if (> (length mapparts) 1) (cadr mapparts) "")))
-;; 	(if replacement
-;; 	    (equal? (string-substitute pattern replacement patha)
-;; 		    (string-substitute pattern replacement pathb))
-;; 	    (equal? (string-substitute pattern "" patha)
-;; 		    (string-substitute pattern "" pathb))))
+;; patha and pathb must be strings or this will fail
+;;
+(define (db:compare-itempaths patha pathb itemmaps)
+  (debug:print-info 6 "ITEMMAPS: " itemmaps)
+  (let* ((testname-a (car (string-split patha "/")))
+	 (itemmap    (tests:lookup-itemmap itemmaps testname-a)))
+    (if itemmap
+	(let ((pathb-mapped (db:multi-pattern-apply pathb itemmap)))
+	  (debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " pathb-mapped)
+	  (equal? patha pathb-mapped))
+	(equal? patha pathb))))
 
 ;; A routine to convert test/itempath using a itemmap
 ;; NOTE: to process only an itempath (i.e. no prepended testname)
@@ -3331,7 +3326,7 @@
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
-(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode itemmap) ;; #!key (mode '(normal))(itemmap #f))
+(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode itemmaps) ;; #!key (mode '(normal))(itemmap #f))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -3356,7 +3351,7 @@
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-		       (same-itempath     (db:compare-itempaths item-path ref-item-path itemmap))) ;; (equal? ref-item-path item-path)))
+		       (same-itempath     (db:compare-itempaths item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 
@@ -3370,7 +3365,7 @@
 			 (member 'toplevel mode))
 		    (set! parent-waiton-met #t))
 		   ;; For itemwait mode IFF the previous matching item is good the set parent-waiton-met
-		   ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait))))
+		   ((and (not (null? (lset-intersection eq? mode '(itemmatch itemwait)))) ;; how is that different from (member mode '(itemmatch itemwait)) ?????
 			 ;; (not (equal? item-path "")) ;; this applies to both top level (to allow launching of next batch) and items
 			 same-itempath)
 		    (if (and is-completed is-ok)
