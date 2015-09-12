@@ -135,8 +135,8 @@ was historically called "itemwait" mode. The terms "itemwait" and
 mode itemmatch
 -------------------
 
-Itemmap
-^^^^^^^
+Itemmap Handling
+~~~~~~~~~~~~~~~~
 
 For cases were the dependent test has a similar but not identical
 itempath to the downstream test an itemmap can allow for itemmatch
@@ -176,9 +176,9 @@ image::complex-itemmap.png[]
 Example:
 
 . Request to run D/1/res
-. Megatest calculates all posible items for Test C and filters down to: C/1/aa
+. Megatest uses rule "(\d+)/res" -> "\1/aa" to create item C/1/aa from D/1/res
 . Full list to be run is now: D/1/res, C/1/aa
-. Megatest calculates all posible items for Test A and filters down to: A/aa/1
+. Megatest uses rule "(\d+)/aa" -> "aa/\1" to create item A/aa/1
 . Full list to be run is now: D/1/res, C/1/aa, A/aa/1
 
 .Testconfig for Test C
