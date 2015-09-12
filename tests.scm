@@ -100,7 +100,7 @@
 			      itemmaps)))
     (if (null? best-matches)
 	#f
-	(car best-matches))))
+	(cdr (car best-matches)))))
 					     
 ;; given test-b that is waiting on test-a extend test-patt appropriately
 ;;
