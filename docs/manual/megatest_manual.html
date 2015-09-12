@@ -1220,8 +1220,9 @@ was historically called "itemwait" mode. The terms "itemwait" and
 mode itemmatch</pre>
 </div></div>
 </div>
-<div class="sect3">
-<h4 id="_itemmap">Itemmap</h4>
+</div>
+<div class="sect2">
+<h3 id="_itemmap_handling">Itemmap Handling</h3>
 <div class="paragraph"><p>For cases were the dependent test has a similar but not identical
 itempath to the downstream test an itemmap can allow for itemmatch
 mode</p></div>
@@ -1248,7 +1249,6 @@ itemmap foo/ bar/
 itemmap (a\d+)(b\d+) \2foo\1
   b(.*) \1p</pre>
 </div></div>
-</div>
 <div class="sect3">
 <h4 id="_complex_mappings">Complex mappings</h4>
 <div class="paragraph"><p>Complex mappings can be handled with the [itemmap] section</p></div>
@@ -1266,7 +1266,7 @@ Request to run D/1/res
 </li>
 <li>
 <p>
-Megatest calculates all posible items for Test C and filters down to: C/1/aa
+Megatest uses rule "(\d+)/res" &#8594; "\1/aa" to create item C/1/aa from D/1/res
 </p>
 </li>
 <li>
@@ -1276,7 +1276,7 @@ Full list to be run is now: D/1/res, C/1/aa
 </li>
 <li>
 <p>
-Megatest calculates all posible items for Test A and filters down to: A/aa/1
+Megatest uses rule "(\d+)/aa" &#8594; "aa/\1" to create item A/aa/1
 </p>
 </li>
 <li>
