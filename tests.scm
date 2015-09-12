@@ -96,7 +96,7 @@
 ;;
 (define (tests:lookup-itemmap itemmaps testname)
   (let ((best-matches (filter (lambda (itemmap)
-				(tests:match (car itemmap) testname))
+				(tests:match (car itemmap) testname #f))
 			      itemmaps)))
     (if (null? best-matches)
 	#f

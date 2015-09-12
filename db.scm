@@ -3270,15 +3270,16 @@
 ;; A routine to map itempaths using a itemmap
 ;; patha and pathb must be strings or this will fail
 ;;
-(define (db:compare-itempaths patha pathb itemmaps)
+;; path-b is waiting on path-a
+;;
+(define (db:compare-itempaths test-b-name path-a path-b itemmaps )
   (debug:print-info 6 "ITEMMAPS: " itemmaps)
-  (let* ((testname-a (car (string-split patha "/")))
-	 (itemmap    (tests:lookup-itemmap itemmaps testname-a)))
+  (let* ((itemmap    (tests:lookup-itemmap itemmaps test-b-name)))
     (if itemmap
-	(let ((pathb-mapped (db:multi-pattern-apply pathb itemmap)))
-	  (debug:print-info 6 "ITEMMAP is " itemmap ", path: " pathb ", mapped path: " pathb-mapped)
-	  (equal? patha pathb-mapped))
-	(equal? patha pathb))))
+	(let ((path-b-mapped (db:multi-pattern-apply path-b itemmap)))
+	  (debug:print-info 6 "ITEMMAP is " itemmap ", path: " path-b ", mapped path: " path-b-mapped)
+	  (equal? path-a path-b-mapped))
+	(equal? path-b path-a))))
 
 ;; A routine to convert test/itempath using a itemmap
 ;; NOTE: to process only an itempath (i.e. no prepended testname)
@@ -3326,7 +3327,7 @@
 ;;       mode 'itemmatch or 'itemwait means that tests items must be COMPLETED and (PASS|WARN|WAIVED|CHECK) [[ NB// NOT IMPLEMENTED YET ]]
 ;; 
 ;; (define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode)
-(define (db:get-prereqs-not-met dbstruct run-id waitons ref-item-path mode itemmaps) ;; #!key (mode '(normal))(itemmap #f))
+(define (db:get-prereqs-not-met dbstruct run-id waitons ref-test-name ref-item-path mode itemmaps) ;; #!key (mode '(normal))(itemmap #f))
   (if (or (not waitons)
 	  (null? waitons))
       '()
@@ -3351,7 +3352,8 @@
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))
 		       (is-ok             (member status '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))
-		       (same-itempath     (db:compare-itempaths item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
+		       ;;                                       testname-b    path-a    path-b
+		       (same-itempath     (db:compare-itempaths ref-test-name item-path ref-item-path itemmaps))) ;; (equal? ref-item-path item-path)))
 		  (set! ever-seen #t)
 		  (cond
 		   ;; case 1, non-item (parent test) is 

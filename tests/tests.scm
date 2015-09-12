@@ -12,6 +12,8 @@
 (require-extension test)
 (require-extension regex)
 (require-extension srfi-18)
+(require-extension posix)
+(import posix)
 (import srfi-18)
 ;; (require-extension zmq)
 ;; (import zmq)

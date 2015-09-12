@@ -158,6 +158,13 @@ $(PREFIX)/bin/.$(ARCHSTR) :
 test: tests/tests.scm
 	cd tests;csi -I .. -b -n tests.scm
 
+ext-tests/.fslckout : $(MTQA_FOSSIL)
+	mkdir -p ext-tests
+	cd ext-tests;fossil open --nested $(MTQA_FOSSIL)
+
+$(MTQA_FOSSIL) :
+	fossil clone https://www.kiatoa.com/fossils/megatest_qa $(MTQA_FOSSIL)
+
 clean : 
 	rm -f $(OFILES) $(GOFILES) megatest dboard dboard.o megatest.o dashboard.o
 
