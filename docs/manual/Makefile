@@ -13,7 +13,7 @@ DISPATH = $(shell dirname $(BINPATH))
 #         asciidoc -b html5 -a icons -a iconsdir=$(DISPATH)/images/icons -a toc2 design_spec.txt
 #
 
-all : server.ps megatest_manual.html client.ps
+all : server.ps megatest_manual.html client.ps complex-itemmap.png
 
 megatest_manual.html : megatest_manual.txt getting_started.txt writing_tests.txt reference.txt ../plan.txt howto.txt *png
 	asciidoc  -b html5 -a icons -a iconsdir=$(DISPATH)/images/icons -a toc2 megatest_manual.txt
@@ -24,6 +24,10 @@ server.ps : server.dot
 
 client.ps : client.dot
 	dot -Tps client.dot > client.ps
+
+complex-itemmap.png : complex-itemmap.dot
+	dot -Tpng complex-itemmap.dot -o complex-itemmap.png
+	dot -Tpdf complex-itemmap.dot -o complex-itemmap.pdf
 
 clean:
 	rm -f megatest_manual.html

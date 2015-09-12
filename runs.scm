@@ -425,8 +425,8 @@
 			  (waiton-itemized (and waiton-tconfig
 						(or (hash-table-ref/default waiton-tconfig "items" #f)
 						    (hash-table-ref/default waiton-tconfig "itemstable" #f))))
-			  (itemmap         (configf:lookup config "requirements" "itemmap"))
-			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmap)))
+			  (itemmaps        (tests:get-itemmaps config));; (configf:lookup config "requirements" "itemmap"))
+			  (new-test-patts  (tests:extend-test-patts test-patts hed waiton itemmaps)))
 		     (debug:print-info 0 "Test " waiton " has " (if waiton-record "a" "no") " waiton-record and" (if waiton-itemized " " " no ") "items")
 		     ;; need to account for test-patt here, if I am test "a", selected with a test-patt of "hed/b%"
 		     ;; and we are waiting on "waiton" we need to add "waiton/,waiton/b%" to test-patt
@@ -561,9 +561,9 @@
 
 (define runs:nothing-left-in-queue-count 0)
 
-(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)
+(define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -744,14 +744,14 @@
 	       (conc t))))
 	   inlst)))
 
-(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap)
+(define (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)
   (let* ((run-limits-info         (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)) ;; look at the test jobgroup and tot jobs running
 	 (have-resources          (car run-limits-info))
 	 (num-running             (list-ref run-limits-info 1))
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!
@@ -1060,7 +1060,7 @@
 	     (jobgroup    (config-lookup tconfig "test_meta" "jobgroup"))
 	     (testmode    (let ((m (config-lookup tconfig "requirements" "mode")))
 			    (if m (map string->symbol (string-split m)) '(normal))))
-	     (itemmap     (configf:lookup tconfig "requirements" "itemmap"))
+	     (itemmaps    (tests:get-itemmaps tconfig)) ;;  (configf:lookup tconfig "requirements" "itemmap"))
 	     (waitons     (tests:testqueue-get-waitons    test-record))
 	     (priority    (tests:testqueue-get-priority   test-record))
 	     (itemdat     (tests:testqueue-get-itemdat    test-record)) ;; itemdat can be a string, list or #f
@@ -1152,7 +1152,7 @@
 	  (if (and (not (tests:match test-patts (tests:testqueue-get-testname test-record) item-path required: required-tests))
 		   (not (null? tal)))
 	      (loop (car tal)(cdr tal) reg reruns))
-	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmap)))
+	  (let ((loop-list (runs:process-expanded-tests hed tal reg reruns reglen regfull test-record runname test-name item-path jobgroup max-concurrent-jobs run-id waitons item-path testmode test-patts required-tests test-registry registry-mutex flags keyvals run-info newtal all-tests-registry itemmaps)))
 	    (if loop-list (apply loop loop-list))))
 
 	 ;; items processed into a list but not came in as a list been processed
@@ -1207,7 +1207,7 @@
 	  (let ((can-run-more    (runs:can-run-more-tests run-id jobgroup max-concurrent-jobs)))
 	    (if (and (list? can-run-more)
 		     (car can-run-more))
-		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmap)))
+		(let ((loop-list (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)))
 		  (if loop-list
 		      (apply loop loop-list)))
 		;; if can't run more just loop with next possible test
