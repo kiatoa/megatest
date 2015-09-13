@@ -188,8 +188,7 @@ waiton A B
 
 [itemmap]
 A (\d+)/aa aa/\1
-B (\d+)/bb bb/\1
-----------------------
+B (\d+)/bb --------------------
 
 .Testconfig for Test D
 ----------------------
@@ -214,13 +213,14 @@ Dynamic Flow Dependency Tree
 # With a toplevel test you may wish to generate your list 
 # of tests to run dynamically
 #
-# waiton #{shell get-valid-tests-to-run.sh}
+waiton #{shell get-valid-tests-to-run.sh}
 -------------------
 
 Run time limit
 ^^^^^^^^^^^^^^
 
 -----------------
+[requirements]
 runtimelim 1h 2m 3s  # this will automatically kill the test if it runs for more than 1h 2m and 3s
 -----------------
 
