@@ -86,7 +86,7 @@
   (let ((base-itemmap  (configf:lookup tconfig "requirements" "itemmap"))
 	(itemmap-table (configf:get-section tconfig "itemmap")))
     (append (if base-itemmap
-		(list (cons "%" base-itemmap))
+		(list (list "%" base-itemmap))
 		'())
 	    (if itemmap-table
 		itemmap-table
@@ -100,9 +100,16 @@
 			      itemmaps)))
     (if (null? best-matches)
 	#f
-	(cdr (car best-matches)))))
+	(let ((res (car best-matches)))
+	  (debug:print 0 "res=" res)
+	  (cond
+	   ((string? res) res) ;;; FIX THE ROOT CAUSE HERE ....
+	   ((null? res)   #f)
+	   ((string? (cdr res)) (cdr res))  ;; it is a pair
+	   ((string? (cadr res))(cadr res)) ;; it is a list
+	   (else cadr res))))))
 					     
-;; given test-b that is waiting on test-a extend test-patt appropriately
+;; given waiting-test that is waiting on waiton-test extend test-patt appropriately
 ;;
 ;;  genlib/testconfig               sim/testconfig
 ;;  genlib/sch                      sim/sch/cell1
@@ -112,23 +119,23 @@
 ;;                                  # trim off the cell to determine what to run for genlib
 ;;                                  itemmap /.*
 ;;
-;;                                  test-a is waiting on test-b so we need to create a pattern for test-b given test-a and itemmap
-(define (tests:extend-test-patts test-patt test-b test-a itemmaps)
-  (let* ((itemmap    (tests:lookup-itemmap itemmaps test-b))
-	 (patts      (string-split test-patt ","))
-	 (test-b-len (+ (string-length test-b) 1))
-	 (patts-b    (map (lambda (x)
-			    (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
-				   (newpatt (conc test-a "/" (substring modpatt test-b-len (string-length modpatt)))))
-				         ;; (conc test-a "/," test-a "/" (substring modpatt test-b-len (string-length modpatt)))))
-			      ;; (print "in map, x=" x ", newpatt=" newpatt)
-			      newpatt))
-			  (filter (lambda (x)
-				    (eq? (substring-index (conc test-b "/") x) 0))
-				  patts))))
-    (string-intersperse (delete-duplicates (append patts (if (null? patts-b)
-							     (list (conc test-a "/%"))
-							     patts-b)))
+;;                                  waiting-test is waiting on waiton-test so we need to create a pattern for waiton-test given waiting-test and itemmap
+(define (tests:extend-test-patts test-patt waiting-test waiton-test itemmaps)
+  (let* ((itemmap          (tests:lookup-itemmap itemmaps waiton-test))
+	 (patts            (string-split test-patt ","))
+	 (waiting-test-len (+ (string-length waiting-test) 1))
+	 (patts-waiton     (map (lambda (x)  ;; for each incoming patt that matches the waiting test
+				  (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
+					 (newpatt (conc waiton-test "/" (substring modpatt waiting-test-len (string-length modpatt)))))
+				    ;; (conc waiting-test "/," waiting-test "/" (substring modpatt waiton-test-len (string-length modpatt)))))
+				    ;; (print "in map, x=" x ", newpatt=" newpatt)
+				    newpatt))
+				(filter (lambda (x)
+					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
+					patts))))
+    (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
+							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+							     patts-waiton)))
 			",")))
   
 ;; tests:glob-like-match 
