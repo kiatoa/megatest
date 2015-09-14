@@ -108,6 +108,57 @@
 	   ((string? (cdr res)) (cdr res))  ;; it is a pair
 	   ((string? (cadr res))(cadr res)) ;; it is a list
 	   (else cadr res))))))
+
+;; returns waitons waitors tconfigdat
+;;
+(define (tests:get-waitons test-name all-tests-registry)
+   (let* ((config  (tests:get-testconfig test-name all-tests-registry 'return-procs)))
+     (let ((instr (if config 
+		      (config-lookup config "requirements" "waiton")
+		      (begin ;; No config means this is a non-existant test
+			(debug:print 0 "ERROR: non-existent required test \"" test-name "\"")
+			(exit 1))))
+	   (instr2 (if config
+		       (config-lookup config "requirements" "waitor")
+		       "")))
+       (debug:print-info 8 "waitons string is " instr ", waitors string is " instr2)
+       (let ((newwaitons
+	      (string-split (cond
+			     ((procedure? instr)
+			      (let ((res (instr)))
+				(debug:print-info 8 "waiton procedure results in string " res " for test " test-name)
+				res))
+			     ((string? instr)     instr)
+			     (else 
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      ""))))
+	     (newwaitors
+	      (string-split (cond
+			     ((procedure? instr2)
+			      (let ((res (instr2)))
+				(debug:print-info 8 "waitor procedure results in string " res " for test " test-name)
+				res))
+			     ((string? instr2)     instr2)
+			     (else 
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      "")))))
+	 (values
+	  ;; the waitons
+	  (filter (lambda (x)
+		    (if (hash-table-ref/default all-tests-registry x #f)
+			#t
+			(begin
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  #f)))
+		  newwaitons)
+	  (filter (lambda (x)
+		    (if (hash-table-ref/default all-tests-registry x #f)
+			#t
+			(begin
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  #f)))
+		  newwaitors)
+	  config)))))
 					     
 ;; given waiting-test that is waiting on waiton-test extend test-patt appropriately
 ;;

@@ -351,37 +351,16 @@
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
-	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
-		 (waitons (let ((instr (if config 
-					   (config-lookup config "requirements" "waiton")
-					   (begin ;; No config means this is a non-existant test
-					     (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-					     (exit 1)))))
-			    (debug:print-info 8 "waitons string is " instr)
-			    (let ((newwaitons
-				   (string-split (cond
-						  ((procedure? instr)
-						   (let ((res (instr)))
-						     (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
-						     res))
-						  ((string? instr)     instr)
-						  (else 
-						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
-						   "")))))
-			      (filter (lambda (x)
-					(if (hash-table-ref/default all-tests-registry x #f)
-					    #t
-					    (begin
-					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
-					      #f)))
-				      newwaitons)))))
+	  (let*-values (((waitons waitors config)(tests:get-waitons hed all-tests-registry)))
 	    (debug:print-info 8 "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
-	    (if (member hed waitons)
+	    (if (or (member hed waitons)
+		    (member hed waitors))
 		(begin
-		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
-		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton or waitor, please correct this!")
+		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))
+		  (set! waitors (filter (lambda (x)(not (equal? x hed))) waitors))))
 	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
@@ -416,6 +395,7 @@
 						(else #f)))                           ;; not iterated
 					     #f      ;; itemsdat 5
 					     #f      ;; spare - used for item-path
+					     waitors ;; 
 					     )))
 	    (for-each 
 	     (lambda (waiton)
@@ -461,7 +441,7 @@
 		     
 		     ;; (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
 		     )))
-	     waitons)
+	     (delete-duplicates (append waitons waitors)))
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
 		  (begin
