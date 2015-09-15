@@ -667,7 +667,7 @@
 ;; E N V I R O N M E N T   V A R S
 ;;======================================================================
 	      
-(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF")))
+(define (save-environment-as-files fname #!key (ignorevars (list "USER" "HOME" "DISPLAY" "LS_COLORS" "XKEYSYMDB" "EDITOR" "MAKEFLAGS" "MAKEF" "MAKEOVERRIDES")))
   (let ((envvars (get-environment-variables))
         (whitesp (regexp "[^a-zA-Z0-9_\\-:,.\\/%$]")))
      (with-output-to-file (conc fname ".csh")
@@ -713,6 +713,32 @@
 		  lst)
 	res)
       '()))
+
+;; clear vars matching pattern, run proc, set vars back
+;; if proc is a string run that string as a command with
+;; system.
+;;
+(define (common:without-vars proc . var-patts)
+  (let ((vars (make-hash-table)))
+    (for-each
+     (lambda (vardat) ;; each env var
+       (for-each
+	(lambda (var-patt)
+	  (if (string-match var-patt (car vardat))
+	      (let ((var (car vardat))
+		    (val (cdr vardat)))
+		(hash-table-set! vars var val)
+		(unsetenv var))))
+	var-patts))
+     (get-environment-variables))
+    (cond
+     ((string? proc)(system proc))
+     (proc          (proc)))
+    (hash-table-for-each
+     vars
+     (lambda (var val)
+       (setenv var val)))
+    vars))
 		  
 ;;======================================================================
 ;; time and date nice to have stuff
