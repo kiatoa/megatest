@@ -834,7 +834,7 @@
 				    (else exe)))))
 	 (item-path       (item-list->path itemdat))
 	 (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
-	 (test-sig   (conc test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
+	 (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	 (work-area  #f)
 	 (toptest-work-area #f) ;; for iterated tests the top test contains data relevant for all
 	 (diskpath   #f)
@@ -903,14 +903,14 @@
 	(change-directory work-area)) ;; so that log files from the launch process don't clutter the test dir
     (cond
      ((and launcher hosts) ;; must be using ssh hostname
-      (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms) debug-param)))
+      (set! fullcmd (append launcher (car hosts)(list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
      ;; (set! fullcmd (append launcher (car hosts)(list remote-megatest test-sig "-execute" cmdparms))))
      (launcher
-      (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms) debug-param)))
+      (set! fullcmd (append launcher (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param)))
      ;; (set! fullcmd (append launcher (list remote-megatest test-sig "-execute" cmdparms))))
      (else
       (if (not useshell)(debug:print 0 "WARNING: internal launching will not work well without \"useshell yes\" in your [jobtools] section"))
-      (set! fullcmd (append (list remote-megatest test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
+      (set! fullcmd (append (list remote-megatest "-m" test-sig "-execute" cmdparms) debug-param (list (if useshell "&" ""))))))
     ;; (set! fullcmd (list remote-megatest test-sig "-execute" cmdparms (if useshell "&" "")))))
     (if (args:get-arg "-xterm")(set! fullcmd (append fullcmd (list "-xterm"))))
     (debug:print 1 "Launching " work-area)
