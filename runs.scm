@@ -351,37 +351,16 @@
 		   (tal (cdr test-names)))         ;; 'return-procs tells the config reader to prep running system but return a proc
 	  (change-directory *toppath*) ;; PLEASE OPTIMIZE ME!!! I think this should be a no-op but there are several places where change-directories could be happening.
 	  (setenv "MT_TEST_NAME" hed) ;; 
-	  (let* ((config  (tests:get-testconfig hed all-tests-registry 'return-procs))
-		 (waitons (let ((instr (if config 
-					   (config-lookup config "requirements" "waiton")
-					   (begin ;; No config means this is a non-existant test
-					     (debug:print 0 "ERROR: non-existent required test \"" hed "\"")
-					     (exit 1)))))
-			    (debug:print-info 8 "waitons string is " instr)
-			    (let ((newwaitons
-				   (string-split (cond
-						  ((procedure? instr)
-						   (let ((res (instr)))
-						     (debug:print-info 8 "waiton procedure results in string " res " for test " hed)
-						     res))
-						  ((string? instr)     instr)
-						  (else 
-						   ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " hed)
-						   "")))))
-			      (filter (lambda (x)
-					(if (hash-table-ref/default all-tests-registry x #f)
-					    #t
-					    (begin
-					      (debug:print 0 "ERROR: test " hed " has unrecognised waiton testname " x)
-					      #f)))
-				      newwaitons)))))
+	  (let*-values (((waitons waitors config)(tests:get-waitons hed all-tests-registry)))
 	    (debug:print-info 8 "waitons: " waitons)
 	    ;; check for hed in waitons => this would be circular, remove it and issue an
 	    ;; error
-	    (if (member hed waitons)
+	    (if (or (member hed waitons)
+		    (member hed waitors))
 		(begin
-		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton, please correct this!")
-		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))))
+		  (debug:print 0 "ERROR: test " hed " has listed itself as a waiton or waitor, please correct this!")
+		  (set! waitons (filter (lambda (x)(not (equal? x hed))) waitons))
+		  (set! waitors (filter (lambda (x)(not (equal? x hed))) waitors))))
 	    
 	    ;; (items   (items:get-items-from-config config)))
 	    (if (not (hash-table-ref/default test-records hed #f))
@@ -416,6 +395,7 @@
 						(else #f)))                           ;; not iterated
 					     #f      ;; itemsdat 5
 					     #f      ;; spare - used for item-path
+					     waitors ;; 
 					     )))
 	    (for-each 
 	     (lambda (waiton)
@@ -461,7 +441,7 @@
 		     
 		     ;; (set! test-names (cons waiton test-names))))) ;; was an append, now a cons
 		     )))
-	     waitons)
+	     (delete-duplicates (append waitons waitors)))
 	    (let ((remtests (delete-duplicates (append waitons tal))))
 	      (if (not (null? remtests))
 		  (begin
@@ -563,7 +543,7 @@
 
 (define (runs:expand-items hed tal reg reruns regfull newtal jobgroup max-concurrent-jobs run-id waitons item-path testmode test-record can-run-more items runname tconfig reglen test-registry test-records itemmaps)
   (let* ((loop-list       (list hed tal reg reruns))
-	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmaps: itemmaps))
+	 (prereqs-not-met (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails           (runs:calc-fails prereqs-not-met))
 	 (prereq-fails    (runs:calc-prereq-fail prereqs-not-met))
@@ -751,7 +731,7 @@
 	 (num-running-in-jobgroup (list-ref run-limits-info 2)) 
 	 (max-concurrent-jobs     (list-ref run-limits-info 3))
 	 (job-group-limit         (list-ref run-limits-info 4))
-	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons item-path mode: testmode itemmaps: itemmaps))
+	 (prereqs-not-met         (rmt:get-prereqs-not-met run-id waitons hed item-path mode: testmode itemmaps: itemmaps))
 	 ;; (prereqs-not-met         (mt:lazy-get-prereqs-not-met run-id waitons item-path mode: testmode itemmap: itemmap))
 	 (fails                   (runs:calc-fails prereqs-not-met))
 	 (non-completed           (filter (lambda (x)             ;; remove hed from not completed list, duh, of course it is not completed!

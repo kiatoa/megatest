@@ -86,7 +86,7 @@
   (let ((base-itemmap  (configf:lookup tconfig "requirements" "itemmap"))
 	(itemmap-table (configf:get-section tconfig "itemmap")))
     (append (if base-itemmap
-		(list (cons "%" base-itemmap))
+		(list (list "%" base-itemmap))
 		'())
 	    (if itemmap-table
 		itemmap-table
@@ -96,13 +96,71 @@
 ;;
 (define (tests:lookup-itemmap itemmaps testname)
   (let ((best-matches (filter (lambda (itemmap)
-				(tests:match (car itemmap) testname))
+				(tests:match (car itemmap) testname #f))
 			      itemmaps)))
     (if (null? best-matches)
 	#f
-	(car best-matches))))
+	(let ((res (car best-matches)))
+	  (debug:print 0 "res=" res)
+	  (cond
+	   ((string? res) res) ;;; FIX THE ROOT CAUSE HERE ....
+	   ((null? res)   #f)
+	   ((string? (cdr res)) (cdr res))  ;; it is a pair
+	   ((string? (cadr res))(cadr res)) ;; it is a list
+	   (else cadr res))))))
+
+;; returns waitons waitors tconfigdat
+;;
+(define (tests:get-waitons test-name all-tests-registry)
+   (let* ((config  (tests:get-testconfig test-name all-tests-registry 'return-procs)))
+     (let ((instr (if config 
+		      (config-lookup config "requirements" "waiton")
+		      (begin ;; No config means this is a non-existant test
+			(debug:print 0 "ERROR: non-existent required test \"" test-name "\"")
+			(exit 1))))
+	   (instr2 (if config
+		       (config-lookup config "requirements" "waitor")
+		       "")))
+       (debug:print-info 8 "waitons string is " instr ", waitors string is " instr2)
+       (let ((newwaitons
+	      (string-split (cond
+			     ((procedure? instr)
+			      (let ((res (instr)))
+				(debug:print-info 8 "waiton procedure results in string " res " for test " test-name)
+				res))
+			     ((string? instr)     instr)
+			     (else 
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      ""))))
+	     (newwaitors
+	      (string-split (cond
+			     ((procedure? instr2)
+			      (let ((res (instr2)))
+				(debug:print-info 8 "waitor procedure results in string " res " for test " test-name)
+				res))
+			     ((string? instr2)     instr2)
+			     (else 
+			      ;; NOTE: This is actually the case of *no* waitons! ;; (debug:print 0 "ERROR: something went wrong in processing waitons for test " test-name)
+			      "")))))
+	 (values
+	  ;; the waitons
+	  (filter (lambda (x)
+		    (if (hash-table-ref/default all-tests-registry x #f)
+			#t
+			(begin
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  #f)))
+		  newwaitons)
+	  (filter (lambda (x)
+		    (if (hash-table-ref/default all-tests-registry x #f)
+			#t
+			(begin
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
+			  #f)))
+		  newwaitors)
+	  config)))))
 					     
-;; given test-b that is waiting on test-a extend test-patt appropriately
+;; given waiting-test that is waiting on waiton-test extend test-patt appropriately
 ;;
 ;;  genlib/testconfig               sim/testconfig
 ;;  genlib/sch                      sim/sch/cell1
@@ -112,23 +170,23 @@
 ;;                                  # trim off the cell to determine what to run for genlib
 ;;                                  itemmap /.*
 ;;
-;;                                  test-a is waiting on test-b so we need to create a pattern for test-b given test-a and itemmap
-(define (tests:extend-test-patts test-patt test-b test-a itemmaps)
-  (let* ((itemmap    (tests:lookup-itemmap itemmaps test-b))
-	 (patts      (string-split test-patt ","))
-	 (test-b-len (+ (string-length test-b) 1))
-	 (patts-b    (map (lambda (x)
-			    (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
-				   (newpatt (conc test-a "/" (substring modpatt test-b-len (string-length modpatt)))))
-				         ;; (conc test-a "/," test-a "/" (substring modpatt test-b-len (string-length modpatt)))))
-			      ;; (print "in map, x=" x ", newpatt=" newpatt)
-			      newpatt))
-			  (filter (lambda (x)
-				    (eq? (substring-index (conc test-b "/") x) 0))
-				  patts))))
-    (string-intersperse (delete-duplicates (append patts (if (null? patts-b)
-							     (list (conc test-a "/%"))
-							     patts-b)))
+;;                                  waiting-test is waiting on waiton-test so we need to create a pattern for waiton-test given waiting-test and itemmap
+(define (tests:extend-test-patts test-patt waiting-test waiton-test itemmaps)
+  (let* ((itemmap          (tests:lookup-itemmap itemmaps waiton-test))
+	 (patts            (string-split test-patt ","))
+	 (waiting-test-len (+ (string-length waiting-test) 1))
+	 (patts-waiton     (map (lambda (x)  ;; for each incoming patt that matches the waiting test
+				  (let* ((modpatt (if itemmap (db:convert-test-itempath x itemmap) x)) 
+					 (newpatt (conc waiton-test "/" (substring modpatt waiting-test-len (string-length modpatt)))))
+				    ;; (conc waiting-test "/," waiting-test "/" (substring modpatt waiton-test-len (string-length modpatt)))))
+				    ;; (print "in map, x=" x ", newpatt=" newpatt)
+				    newpatt))
+				(filter (lambda (x)
+					  (eq? (substring-index (conc waiting-test "/") x) 0)) ;; is this patt pertinent to the waiting test
+					patts))))
+    (string-intersperse (delete-duplicates (append patts (if (null? patts-waiton)
+							     (list (conc waiton-test "/%")) ;; really shouldn't add the waiton forcefully like this
+							     patts-waiton)))
 			",")))
   
 ;; tests:glob-like-match 

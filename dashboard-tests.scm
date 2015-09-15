@@ -492,8 +492,10 @@
 				 (let ((shell (if (get-environment-variable "SHELL") 
 						  (conc "-e " (get-environment-variable "SHELL"))
 						  "")))
-				   (system (conc "cd " rundir 
-						 ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")))
+				   (common:without-vars
+				    (conc "cd " rundir 
+					  ";mt_xterm -T \"" (string-translate testfullname "()" "  ") "\" " shell "&")
+				    "MT_.*"))
 				 (message-window  (conc "Directory " rundir " not found")))))
 	       (widgets    (make-hash-table))
 	       (refreshdat (lambda ()
@@ -574,14 +576,30 @@
 							 )))))
 			      lbl))
 	       (store-button store-label)
-	       (command-text-box (iup:textbox #:expand "HORIZONTAL" #:font "Courier New, -10"))
+	       (command-proc (lambda (command-text-box)
+			       (let* ((cmd     (iup:attribute command-text-box "VALUE"))
+				      (fullcmd (conc (dtests:get-pre-command)
+						     cmd 
+						     (dtests:get-post-command))))
+				 (debug:print-info 02 "Running command: " fullcmd)
+				 (common:without-vars fullcmd "MT_.*"))))
+	       (command-text-box (iup:textbox
+				  #:expand "HORIZONTAL"
+				  #:font "Courier New, -10"
+				  #:action (lambda (obj cnum val)
+					     ;; (print "cnum=" cnum)
+					     (if (eq? cnum 13)
+						 (command-prox obj)))
+				  ))
 	       (command-launch-button (iup:button "Execute!" #:action (lambda (x)
-									(let* ((cmd     (iup:attribute command-text-box "VALUE"))
-									       (fullcmd (conc (dtests:get-pre-command)
-											      cmd 
-											      (dtests:get-post-command))))
-									  (debug:print-info 02 "Running command: " fullcmd)
-									  (system fullcmd)))))
+									(command-proc command-text-box))))
+	;; (lambda (x)
+	;; 								(let* ((cmd     (iup:attribute command-text-box "VALUE"))
+	;; 								       (fullcmd (conc (dtests:get-pre-command)
+	;; 										      cmd 
+	;; 										      (dtests:get-post-command))))
+	;; 								  (debug:print-info 02 "Running command: " fullcmd)
+	;; 								  (common:without-vars fullcmd "MT_.*")))))
 	       (kill-jobs (lambda (x)
 			    (iup:attribute-set! 
 			     command-text-box "VALUE"
@@ -605,18 +623,20 @@
 									  item-path))
 				     " -v"))))
 	       (clean-run-execute  (lambda (x)
-				     (let ((cmd (conc "bmegatest -remove-runs -target " keystring " -runname " runname
+				     (let ((cmd (conc "megatest -remove-runs -target " keystring " -runname " runname
 						      " -testpatt " (conc testname "/" (if (equal? item-path "")
-											   "%"
-											   item-path))
+						       					   "%"
+						       					   item-path))
 						      ";megatest -target " keystring " -runname " runname 
-						      " -runtests " (conc testname "/" (if (equal? item-path "")
+						      " -run -preclean -testpatt " (conc testname "/" (if (equal? item-path "")
 											   "%" 
 											   item-path))
 						      )))
-				       (system (conc (dtests:get-pre-command)
-						     cmd 
-						     (dtests:get-post-command))))))
+				       (common:without-vars
+					(conc (dtests:get-pre-command)
+					      cmd 
+					      (dtests:get-post-command))
+					"MT_.*"))))
 	       (remove-test (lambda (x)
 			      (iup:attribute-set!
 			       command-text-box "VALUE"
