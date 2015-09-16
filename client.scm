@@ -45,16 +45,19 @@
 
 (define (client:connect iface port)
   (case (server:get-transport)
-    ((rpc)  (rpc:client-connect  iface port))
+    ((nmsg)  (nmsg-transport:client-connect  iface port))
     ((http) (http:client-connect iface port))
-    ((zmq)  (zmq:client-connect  iface port))
-    (else   (rpc:client-connect  iface port))))
+    ;; ((zmq)  (zmq:client-connect  iface port))
+    (else
+     (debug:print 0 "ERROR: Unknown transport " (server:get-transport))
+     (exit 1))))
 
 (define (client:setup  run-id #!key (remaining-tries 10) (failed-connects 0))
   (case (server:get-transport)
-    ((rpc) (rpc-transport:client-setup run-id)) ;;(client:setup-rpc run-id))
+    ((nmsg) (client:setup-nmsg run-id))
     ((http)(client:setup-http run-id))
-    (else  (rpc-transport:client-setup run-id)))) ;; (client:setup-rpc run-id))))
+    (else
+     (debug:print 0 "ERROR: Unknown transport " (server:get-transport)))))
 
 ;; (define (client:login-no-auto-setup server-info run-id)
 ;;   (case (server:get-transport)
@@ -155,6 +158,62 @@
 ;; lookup_server, need to remove *runremote* stuff
 ;;
 (define (client:setup-http run-id #!key (remaining-tries 10) (failed-connects 0))
+  (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
+  (let* ((tdbdat (tasks:open-db)))
+    (if (<= remaining-tries 0)
+	(begin
+	  (debug:print 0 "ERROR: failed to start or connect to server for run-id " run-id)
+	  (exit 1))
+	(let* ((server-dat (tasks:get-server (db:delay-if-busy tdbdat) run-id)))
+	  (debug:print-info 4 "client:setup server-dat=" server-dat ", remaining-tries=" remaining-tries)
+	  (if server-dat
+	      (let* ((iface     (tasks:hostinfo-get-interface server-dat))
+		     (hostname  (tasks:hostinfo-get-hostname  server-dat))
+		     (port      (tasks:hostinfo-get-port      server-dat))
+		     (start-res (case *transport-type*
+				  ((http)(http-transport:client-connect iface port))
+				  ((nmsg)(nmsg-transport:client-connect hostname port))))
+		     (ping-res  (case *transport-type* 
+				  ((http)(rmt:login-no-auto-client-setup start-res run-id))
+				  ((nmsg)(let ((logininfo (rmt:login-no-auto-client-setup start-res run-id)))
+ 					   (if logininfo
+ 					       (car (vector-ref logininfo 1))
+ 					       #f))))))
+		(if (and start-res
+			 ping-res)
+		    (begin
+		      (hash-table-set! *runremote* run-id start-res)
+		      (debug:print-info 2 "connected to " (http-transport:server-dat-make-url start-res))
+		      start-res)
+		    (begin    ;; login failed but have a server record, clean out the record and try again
+		      (debug:print-info 0 "client:setup, login failed, will attempt to start server ... start-res=" start-res ", run-id=" run-id ", server-dat=" server-dat)
+		      (case *transport-type* 
+			((http)(http-transport:close-connections run-id)))
+		      (hash-table-delete! *runremote* run-id)
+		      (tasks:kill-server-run-id run-id)
+		      (tasks:server-force-clean-run-record (db:delay-if-busy tdbdat)
+							   run-id 
+							   (tasks:hostinfo-get-interface server-dat)
+							   (tasks:hostinfo-get-port      server-dat)
+							   " client:setup (server-dat = #t)")
+		      (if (> remaining-tries 8)
+			  (thread-sleep! (+ 1 (random 5))) ;; spread out the starts a little
+			  (thread-sleep! (+ 15 (random 20)))) ;; it isn't going well. give it plenty of time
+		      (server:try-running run-id)
+		      (thread-sleep! 5)   ;; give server a little time to start up
+		      (client:setup run-id remaining-tries: (- remaining-tries 1))
+		      )))
+	      (begin    ;; no server registered
+		(let ((num-available (tasks:num-in-available-state (db:dbdat-get-db tdbdat) run-id)))
+		  (debug:print-info 0 "client:setup, no server registered, remaining-tries=" remaining-tries " num-available=" num-available)
+		  (if (< num-available 2)
+		      (server:try-running run-id))
+		  (thread-sleep! (+ 5 (random (- 20 remaining-tries))))  ;; give server a little time to start up, randomize a little to avoid start storms.
+		  (client:setup run-id remaining-tries: (- remaining-tries 1)))))))))
+
+;; for nanomsg
+;;
+(define (client:setup-nmsg run-id #!key (remaining-tries 10) (failed-connects 0))
   (debug:print-info 2 "client:setup remaining-tries=" remaining-tries)
   (let* ((tdbdat (tasks:open-db)))
     (if (<= remaining-tries 0)

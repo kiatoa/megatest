@@ -21,8 +21,8 @@
 (declare (uses db))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses synchash))
-(declare (uses http-transport))
-(declare (uses rpc-transport))
+;; (declare (uses http-transport))
+;; (declare (uses rpc-transport))
 (declare (uses nmsg-transport))
 (declare (uses launch))
 (declare (uses daemon))
@@ -53,7 +53,7 @@
   (case *transport-type*
     ((http)(http-transport:launch run-id))
     ((nmsg)(nmsg-transport:launch run-id))
-    ((rpc)  (rpc-transport:launch run-id))
+    ;; ((rpc)  (rpc-transport:launch run-id))
     (else (debug:print 0 "ERROR: unknown server type " *transport-type*))))
 ;;       (else   (debug:print 0 "ERROR: No known transport set, transport=" transport ", using rpc")
 ;; 	      (rpc-transport:launch run-id)))))
@@ -69,7 +69,7 @@
       (let ((ttype (string->symbol
 		    (or (args:get-arg "-transport")
 			(configf:lookup *configdat* "server" "transport")
-			"rpc"))))
+			"http"))))
 	(set! *transport-type* ttype)
 	ttype)))
 	    
@@ -89,7 +89,7 @@
   ;; (send-message pubsock target send-more: #t)
   ;; (send-message pubsock 
   (case (server:get-transport)
-    ((rpc)  (db:obj->string (vector success/fail query-sig result)))
+    ;; ((rpc)  (db:obj->string (vector success/fail query-sig result)))
     ((http) (db:obj->string (vector success/fail query-sig result)))
     ((zmq)
      (let ((pub-socket (vector-ref *runremote* 1)))

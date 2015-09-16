@@ -13,7 +13,7 @@
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
 (import (prefix sqlite3 sqlite3:))
 
-;; (use nanomsg)
+(use nanomsg)
 
 (declare (unit nmsg-transport))
 
@@ -22,9 +22,28 @@
 (declare (uses tests))
 (declare (uses tasks)) ;; tasks are where stuff is maintained about what is running.
 (declare (uses server))
+(declare (uses portlogger))
 
 (include "common_records.scm")
 (include "db_records.scm")
+
+(define (make-http-transport:server-dat)(make-vector 6))
+(define (http-transport:server-dat-get-iface         vec)    (vector-ref  vec 0))
+(define (http-transport:server-dat-get-port          vec)    (vector-ref  vec 1))
+(define (http-transport:server-dat-get-api-uri       vec)    (vector-ref  vec 2))
+(define (http-transport:server-dat-get-api-url       vec)    (vector-ref  vec 3))
+(define (http-transport:server-dat-get-api-req       vec)    (vector-ref  vec 4))
+(define (http-transport:server-dat-get-last-access   vec)    (vector-ref  vec 5))
+(define (http-transport:server-dat-get-socket        vec)    (vector-ref  vec 6))
+
+(define (http-transport:server-dat-make-url vec)
+  (if (and (http-transport:server-dat-get-iface vec)
+	   (http-transport:server-dat-get-port  vec))
+      (conc "http://" 
+	    (http-transport:server-dat-get-iface vec)
+	    ":"
+	    (http-transport:server-dat-get-port  vec))
+      #f))
 
 ;; Transition to pub --> sub with pull <-- push
 ;;
@@ -58,6 +77,7 @@
 
 (define *server-loop-heart-beat* (current-seconds))
 (define *heartbeat-mutex* (make-mutex))
+(define *nmsg-mutex* (make-mutex))
 
 ;;======================================================================
 ;; S E R V E R
@@ -282,7 +302,7 @@
 			       (* 60 1)         ;; default to one minute
 			       ;; (* 60 60 25)      ;; default to 25 hours
 			       ))))
-    (print "Keep-running got server pid " server-id ", using iface " iface " and port " port)
+    (print "Keep-running got server pid " server-id ", using iface " iface " and port " port " and transport of " *transport-type*)
     (let loop ((count 0))
       (thread-sleep! 4) ;; no need to do this very often
       ;; NB// sync currently does NOT return queue-length
@@ -323,13 +343,13 @@
 (define (nmsg-transport:client-api-send-receive run-id connection-info cmd param #!key (remtries 5))
   ;; NB// In the html version of this routine there is a call to 
   ;;      tasks:kill-server-run-id when there is an exception
-  (mutex-lock! *http-mutex*)
+  (mutex-lock! *nmsg-mutex*)
   (let* ((packet  (vector cmd param))
 	 (reqsoc  (http-transport:server-dat-get-socket connection-info))
 	 (res     (nmsg-transport:client-api-send-receive-raw reqsoc packet)))
 ;;	 (status  (vector-ref rawres 0))
 ;;	 (result  (vector-ref rawres 1)))
-    (mutex-unlock! *http-mutex*)
+    (mutex-unlock! *nmsg-mutex*)
     res)) ;; (vector status (if status (db:string->obj result transport: 'nmsg) result))))
 	
 ;;======================================================================
