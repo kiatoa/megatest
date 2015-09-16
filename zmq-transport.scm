@@ -342,9 +342,9 @@
         (mutex-unlock! *heartbeat-mutex*)
         (if (> (+ last-access
                   ;; (* 50 60 60)    ;; 48 hrs
-                  ;; 60              ;; one minute
+                  60              ;; one minute
                   ;; (* 60 60)       ;; one hour
-                  (* 45 60)          ;; 45 minutes, until the db deletion bug is fixed.
+                  ;; (* 45 60)           ;; 45 minutes, until the db deletion bug is fixed.
                   )
                (current-seconds))
             (begin

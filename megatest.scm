@@ -270,7 +270,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;;======================================================================
 
 (if (args:get-arg "-server")
-    (let ((transport (args:get-arg "-transport" "http")))
+    (let ((transport (or "zmq" ;; (config-lookup *configdat* "server" "transport")
+			 (args:get-arg "-transport" "http"))))
       (debug:print 2 "Launching server using transport " transport)
       (server:launch (string->symbol transport))))
 
