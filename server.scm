@@ -114,7 +114,7 @@
 		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
 									      "")
-		      " -debug 4 testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
+		      " -debug 4 -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
