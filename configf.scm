@@ -214,7 +214,7 @@
 								section-name "") ;; stick everything into ""
 							    #f #f))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
-							  (let ((alist (hash-table-ref/default res curr-section-name '()))
+							  (let ((alist    (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
 									    (let* ((cmdres  (cmd-run->list cmd))
 										   (status  (cadr cmdres))
@@ -224,7 +224,8 @@
 										  (begin
 										    (debug:print 0 "ERROR: problem with " inl ", return code " status
 												 " output: " cmdres)
-										    (exit 1)))
+										    ;; (exit 1)
+										    ))
 									      (if (null? res)
 										  ""
 										  (string-intersperse res " "))))))
