@@ -57,6 +57,10 @@
 
 (define api:write-queries
   '(
+
+    ;; general call can be a write - must treat it as such
+    general-call
+    
     ;; SERVERS
     start-server
     kill-server

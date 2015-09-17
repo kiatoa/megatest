@@ -9,7 +9,7 @@
 ;;  PURPOSE.
 ;;======================================================================
 
-(use json format)
+(use json format nanomsg) 
 
 (declare (unit rmt))
 (declare (uses api))
@@ -153,7 +153,7 @@
 	    (let ((faststart (configf:lookup *configdat* "server" "faststart")))
 	      (hash-table-delete! *runremote* run-id)
 	      ;; (mutex-unlock! *send-receive-mutex*)
-	      (if (and faststart (equal? faststart "no"))
+	      (if (equal? faststart "no")
 		  (begin
 		    (tasks:start-and-wait-for-server (db:delay-if-busy (tasks:open-db)) run-id 10)
 		    (thread-sleep! (random 5)) ;; give some time to settle and minimize collison?
