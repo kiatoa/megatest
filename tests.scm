@@ -145,18 +145,25 @@
 	 (values
 	  ;; the waitons
 	  (filter (lambda (x)
-		    (if (hash-table-ref/default all-tests-registry x #f)
+                    ;; if x has a / in name, split the first part before / and check that value
+                    (let ((y (car (string-split x "/" #t))))
+                      ;;(print y)
+                      (if (hash-table-ref/default all-tests-registry y #f)
 			#t
 			(begin
-			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
-			  #f)))
+                          (print "Checking for waiton test " y)
+			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " y)
+			  #f))))
 		  newwaitons)
 	  (filter (lambda (x)
-		    (if (hash-table-ref/default all-tests-registry x #f)
-			#t
-			(begin
-			  (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " x)
-			  #f)))
+                    (let ((y (car (string-split x "/" #t))))
+                      ;;(print y)
+                      (if (hash-table-ref/default all-tests-registry y #f)
+                          #t
+                          (begin
+                            (print "Checking for waiton test " y)
+                            (debug:print 0 "ERROR: test " test-name " has unrecognised waiton testname " y)
+                            #f))))
 		  newwaitors)
 	  config)))))
 					     
