@@ -242,7 +242,7 @@
 	  ;;
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED")) ;; prior run of this test didn't complete, go ahead and try to rerun
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
 	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
