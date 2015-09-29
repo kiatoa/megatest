@@ -172,7 +172,8 @@
     logpro-used))
 
 (define (launch:execute encoded-cmd)
-  (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
+  
+   (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -212,17 +213,43 @@
 	       )
 	  (change-directory top-path)
 
+	  (let ((sighand (lambda (signum)
+			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
+			   (if (eq? signum signal/stop)
+			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
+			   (set! *time-to-exit* #t)
+			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
+			   (let ((th1 (make-thread (lambda ()
+						     (tests:test-force-state-status! run-id test-id "INCOMPLETE" "KILLED")
+						     (print "Killed by signal " signum ". Exiting")
+						     (thread-sleep! 1)
+						     (exit 1))))
+				 (th2 (make-thread (lambda ()
+						     (thread-sleep! 2)
+						     (debug:print 0 "Done")
+						     (exit 4)))))
+			     (thread-start! th2)
+			     (thread-start! th1)
+			     (thread-join! th2)))))
+	    (set-signal-handler! signal/int sighand)
+	    (set-signal-handler! signal/term sighand)
+	    (set-signal-handler! signal/stop sighand))
+	  
 	  ;; (set-signal-handler! signal/int (lambda ()
 					    
 	  ;; Do not run the test if it is REMOVING, RUNNING, KILLREQ or REMOTEHOSTSTART,
 	  ;; Mark the test as REMOTEHOSTSTART *IMMEDIATELY*
 	  ;;
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
-	    (if (not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
-		(tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")
-		(begin
-		  (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
-		  (exit))))
+	    (cond
+	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED")) ;; prior run of this test didn't complete, go ahead and try to rerun
+	      (debug:print 0 "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
+	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
+	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
+	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
+	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
+	      (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
+	      (exit))))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
 	  (set! keys       (rmt:get-keys))
