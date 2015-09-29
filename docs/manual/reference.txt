@@ -188,7 +188,8 @@ waiton A B
 
 [itemmap]
 A (\d+)/aa aa/\1
-B (\d+)/bb --------------------
+B (\d+)/bb 
+--------------------
 
 .Testconfig for Test D
 ----------------------

@@ -45,6 +45,13 @@
 	    (http-transport:server-dat-get-port  vec))
       #f))
 
+(define (http-transport:server-dat-update-last-access vec)
+  (if (vector? vec)
+      (vector-set! vec 5 (current-seconds))
+      (begin
+	(print-call-chain (current-error-port))
+	(debug:print 0 "ERROR: call to http-transport:server-dat-update-last-access with non-vector!!"))))
+
 ;; Transition to pub --> sub with pull <-- push
 ;;
 ;;   1. client sends request to server via push to the pull port
@@ -312,7 +319,7 @@
             (loop (+ count 1)))
         
         (mutex-lock! *heartbeat-mutex*)
-        (set! last-access *last-db-access*)
+        (set! last-access (http-transport:server-dat-get-last-access server-info)) ;; *last-db-access*)
         (mutex-unlock! *heartbeat-mutex*)
 	(db:sync-touched *inmemdb* run-id force-sync: #t)
         (if (and *server-run*
