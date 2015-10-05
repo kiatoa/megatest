@@ -47,7 +47,8 @@
 	      (if (directory-exists? d)
 		  d
 		  (begin
-		    (debug:print 0 "WARNING: problem with directory " d ", dropping it from tests path")
+		    (if (common:low-noise-print 60 "tests:get-tests-search-path" d)
+			(debug:print 0 "WARNING: problem with directory " d ", dropping it from tests path"))
 		    #f)))
 	    (append paths (list (conc *toppath* "/tests"))))))
 
@@ -715,6 +716,19 @@
 ;; 		    (last (string-split testp "/")))
 ;; 		  tests)))))
 
+(define (tests:get-test-path-from-environment)
+  (and (getenv "MT_LINKTREE")
+       (getenv "MT_TARGET")
+       (getenv "MT_RUNNAME")
+       (getenv "MT_TEST_NAME")
+       (getenv "MT_ITEMPATH")
+       (conc (getenv "MT_LINKTREE")  "/"
+	     (getenv "MT_TARGET")    "/"
+	     (getenv "MT_RUNNAME")   "/"
+	     (getenv "MT_TEST_NAME") "/"
+	     (if (or (getenv "MT_ITEMPATH")
+		     (not (string=? "" (getenv "MT_ITEMPATH"))))
+		 (conc "/" (getenv "MT_ITEMPATH"))))))
 
 (define (tests:get-testconfig test-name test-registry system-allowed)
   (let* ((test-path         (hash-table-ref/default 
@@ -722,12 +736,26 @@
 			     (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
+	 (cache-path   (tests:get-test-path-from-environment))
+	 (cache-exists (and cache-path (file-exists? (conc cache-path "/.testconfig"))))
+	 (cache-file   (conc cache-path "/.testconfig"))
 	 (tcfg         (if testexists
-			   (read-config test-configf #f system-allowed environ-patt: (if system-allowed
-											 "pre-launch-env-vars"
-											 #f))
+			   (or (and cache-exists
+				    (handle-exceptions
+				     exn
+				     (begin
+				       (debug:print 0 "WARNING: Failed to read " cache-file) 
+				       #f)
+				     (configf:read-alist cache-file)))
+			       (read-config test-configf #f system-allowed environ-patt: (if system-allowed
+											     "pre-launch-env-vars"
+											     #f)))
 			   #f)))
     (hash-table-set! *testconfigs* test-name tcfg)
+    (if (and cache-path
+	     (not cache-exists)
+	     (file-write-access? cache-path))
+	(configf:write-alist tcfg (conc cache-path "/.testconfig")))	
     tcfg))
   
 ;; sort tests by priority and waiton
