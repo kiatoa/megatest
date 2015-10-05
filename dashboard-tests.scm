@@ -196,12 +196,12 @@
 			  (iup:label val ; #:expand "HORIZONTAL"
 				     ))
 			(list "Hostname: "
-			      "Uname -a: "
 			      "Disk free: "
 			      "CPU Load: "
 			      "Run duration: "
 			      "Logfile: "
-			      "Top process id: "))
+			      "Top process id: "
+			      "Uname -a: "))
 		   (iup:label "" #:expand "VERTICAL")))
     (apply iup:vbox ; #:expand "YES"
 	   (list
