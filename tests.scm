@@ -755,7 +755,9 @@
     (if (and cache-path
 	     (not cache-exists)
 	     (file-write-access? cache-path))
-	(configf:write-alist tcfg (conc cache-path "/.testconfig")))	
+	(let ((tpath (conc cache-path "/.testconfig")))
+	  (debug:print-info 1 "Caching testconfig for " test-name " in " tpath)
+	  (configf:write-alist tcfg tpath)))
     tcfg))
   
 ;; sort tests by priority and waiton
