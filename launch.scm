@@ -174,7 +174,7 @@
 (define (launch:execute encoded-cmd)
   
    (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
-	  (tconfigreg (make-hash-table)))
+	  (tconfigreg (tests:get-all)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -834,7 +834,7 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((tregistry       (make-hash-table))
+  (let* ((tregistry       (tests:get-all))
 	 (item-path       (let ((ip (item-list->path itemdat)))
 			    (alist->env-vars (list (list "MT_ITEMPATH" ip)))
 			    ip))

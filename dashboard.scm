@@ -216,6 +216,26 @@ Misc
 	 (delta (map (lambda (a b)(abs (- a b))) c1 c2)))
     (null? (filter (lambda (x)(> x 3)) delta))))
 
+(define (compare-tests test1 test2)
+  (let* ((test-name1  (db:test-get-testname  test1))
+	 (item-path1  (db:test-get-item-path test1))
+	 (eventtime1  (db:test-get-event_time test1))
+	 (test-name2  (db:test-get-testname  test2))
+	 (item-path2  (db:test-get-item-path test2))
+	 (eventtime2  (db:test-get-event_time test2))
+	 (same-name   (equal? test-name1 test-name2))
+	 (test1-top   (equal? item-path1 ""))
+	 (test2-top   (equal? item-path2 ""))
+	 (test1-older (> eventtime1 eventtime2))
+	 (same-time   (equal? eventtime1 eventtime2)))			 
+    (if same-name
+	(if same-time
+	    (string>? item-path1 item-path2)
+	    test1-older)
+	(if same-time
+	    (string>? test-name1 test-name2)
+	    test1-older))))
+    
 ;; keypatts: ( (KEY1 "abc%def")(KEY2 "%") )
 (define (update-rundat runnamepatt numruns testnamepatt keypatts)
   (let* ((referenced-run-ids '())
@@ -240,7 +260,7 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
-		       (tests       (if *useserver*
+		       (tmptests    (if *useserver*
 					(rmt:get-tests-for-run run-id testnamepatt states statuses
 							       #f #f
 							       *hide-not-hide*
@@ -253,6 +273,9 @@ Misc
 							      sort-by
 							      sort-order
 							      'shortlist)))
+		       (tests       (if (eq? *tests-sort-reverse* 3) ;; +event_time
+					(sort tmptests compare-tests)
+					tmptests))
 		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
 		       ;; (tests       (bubble-up tmptests priority: bubble-type))
 		       (key-vals    (if *useserver* 
