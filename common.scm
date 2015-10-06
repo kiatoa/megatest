@@ -553,7 +553,7 @@
   (with-input-from-file "/proc/loadavg" 
     (lambda ()(list (read)(read)(read)))))
 
-(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000))
+(define (common:wait-for-cpuload maxload numcpus waitdelay #!key (count 1000) (msg #f))
   (let* ((loadavg (common:get-cpu-load))
 	 (first   (car loadavg))
 	 (next    (cadr loadavg))
@@ -562,12 +562,12 @@
     (cond
      ((and (> first adjload)
 	   (> count 0))
-      (debug:print-info 0 "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload)
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load " first " exceeding max of " adjload (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1)))
      ((and (> loadjmp numcpus)
 	   (> count 0))
-      (debug:print-info 0 "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus)
+      (debug:print-info 0 "waiting " waitdelay " seconds due to load jump " loadjmp " > numcpus " numcpus (if msg msg ""))
       (thread-sleep! waitdelay)
       (common:wait-for-cpuload maxload numcpus waitdelay count: (- count 1))))))
 
@@ -582,6 +582,12 @@
 		      (+ numcpu 1)
 		      numcpu)
 		  (read-line)))))))
+
+;; wait for normalized cpu load to drop below maxload
+;;
+(define (common:wait-for-normalized-load maxload #!key (msg #f))
+  (let ((num-cpus (common:get-num-cpus)))
+    (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
 
 (define (get-uname . params)
   (let* ((uname-res (cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))

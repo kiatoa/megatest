@@ -173,7 +173,8 @@
 
 (define (launch:execute encoded-cmd)
   
-   (let* ((cmdinfo   (common:read-encoded-string encoded-cmd)))
+   (let* ((cmdinfo    (common:read-encoded-string encoded-cmd))
+	  (tconfigreg (make-hash-table)))
     (setenv "MT_CMDINFO" encoded-cmd)
     (if (list? cmdinfo) ;; ((testpath /tmp/mrwellan/jazzmind/src/example_run/tests/sqlitespeed)
 	;; (test-name sqlitespeed) (runscript runscript.rb) (db-host localhost) (run-id 1))
@@ -384,7 +385,8 @@
 				 ;; then, if runscript ran ok (or did not get called)
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
-				     (let* ((testconfig (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+					     (tests:get-testconfig test-name tconfigreg #t)) ;; 'return-procs)))
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
@@ -832,19 +834,25 @@
     (list "MT_RUNNAME"   runname)
     ;; (list "MT_TARGET"    mt_target)
     ))
-  (let* ((useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
+  (let* ((tregistry       (make-hash-table))
+	 (item-path       (let ((ip (item-list->path itemdat)))
+			    (alist->env-vars (list (list "MT_ITEMPATH" ip)))
+			    ip))
+	 (tconfig         (or (tests:get-testconfig test-name tregistry #t)
+			      test-conf)) ;; force re-read now that all vars are set
+	 (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
 			    (if ush 
 				(if (equal? ush "no") ;; must use "no" to NOT use shell
 				    #f
 				    ush)
 				#t)))     ;; default is yes
-	 (runscript       (config-lookup test-conf   "setup"        "runscript"))
-	 (ezsteps         (> (length (hash-table-ref/default test-conf "ezsteps" '())) 0)) ;; don't send all the steps, could be big
-	 (diskspace       (config-lookup test-conf   "requirements" "diskspace"))
-	 (memory          (config-lookup test-conf   "requirements" "memory"))
+	 (runscript       (config-lookup tconfig   "setup"        "runscript"))
+	 (ezsteps         (> (length (hash-table-ref/default tconfig "ezsteps" '())) 0)) ;; don't send all the steps, could be big
+	 (diskspace       (config-lookup tconfig   "requirements" "diskspace"))
+	 (memory          (config-lookup tconfig   "requirements" "memory"))
 	 (hosts           (config-lookup *configdat* "jobtools"     "workhosts"))
 	 (remote-megatest (config-lookup *configdat* "setup" "executable"))
-	 (run-time-limit  (or (configf:lookup  test-conf   "requirements" "runtimelim")
+	 (run-time-limit  (or (configf:lookup  tconfig   "requirements" "runtimelim")
 			      (configf:lookup  *configdat* "setup" "runtimelim")))
 	 ;; FIXME SOMEDAY: not good how this is so obtuse, this hack is to 
 	 ;;                allow running from dashboard. Extract the path
@@ -859,7 +867,6 @@
 				    ((mtest)     "../megatest")
 				    ((dashboard) "megatest")
 				    (else exe)))))
-	 (item-path       (item-list->path itemdat))
 	 (launcher        (common:get-launcher *configdat* test-name item-path)) ;; (config-lookup *configdat* "jobtools"     "launcher"))
 	 (test-sig   (conc (common:get-testsuite-name) ":" test-name ":" item-path)) ;; (item-list->path itemdat))) ;; test-path is the full path including the item-path
 	 (work-area  #f)
@@ -872,6 +879,7 @@
 	 (mt_target  (string-intersperse (map cadr keyvals) "/"))
 	 (debug-param (append (if (args:get-arg "-debug")  (list "-debug" (args:get-arg "-debug")) '())
 			      (if (args:get-arg "-logging")(list "-logging") '()))))
+
     (setenv "MT_ITEMPATH" item-path)
     (if hosts (set! hosts (string-split hosts)))
     ;; set the megatest to be called on the remote host
@@ -889,7 +897,7 @@
     ;;
     (tests:test-set-status! run-id test-id "LAUNCHED" "n/a" #f #f) ;; (if launch-results launch-results "FAILED"))
     (rmt:roll-up-pass-fail-counts run-id test-name item-path #f "LAUNCHED")
-    (set! diskpath (get-best-disk *configdat* test-conf))
+    (set! diskpath (get-best-disk *configdat* tconfig))
     (if diskpath
 	(let ((dat  (create-work-area run-id run-info keyvals test-id test-path diskpath test-name itemdat)))
 	  (set! work-area (car dat))
@@ -946,7 +954,7 @@
     (let* ((commonprevvals (alist->env-vars
 			    (hash-table-ref/default *configdat* "env-override" '())))
 	   (testprevvals   (alist->env-vars
-			    (hash-table-ref/default test-conf "pre-launch-env-overrides" '())))
+			    (hash-table-ref/default tconfig "pre-launch-env-overrides" '())))
 	   (miscprevvals   (alist->env-vars ;; consolidate this code with the code in megatest.scm for "-execute"
 			    (append (list (list "MT_TEST_RUN_DIR" work-area)
 					  (list "MT_TEST_NAME" test-name)

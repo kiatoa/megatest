@@ -128,6 +128,7 @@
 	  (debug:print-info 0 "Starting server on " target-host ", logfile is " logfile)
 	  (setenv "TARGETHOST" target-host)))
     (setenv "TARGETHOST_LOGF" logfile)
+    (common:wait-for-normalized-load 4 " delaying server start due to load") ;; do not try starting servers on an already overloaded machine, just wait forever
     (system (conc "nbfake " cmdln))
     (unsetenv "TARGETHOST_LOGF")
     (if (get-environment-variable "TARGETHOST")(unsetenv "TARGETHOST"))
