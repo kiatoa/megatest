@@ -752,7 +752,8 @@
 											     #f)))
 			   #f)))
     (hash-table-set! *testconfigs* test-name tcfg)
-    (if (and cache-path
+    (if (and testexists
+	     cache-path
 	     (not cache-exists)
 	     (file-write-access? cache-path))
 	(let ((tpath (conc cache-path "/.testconfig")))
