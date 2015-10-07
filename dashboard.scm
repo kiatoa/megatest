@@ -730,7 +730,7 @@ Misc
 
 ;; Display the tests as rows of boxes on the test/task pane
 ;;
-(define (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)
+(define (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames test-records)
   (canvas-clear! cnv)
   (canvas-font-set! cnv "Helvetica, -10")
   (let-values (((sizex sizey sizexmm sizeymm) (canvas-size cnv))
@@ -746,8 +746,8 @@ Misc
 	    ;; set these 
 	    (hash-table-set! tests-draw-state 'test-browse-xoffset 20) ;; (- 0 (* (/ sizex 2) (* 8 xadj))))
 	    (hash-table-set! tests-draw-state 'test-browse-yoffset 20) ;; (- 0 (* (/ sizey 2) (* 8 (- 1 yadj)))))))
-	    (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
-	  (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames))
+	    (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records))
+	  (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records))
       ))
 
 ;;======================================================================
@@ -926,7 +926,7 @@ Misc
 					(if (not updater)
 					    (set! updater (lambda (xadj yadj)
 							    ;; (print "cnv: " cnv " xadj: " xadj " yadj: " yadj)
-							    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames)
+							    (dashboard:draw-tests cnv xadj yadj tests-draw-state sorted-testnames test-records)
 							    (set! last-xadj xadj)
 							    (set! last-yadj yadj))))
 					(updater xadj yadj)
@@ -941,7 +941,7 @@ Misc
 					   ;; (print "step: " step " x: " x " y: " y " dir: \"" dir "\"")
 					   ;; (print "the-cnv: " the-cnv " obj: " obj " xadj: " xadj " yadj: " yadj " dir: " dir)
 					   (if the-cnv
-					       (dashboard:draw-tests the-cnv xadj yadj tests-draw-state sorted-testnames))
+					       (dashboard:draw-tests the-cnv xadj yadj tests-draw-state sorted-testnames test-records))
 					   (set! last-xadj xadj)
 					   (set! last-yadj yadj)
 					   ))
