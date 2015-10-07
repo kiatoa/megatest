@@ -590,7 +590,64 @@
     (canvas-rectangle! cnv llx urx lly ury)
     (if selected (canvas-box! cnv llx (+ llx 5) lly (+ lly 5)))))
 
-(define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
+(define (dcommon:draw-arrow cnv test-box-center waiton-center)
+  (let* ((test-box-center-x (vector-ref test-box-center 0))
+	 (test-box-center-y (vector-ref test-box-center 1))
+	 (waiton-center-x   (vector-ref waiton-center   0))
+	 (waiton-center-y   (vector-ref waiton-center   1))
+	 (delta-y           (- waiton-center-y test-box-center-y))
+	 (delta-x           (- waiton-center-x test-box-center-x))
+	 (use-delta-x       (> (abs delta-x)(abs delta-y))) ;; use the larger one
+	 (delta-ratio       (if use-delta-x
+				(/ (abs delta-y)(abs delta-x))
+				(/ (abs delta-x)(abs delta-y))))
+	 (x-adj             (if use-delta-x
+				8
+				(* delta-ratio 8)))
+	 (y-adj             (if use-delta-x
+				(* x-adj delta-ratio)
+				8))
+	 (new-waiton-x      (inexact->exact
+			     (round (if (> delta-x 0) ;; have positive x
+					(- waiton-center-x x-adj)
+					(+ waiton-center-x x-adj)))))
+	 (new-waiton-y      (inexact->exact
+			     (round (if (> delta-y 0)
+					(- waiton-center-y y-adj)
+					(+ waiton-center-y y-adj))))))
+  ;; (canvas-line-width-set! cnv 5)
+  (canvas-line! cnv
+		test-box-center-x
+		test-box-center-y
+		new-waiton-x
+		new-waiton-y
+		)
+  (canvas-mark! cnv new-waiton-x new-waiton-y)))
+
+(define (dcommon:get-box-center box)
+  (let* ((llx  (list-ref box 0))
+	 (lly  (list-ref box 4))
+	 (boxw (list-ref box 5))
+	 (boxh (list-ref box 6)))
+    (vector (+ llx (/ boxw 2))
+	    (+ lly (/ boxh 2)))))
+
+(define (dcommon:draw-arrows cnv testname tests-hash test-records)
+  (let* ((test-box-info   (hash-table-ref tests-hash testname))
+	 (test-box-center (dcommon:get-box-center test-box-info))
+	 (test-record     (hash-table-ref test-records testname))
+	 (waitons         (vector-ref test-record 2)))
+    (for-each
+     (lambda (waiton)
+       (let* ((waiton-box-info (hash-table-ref/default tests-hash waiton #f))
+	      (waiton-center   (dcommon:get-box-center (or waiton-box-info test-box-info))))
+	 (dcommon:draw-arrow cnv test-box-center waiton-center)))
+     waitons)
+    ;; (debug:print 0 "test-box-info=" test-box-info)
+    ;; (debug:print 0 "test-record=" test-record)
+    ))
+
+(define (dcommon:initial-draw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
       (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
 	     (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
 	     (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
@@ -631,14 +688,18 @@
 			  (if have-room (+ llx boxw gapx) xtorig) ;; have room, 
 			  (if have-room lly (+ lly boxh gapy))
 			  (if have-room (+ urx boxw gapx) (+ xtorig boxw))
-			  (if have-room ury (+ ury boxh gapy)))))))))
+			  (if have-room ury (+ ury boxh gapy)))))))
+	(for-each
+	 (lambda (testname)
+	   (dcommon:draw-arrows cnv testname tests-hash test-records))
+	 sorted-testnames)))
 
-(define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames)
+(define (dcommon:redraw-tests cnv xadj yadj sizex sizey sizexmm sizeymm originx originy tests-draw-state sorted-testnames test-records)
   (let* ((scalef (hash-table-ref/default tests-draw-state 'scalef 8))
 	 (test-browse-xoffset (hash-table-ref tests-draw-state 'test-browse-xoffset))
 	 (test-browse-yoffset (hash-table-ref tests-draw-state 'test-browse-yoffset))
-	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- 0.5 xadj)))) ;;  (- xadj 1))))
-	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- yadj 0.5))))
+	 (xtorig (+ test-browse-xoffset (* (/ sizex 2) scalef (- xadj 0.5)))) ;;  (- xadj 1))))
+	 (ytorig (+ test-browse-yoffset (* (/ sizey 2) scalef (- 0.5 yadj))))
 	 (xdelta (- (hash-table-ref tests-draw-state 'xtorig) xtorig))
 	 (ydelta (- (hash-table-ref tests-draw-state 'ytorig) ytorig))
 	 (tests-hash     (hash-table-ref tests-draw-state 'tests-info))
@@ -660,7 +721,11 @@
 	    (if (not (null? tal))
 		;; leave a column of space to the right to list items
 		(loop (car tal)
-		      (cdr tal))))))))
+		      (cdr tal))))))
+    (for-each
+     (lambda (testname)
+       (dcommon:draw-arrows cnv testname tests-hash test-records))
+     sorted-testnames)))
 
 ;;======================================================================
 ;;  S T E P S
