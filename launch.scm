@@ -212,7 +212,16 @@
                                               runscript))))) ;; assume it is on the path
 	       ;; (rollup-status 0)
 	       )
-	  (change-directory top-path)
+
+	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
+	  (let loop ((count 0))
+	    (if (or (file-exists? top-path)
+		    (< count 10))
+		(change-directory top-path)
+		(begin
+		  (debug:print 0 "INFO: Not starting job yet - directory " top-path " not found")
+		  (thread-sleep! 10)
+		  (loop (+ count 1)))))
 
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
@@ -282,6 +291,17 @@
 					  (debug:print 0 "ERROR: bad variable spec, " var "=" val))))
 				  (configf:get-section rconfig section)))
 		      (list "default" target)))
+
+	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
+	  (let loop ((count 0))
+	    (if (or (file-exists? work-area)
+		    (< count 10))
+		(change-directory work-area)
+		(begin
+		  (debug:print 0 "INFO: Not starting job yet - directory " work-area " not found")
+		  (thread-sleep! 10)
+		  (loop (+ count 1)))))
+
 	  (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
