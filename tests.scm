@@ -769,12 +769,21 @@
 			      (let ((tmp (any->number priority)))
 				(if tmp tmp (begin (debug:print 0 "ERROR: bad priority value " priority ", using 0") 0)))
 			      0)))
+	 (all-tests      (hash-table-keys test-records))
+	 (all-waited-on  (let loop ((hed (car all-tests))
+				    (tal (cdr all-tests))
+				    (res '()))
+			   (let* ((trec    (hash-table-ref test-records hed))
+				  (waitons (or (tests:testqueue-get-waitons trec) '())))
+			     (if (null? tal)
+				 (append res waitons)
+				 (loop (car tal)(cdr tal)(append res waitons))))))
 	 (sort-fn1 
 	  (lambda (a b)
 	    (let* ((a-record   (hash-table-ref test-records a))
 		   (b-record   (hash-table-ref test-records b))
-		   (a-waitons  (tests:testqueue-get-waitons a-record))
-		   (b-waitons  (tests:testqueue-get-waitons b-record))
+		   (a-waitons  (or (tests:testqueue-get-waitons a-record) '()))
+		   (b-waitons  (or (tests:testqueue-get-waitons b-record) '()))
 		   (a-config   (tests:testqueue-get-testconfig  a-record))
 		   (b-config   (tests:testqueue-get-testconfig  b-record))
 		   (a-raw-pri  (config-lookup a-config "requirements" "priority"))
@@ -783,20 +792,38 @@
 		   (b-priority (mungepriority b-raw-pri)))
 	      (tests:testqueue-set-priority! a-record a-priority)
 	      (tests:testqueue-set-priority! b-record b-priority)
-	      (or (and b-waitons (member (tests:testqueue-get-testname a-record) b-waitons))
-		  (not b-waitons)))))
+	      (debug:print 0 "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
+	      (cond
+	       ;; is 
+	       ((member a b-waitons)          ;; is b waiting on a?
+		(debug:print 0 "case1")
+		#t)
+	       ((member b a-waitons)          ;; is a waiting on b?
+		(debug:print 0 "case2")
+		#f)
+	       ((and (not (null? a-waitons))  ;; both have waitons - do not disturb
+		     (not (null? b-waitons)))
+		(debug:print 0 "case2.1")
+		#t)
+	       ((and (null? a-waitons)        ;; no waitons for a but b has waitons
+		     (not (null? b-waitons)))
+		(debug:print 0 "case3")
+		#f)
+	       ((and (not (null? a-waitons))  ;; a has waitons but b does not
+		     (null? b-waitons)) 
+		(debug:print 0 "case4")
+		#t)
+	       ((not (eq? a-priority b-priority)) ;; use
+		(> a-priority b-priority))
+	       (else
+		(debug:print 0 "case5")
+		(string>? a b))))))
+	 
 	 (sort-fn2
 	  (lambda (a b)
 	    (> (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records a)))
 	       (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
-    (sort
-     (sort
-      (sort
-       (sort (hash-table-keys test-records) ;; avoid dealing with deleted tests, look at the hash table
-	     sort-fn1) ;; first once by waiton
-       sort-fn2)       ;; second by priority
-      sort-fn1)
-     sort-fn1)))      ;; third by waiton again
+    (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
 
 ;; for each test:
 ;;   

@@ -597,10 +597,16 @@
 	 (waiton-center-y   (vector-ref waiton-center   1))
 	 (delta-y           (- waiton-center-y test-box-center-y))
 	 (delta-x           (- waiton-center-x test-box-center-x))
-	 (use-delta-x       (> (abs delta-x)(abs delta-y))) ;; use the larger one
+	 (abs-delta-x       (abs delta-x))
+	 (abs-delta-y       (abs delta-y))
+	 (use-delta-x       (> abs-delta-x abs-delta-y)) ;; use the larger one
 	 (delta-ratio       (if use-delta-x
-				(/ (abs delta-y)(abs delta-x))
-				(/ (abs delta-x)(abs delta-y))))
+				(if (> abs-delta-x 0)
+				    (/ abs-delta-y abs-delta-x)
+				    1)
+				(if (> abs-delta-y 0)
+				    (/ abs-delta-x abs-delta-y)
+				    1)))
 	 (x-adj             (if use-delta-x
 				8
 				(* delta-ratio 8)))
