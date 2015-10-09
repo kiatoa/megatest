@@ -706,10 +706,15 @@
 						     #f))
 					       dot-data)))
 			    (map (lambda (inlst)
-				   (map (lambda (instr)
-					  (* dotscale (string->number instr))) ;; convert to number and scale
-					(let ((il (cddddr inlst)))
-					  (take il (- (length il) 2)))))
+				   (dcommon:process-polyline 
+				    (map (lambda (instr)
+					   (* dotscale (string->number instr))) ;; convert to number and scale
+					 (let ((il (cddddr inlst)))
+					   (take il (- (length il) 2))))
+				    (lambda (x y)
+				      (list (+ x xtorig)
+					    (+ y ytorig)))
+				    #f #f)) ;; process polyline
 				 edges)))
 		 (llx  (* (string->number (list-ref nodedat 2)) dotscale))
 		 (lly  (* (string->number (list-ref nodedat 3)) dotscale))
