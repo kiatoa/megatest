@@ -839,19 +839,20 @@
 	  (temp-port     (open-output-file* fd)))
       ;; (format temp-port "This file is ~A.~%" temp-path)
       (format temp-port "digraph tests {\n")
+      ;; (format temp-port "   splines=none\n")
       (for-each
        (lambda (testname)
 	 (let* ((testrec (hash-table-ref test-records testname))
 		(waitons (or (tests:testqueue-get-waitons testrec) '())))
 	   (for-each
 	    (lambda (waiton)
-	      (format temp-port (conc "   " waiton " -> " testname "\n")))
+	      (format temp-port (conc "   " waiton " -> " testname " [splines=ortho]\n")))
 	    waitons)))
        all-testnames)
       (format temp-port "}\n")
       (close-output-port temp-port)
       (with-input-from-pipe
-       (conc "dot -T" outtype " < " temp-path)
+       (conc "env -i PATH=$PATH dot -T" outtype " < " temp-path)
        (lambda ()
 	 (let ((res (read-lines)))
 	   ;; (delete-file temp-path)
