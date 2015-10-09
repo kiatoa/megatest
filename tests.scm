@@ -823,7 +823,82 @@
 	  (lambda (a b)
 	    (> (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records a)))
 	       (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
-    (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
+    ;; (let ((dot-res (tests:run-dot (tests:tests->dot test-records) "plain")))
+    ;;   (debug:print "dot-res=" dot-res))
+    (let ((data (map cdr (filter
+			  (lambda (x)(equal? "node" (car x)))
+			  (map string-split (tests:easy-dot test-records "plain"))))))
+      (map car (sort data (lambda (a b)
+			    (> (string->number (caddr a))(string->number (caddr b)))))))
+    ))
+    ;; (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
+
+(define (tests:easy-dot test-records outtype)
+  (let-values (((fd temp-path) (file-mkstemp (conc "/tmp/" (current-user-name) ".XXXXXX"))))
+    (let ((all-testnames (hash-table-keys test-records))
+	  (temp-port     (open-output-file* fd)))
+      ;; (format temp-port "This file is ~A.~%" temp-path)
+      (format temp-port "digraph tests {\n")
+      (for-each
+       (lambda (testname)
+	 (let* ((testrec (hash-table-ref test-records testname))
+		(waitons (or (tests:testqueue-get-waitons testrec) '())))
+	   (for-each
+	    (lambda (waiton)
+	      (format temp-port (conc "   " waiton " -> " testname "\n")))
+	    waitons)))
+       all-testnames)
+      (format temp-port "}\n")
+      (close-output-port temp-port)
+      (with-input-from-pipe
+       (conc "dot -T" outtype " < " temp-path)
+       (lambda ()
+	 (let ((res (read-lines)))
+	   ;; (delete-file temp-path)
+	   res))))))
+
+(define (tests:write-dot-file test-records fname)
+  (if (file-write-access? (pathname-directory fname))
+      (map print (tests:tests->dot test-records))))
+
+(define (tests:tests->dot test-records)
+  (let ((all-testnames (hash-table-keys test-records)))
+    (if (null? all-testnames)
+	'()
+	(let loop ((hed (car all-testnames))
+		   (tal (cdr all-testnames))
+		   (res (list "digraph tests {")))
+	  (let* ((testrec (hash-table-ref test-records hed))
+		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
+		 (newres  (append res
+				  (map (lambda (waiton)
+					 (conc "   " waiton " -> " hed))
+				       waitons))))
+	    (if (null? tal)
+		(append newres (list "}"))
+		(loop (car tal)(cdr tal) newres)
+		))))))
+
+;; (tests:run-dot (list "digraph tests {" "a -> b" "}") "plain")
+
+(define (tests:run-dot indat outtype) ;; outtype is plain, fig, dot, etc. http://www.graphviz.org/content/output-formats
+  (print "indat: ")
+  (map print indat)
+  (let-values (((inp oup pid)(process "dot" (list "-T" outtype))))
+    (let ((th1 (make-thread (lambda ()
+			      (with-output-to-port oup
+				(lambda ()
+				  (map print indat))))
+			    "dot writer")))
+      (thread-start! th1)
+      (let ((res (with-input-from-port inp
+		   (lambda ()
+		     (read-lines)))))
+	(thread-join! th1)
+	(close-input-port inp)
+	(close-output-port oup)
+	;; (process-wait pid)
+	res))))
 
 ;; for each test:
 ;;   
