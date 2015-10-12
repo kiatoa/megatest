@@ -825,13 +825,13 @@
 	       (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
     ;; (let ((dot-res (tests:run-dot (tests:tests->dot test-records) "plain")))
     ;;   (debug:print "dot-res=" dot-res))
-    (let ((data (map cdr (filter
-			  (lambda (x)(equal? "node" (car x)))
-			  (map string-split (tests:easy-dot test-records "plain"))))))
-      (map car (sort data (lambda (a b)
-			    (> (string->number (caddr a))(string->number (caddr b)))))))
-    ))
-    ;; (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
+    ;; (let ((data (map cdr (filter
+    ;;     		  (lambda (x)(equal? "node" (car x)))
+    ;;     		  (map string-split (tests:easy-dot test-records "plain"))))))
+    ;;   (map car (sort data (lambda (a b)
+    ;;     		    (> (string->number (caddr a))(string->number (caddr b)))))))
+    ;; ))
+    (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
 
 (define (tests:easy-dot test-records outtype)
   (let-values (((fd temp-path) (file-mkstemp (conc "/tmp/" (current-user-name) ".XXXXXX"))))
