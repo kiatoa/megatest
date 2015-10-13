@@ -216,7 +216,7 @@
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (file-exists? top-path)
-		    (< count 10))
+		    (> count 10))
 		(change-directory top-path)
 		(begin
 		  (debug:print 0 "INFO: Not starting job yet - directory " top-path " not found")
@@ -295,14 +295,14 @@
 	  ;; NFS might not have propagated the directory meta data to the run host - give it time if needed
 	  (let loop ((count 0))
 	    (if (or (file-exists? work-area)
-		    (< count 10))
+		    (> count 10))
 		(change-directory work-area)
 		(begin
 		  (debug:print 0 "INFO: Not starting job yet - directory " work-area " not found")
 		  (thread-sleep! 10)
 		  (loop (+ count 1)))))
 
-	  (change-directory work-area) 
+	  ;; (change-directory work-area) 
 	  (set! keyvals    (keys:target->keyval keys target))
 	  ;; apply pre-overrides before other variables. The pre-override vars must not
 	  ;; clobbers things from the official sources such as megatest.config and runconfigs.config
@@ -406,7 +406,9 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					     (tests:get-testconfig test-name tconfigreg #t)) ;; 'return-procs)))
+					     ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
+					     ;;       ezstep names need a full re-eval here.
+					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
@@ -858,7 +860,7 @@
 	 (item-path       (let ((ip (item-list->path itemdat)))
 			    (alist->env-vars (list (list "MT_ITEMPATH" ip)))
 			    ip))
-	 (tconfig         (or (tests:get-testconfig test-name tregistry #t)
+	 (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
 			      test-conf)) ;; force re-read now that all vars are set
 	 (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
 			    (if ush 

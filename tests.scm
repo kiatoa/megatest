@@ -730,14 +730,16 @@
 		     (not (string=? "" (getenv "MT_ITEMPATH"))))
 		 (conc "/" (getenv "MT_ITEMPATH"))))))
 
-(define (tests:get-testconfig test-name test-registry system-allowed)
+(define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
   (let* ((test-path         (hash-table-ref/default 
 			     test-registry test-name 
 			     (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (cache-path   (tests:get-test-path-from-environment))
-	 (cache-exists (and cache-path (file-exists? (conc cache-path "/.testconfig"))))
+	 (cache-exists (and cache-path 
+			    (not force-create)  ;; if force-create then pretend there is no cache to read
+			    (file-exists? (conc cache-path "/.testconfig"))))
 	 (cache-file   (conc cache-path "/.testconfig"))
 	 (tcfg         (if testexists
 			   (or (and cache-exists
@@ -825,13 +827,13 @@
 	       (mungepriority (tests:testqueue-get-priority (hash-table-ref test-records b)))))))
     ;; (let ((dot-res (tests:run-dot (tests:tests->dot test-records) "plain")))
     ;;   (debug:print "dot-res=" dot-res))
-    (let ((data (map cdr (filter
-			  (lambda (x)(equal? "node" (car x)))
-			  (map string-split (tests:easy-dot test-records "plain"))))))
-      (map car (sort data (lambda (a b)
-			    (> (string->number (caddr a))(string->number (caddr b)))))))
-    ))
-    ;; (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
+    ;; (let ((data (map cdr (filter
+    ;;     		  (lambda (x)(equal? "node" (car x)))
+    ;;     		  (map string-split (tests:easy-dot test-records "plain"))))))
+    ;;   (map car (sort data (lambda (a b)
+    ;;     		    (> (string->number (caddr a))(string->number (caddr b)))))))
+    ;; ))
+    (sort all-tests sort-fn1))) ;; avoid dealing with deleted tests, look at the hash table
 
 (define (tests:easy-dot test-records outtype)
   (let-values (((fd temp-path) (file-mkstemp (conc "/tmp/" (current-user-name) ".XXXXXX"))))
