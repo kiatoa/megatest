@@ -406,7 +406,7 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
-					     (tests:get-testconfig test-name tconfigreg #t)) ;; 'return-procs)))
+					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
@@ -858,7 +858,7 @@
 	 (item-path       (let ((ip (item-list->path itemdat)))
 			    (alist->env-vars (list (list "MT_ITEMPATH" ip)))
 			    ip))
-	 (tconfig         (or (tests:get-testconfig test-name tregistry #t)
+	 (tconfig         (or (tests:get-testconfig test-name tregistry #t force-create: #t)
 			      test-conf)) ;; force re-read now that all vars are set
 	 (useshell        (let ((ush (config-lookup *configdat* "jobtools"     "useshell")))
 			    (if ush 
