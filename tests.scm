@@ -730,14 +730,16 @@
 		     (not (string=? "" (getenv "MT_ITEMPATH"))))
 		 (conc "/" (getenv "MT_ITEMPATH"))))))
 
-(define (tests:get-testconfig test-name test-registry system-allowed)
+(define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
   (let* ((test-path         (hash-table-ref/default 
 			     test-registry test-name 
 			     (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
 	 (cache-path   (tests:get-test-path-from-environment))
-	 (cache-exists (and cache-path (file-exists? (conc cache-path "/.testconfig"))))
+	 (cache-exists (and cache-path 
+			    (not force-create)  ;; if force-create then pretend there is no cache to read
+			    (file-exists? (conc cache-path "/.testconfig"))))
 	 (cache-file   (conc cache-path "/.testconfig"))
 	 (tcfg         (if testexists
 			   (or (and cache-exists
