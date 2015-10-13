@@ -406,6 +406,8 @@
 				 ;; do all the ezsteps (if any)
 				 (if ezsteps
 				     (let* ((testconfig ;; (read-config (conc work-area "/testconfig") #f #t environ-patt: "pre-launch-env-vars")) ;; FIXME??? is allow-system ok here?
+					     ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
+					     ;;       ezstep names need a full re-eval here.
 					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
 					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
 				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
