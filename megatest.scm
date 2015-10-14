@@ -275,6 +275,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-unlock"
 			"-list-servers"
                         "-run-wait"      ;; wait on a run to complete (i.e. no RUNNING)
+			"-local"         ;; run some commands using local db access
 
 			;; misc queries
 			"-list-disks"
@@ -938,7 +939,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (launch:setup-for-run)
-	(let* ((dbstruct    (make-dbr:dbstruct path: *toppath* local: #t))
+	(let* ((dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
 	       (testpatt    (common:args-get-testpatt #f))
 	       ;; (if (args:get-arg "-testpatt") 
@@ -1611,7 +1612,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-repl")
 	(args:get-arg "-load"))
     (let* ((toppath (launch:setup-for-run))
-	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+	   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: (args:get-arg "-local")) #f)))
       (if dbstruct
 	  (begin
 	    (set! *db* dbstruct)
