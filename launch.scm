@@ -1004,6 +1004,7 @@
 	  (thread-sleep! 0.01))
       (with-output-to-file "mt_launch.log"
 	(lambda ()
+	  (print "LAUNCHCMD: " (string-intersperse fullcmd " "))
 	  (if (list? launch-results)
 	      (apply print launch-results)
 	      (print "NOTE: launched \"" fullcmd "\"\n  but did not wait for it to proceed. Add the following to megatest.config \n[setup]\nlaunchwait yes\n  if you have problems with this"))
