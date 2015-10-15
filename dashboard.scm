@@ -961,6 +961,7 @@ Misc
 			    #:posy "0.5"
 			    #:button-cb (lambda (obj btn pressed x y status)
 					  (print "obj: " obj ", pressed " pressed ", status " status)
+					  (print "canvas-origin: " (canvas-origin the-cnv))
 					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
 						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
 					    ;; (print "\tx\ty\tllx\tlly\turx\tury")
