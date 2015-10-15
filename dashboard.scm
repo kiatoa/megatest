@@ -960,17 +960,17 @@ Misc
 			    #:posx "0.5"
 			    #:posy "0.5"
 			    #:button-cb (lambda (obj btn pressed x y status)
-					  ;; (print "obj: " obj)
+					  (print "obj: " obj ", pressed " pressed ", status " status)
 					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
 						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
-					    ;; (print "x\ty\tllx\tlly\turx\tury")
+					    ;; (print "\tx\ty\tllx\tlly\turx\tury")
 					    (for-each (lambda (test-name)
 							(let* ((rec-coords (hash-table-ref tests-info test-name))
 							       (llx        (list-ref rec-coords 0))
 							       (urx        (list-ref rec-coords 1))
 							       (lly        (list-ref rec-coords 2))
 							       (ury        (list-ref rec-coords 3)))
-							  ;; (print x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " "
+							  ;; (print "\t" x "\t" y "\t" llx "\t" lly "\t" urx "\t" ury "\t" test-name " ")
 							  (if (and (eq? pressed 1)
 								   (> x llx)
 								   (> y lly)
