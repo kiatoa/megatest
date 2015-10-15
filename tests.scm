@@ -26,6 +26,7 @@
 (declare (uses items))
 (declare (uses runconfig))
 ;; (declare (uses sdb))
+(declare (uses server))
 
 (include "common_records.scm")
 (include "key_records.scm")
@@ -794,31 +795,31 @@
 		   (b-priority (mungepriority b-raw-pri)))
 	      (tests:testqueue-set-priority! a-record a-priority)
 	      (tests:testqueue-set-priority! b-record b-priority)
-	      (debug:print 0 "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
+	      ;; (debug:print 0 "a=" a ", b=" b ", a-waitons=" a-waitons ", b-waitons=" b-waitons)
 	      (cond
 	       ;; is 
 	       ((member a b-waitons)          ;; is b waiting on a?
-		(debug:print 0 "case1")
+		;; (debug:print 0 "case1")
 		#t)
 	       ((member b a-waitons)          ;; is a waiting on b?
-		(debug:print 0 "case2")
+		;; (debug:print 0 "case2")
 		#f)
 	       ((and (not (null? a-waitons))  ;; both have waitons - do not disturb
 		     (not (null? b-waitons)))
-		(debug:print 0 "case2.1")
+		;; (debug:print 0 "case2.1")
 		#t)
 	       ((and (null? a-waitons)        ;; no waitons for a but b has waitons
 		     (not (null? b-waitons)))
-		(debug:print 0 "case3")
+		;; (debug:print 0 "case3")
 		#f)
 	       ((and (not (null? a-waitons))  ;; a has waitons but b does not
 		     (null? b-waitons)) 
-		(debug:print 0 "case4")
+		;; (debug:print 0 "case4")
 		#t)
 	       ((not (eq? a-priority b-priority)) ;; use
 		(> a-priority b-priority))
 	       (else
-		(debug:print 0 "case5")
+		;; (debug:print 0 "case5")
 		(string>? a b))))))
 	 
 	 (sort-fn2
@@ -862,7 +863,9 @@
 
 (define (tests:write-dot-file test-records fname)
   (if (file-write-access? (pathname-directory fname))
-      (map print (tests:tests->dot test-records))))
+      (with-output-to-file fname
+	(lambda ()
+	  (map print (tests:tests->dot test-records))))))
 
 (define (tests:tests->dot test-records)
   (let ((all-testnames (hash-table-keys test-records)))
@@ -874,9 +877,12 @@
 	  (let* ((testrec (hash-table-ref test-records hed))
 		 (waitons (or (tests:testqueue-get-waitons testrec) '()))
 		 (newres  (append res
-				  (map (lambda (waiton)
-					 (conc "   " waiton " -> " hed))
-				       waitons))))
+				  (if (null? waitons)
+				      (list (conc "   \"" hed "\";"))
+				      (map (lambda (waiton)
+					     (conc "   \"" waiton "\" -> \"" hed "\";"))
+					   waitons)
+				      ))))
 	    (if (null? tal)
 		(append newres (list "}"))
 		(loop (car tal)(cdr tal) newres)
@@ -885,23 +891,36 @@
 ;; (tests:run-dot (list "digraph tests {" "a -> b" "}") "plain")
 
 (define (tests:run-dot indat outtype) ;; outtype is plain, fig, dot, etc. http://www.graphviz.org/content/output-formats
-  (print "indat: ")
-  (map print indat)
-  (let-values (((inp oup pid)(process "dot" (list "-T" outtype))))
-    (let ((th1 (make-thread (lambda ()
-			      (with-output-to-port oup
-				(lambda ()
-				  (map print indat))))
-			    "dot writer")))
-      (thread-start! th1)
-      (let ((res (with-input-from-port inp
-		   (lambda ()
-		     (read-lines)))))
-	(thread-join! th1)
-	(close-input-port inp)
-	(close-output-port oup)
-	;; (process-wait pid)
-	res))))
+  (let-values (((inp oup pid)(process "env -i PATH=$PATH dot" (list "-T" outtype))))
+    (with-output-to-port oup
+      (lambda ()
+	(map print indat)))
+    (close-output-port oup)
+    (let ((res (with-input-from-port inp
+		 (lambda ()
+		   (read-lines)))))
+      (close-input-port inp)
+      res)))
+
+;; read data from tmp file or create if not exists
+;; if exists regen in background
+;;
+(define (tests:lazy-dot testrecords  outtype)
+  (let ((dfile (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dot"))
+	(fname (conc "/tmp/." (current-user-name) "-" (server:mk-signature) ".dotdat")))
+    (tests:write-dot-file testrecords dfile)
+    (if (file-exists? fname)
+	(let ((res (with-input-from-file fname
+		     (lambda ()
+		       (read-lines)))))
+	  (system (conc "env -i PATH=$PATH dot -T " outtype " < " dfile " > " fname "&"))
+	  res)
+	(begin
+	  (system (conc "env -i PATH=$PATH dot -T " outtype " < " dfile " > " fname))
+	  (with-input-from-file fname
+	    (lambda ()
+	      (read-lines)))))))
+	  
 
 ;; for each test:
 ;;   
