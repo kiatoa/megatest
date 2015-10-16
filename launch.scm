@@ -1027,3 +1027,28 @@
       launch-results))
   (change-directory *toppath*))
 
+;; recover a test where the top controlling mtest may have died
+;;
+(define (launch:recover-test run-id test-id)
+  ;; this function is called on the test run host via ssh
+  ;;
+  ;; 1. look at the process from pid
+  ;;    - is it owned by calling user
+  ;;    - it it's run directory correct for the test
+  ;;    - is there a controlling mtest (maybe stuck)
+  ;; 2. if recovery is needed watch pid
+  ;;    - when it exits take the exit code and do the needful
+  ;;
+  (let* ((pid (rmt:test-get-top-process-id run-id test-id))
+	 (psres (with-input-from-pipe
+		 (conc "ps -F -u " (current-user-name) " | grep -E '" pid " ' | grep -v 'grep -E " pid "'")
+		 (lambda ()
+		   (read-line))))
+	 (rundir (if (string? psres) ;; real process owned by user
+		     (read-symbolic-link (conc "/proc/" pid "/cwd"))
+		     #f)))
+    ;; now wait on that process if all is correct
+    ;; periodically update the db with runtime
+    ;; when the process exits look at the db, if still RUNNING after 10 seconds set
+    ;; state/status appropriately
+    (process-wait pid)))

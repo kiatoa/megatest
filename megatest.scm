@@ -253,6 +253,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-archive"
 			"-since"
 			"-fields"
+			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -1346,6 +1347,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
     (begin
       (launch:execute (args:get-arg "-execute"))
       (set! *didsomething* #t)))
+
+;;======================================================================
+;; recover from a test where the managing mtest was killed but the underlying
+;; process might still be salvageable
+;;======================================================================
+
+(if (args:get-arg "-recover-test")
+    (let* ((params (string-split (args:get-arg "-recover-test") ",")))
+      (if (> (length params) 1) ;; run-id and test-id
+	  (let ((run-id (string->number (car params)))
+		(test-id (string->number (cadr params))))
+	    (if (and run-id test-id)
+		(begin
+		  (launch:recover-test run-id test-id)
+		  (set! *didsomething* #t))
+		(begin
+		  (debug:print 0 "ERROR: bad run-id or test-id, must be integers")
+		  (exit 1)))))))
 
 ;;======================================================================
 ;; Test commands (i.e. for use inside tests)
