@@ -940,15 +940,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
     (if (launch:setup-for-run)
-	(let* ((dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
+	(let* (;; (dbstruct    (make-dbr:dbstruct path: *toppath* local: (args:get-arg "-local")))
 	       (runpatt     (args:get-arg "-list-runs"))
 	       (testpatt    (common:args-get-testpatt #f))
 	       ;; (if (args:get-arg "-testpatt") 
 	       ;;  	        (args:get-arg "-testpatt") 
 	       ;;  	        "%"))
-	       (keys        (db:get-keys dbstruct))
+	       (keys        (rmt:get-keys)) ;; (db:get-keys dbstruct))
 	       ;; (runsda   t  (db:get-runs dbstruct runpatt #f #f '()))
-	       (runsdat     (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
+	       (runsdat     (rmt:get-runs-by-patt keys (or runpatt "%") (common:args-get-target) ;; (db:get-runs-by-patt dbstruct keys (or runpatt "%") (common:args-get-target)
 			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment")))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
@@ -1015,7 +1015,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
 			  (tests   (if tests-spec
-				       (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (rmt:get-tests-for-run run-id testpatt '() '() #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1105,7 +1105,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
-				    (let ((steps (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
+				    (let ((steps (rmt:get-steps-for-test run-id (db:test-get-id test)))) ;; (db:get-steps-for-test dbstruct run-id (db:test-get-id test))))
 				      (for-each 
 				       (lambda (step)
 					 (format #t 
