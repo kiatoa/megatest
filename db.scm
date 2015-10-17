@@ -3406,6 +3406,8 @@
 	 (keyqry   (string-intersperse (map (lambda (p)(conc (car p) " LIKE ? ")) keypatt-alist) " AND "))
 	 (numkeys  (length keypatt-alist))
 	 (test-ids '())
+	 (dbdat    (db:get-db dbstruct #f))
+	 (db       (db:dbdat-get-db dbdat))
 	 (windows  (and pathmod (substring-index "\\" pathmod)))
 	 (tempdir  (conc "/tmp/" (current-user-name) "/" runspatt "_" (random 10000) "_" (current-process-id)))
 	 (runsheader (append (list "Run Id" "Runname") ; 0 1
