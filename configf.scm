@@ -38,9 +38,11 @@
 		      (list #f #f #f) ;;  #f #f) 
 		  (loop remcwd)))))))))
 
-(define (config:assoc-safe-add alist key val)
+(define (config:assoc-safe-add alist key val #!key (metadata #f))
   (let ((newalist (filter (lambda (x)(not (equal? key (car x)))) alist)))
-    (append newalist (list (list key val)))))
+    (append newalist (list (if metadata
+			       (list key val metadata)
+			       (list key val))))))
 
 (define (config:eval-string-in-environment str)
   (let ((cmdres (cmd-run->list (conc "echo " str))))
@@ -64,7 +66,7 @@
 ;; read a line and process any #{ ... } constructs
 
 (define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
-(define (configf:process-line l ht allow-system)
+(define (configf:process-line l ht allow-system #!key (linenum #f))
   (let loop ((res l))
     (if (string? res)
 	(let ((matchdat (string-search configf:var-expand-regex res)))
@@ -74,7 +76,9 @@
 		     (cmd     (list-ref matchdat 3))
 		     (poststr (list-ref matchdat 4))
 		     (result  #f)
-		     (fullcmd (case (string->symbol cmdtype)
+		     (start-time (current-seconds))
+		     (cmdsym  (string->symbol cmdtype))
+		     (fullcmd (case cmdsym
 				((scheme)(conc "(lambda (ht)" cmd ")"))
 				((system)(conc "(lambda (ht)(system \"" cmd "\"))"))
 				((shell) (conc "(lambda (ht)(shell \""  cmd "\"))"))
@@ -90,13 +94,19 @@
 		;; (print "fullcmd=" fullcmd)
 		(handle-exceptions
 		 exn
-		 (debug:print 0 "ERROR: failed to process config input \"" l "\"")
+		 (debug:print 0 "ERROR: failed to process config input \"" l "\"")		 
 		 (if (or allow-system
 			 (not (member cmdtype '("system" "shell"))))
 		     (with-input-from-string fullcmd
 		       (lambda ()
 			 (set! result ((eval (read)) ht))))
 		    (set! result (conc "#{(" cmdtype ") "  cmd "}"))))
+		(case cmdsym
+		  ((system shell scheme)
+		   (let ((delta (- (current-seconds) start-time)))
+		     (if (> delta 2)
+			 (debug:print-info 0 "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)
+			 (debug:print-info 9 "for line \"" l "\"\n command:  " cmd " took " delta " seconds to run with output:\n   " result)))))
 		(loop (conc prestr result poststr)))
 	      res))
 	res)))
@@ -160,7 +170,7 @@
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table)))
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f))
   (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (debug:print 9 "START: " path)
   (if (not (file-exists? path))
@@ -169,7 +179,10 @@
 	;; WARNING: This is a risky change but really, we should not return an empty hash table if no file read?
 	#f) ;; (if (not ht)(make-hash-table) ht))
       (let ((inp        (open-input-file path))
-	    (res        (if (not ht)(make-hash-table) ht)))
+	    (res        (if (not ht)(make-hash-table) ht))
+	    (metapath   (if (or (debug:debug-mode 9)
+				keep-filenames)
+			    path #f)))
 	(let loop ((inl               (configf:read-line inp res allow-system settings)) ;; (read-line inp))
 		   (curr-section-name (if curr-section curr-section "default"))
 		   (var-flag #f);; turn on for key-var-pr and cont-ln-rx, turn off elsewhere
@@ -200,7 +213,7 @@
 							    (begin
 							      ;; (push-directory conf-dir)
 							      (debug:print 9 "Including: " full-conf)
-							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings)
+							      (read-config full-conf res allow-system environ-patt: environ-patt curr-section: curr-section-name sections: sections settings: settings keep-filenames: keep-filenames)
 							      ;; (pop-directory)
 							      (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
 							    (begin
@@ -216,16 +229,19 @@
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
 							  (let ((alist    (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
-									    (let* ((cmdres  (cmd-run->list cmd))
-										   (status  (cadr cmdres))
-										   (res     (car  cmdres)))
+									    (let* ((start-time (current-seconds))
+										   (cmdres     (cmd-run->list cmd))
+										   (delta      (- (current-seconds) start-time))
+										   (status     (cadr cmdres))
+										   (res        (car  cmdres)))
 									      (debug:print-info 4 "" inl "\n => " (string-intersperse res "\n"))
 									      (if (not (eq? status 0))
 										  (begin
 										    (debug:print 0 "ERROR: problem with " inl ", return code " status
-												 " output: " cmdres)
-										    ;; (exit 1)
-										    ))
+												 " output: " cmdres)))
+									      (if (> delta 2)
+										  (debug:print-info 0 "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res)
+										  (debug:print-info 9 "for line \"" inl "\"\n  command: " cmd " took " delta " seconds to run with output:\n   " res))
 									      (if (null? res)
 										  ""
 										  (string-intersperse res " "))))))
@@ -235,7 +251,8 @@
 												    (case allow-system
 												      ((return-procs) val-proc)
 												      ((return-string) cmd)
-												      (else (val-proc)))))
+												      (else (val-proc)))
+												    metadata: metapath))
 							    (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))
 							  (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f)))
 	       (configf:key-val-pr ( x key unk1 val unk2 ) (let* ((alist   (hash-table-ref/default res curr-section-name '()))
@@ -247,12 +264,12 @@
 							     (if envar (safe-setenv key realval))
 							     (debug:print 10 "   setting: [" curr-section-name "] " key " = " val)
 							     (hash-table-set! res curr-section-name 
-									      (config:assoc-safe-add alist key realval))
+									      (config:assoc-safe-add alist key realval metadata: metapath))
 							     (loop (configf:read-line inp res allow-system settings) curr-section-name key #f)))
 	       (configf:key-no-val ( x key val)             (let* ((alist   (hash-table-ref/default res curr-section-name '())))
 							      (debug:print 10 "   setting: [" curr-section-name "] " key " = #t")
 							      (hash-table-set! res curr-section-name 
-									       (config:assoc-safe-add alist key #t))
+									       (config:assoc-safe-add alist key #t metadata: metapath))
 							      (loop (configf:read-line inp res allow-system settings) curr-section-name key #f)))
 	       ;; if a continued line
 	       (configf:cont-ln-rx ( x whsp val     ) (let ((alist (hash-table-ref/default res curr-section-name '())))
@@ -266,7 +283,7 @@
 								   val)))
 						      ;; (print "val: " val "\nnewval: \"" newval "\"\nvarflag: " var-flag)
 						      (hash-table-set! res curr-section-name 
-								       (config:assoc-safe-add alist var-flag newval))
+								       (config:assoc-safe-add alist var-flag newval metadata: metapath))
 						      (loop (configf:read-line inp res allow-system settings) curr-section-name var-flag (if lead lead whsp)))
 						    (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f))))
 	       (else (debug:print 0 "ERROR: problem parsing " path ",\n   \"" inl "\"")
@@ -537,3 +554,20 @@
     (lambda ()
       (pp (configf:config->alist cdat)))))
      
+
+;; convert hierarchial list to ini format
+;;
+(define (configf:config->ini data)
+  (map 
+   (lambda (section)
+     (let ((section-name (car section))
+	   (section-dat  (cdr section)))
+       (print "\n[" section-name "]")
+       (map (lambda (dat-pair)
+	      (let* ((var (car dat-pair))
+		     (val (cadr dat-pair))
+		     (fname (if (> (length dat-pair) 2)(caddr dat-pair) #f)))
+		(if fname (print "# " var "=>" fname))
+		(print var " " val)))
+	    section-dat))) ;;       (print "section-dat: " section-dat))
+   (hash-table->alist data)))

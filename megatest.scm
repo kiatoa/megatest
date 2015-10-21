@@ -803,6 +803,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (pp (hash-table->alist data)))
 	 ((string=? (args:get-arg "-dumpmode") "json")
 	  (json-write data))
+	 ((string=? (args:get-arg "-dumpmode") "ini")
+	  (configf:config->ini data))
 	 (else
 	  (debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
 	(set! *didsomething* #t))
@@ -818,10 +820,15 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (args:get-arg "-var"))
 	(let ((val (configf:lookup data (args:get-arg "-section")(args:get-arg "-var"))))
 	  (if val (print val))))
+
+       ;; print just a section if only -section
+
        ((not (args:get-arg "-dumpmode"))
 	(pp (hash-table->alist data)))
        ((string=? (args:get-arg "-dumpmode") "json")
 	(json-write data))
+       ((string=? (args:get-arg "-dumpmode") "ini")
+	(configf:config->ini data))
        (else
 	(debug:print 0 "ERROR: -dumpmode of " (args:get-arg "-dumpmode") " not recognised")))
       (set! *didsomething* #t)
@@ -1014,8 +1021,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     )))
 		   (let* ((run-id  (db:get-value-by-header run header "id"))
 			  (runname (db:get-value-by-header run header "runname")) 
+			  (states  (string-split (or (args:get-arg "-state") "") ","))
+			  (statuses (string-split (or (args:get-arg "-status") "") ","))
 			  (tests   (if tests-spec
-				       (rmt:get-tests-for-run run-id testpatt '() '() #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
+				       (rmt:get-tests-for-run run-id testpatt states statuses #f #f #f 'testname 'asc ;; (db:get-tests-for-run dbstruct run-id testpatt '() '() #f #f #f 'testname 'asc 
 							     ;; use qryvals if test-spec provided
 							     (if tests-spec
 								 (string-intersperse adj-tests-spec ",")
@@ -1037,9 +1046,23 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			;; ;; add last entry twice - seems to be a bug in hierhash?
 			;; (mutils:hierhash-set! data (db:get-value-by-header run header "comment")    targetstr runname "meta" "comment"    )
 		       (else
-			(print "Run: " targetstr "/" runname 
-			       " status: " (db:get-value-by-header run header "state")
-			       " run-id: " run-id ", number tests: " (length tests))))
+			(if (null? runs-spec)
+			    (print "Run: " targetstr "/" runname 
+				   " status: " (db:get-value-by-header run header "state")
+				   " run-id: " run-id ", number tests: " (length tests)
+				   " event_time: " (db:get-value-by-header run header "event_time"))
+			    (begin
+			      (if (not (member "target" runs-spec))
+			          ;; (display (conc "Target: " targetstr))
+			          (display (conc "Run: " targetstr "/" runname " ")))
+			      (for-each
+			       (lambda (field-name)
+				 (if (equal? field-name "target")
+				     (display (conc "target: " targetstr " "))
+				     (display (conc field-name ": " (db:get-value-by-header run header (conc field-name)) " "))))
+			       runs-spec)
+			      (newline)))))
+		       
 		     (for-each 
 		      (lambda (test)
 		      	(handle-exceptions
@@ -1049,16 +1072,16 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (print "exn=" (condition->list exn))
 			   (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
 			   (print-call-chain (current-error-port)))
-			 (let* ((test-id      (get-value-by-fieldname test test-field-index "id"       )) ;; (db:test-get-id         test))
-				(testname     (get-value-by-fieldname test test-field-index "testname" )) ;; (db:test-get-testname   test))
-				(itempath     (get-value-by-fieldname test test-field-index "item_path")) ;; (db:test-get-item-path  test))
-				(comment      (get-value-by-fieldname test test-field-index "comment"  )) ;; (db:test-get-comment    test))
-				(tstate       (get-value-by-fieldname test test-field-index "state"    )) ;; (db:test-get-state      test))
-				(tstatus      (get-value-by-fieldname test test-field-index "status"   )) ;; (db:test-get-status     test))
-				(event-time   (get-value-by-fieldname test test-field-index "event_time")) ;; (db:test-get-event_time test))
-				(rundir       (get-value-by-fieldname test test-field-index "rundir"    )) ;; (db:test-get-rundir     test))
-				(final_logf   (get-value-by-fieldname test test-field-index "final_logf")) ;; (db:test-get-final_logf test))
-				(run_duration (get-value-by-fieldname test test-field-index "run_duration")) ;; (db:test-get-run_duration test))
+			 (let* ((test-id      (if (member "id"           tests-spec)(get-value-by-fieldname test test-field-index "id"          ) #f)) ;; (db:test-get-id         test))
+				(testname     (if (member "testname"     tests-spec)(get-value-by-fieldname test test-field-index "testname"    ) #f)) ;; (db:test-get-testname   test))
+				(itempath     (if (member "item_path"    tests-spec)(get-value-by-fieldname test test-field-index "item_path"   ) #f)) ;; (db:test-get-item-path  test))
+				(comment      (if (member "comment"      tests-spec)(get-value-by-fieldname test test-field-index "comment"     ) #f)) ;; (db:test-get-comment    test))
+				(tstate       (if (member "state"        tests-spec)(get-value-by-fieldname test test-field-index "state"       ) #f)) ;; (db:test-get-state      test))
+				(tstatus      (if (member "status"       tests-spec)(get-value-by-fieldname test test-field-index "status"      ) #f)) ;; (db:test-get-status     test))
+				(event-time   (if (member "event_time"   tests-spec)(get-value-by-fieldname test test-field-index "event_time"  ) #f)) ;; (db:test-get-event_time test))
+				(rundir       (if (member "rundir"       tests-spec)(get-value-by-fieldname test test-field-index "rundir"      ) #f)) ;; (db:test-get-rundir     test))
+				(final_logf   (if (member "final_logf"   tests-spec)(get-value-by-fieldname test test-field-index "final_logf"  ) #f)) ;; (db:test-get-final_logf test))
+				(run_duration (if (member "run_duration" tests-spec)(get-value-by-fieldname test test-field-index "run_duration") #f)) ;; (db:test-get-run_duration test))
 				(fullname     (conc testname
 						    (if (equal? itempath "")
 							"" 
@@ -1084,24 +1107,43 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			     ;;  (mutils:hierhash-set! data  event-time targetstr runname "data" (conc test-id) "event_time")
 			     ;;  )
 			     (else
-			      (format #t
-				      "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
-				      fullname
-				      tstate
-				      tstatus
-				      (db:test-get-run_duration test)
-				      event-time
-				      (db:test-get-host test))
-			      (if (not (or (equal? (db:test-get-status test) "PASS")
-					   (equal? (db:test-get-status test) "WARN")
-					   (equal? (db:test-get-state test)  "NOT_STARTED")))
+			      (if (and tstate tstatus event-time)
+				  (format #t
+					  "  Test: ~25a State: ~15a Status: ~15a Runtime: ~5@as Time: ~22a Host: ~10a\n"
+					  (if fullname fullname "")
+					  (if tstate   tstate   "")
+					  (if tstatus  tstatus  "")
+					  (get-value-by-fieldname test test-field-index "run_duration");;(if test     (db:test-get-run_duration test) "")
+					  (if event-time event-time "")
+					  (get-value-by-fieldname test test-field-index "host")) ;;(if test (db:test-get-host test)) "")
+				  (print "  Test: " fullname
+					 (if tstate  (conc " State: "  tstate)  "")
+					 (if tstatus (conc " Status: " tstatus) "")
+					 (if (get-value-by-fieldname test test-field-index "run_duration")
+					     (conc " Runtime: " (get-value-by-fieldname test test-field-index "run_duration"))
+					     "")
+					 (if event-time (conc " Time: " event-time) "")
+					 (if (get-value-by-fieldname test test-field-index "host")
+					     (conc " Host: " (get-value-by-fieldname test test-field-index "host"))
+					     "")))
+			      (if (not (or (equal? (get-value-by-fieldname test test-field-index "status") "PASS")
+					   (equal? (get-value-by-fieldname test test-field-index "status") "WARN")
+					   (equal? (get-value-by-fieldname test test-field-index "state")  "NOT_STARTED")))
 				  (begin
-				    (print   "         cpuload:  " (db:test-get-cpuload test)
-					     "\n         diskfree: " (db:test-get-diskfree test)
-					     "\n         uname:    " (db:test-get-uname test)
-					     "\n         rundir:   " (db:test-get-rundir test)
-					     "\n         rundir:   " ;; (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
-					     (db:test-get-rundir test) ;; )
+				    (print   (if (get-value-by-fieldname test test-field-index "cpuload")
+						 (conc "         cpuload:  "   (get-value-by-fieldname test test-field-index "cpuload"))
+						 "") ;; (db:test-get-cpuload test)
+					     (if (get-value-by-fieldname test test-field-index "diskfree")
+						 (conc "\n         diskfree: " (get-value-by-fieldname test test-field-index "diskfree")) ;; (db:test-get-diskfree test)
+						 "")
+					     (if (get-value-by-fieldname test test-field-index "uname")
+						 (conc "\n         uname:    " (get-value-by-fieldname test test-field-index "uname")) ;; (db:test-get-uname test)
+						 "")
+					     (if (get-value-by-fieldname test test-field-index "rundir")
+						 (conc "\n         rundir:   " (get-value-by-fieldname test test-field-index "rundir")) ;; (db:test-get-rundir test)
+						 "")
+;;					     "\n         rundir:   " (get-value-by-fieldname test test-field-index "") ;; (sdb:qry 'getstr ;; (filedb:get-path *fdb* 
+;; 					     (db:test-get-rundir test) ;; )
 					     )
 				    ;; Each test
 				    ;; DO NOT remote run
