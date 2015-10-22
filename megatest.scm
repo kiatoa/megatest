@@ -942,6 +942,21 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (vector-ref datavec indx))
 	#f)))
 
+(define (to-alist dat)
+  (cond
+   ((list? dat)   (map to-alist dat))
+   ((vector? dat)
+    (map to-alist (vector->list dat)))
+   ((pair? dat)
+    (cons (to-alist (car dat))
+	  (to-alist (cdr dat))))
+   ((hash-table? dat)
+    (map to-alist (hash-table->alist dat)))
+   (else
+    (if dat
+	dat
+	""))))
+
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
 (if (or (args:get-arg "-list-runs")
@@ -959,6 +974,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			           	 #f #f '("id" "runname" "state" "status" "owner" "event_time" "comment")))
 	       (runstmp     (db:get-rows runsdat))
 	       (header      (db:get-header runsdat))
+	       ;; this is "-since" support. This looks at last mod times of <run-id>.db files
+	       ;; and collects those modified since the -since time.
 	       (runs        (if (and (not (null? runstmp))
 				     (args:get-arg "-since"))
 				(let ((changed-ids (db:get-changed-run-ids (string->number (args:get-arg "-since")))))
@@ -1032,7 +1049,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 								 #f))
 				       '())))
 		     (case dmode
-		       ((json)
+		       ((json ods)
 			(if runs-spec
 			    (for-each 
 			     (lambda (field-name)
@@ -1087,7 +1104,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 							"" 
 							(conc "(" itempath ")")))))
 			   (case dmode
-			     ((json)
+			     ((json ods)
 			      (if tests-spec
 				  (for-each
 				   (lambda (field-name)
@@ -1160,6 +1177,82 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      tests)))))
 	   runs)
 	  (if (eq? dmode 'json)(json-write data))
+	  (let* ((metadat-fields (delete-duplicates
+				  (append keys '( "runname" "time" "owner" "pass_count" "fail_count" "state" "status" "comment" "id"))))
+		 (run-fields    '("state"
+				  "shortdir"
+				  "status"
+				  "comment"
+				  "item_path"
+				  "event_time"
+				  "host"
+				  "run_id"
+				  "run_duration"
+				  "attemptnum"
+				  "testname"
+				  "id"
+				  "uname"
+				  "archived"
+				  "diskfree"
+				  "rundir"
+				  "cpuload"
+				  "final_logf"))
+		 (newdat          (to-alist data))
+		 (allrundat       (car (map cdr newdat))) ;; (car (map cdr (car (map cdr newdat)))))
+		 (runs            (append
+				   (list "runs" ;; sheetname
+					 metadat-fields)
+				   (map (lambda (run)
+					  ;; (print "run: " run)
+					  (let* ((runname (car run))
+						 (rundat  (cdr run))
+						 (metadat (let ((tmp (assoc "meta" rundat)))
+							    (if tmp (cdr tmp) #f))))
+					    ;; (print "runname: " runname "\n\nrundat: " )(pp rundat)(print "\n\nmetadat: ")(pp metadat)
+					    (if metadat
+						(map (lambda (field)
+						       (let ((tmp (assoc field metadat)))
+							 (if tmp (cdr tmp) "")))
+						     metadat-fields)
+						'())))
+					allrundat)))
+		 ;; '( ( "target" ( "runname" ( "data" ( "runid" ( "id . "37" ) ( ... ))))
+		 (run-pages      (map (lambda (targdat)
+					(let* ((target  (car targdat))
+					       (runsdat (cdr targdat)))
+					  (if runsdat
+					      (map (lambda (rundat)
+						     (let* ((runname  (car rundat))
+							    (rundat   (cdr rundat))
+							    (testsdat (let ((tmp (assoc "data" rundat)))
+									(if tmp (cdr tmp) #f))))
+						       (if testsdat
+							   (let ((tests (map (lambda (test)
+									       (let* ((test-id  (car test))
+										      (test-dat (cdr test)))
+										 (map (lambda (field)
+											(let ((tmp (assoc field test-dat)))
+											  (if tmp (cdr tmp) "")))
+										      run-fields)))
+									     testsdat)))
+							     (print "Target: " target "/" runname ":")
+							     (pp testsdat)
+							     (cons (conc target "/" runname)
+								   tests))
+							   '())))
+						   runsdat)
+					      '())))
+				      newdat)) ;; we use newdat to get target
+		 (sheets         (apply list runs run-pages)))
+	    ;; (print "allrundat:")
+	    ;; (pp allrundat)
+	    ;; (print "runs:")
+	    ;; (pp runs)
+	    (print "sheets: ")
+	    (pp sheets)
+	    (system "rm -rf /tmp/construct-ods")
+	    (create-directory "/tmp/construct-ods" #t)
+	    (if (eq? dmode 'ods)(ods:list->ods "/tmp/construct-ods" "blah.ods" sheets)))
 	  (set! *didsomething* #t))))
 
 ;; Don't think I need this. Incorporated into -list-runs instead

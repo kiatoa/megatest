@@ -420,7 +420,7 @@
   (let* ((db-path       (db:dbfile-path run-id)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/db/" run-id ".db"))
 	 (dbstruct      (make-dbr:dbstruct path:  (db:dbfile-path #f) ;; (configf:lookup *configdat* "setup" "linktree") 
 					   local: #t))
-	 (testdat       (db:get-test-info-by-id dbstruct run-id test-id))
+	 (testdat        (rmt:get-test-info-by-id run-id test-id)) ;; (db:get-test-info-by-id dbstruct run-id test-id))
 	 (db-mod-time   0) ;; (file-modification-time db-path))
 	 (last-update   0) ;; (current-seconds))
 	 (request-update #t))
@@ -430,8 +430,8 @@
 	  (exit 1))
 	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
 	       (test-registry (tests:get-all))
-	       (keydat        (if testdat (db:get-key-val-pairs dbstruct run-id) #f))
-	       (rundat        (if testdat (db:get-run-info dbstruct run-id) #f))
+	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
+	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
 	       (runname       (if testdat (db:get-value-by-header (db:get-rows rundat)
 								  (db:get-header rundat)
 								  "runname") #f))
@@ -443,12 +443,12 @@
 				  (db:test-get-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
-	       (teststeps     (if testdat (tests:get-compressed-steps dbstruct run-id test-id) '()))
+	       (teststeps     (if testdat (tests:get-compressed-steps #f run-id test-id) '()))
 	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
 	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
 	       (testmeta      (if testdat 
-				  (let ((tm (db:testmeta-get-record dbstruct testname)))
+				  (let ((tm (rmt:testmeta-get-record testname)))
 				    (if tm tm (make-db:testmeta)))
 				  (make-db:testmeta)))
 
@@ -514,12 +514,12 @@
 						    (handle-exceptions
 						     exn 
 						     (debug:print-info 0 "test db access issue in examine test for run-id " run-id ", test-id " test-id ": " ((condition-property-accessor 'exn 'message) exn))
-						     (db:get-test-info-by-id dbstruct run-id test-id )))))
+						     (rmt:get-test-info-by-id run-id test-id )))))
 			       ;; (debug:print-info 0 "need-update= " need-update " curr-mod-time = " curr-mod-time)
 			       (cond
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
-				 (set! teststeps    (tests:get-compressed-steps dbstruct run-id test-id))
+				 (set! teststeps    (tests:get-compressed-steps #f run-id test-id))
 				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
 				       (db:test-get-rundir testdat)) ;; )
@@ -759,7 +759,7 @@
 											      (db:test-data-get-units    x)
 											      (db:test-data-get-type     x)
 											      (db:test-data-get-comment  x)))
-										    (db:read-test-data dbstruct run-id test-id "%")))
+										    (rmt:read-test-data run-id test-id "%")))
 									      "\n")))
 							       (if (not (equal? currval newval))
 								   (iup:attribute-set! test-data "VALUE" newval ))))) ;; "TITLE" newval)))))
