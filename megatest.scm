@@ -942,21 +942,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (vector-ref datavec indx))
 	#f)))
 
-(define (to-alist dat)
-  (cond
-   ((list? dat)   (map to-alist dat))
-   ((vector? dat)
-    (map to-alist (vector->list dat)))
-   ((pair? dat)
-    (cons (to-alist (car dat))
-	  (to-alist (cdr dat))))
-   ((hash-table? dat)
-    (map to-alist (hash-table->alist dat)))
-   (else
-    (if dat
-	dat
-	""))))
-
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
 ;;
 (if (or (args:get-arg "-list-runs")
@@ -1200,8 +1185,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 				  "uname"
 				  )
 				)
-		 (newdat          (to-alist data))
-		 (allrundat       (car (map cdr newdat))) ;; (car (map cdr (car (map cdr newdat)))))
+		 (newdat          (common:to-alist data))
+		 (allrundat       (if (null? newdat)
+				      '()
+				      (car (map cdr newdat)))) ;; (car (map cdr (car (map cdr newdat)))))
 		 (runs            (append
 				   (list "runs" ;; sheetname
 					 metadat-fields)
@@ -1262,17 +1249,17 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    ;; (pp runs)
 	    ;(print "sheets: ")
 	    ;; (pp sheets)
-	    (let* ((tempdir    (conc "/tmp/" (current-user-name) "/" (random 10000) "_" (current-process-id)))
-		   (outputfile (or (args:get-arg "-o") "out.ods"))
-		   (ouf        (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
-				   outputfile
-				   (begin
-				     (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
-				     (conc (current-directory) "/" outputfile)))))
-	      (create-directory tempdir #t)
-	      (if (eq? dmode 'ods)(ods:list->ods tempdir ouf sheets))
-	      ;; (system (conc "rm -rf " tempdir))
-	      ))
+	    (if (eq? dmode 'ods)
+		(let* ((tempdir    (conc "/tmp/" (current-user-name) "/" (random 10000) "_" (current-process-id)))
+		       (outputfile (or (args:get-arg "-o") "out.ods"))
+		       (ouf        (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
+				       outputfile
+				       (begin
+					 (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
+					 (conc (current-directory) "/" outputfile)))))
+		  (create-directory tempdir #t)
+		  (ods:list->ods tempdir ouf sheets))))
+	  ;; (system (conc "rm -rf " tempdir))
 	  (set! *didsomething* #t))))
 
 ;; Don't think I need this. Incorporated into -list-runs instead

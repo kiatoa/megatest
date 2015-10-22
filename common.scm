@@ -149,6 +149,23 @@
 ;; U S E F U L   S T U F F
 ;;======================================================================
 
+;; convert things to an alist or assoc list, #f gets converted to ""
+;;
+(define (common:to-alist dat)
+  (cond
+   ((list? dat)   (map common:to-alist dat))
+   ((vector? dat)
+    (map common:to-alist (vector->list dat)))
+   ((pair? dat)
+    (cons (common:to-alist (car dat))
+	  (common:to-alist (cdr dat))))
+   ((hash-table? dat)
+    (map common:to-alist (hash-table->alist dat)))
+   (else
+    (if dat
+	dat
+	""))))
+
 (define (common:low-noise-print waitval . keys)
   (let* ((key      (string-intersperse (map conc keys) "-" ))
 	 (lasttime (hash-table-ref/default *common:denoise* key 0))
