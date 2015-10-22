@@ -73,6 +73,7 @@ Misc
 			"-main"
 			"-v"
 			"-q"
+			"-use-local"
 		       )
 		 args:arg-hash
 		 0))
@@ -87,7 +88,7 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *useserver* (or (args:get-arg "-use-server")
+(define *useserver* (or(not (args:get-arg "-use-local"))
 			(configf:lookup *configdat* "dashboard" "use-server")))
 
 (define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
@@ -962,6 +963,9 @@ Misc
 			    #:button-cb (lambda (obj btn pressed x y status)
 					  (print "obj: " obj ", pressed " pressed ", status " status)
 					  (print "canvas-origin: " (canvas-origin the-cnv))
+					  (let-values (((xx yy)(canvas-origin the-cnv)))
+					    (canvas-transform-set! the-cnv #f)
+					    (print "canvas-origin: " xx " " yy " click at " x " " y))
 					  (let ((tests-info     (hash-table-ref tests-draw-state  'tests-info))
 						(selected-tests (hash-table-ref tests-draw-state  'selected-tests)))
 					    ;; (print "\tx\ty\tllx\tlly\turx\tury")
@@ -1107,17 +1111,30 @@ Misc
 			       (cmd      (conc toolpath " -test " (dboard:data-get-curr-run-id *data*) "," test-id "&")))
 			  (system cmd)))))
 	 (updater  (lambda ()
-		     (let* ((runs-dat     (db:get-runs-by-patt db *keys* "%" #f #f #f #f))
+		     (let* ((runs-dat     (if *useserver*
+					      (rmt:get-runs-by-patt *keys* "%" #f #f #f #f)
+					      (db:get-runs-by-patt db *keys* "%" #f #f #f #f)))
 			    (runs-header  (vector-ref runs-dat 0)) ;; 0 is header, 1 is list of records
 			    (run-id       (dboard:data-get-curr-run-id *data*))
-			    (tests-dat    (let ((tdat (db:get-tests-for-run db run-id 
-									    (hash-table-ref/default *searchpatts* "test-name" "%/%")
-									    (hash-table-keys *state-ignore-hash*) ;; '()
-									    (hash-table-keys *status-ignore-hash*) ;; '()
-									    #f #f
-									    *hide-not-hide*
-									    #f #f
-									    "id,testname,item_path,state,status"))) ;; get 'em all
+			    (tests-dat    (let ((tdat (if run-id
+							  (if *useserver*
+							      (rmt:get-tests-for-run run-id 
+										     (hash-table-ref/default *searchpatts* "test-name" "%/%")
+										     (hash-table-keys *state-ignore-hash*) ;; '()
+										     (hash-table-keys *status-ignore-hash*) ;; '()
+										     #f #f
+										     *hide-not-hide*
+										     #f #f
+										     "id,testname,item_path,state,status") ;; get 'em all
+							      (db:get-tests-for-run db run-id 
+										    (hash-table-ref/default *searchpatts* "test-name" "%/%")
+										    (hash-table-keys *state-ignore-hash*) ;; '()
+										    (hash-table-keys *status-ignore-hash*) ;; '()
+										    #f #f
+										    *hide-not-hide*
+										    #f #f
+										    "id,testname,item_path,state,status"))
+							  '()))) ;; get 'em all
 					    (sort tdat (lambda (a b)
 							 (let* ((aval (vector-ref a 2))
 								(bval (vector-ref b 2))
