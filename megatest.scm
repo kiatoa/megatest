@@ -1179,24 +1179,27 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (if (eq? dmode 'json)(json-write data))
 	  (let* ((metadat-fields (delete-duplicates
 				  (append keys '( "runname" "time" "owner" "pass_count" "fail_count" "state" "status" "comment" "id"))))
-		 (run-fields    '("state"
-				  "shortdir"
+		 (run-fields    '(
+				  "testname"
+				  "item_path"
+				  "state"
 				  "status"
 				  "comment"
-				  "item_path"
 				  "event_time"
 				  "host"
 				  "run_id"
 				  "run_duration"
 				  "attemptnum"
-				  "testname"
 				  "id"
-				  "uname"
 				  "archived"
 				  "diskfree"
-				  "rundir"
 				  "cpuload"
-				  "final_logf"))
+				  "final_logf"
+				  "shortdir"
+				  "rundir"
+				  "uname"
+				  )
+				)
 		 (newdat          (to-alist data))
 		 (allrundat       (car (map cdr newdat))) ;; (car (map cdr (car (map cdr newdat)))))
 		 (runs            (append
@@ -1214,7 +1217,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						       (let ((tmp (assoc field metadat)))
 							 (if tmp (cdr tmp) "")))
 						     metadat-fields)
-						'())))
+						(begin
+						  (debug:print 0 "WARNING: meta data for run " runname " not found")
+						  '()))))
 					allrundat)))
 		 ;; '( ( "target" ( "runname" ( "data" ( "runid" ( "id . "37" ) ( ... ))))
 		 (run-pages      (map (lambda (targdat)
@@ -1235,24 +1240,39 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 											  (if tmp (cdr tmp) "")))
 										      run-fields)))
 									     testsdat)))
-							     (print "Target: " target "/" runname ":")
-							     (pp testsdat)
+							     ;; (print "Target: " target "/" runname " tests:")
+							     ;; (pp tests)
 							     (cons (conc target "/" runname)
-								   tests))
-							   '())))
+								   (cons (list (conc target "/" runname))
+									 (cons '()
+									       (cons run-fields tests)))))
+							   (begin
+							     (debug:print 0 "WARNING: run " target "/" runname " appears to have no data")
+							     ;; (pp rundat)
+							     '()))))
 						   runsdat)
 					      '())))
 				      newdat)) ;; we use newdat to get target
-		 (sheets         (apply list runs run-pages)))
+		 (sheets         (filter (lambda (x)
+					   (not (null? x)))
+					 (cons runs (map car run-pages)))))
 	    ;; (print "allrundat:")
 	    ;; (pp allrundat)
 	    ;; (print "runs:")
 	    ;; (pp runs)
-	    (print "sheets: ")
-	    (pp sheets)
-	    (system "rm -rf /tmp/construct-ods")
-	    (create-directory "/tmp/construct-ods" #t)
-	    (if (eq? dmode 'ods)(ods:list->ods "/tmp/construct-ods" "blah.ods" sheets)))
+	    ;(print "sheets: ")
+	    ;; (pp sheets)
+	    (let* ((tempdir    (conc "/tmp/" (current-user-name) "/" (random 10000) "_" (current-process-id)))
+		   (outputfile (or (args:get-arg "-o") "out.ods"))
+		   (ouf        (if (string-match (regexp "^[/~]+.*") outputfile) ;; full path?
+				   outputfile
+				   (begin
+				     (debug:print 0 "WARNING: path given, " outputfile " is relative, prefixing with current directory")
+				     (conc (current-directory) "/" outputfile)))))
+	      (create-directory tempdir #t)
+	      (if (eq? dmode 'ods)(ods:list->ods tempdir ouf sheets))
+	      ;; (system (conc "rm -rf " tempdir))
+	      ))
 	  (set! *didsomething* #t))))
 
 ;; Don't think I need this. Incorporated into -list-runs instead
