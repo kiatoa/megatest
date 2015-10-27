@@ -114,10 +114,26 @@
 		      " -server " (or target-host "-") " -run-id " run-id (if (equal? (configf:lookup *configdat* "server" "daemonize") "yes")
 									      (conc " -daemonize -log " logfile)
 									      "")
-		      " -debug 4 -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
+		      " -m testsuite:" testsuite))) ;; (conc " >> " logfile " 2>&1 &")))))
     (debug:print 0 "INFO: Starting server (" cmdln ") as none running ...")
     (push-directory *toppath*)
     (if (not (directory-exists? "logs"))(create-directory "logs"))
+    ;; Rotate logs, logic: 
+    ;;                 if > 500k and older than 1 week, remove previous compressed log and compress this log
+    (directory-fold 
+     (lambda (file rem)
+       (if (and (string-match "^.*.log" file)
+		(> (file-size file) 200000))
+	   (let ((gzfile (conc file ".gz")))
+	     (if (file-exists gzfile)
+		 (begin
+		   (debug:print-info 0 "removing " gzfile)
+		   (delete-file gzfile)))
+	     (debug:print-info 0 "compressing " file)
+	     (system (conc "gzip " file)))))
+     '()
+     "logs")
+    
     ;; host.domain.tld match host?
     (if (and target-host 
 	     ;; look at target host, is it host.domain.tld or ip address and does it 
