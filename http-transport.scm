@@ -461,11 +461,11 @@
       ;;
       ;; no_traffic, no running tests, if server 0, no running servers
       ;;
-      ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
+      ;; (let ((wait-on-running (configf:lookup *configdat* "server" b"wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
       ;;
       (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
 	     (adjusted-timeout (if (> hrs-since-start 1)
-				   (- server-timeout (* hrs-since-start 60))  ;; subtract 60 seconds per hour
+				   (- server-timeout (inexact->exact (round (* hrs-since-start 60))))  ;; subtract 60 seconds per hour
 				   server-timeout)))
 	(if (common:low-noise-print 120 "server timeout")
 	    (debug:print-info 0 "Adjusted server timeout: " adjusted-timeout))

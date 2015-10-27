@@ -45,9 +45,14 @@
 			       (list key val))))))
 
 (define (config:eval-string-in-environment str)
-  (let ((cmdres (cmd-run->list (conc "echo " str))))
-    (if (null? cmdres) ""
-	(caar cmdres))))
+  (handle-exceptions
+   exn
+   (begin
+     (debug:print 0 "ERROR: problem evaluating \"" str "\" in the shell environment")
+     #f)
+   (let ((cmdres (cmd-run->list (conc "echo " str))))
+     (if (null? cmdres) ""
+	 (caar cmdres)))))
 
 ;;======================================================================
 ;; Make the regexp's needed globally available
