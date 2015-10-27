@@ -654,7 +654,8 @@
 	    (if (not (null? fromdat))
 		(set! fromdats (cons fromdat fromdats)))
 
-	    (debug:print-info 4 "found " totrecords " records to sync")
+	    (if (common:low-noise-print 120 "sync-records")
+		(debug:print-info 4 "found " totrecords " records to sync"))
 
 	    ;; read the target table
 	    (sqlite3:for-each-row
@@ -697,7 +698,7 @@
 	     (append (list todb) slave-dbs))))
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
-	      (should-print (common:low-noise-print 30 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
+	      (should-print (common:low-noise-print 120 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
 	 (if should-print (debug:print 0 "INFO: db sync, total run time " runtime " ms"))
 	 (for-each 
 	  (lambda (dat)

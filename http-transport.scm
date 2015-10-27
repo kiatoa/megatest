@@ -10,8 +10,8 @@
 
 (require-extension (srfi 18) extras tcp s11n)
 
-(use sqlite3 srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest)
-(import (prefix sqlite3 sqlite3:))
+(use  srfi-1 posix regex regex-case srfi-69 hostinfo md5 message-digest) ;; sqlite3
+;; (import (prefix sqlite3 sqlite3:))
 
 (use spiffy uri-common intarweb http-client spiffy-request-vars intarweb spiffy-directory-listing)
 
@@ -359,6 +359,7 @@
   ;; This thread waits for the server to come alive
   (debug:print-info 0 "Starting the sync-back, keep alive thread in server for run-id=" run-id)
   (let* ((tdbdat      (tasks:open-db))
+	 (server-start-time (current-seconds))
 	 (server-info (let loop ((start-time (current-seconds))
 				 (changed    #t)
 				 (last-sdat  "not this"))
@@ -462,21 +463,28 @@
       ;;
       ;; (let ((wait-on-running (configf:lookup *configdat* "server" "wait-on-running"))) ;; wait on running tasks (if not true then exit on time out)
       ;;
-      (if (and *server-run*
-	       (> (+ last-access server-timeout)
-		  (current-seconds)))
-	  (begin
-	    (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access))
-	    ;;
-	    ;; Consider implementing some smarts here to re-insert the record or kill self is
-	    ;; the db indicates so
-	    ;;
-	    ;; (if (tasks:server-am-i-the-server? tdb run-id)
-	    ;;     (tasks:server-set-state! tdb server-id "running"))
-	    ;;
-	    (loop 0 server-state bad-sync-count))
-	  (http-transport:server-shutdown server-id port)))))
-
+      (let* ((hrs-since-start  (/ (- (current-seconds) server-start-time) 3600))
+	     (adjusted-timeout (if (> hrs-since-start 1)
+				   (- server-timeout (* hrs-since-start 60))  ;; subtract 60 seconds per hour
+				   server-timeout)))
+	(if (common:low-noise-print 120 "server timeout")
+	    (debug:print-info 0 "Adjusted server timeout: " adjusted-timeout))
+	(if (and *server-run*
+		 (> (+ last-access server-timeout)
+		    (current-seconds)))
+	    (begin
+	      (if (common:low-noise-print 120 "server continuing")
+		  (debug:print-info 0 "Server continuing, seconds since last db access: " (- (current-seconds) last-access)))
+	      ;;
+	      ;; Consider implementing some smarts here to re-insert the record or kill self is
+	      ;; the db indicates so
+	      ;;
+	      ;; (if (tasks:server-am-i-the-server? tdb run-id)
+	      ;;     (tasks:server-set-state! tdb server-id "running"))
+	      ;;
+	      (loop 0 server-state bad-sync-count))
+	    (http-transport:server-shutdown server-id port))))))
+  
 (define (http-transport:server-shutdown server-id port)
   (let ((tdbdat (tasks:open-db)))
     (debug:print-info 0 "Starting to shutdown the server.")
