@@ -125,7 +125,7 @@
        (if (and (string-match "^.*.log" file)
 		(> (file-size (conc "logs/" file)) 200000))
 	   (let ((gzfile (conc "logs/" file ".gz")))
-	     (if (file-exists gzfile)
+	     (if (file-exists? gzfile)
 		 (begin
 		   (debug:print-info 0 "removing " gzfile)
 		   (delete-file gzfile)))
