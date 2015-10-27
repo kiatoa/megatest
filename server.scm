@@ -123,7 +123,7 @@
     (directory-fold 
      (lambda (file rem)
        (if (and (string-match "^.*.log" file)
-		(> (file-size file) 200000))
+		(> (file-size (conc "logs/" file)) 200000))
 	   (let ((gzfile (conc "logs/" file ".gz")))
 	     (if (file-exists gzfile)
 		 (begin
