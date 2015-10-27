@@ -124,13 +124,13 @@
      (lambda (file rem)
        (if (and (string-match "^.*.log" file)
 		(> (file-size file) 200000))
-	   (let ((gzfile (conc file ".gz")))
+	   (let ((gzfile (conc "logs/" file ".gz")))
 	     (if (file-exists gzfile)
 		 (begin
 		   (debug:print-info 0 "removing " gzfile)
 		   (delete-file gzfile)))
 	     (debug:print-info 0 "compressing " file)
-	     (system (conc "gzip " file)))))
+	     (system (conc "gzip logs/" file)))))
      '()
      "logs")
     
