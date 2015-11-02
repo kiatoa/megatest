@@ -699,7 +699,7 @@
 	tbls)
        (let* ((runtime      (- (current-milliseconds) start-time))
 	      (should-print (common:low-noise-print 120 "db sync" (> runtime 500)))) ;; low and high sync times treated as separate.
-	 (if should-print (debug:print 0 "INFO: db sync, total run time " runtime " ms"))
+	 (if should-print (debug:print 2 "INFO: db sync, total run time " runtime " ms"))
 	 (for-each 
 	  (lambda (dat)
 	    (let ((tblname (car dat))
