@@ -1075,7 +1075,8 @@
   0)
 
 (define (tests:update-central-meta-info run-id test-id cpuload diskfree minutes uname hostname)
-  (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id)
+  (if (and cpuload diskfree)
+      (rmt:general-call 'update-cpuload-diskfree run-id cpuload diskfree test-id))
   (if minutes 
       (rmt:general-call 'update-run-duration run-id minutes test-id))
   (if (and uname hostname)
