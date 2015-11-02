@@ -399,8 +399,9 @@
 (define (common:get-runconfig-targets #!key (configf #f))
   (sort (map car (hash-table->alist
 		  (or configf
-		      (read-config "runconfigs.config"
-			       #f #t))))
+		      (read-config (conc *toppath* "/runconfigs.config")
+			       #f #t)
+		      (make-hash-table))))
 	string<?))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'

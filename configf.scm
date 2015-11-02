@@ -71,6 +71,7 @@
 ;; read a line and process any #{ ... } constructs
 
 (define configf:var-expand-regex (regexp "^(.*)#\\{(scheme|system|shell|getenv|get|runconfigs-get|rget)\\s+([^\\}\\{]*)\\}(.*)"))
+
 (define (configf:process-line l ht allow-system #!key (linenum #f))
   (let loop ((res l))
     (if (string? res)
@@ -99,7 +100,9 @@
 		;; (print "fullcmd=" fullcmd)
 		(handle-exceptions
 		 exn
-		 (debug:print 0 "ERROR: failed to process config input \"" l "\"")		 
+		 (begin
+		   (debug:print 0 "WARNING: failed to process config input \"" l "\"")
+		   (set! result (conc "#{( " cmdtype ") " cmd"}")))
 		 (if (or allow-system
 			 (not (member cmdtype '("system" "shell"))))
 		     (with-input-from-string fullcmd
