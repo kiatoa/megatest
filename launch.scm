@@ -437,8 +437,19 @@
 				   ;; (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area)
 				   ;; (tests:set-full-meta-info test-id run-id (calc-minutes) work-area)
 				   (tests:set-full-meta-info #f test-id run-id (calc-minutes) work-area 10)
-				   (let loop ((minutes   (calc-minutes)))
-				     (begin
+				   (let loop ((minutes   (calc-minutes))
+					      (cpu-load  (get-cpu-load))
+					      (disk-free (get-df (current-directory))))
+				     (let ((new-cpu-load (let* ((load  (get-cpu-load))
+								(delta (abs (- load cpu-load))))
+							   (if (> delta 0.6) ;; don't bother updating with small changes
+							       load
+							       #f)))
+					   (new-disk-free (let* ((df    (get-df (current-directory)))
+								 (delta (abs (- df disk-free))))
+							    (if (> delta 200) ;; ignore changes under 200 Meg
+								df
+								#f))))
 				       (set! kill-job? (or (test-get-kill-request run-id test-id) ;; run-id test-name itemdat))
 							   (and runtlim (let* ((run-seconds   (- (current-seconds) start-seconds))
 									       (time-exceeded (> run-seconds runtlim)))
@@ -447,7 +458,7 @@
 										(debug:print-info 0 "KILLING TEST DUE TO TIME LIMIT EXCEEDED! Runtime=" run-seconds " seconds, limit=" runtlim)
 										#t)
 									      #f)))))
-				       (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)
+				       (tests:update-central-meta-info run-id test-id new-cpu-load new-disk-free (calc-minutes) #f #f)
 				       (if kill-job? 
 					   (begin
 					     (mutex-lock! m)
@@ -494,8 +505,8 @@
 				       (if keep-going
 					   (begin
 					     (thread-sleep! 3) ;; (+ 3 (random 6))) ;; add some jitter to the call home time to spread out the db accesses
-					     (if keep-going
-						 (loop (calc-minutes)))))))
+					     (if keep-going    ;; keep originals for cpu-load and disk-free unless they change more than the allowed delta
+						 (loop (calc-minutes) (or new-cpu-load cpu-load) (or new-disk-free disk-free)))))))
 				   (tests:update-central-meta-info run-id test-id (get-cpu-load) (get-df (current-directory))(calc-minutes) #f #f)))) ;; NOTE: Checking twice for keep-going is intentional
 		 (th1          (make-thread monitorjob "monitor job"))
 		 (th2          (make-thread runit "run job")))
