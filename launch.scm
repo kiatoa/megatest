@@ -357,8 +357,11 @@
 
 	  (if (args:get-arg "-xterm")
 	      (set! fullrunscript "xterm")
-	      (if (and fullrunscript (not (file-execute-access? fullrunscript)))
+	      (if (and fullrunscript 
+		       (file-exists? fullrunscript)
+		       (not (file-execute-access? fullrunscript)))
 		  (system (conc "chmod ug+x " fullrunscript))))
+
 	  ;; We are about to actually kick off the test
 	  ;; so this is a good place to remove the records for 
 	  ;; any previous runs
@@ -517,7 +520,7 @@
 	    (debug:print-info 0 "Megatest exectute of test " test-name ", item path " item-path " complete. Notifying the db ...")
 	    (set! keep-going #f)
 	    (thread-join! th1)
-	    (thread-sleep! 1)       ;; give thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
+	    (thread-sleep! 1)       ;; givbe thread th1 a chance to be done TODO: Verify this is needed. At 0.1 I was getting fail to stop, increased to total of 1.1 sec.
 	    (mutex-lock! m)
 	    (let* ((item-path (item-list->path itemdat))
 		   ;; only state and status needed - use lazy routine
