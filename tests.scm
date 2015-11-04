@@ -732,8 +732,10 @@
 		 (conc "/" (getenv "MT_ITEMPATH"))))))
 
 (define (tests:get-testconfig test-name test-registry system-allowed #!key (force-create #f))
-  (let* ((test-path         (hash-table-ref/default 
-			     test-registry test-name 
+  (let* ((treg              (or test-registry
+				(tests:get-all)))
+	 (test-path         (hash-table-ref/default 
+			     treg test-name 
 			     (conc *toppath* "/tests/" test-name)))
 	 (test-configf (conc test-path "/testconfig"))
 	 (testexists   (and (file-exists? test-configf)(file-read-access? test-configf)))
@@ -743,12 +745,13 @@
 			    (file-exists? (conc cache-path "/.testconfig"))))
 	 (cache-file   (conc cache-path "/.testconfig"))
 	 (tcfg         (if testexists
-			   (or (and cache-exists
+			   (or (and (not force-create)
+				    cache-exists
 				    (handle-exceptions
 				     exn
 				     (begin
 				       (debug:print 0 "WARNING: Failed to read " cache-file) 
-				       #f)
+				       (make-hash-table)) ;; better to return a hash and keep going - I think
 				     (configf:read-alist cache-file)))
 			       (read-config test-configf #f system-allowed environ-patt: (if system-allowed
 											     "pre-launch-env-vars"
