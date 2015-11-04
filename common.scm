@@ -397,12 +397,18 @@
 
 ;; (map print (map car (hash-table->alist (read-config "runconfigs.config" #f #t))))
 (define (common:get-runconfig-targets #!key (configf #f))
-  (sort (map car (hash-table->alist
-		  (or configf
-		      (read-config (conc *toppath* "/runconfigs.config")
-			       #f #t)
-		      (make-hash-table))))
-	string<?))
+  (let ((targs       (sort (map car (hash-table->alist
+				     (or configf
+					 (read-config (conc *toppath* "/runconfigs.config")
+						      #f #t)
+					 (make-hash-table))))
+			   string<?))
+	(target-patt (args:get-arg "-target")))
+    (if target-patt
+	(filter (lambda (x)
+		  (patt-list-match x target-patt))
+		targs)
+	targs)))
 
 ;; '(print (string-intersperse (map cadr (hash-table-ref/default (read-config "megatest.config" \#f \#t) "disks" '"'"'("none" ""))) "\n"))'
 (define (common:get-disks #!key (configf #f))
@@ -666,15 +672,15 @@
 	      (freespc    (cond
 			   ((not (directory? dirpath))
 			    (if (common:low-noise-print 50 "disks not a dir " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a directory - ignoring it."))
+				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not a directory - ignoring it."))
 			    -1)
 			   ((not (file-write-access? dirpath))
 			    (if (common:low-noise-print 50 "disks not writeable " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not writeable - ignoring it."))
+				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not writeable - ignoring it."))
 			    -1)
 			   ((not (eq? (string-ref dirpath 0) #\/))
 			    (if (common:low-noise-print 50 "disks not a proper path " disk-num)
-				(debug:print 0 "WARNING: disk " disk-num " at path " dirpath " is not a fully qualified path - ignoring it."))
+				(debug:print 0 "WARNING: disk " disk-num " at path \"" dirpath "\" is not a fully qualified path - ignoring it."))
 			    -1)
 			   (else
 			    (get-df dirpath)))))
