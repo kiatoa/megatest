@@ -760,7 +760,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (args:get-arg "-list-targets")
     (let ((targets (common:get-runconfig-targets)))
-      (print "Found "(length targets) " targets")
+      (debug:print 1 "Found "(length targets) " targets")
       (case (string->symbol (or (args:get-arg "-dumpmode") "alist"))
 	((alist)
 	 (for-each (lambda (x)
@@ -943,6 +943,8 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	#f)))
 
 ;; NOTE: list-runs and list-db-targets operate on local db!!!
+;;
+;; IDEA: megatest list -runname blah% ...
 ;;
 (if (or (args:get-arg "-list-runs")
 	(args:get-arg "-list-db-targets"))
