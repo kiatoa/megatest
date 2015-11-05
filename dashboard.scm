@@ -92,8 +92,10 @@ Misc
 			(configf:lookup *configdat* "dashboard" "use-server")))
 
 (define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
-					     local: #t))
+(define *dbstruct-local*  (if *useserver*
+			      #f
+			      (make-dbr:dbstruct path:  *dbdir*
+						 local: #t)))
 (define *db-file-path* (db:dbfile-path 0))
 
 ;; HACK ALERT: this is a hack, please fix.

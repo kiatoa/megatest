@@ -402,7 +402,9 @@
   (let* ((stats-matrix (iup:matrix expand: "YES"))
 	 (changed      #f)
 	 (updater      (lambda ()
-			 (let* ((run-stats    (db:get-run-stats dbstruct))
+			 (let* ((run-stats    (if dbstruct
+						  (db:get-run-stats dbstruct)
+						  (rmt:get-all-run-stats)))
 				(indices      (common:sparse-list-generate-index run-stats)) ;;  proc: set-cell))
 				(row-indices  (car indices))
 				(col-indices  (cadr indices))
