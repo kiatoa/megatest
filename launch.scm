@@ -643,7 +643,7 @@
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
+	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	(if (file-exists? linktree) ;; can't proceed without linktree
 	    (begin
 	      (if (not (file-exists? fulldir))
