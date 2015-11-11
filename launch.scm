@@ -134,9 +134,12 @@
     (if logpro-used
 	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
     ;; set the test final status
-    (let* ((this-step-status (cond
-			      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-			      ((eq? (vector-ref exit-info 2) 0)                   'pass)
+    (let* ((process-exit-status (vector-ref exit-info 2))
+	   (this-step-status (cond
+			      ((and (eq? process-exit-status 2) logpro-used) 'warn)
+			      ((and (eq? process-exit-status 3) logpro-used) 'check)
+			      ((and (eq? process-exit-status 4) logpro-used) 'abort)
+			      ((eq? (vector-ref exit-info 2) 0)              'pass)
 			      (else 'fail)))
 	   (overall-status   (cond
 			      ((eq? (vector-ref exit-info 3) 2) 'warn) ;; rollup-status
@@ -162,6 +165,18 @@
 	 ;; NB// test-set-status! does rdb calls under the hood
 	 (tests:test-set-status! run-id test-id next-state "WARN" 
 				 (if (eq? this-step-status 'warn) "Logpro warning found" #f)
+				 #f))
+	((check)
+	 (vector-set! exit-info 3 3) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "CHECK" 
+				 (if (eq? this-step-status 'check) "Logpro check found" #f)
+				 #f))
+	((abort)
+	 (vector-set! exit-info 3 4) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "ABORT" 
+				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)
 				 #f))
 	((pass)
 	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
