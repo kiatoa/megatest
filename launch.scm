@@ -146,7 +146,7 @@
 			      ((and (eq? process-exit-status 5) logpro-used) 'abort) ;; logpro 4 = abort
 			      ((eq? process-exit-status 0)                   'pass)  ;; logpro 0 = pass
 			      (else 'fail)))
-	   (overall-status   (conds
+	   (overall-status   (cond
 			      ((eq? (launch:einf-rollup-status exit-info) 2) 'warn) ;; rollup-status (vector-ref exit-info 3)
 			      ((eq? (launch:einf-rollup-status exit-info) 0) 'pass) ;; (vector-ref exit-info 3)
 			      (else 'fail)))
