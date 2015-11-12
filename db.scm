@@ -140,8 +140,15 @@
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id)
-  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
-			      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
+  (let* ((dbdirs           (filter string?
+				   (list (configf:lookup *configdat* "setup" "dbdir")
+					 (conc *toppath* "/.db")
+					 (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+	 (existing-dirs   (filter file-exists? dbdirs))
+	 (dbdir           (if (null? existing-dirs)
+			      (or  (configf:lookup *configdat* "setup" "dbdir")
+				   (conc *toppath* "/.db"))
+			      (car existing-dirs)))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f)))
@@ -1824,46 +1831,34 @@
 ;;
 ;; ( (runname (( state  count ) ... ))
 ;;   (   ...  
-(define (db:get-run-stats dbstruct)
-  (let* ((dbdat        (db:get-db dbstruct #f))
+(define (db:get-run-stats dbstruct run-id run-name)
+  (let* ((dbdat        (db:get-db dbstruct run-id))
 	 (db           (db:dbdat-get-db dbdat))
 	 (totals       (make-hash-table))
 	 (curr         (make-hash-table))
 	 (res          '())
 	 (runs-info    '()))
     ;; First get all the runname/run-ids
-    (db:delay-if-busy dbdat)
-    (sqlite3:for-each-row
-     (lambda (run-id runname)
-       (set! runs-info (cons (list run-id runname) runs-info)))
-     db
-     "SELECT id,runname FROM runs WHERE state != 'deleted' ORDER BY event_time DESC;") ;; If you change this to the more logical ASC please adjust calls to db:get-run-stats
-    ;; for each run get stats data
-    (for-each
-     (lambda (run-info)
-       ;; get the net state/status counts for this run
-       (let* ((run-id   (car  run-info))
-	      (run-name (cadr run-info)))
-	 (db:with-db
-	  dbstruct
-	  run-id
-	  #f
-	  (lambda (db)
-	    (sqlite3:for-each-row
-	     (lambda (state status count)
-	       (let ((netstate (if (equal? state "COMPLETED") status state)))
-		 (if (string? netstate)
-		     (begin
-		       (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
-		       (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
-	     db
-	     "SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
-	    ;; add the per run counts to res
-	    (for-each (lambda (state)
-			(set! res (cons (list run-name state (hash-table-ref curr state)) res)))
-		      (sort (hash-table-keys curr) string>=))
-	    (set! curr (make-hash-table))))))
-     runs-info)
+    ;; (db:delay-if-busy dbdat)
+    (db:with-db
+     dbstruct
+     run-id
+     #f
+     (lambda (db)
+       (sqlite3:for-each-row
+	(lambda (state status count)
+	  (let ((netstate (if (equal? state "COMPLETED") status state)))
+	    (if (string? netstate)
+		(begin
+		  (hash-table-set! totals netstate (+ (hash-table-ref/default totals netstate 0) count))
+		  (hash-table-set! curr   netstate (+ (hash-table-ref/default curr   netstate 0) count))))))
+	db
+	"SELECT state,status,count(id) FROM tests AS t GROUP BY state,status ORDER BY state,status DESC;")
+       ;; add the per run counts to res
+       (for-each (lambda (state)
+		   (set! res (cons (list run-name state (hash-table-ref curr state)) res)))
+		 (sort (hash-table-keys curr) string>=))
+       (set! curr (make-hash-table))))
     (for-each (lambda (state)
 		(set! res (cons (list "Totals" state (hash-table-ref totals state)) res)))
 	      (sort (hash-table-keys totals) string>=))
@@ -3164,7 +3159,7 @@
 		      (loop (car tal)(cdr tal))))))))))
 
 (define (db:delay-if-busy dbdat #!key (count 6))
-  (if (not (configf:lookup *configdat* "server" "delay-on-busy"))
+  (if #f ;; (not (configf:lookup *configdat* "server" "delay-on-busy"))
       (and dbdat (db:dbdat-get-db dbdat))
       (if dbdat
 	  (let* ((dbpath (db:dbdat-get-path dbdat))

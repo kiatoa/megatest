@@ -326,10 +326,13 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
   (make-thread 
    (lambda ()
      (thread-sleep! 0.05) ;; delay for startup
-     (let ((legacy-sync (common:legacy-sync-required))
-	   (debug-mode  (debug:debug-mode 1))
-	   (last-time   (current-seconds)))
-       (if (common:legacy-sync-recommended)
+     (let* ((legacy-sync (common:legacy-sync-required))
+	    (debug-mode  (debug:debug-mode 1))
+	    (last-time   (current-seconds))
+	    (dbpath      (db:dbfile-path #f))
+	    (lockf       (conc dbpath "/.megatest.lck")))
+       (if (or legacy-sync
+	       (common:legacy-sync-recommended)) ;; for now do *some* syncing to megatest.db for backup purposes
 	   (let loop ()
 	     ;; sync for filesystem local db writes
 	     ;;
@@ -342,7 +345,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			   (hash-table-ref/default *db-local-sync* run-id #f))
 		      ;; (if (> (- start-time last-write) 5) ;; every five seconds
 		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
+			(common:simple-file-lock lockf)
 			(db:multi-db-sync (list run-id) 'new2old)
+			(common:simple-file-release-lock lockf)
 			(if (common:low-noise-print 30 "sync new to old")
 			    (let ((sync-time (- (current-seconds) start-time)))
 			      (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
@@ -364,7 +369,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	     (if (not *time-to-exit*)
 		 (let delay-loop ((count 0))
 		   (if (and (not *time-to-exit*)
-			    (< count 11)) ;; aprox 5-6 seconds
+			    (< count 40)) ;; aprox 30-40 seconds
 		       (begin
 			 (thread-sleep! 1)
 			 (delay-loop (+ count 1))))

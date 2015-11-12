@@ -624,6 +624,26 @@
 		      (if (null? results) #f
 			  (car results))))))))))
 
+;; call with run-id #f
+;;
+(define (rmt:get-all-run-stats)
+  (let* ((runs-dat (rmt:get-runs "%" #f #f '()))
+	 (header   (db:get-header runs-dat))
+	 (runs     (db:get-rows   runs-dat)))
+    (fold (lambda (run currdat)
+	    (let* ((run-id   (db:get-value-by-header run header "id"))
+		   (run-name (db:get-value-by-header run header "runname")))
+	      (if (and run-id run-name)
+		  (append (rmt:get-run-stats run-id run-name) currdat)
+		  (begin
+		    (debug:print 0 "ERROR: Bad run-id or run-name in " run)
+		    currdat))))
+	  '()
+	  runs)))
+
+(define (rmt:get-run-stats run-id run-name)
+  (rmt:send-receive 'get-run-stats run-id (list run-id run-name)))
+
 ;;======================================================================
 ;;  S T E P S
 ;;======================================================================

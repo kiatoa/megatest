@@ -147,6 +147,7 @@
 		     (cons "MT_TEST_RUN_DIR" test-rundir)
 		     (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
 	       (lambda ()
+		 (runs:set-megatest-env-vars run-id) ;;; WARNING: This sets a lot of vars!!!!
 		 (push-directory test-rundir)
 		 (set! tconfig (mt:lazy-read-test-config test-name))
 		 (for-each (lambda (trigger)

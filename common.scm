@@ -270,6 +270,7 @@
 
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
+      (args:get-arg "-run")
       (args:get-arg "-server")
       (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
@@ -280,8 +281,15 @@
   (configf:lookup *configdat* "setup" "megatest-db"))
 
 (define (std-exit-procedure)
-  (let ((no-hurry  (if *time-to-exit* ;; hurry up
-		       #f
+  ;; (let ((dbpath      (db:dbfile-path run-id))
+  ;; 	(lockf       (conc dbpath "/." run-id ".lck")))
+  ;;   (common:simple-file-lock lockf)
+  ;;   (db:multi-db-sync (list run-id) 'new2old)
+  ;;   (common:simple-file-release-lock lockf))
+  (let* ((dbpath      (db:dbfile-path #f))
+	 (lockf       (conc dbpath "/.megatest.lck"))
+	 (no-hurry  (if *time-to-exit* ;; hurry up
+			#f
 		       (begin
 			 (set! *time-to-exit* #t)
 			 #t))))
@@ -292,7 +300,12 @@
 			      (let ((run-ids (hash-table-keys *db-local-sync*)))
 				(if (and (not (null? run-ids))
 					 (configf:lookup *configdat* "setup" "megatest-db"))
-				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
+				    ;; was if no-hurry but I always want it sync'd I think ...
+				    ;; (if no-hurry (db:multi-db-sync run-ids 'new2old))))
+				    (begin
+				      (common:simple-file-lock lockf)
+				      (db:multi-db-sync run-ids 'new2old)
+				      (common:simple-file-release-lock lockf))))
 			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
 			      (if *inmemdb*     (db:close-all *inmemdb*))
 			      (if (and *megatest-db*

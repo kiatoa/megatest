@@ -218,6 +218,7 @@
 	    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct params))
 	    ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
 	    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
+	    ((get-run-stats)                (apply db:get-run-stats dbstruct params))
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))
