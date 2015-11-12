@@ -140,8 +140,15 @@
 ;;      (was planned to be;  zeroth db with name=main.db)
 ;;
 (define (db:dbfile-path run-id)
-  (let* ((dbdir           (or (configf:lookup *configdat* "setup" "dbdir")
-			      (conc (configf:lookup *configdat* "setup" "linktree") "/.db")))
+  (let* ((dbdirs           (filter string?
+				   (list (configf:lookup *configdat* "setup" "dbdir")
+					 (conc *toppath* "/.db")
+					 (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))))
+	 (existing-dirs   (filter file-exists? dbdirs))
+	 (dbdir           (if (null? existing-dirs)
+			      (or  (configf:lookup *configdat* "setup" "dbdir")
+				   (conc *toppath* "/.db"))
+			      (car existing-dirs)))
 	 (fname           (if run-id
 			      (if (eq? run-id 0) "main.db" (conc run-id ".db"))
 			      #f)))
