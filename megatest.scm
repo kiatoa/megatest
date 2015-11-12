@@ -343,8 +343,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		      ;; (if (> (- start-time last-write) 5) ;; every five seconds
 		      (begin ;; let ((sync-time (- (current-seconds) start-time)))
 			(db:multi-db-sync (list run-id) 'new2old)
-			(if (common:low-noise-print 30 "sync new to old")
-			    (let ((sync-time (- (current-seconds) start-time)))
+			(let ((sync-time (- (current-seconds) start-time)))
+			  (debug:print-info 3 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")
+			  (if (common:low-noise-print 30 "sync new to old")
 			      (debug:print-info 0 "Sync of newdb to olddb for run-id " run-id " completed in " sync-time " seconds")))
 			;; (if (> sync-time 10) ;; took more than ten seconds, start a server for this run
 			;;     (begin

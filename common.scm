@@ -207,9 +207,11 @@
 	  (lambda ()
 	    (print key-string)))
 	(thread-sleep! 0.25)
-	(with-input-from-file fname
-	  (lambda ()
-	    (equal? key-string (read-line)))))))
+	(if (file-exists? fname)
+	    (with-input-from-file fname
+	      (lambda ()
+		(equal? key-string (read-line))))
+	    #f))))
 	
 (define (common:simple-file-release-lock fname)
   (delete-file* fname))
@@ -271,9 +273,9 @@
 (define (common:legacy-sync-recommended)
   (or (args:get-arg "-runtests")
       (args:get-arg "-server")
-      (args:get-arg "-set-run-status")
+      ;; (args:get-arg "-set-run-status")
       (args:get-arg "-remove-runs")
-      (args:get-arg "-get-run-status")
+      ;; (args:get-arg "-get-run-status")
       ))
 
 (define (common:legacy-sync-required)
@@ -291,7 +293,8 @@
     (let ((th1 (make-thread (lambda () ;; thread for cleaning up, give it five seconds
 			      (let ((run-ids (hash-table-keys *db-local-sync*)))
 				(if (and (not (null? run-ids))
-					 (configf:lookup *configdat* "setup" "megatest-db"))
+					 (or (common:legacy-sync-recommended)
+					     (configf:lookup *configdat* "setup" "megatest-db")))
 				    (if no-hurry (db:multi-db-sync run-ids 'new2old))))
 			      (if *dbstruct-db* (db:close-all *dbstruct-db*))
 			      (if *inmemdb*     (db:close-all *inmemdb*))

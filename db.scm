@@ -777,7 +777,7 @@
     ;;
     (if (member 'new2old options)
 	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
-	       (src-run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0))))
+	       (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
 	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
 	       (count       1)
 	       (total       (length all-run-ids))
