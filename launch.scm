@@ -14,6 +14,7 @@
 ;;======================================================================
 
 (use regex regex-case base64 sqlite3 srfi-18 directory-utils posix-extras z3 call-with-environment-variables)
+(use defstruct)
 
 (import (prefix base64 base64:))
 (import (prefix sqlite3 sqlite3:))
@@ -54,6 +55,8 @@
 	(common:read-encoded-string enccmd)
 	'())))
 
+;;                       0           1              2              3
+(defstruct launch:einf (pid #t)(exit-status #t)(exit-code #t)(rollup-status 0))
 
 (define (launch:runstep ezstep run-id test-id exit-info m tal testconfig)
   (let* ((stepname       (car ezstep))  ;; do stuff to run the step
@@ -102,50 +105,56 @@
 	 (let processloop ((i 0))
 	   (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
 		       (mutex-lock! m)
-		       (vector-set! exit-info 0 pid)
-		       (vector-set! exit-info 1 exit-status)
-		       (vector-set! exit-info 2 exit-code)
+		       (launch:einf-pid-set!         exit-info pid)         ;; (vector-set! exit-info 0 pid)
+		       (launch:einf-exit-status-set! exit-info exit-status) ;; (vector-set! exit-info 1 exit-status)
+		       (launch:einf-exit-code-set!   exit-info exit-code)   ;; (vector-set! exit-info 2 exit-code)
 		       (mutex-unlock! m)
 		       (if (eq? pid-val 0)
 			   (begin
 			     (thread-sleep! 2)
 			     (processloop (+ i 1))))
 		       )))))
-    (debug:print-info 0 "step " stepname " completed with exit code " (vector-ref exit-info 2))
+    (debug:print-info 0 "step " stepname " completed with exit code " (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
     ;; now run logpro if needed
     (if logpro-used
 	(let ((pid (process-run (conc "logpro " logpro-file " " (conc stepname ".html") " < " stepname ".log"))))
 	  (let processloop ((i 0))
 	    (let-values (((pid-val exit-status exit-code)(process-wait pid #t)))
 			(mutex-lock! m)
-			(vector-set! exit-info 0 pid)
-			(vector-set! exit-info 1 exit-status)
-			(vector-set! exit-info 2 exit-code)
+			;; (make-launch:einf pid: pid exit-status: exit-status exit-code: exit-code)
+			(launch:einf-pid-set!         exit-info pid)         ;; (vector-set! exit-info 0 pid)
+			(launch:einf-exit-status-set! exit-info exit-status) ;; (vector-set! exit-info 1 exit-status)
+			(launch:einf-exit-code-set!   exit-info exit-code)   ;; (vector-set! exit-info 2 exit-code)
 			(mutex-unlock! m)
 			(if (eq? pid-val 0)
 			    (begin
 			      (thread-sleep! 2)
 			      (processloop (+ i 1)))))
-	    (debug:print-info 0 "logpro for step " stepname " exited with code " (vector-ref exit-info 2)))))
+	    (debug:print-info 0 "logpro for step " stepname " exited with code " (launch:einf-exit-code exit-info))))) ;; (vector-ref exit-info 2)))))
     
-    (let ((exinfo (vector-ref exit-info 2))
+    (let ((exinfo (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
 	  (logfna (if logpro-used (conc stepname ".html") "")))
       (rmt:teststep-set-status! run-id test-id stepname "end" exinfo #f logfna))
     (if logpro-used
 	(rmt:test-set-log! run-id test-id (conc stepname ".html")))
     ;; set the test final status
-    (let* ((this-step-status (cond
-			      ((and (eq? (vector-ref exit-info 2) 2) logpro-used) 'warn)
-			      ((eq? (vector-ref exit-info 2) 0)                   'pass)
+    (let* ((process-exit-status (launch:einf-exit-code exit-info)) ;; (vector-ref exit-info 2))
+	   (this-step-status (cond
+			      ((and (eq? process-exit-status 2) logpro-used) 'warn)  ;; logpro 2 = warnings
+			      ((and (eq? process-exit-status 3) logpro-used) 'check) ;; logpro 3 = check
+			      ((and (eq? process-exit-status 4) logpro-used) 'waived) ;; logpro 4 = abort			      
+			      ((and (eq? process-exit-status 5) logpro-used) 'abort) ;; logpro 4 = abort
+			      ((eq? process-exit-status 0)                   'pass)  ;; logpro 0 = pass
 			      (else 'fail)))
 	   (overall-status   (cond
-			      ((eq? (vector-ref exit-info 3) 2) 'warn) ;; rollup-status
-			      ((eq? (vector-ref exit-info 3) 0) 'pass)
+			      ((eq? (launch:einf-rollup-status exit-info) 2) 'warn) ;; rollup-status (vector-ref exit-info 3)
+			      ((eq? (launch:einf-rollup-status exit-info) 0) 'pass) ;; (vector-ref exit-info 3)
 			      (else 'fail)))
 	   (next-status      (cond 
 			      ((eq? overall-status 'pass) this-step-status)
 			      ((eq? overall-status 'warn)
 			       (if (eq? this-step-status 'fail) 'fail 'warn))
+			      ((eq? overall-status 'abort) 'abort)
 			      (else 'fail)))
 	   (next-state       ;; "RUNNING") ;; WHY WAS THIS CHANGED TO NOT USE (null? tal) ??
 	    (cond
@@ -153,20 +162,32 @@
 	      "COMPLETED")
 	     (else "RUNNING")))
 	   )
-      (debug:print 4 "Exit value received: " (vector-ref exit-info 2) " logpro-used: " logpro-used 
+      (debug:print 4 "Exit value received: " (launch:einf-exit-code exit-info) " logpro-used: " logpro-used 
 		   " this-step-status: " this-step-status " overall-status: " overall-status 
-		   " next-status: " next-status " rollup-status: " (vector-ref exit-info 3))
+		   " next-status: " next-status " rollup-status: "  (launch:einf-rollup-status exit-info)) ;; (vector-ref exit-info 3))
       (case next-status
 	((warn)
-	 (vector-set! exit-info 3 2) ;; rollup-status
+	 (launch:einf-rollup-status-set! exit-info 2) ;; (vector-set! exit-info 3 2) ;; rollup-status
 	 ;; NB// test-set-status! does rdb calls under the hood
 	 (tests:test-set-status! run-id test-id next-state "WARN" 
 				 (if (eq? this-step-status 'warn) "Logpro warning found" #f)
 				 #f))
+	((check)
+	 (launch:einf-rollup-status-set! exit-info 3) ;; (vector-set! exit-info 3 3) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "CHECK" 
+				 (if (eq? this-step-status 'check) "Logpro check found" #f)
+				 #f))
+	((abort)
+	 (launch:einf-rollup-status-set! exit-info 4) ;; (vector-set! exit-info 3 4) ;; rollup-status
+	 ;; NB// test-set-status! does rdb calls under the hood
+	 (tests:test-set-status! run-id test-id next-state "ABORT" 
+				 (if (eq? this-step-status 'abort) "Logpro abort found" #f)
+				 #f))
 	((pass)
 	 (tests:test-set-status! run-id test-id next-state "PASS" #f #f))
 	(else ;; 'fail
-	 (vector-set! exit-info 3 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
+	 (launch:einf-rollup-status-set! exit-info 1) ;; (vector-set! exit-info 3 1) ;; force fail, this used to be next-state but that doesn't make sense. should always be "COMPLETED" 
 	 (tests:test-set-status! run-id test-id "COMPLETED" "FAIL" (conc "Failed at step " stepname) #f)
 	 )))
     logpro-used))
@@ -369,7 +390,7 @@
 	  
 	  (let* ((m            (make-mutex))
 		 (kill-job?    #f)
-		 (exit-info    (vector #t #t #t 0))
+		 (exit-info    (make-launch:einf pid: #t exit-status: #t exit-code: #t rollup-status: 0)) ;; pid exit-status exit-code (i.e. process was successfully run) rollup-status
 		 (job-thread   #f)
 		 (keep-going   #t)
 		 (runit        (lambda ()
@@ -395,10 +416,10 @@
 					 (let-values
 					  (((pid-val exit-status exit-code) (process-wait pid #t)))
 					  (mutex-lock! m)
-					  (vector-set! exit-info 0 pid)
-					  (vector-set! exit-info 1 exit-status)
-					  (vector-set! exit-info 2 exit-code)
-					  (vector-set! exit-info 3 exit-code)  ;; rollup status
+					  (launch:einf-pid-set!           exit-info  pid)         ;; (vector-set! exit-info 0 pid)
+					  (launch:einf-exit-status-set!   exit-info  exit-status) ;; (vector-set! exit-info 1 exit-status)
+					  (launch:einf-exit-code-set!     exit-info  exit-code)   ;; (vector-set! exit-info 2 exit-code)
+					  (launch:einf-rollup-status-set! exit-info  exit-code)   ;; (vector-set! exit-info 3 exit-code)  ;; rollup status
 					  (mutex-unlock! m)
 					  (if (eq? pid-val 0)
 					      (begin
@@ -422,9 +443,9 @@
 						      (tal    (cdr ezstepslst))
 						      (prevstep #f))
 					     ;; check exit-info (vector-ref exit-info 1)
-					     (if (vector-ref exit-info 1)
+					     (if (launch:einf-exit-status exit-info) ;; (vector-ref exit-info 1)
 						 (let ((logpro-used (launch:runstep ezstep run-id test-id exit-info m tal testconfig)))
-						   (if (and (steprun-good? logpro-used (vector-ref exit-info 2))
+						   (if (and (steprun-good? logpro-used (launch:einf-exit-code exit-info))
 							    (not (null? tal)))
 						       (loop (car tal) (cdr tal) stepname)))
 						 (debug:print 4 "WARNING: a prior step failed, stopping at " ezstep))))))))
@@ -468,7 +489,7 @@
 					     ;; NOTE: The pid can change as different steps are run. Do we need handshaking between this
 					     ;;       section and the runit section? Or add a loop that tries three times with a 1/4 second
 					     ;;       between tries?
-					     (let* ((pid1 (vector-ref exit-info 0))
+					     (let* ((pid1 (launch:einf-pid exit-info)) ;; (vector-ref exit-info 0))
 						    (pid2 (rmt:test-get-top-process-pid run-id test-id))
 						    (pids (delete-duplicates (filter number? (list pid1 pid2)))))
 					       (if (not (null? pids))
@@ -532,16 +553,16 @@
 							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
 				    )
 			(new-status (cond
-				     ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
-				     ((eq? (vector-ref exit-info 3) 0)
+				     ((not (launch:einf-exit-status exit-info)) "FAIL") ;; job failed to run ... (vector-ref exit-info 1)
+				     ((eq? (launch:einf-rollup-status exit-info) 0)     ;; (vector-ref exit-info 3)
 				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
-				     ((eq? (vector-ref exit-info 3) 1) "FAIL")
-				     ((eq? (vector-ref exit-info 3) 2)
+				     ((eq? (launch:einf-rollup-status exit-info) 1) "FAIL")  ;; (vector-ref exit-info 3)
+				     ((eq? (launch:einf-rollup-status exit-info) 2)	     ;;	(vector-ref exit-info 3)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
 				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
 				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (vector-ref exit-info 1) " and rollup-status of " (vector-ref exit-info 3))
+		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -556,9 +577,9 @@
 	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
 	      )
 	    (mutex-unlock! m)
-	    (debug:print 2 "Output from running " fullrunscript ", pid " (vector-ref exit-info 0) " in work area " 
-			 work-area ":\n====\n exit code " (vector-ref exit-info 2) "\n" "====\n")
-	    (if (not (vector-ref exit-info 1))
+	    (debug:print 2 "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
+			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")
+	    (if (not (launch:einf-exit-status exit-info))
 		(exit 4)))))))
 
 ;; set up the very basics needed for doing anything here.
@@ -643,7 +664,7 @@
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
-	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir)
+	(debug:print-info 0 "Have -runtests with target=" target ", runname=" runname ", fulldir=" fulldir ", testpatt=" (or (args:get-arg "-testpatt") "%"))
 	(if (file-exists? linktree) ;; can't proceed without linktree
 	    (begin
 	      (if (not (file-exists? fulldir))

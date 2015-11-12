@@ -2,6 +2,10 @@
 TODO
 ====
 
+. Dashboard should resist running from non-homehost
+
+
+
 Migration to inmem db plus per run db
 -------------------------------------
 
