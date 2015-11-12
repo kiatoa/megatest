@@ -286,8 +286,8 @@
   ;;   (common:simple-file-lock lockf)
   ;;   (db:multi-db-sync (list run-id) 'new2old)
   ;;   (common:simple-file-release-lock lockf))
-  (let* ((dbpath      (db:dbfile-path run-id))
-	 (lockf       (conc dbpath "/." run-id ".lck"))
+  (let* ((dbpath      (db:dbfile-path #f))
+	 (lockf       (conc dbpath "/.megatest.lck"))
 	 (no-hurry  (if *time-to-exit* ;; hurry up
 			#f
 		       (begin
