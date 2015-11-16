@@ -178,7 +178,9 @@
 ;; envion-patt is a regex spec that identifies sections that will be eval'd
 ;; in the environment on the fly
 ;; sections: #f => get all, else list of sections to gather
-(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f))
+;; post-section-procs alist of section-pattern => proc, where: (proc section-name next-section-name ht curr-path)
+;;
+(define (read-config path ht allow-system #!key (environ-patt #f)(curr-section #f)(sections #f)(settings (make-hash-table))(keep-filenames #f)(post-section-procs '()))
   (debug:print-info 5 "read-config " path " allow-system " allow-system " environ-patt " environ-patt " curr-section: " curr-section " sections: " sections " pwd: " (current-directory))
   (debug:print 9 "START: " path)
   (if (not (file-exists? path))
@@ -228,12 +230,21 @@
 							      (debug:print '(2 9) "INFO: include file " include-file " not found (called from " path ")")
 							      (debug:print 2 "        " full-conf)
 							      (loop (configf:read-line inp res allow-system settings) curr-section-name #f #f)))))
-	       (configf:section-rx ( x section-name ) (loop (configf:read-line inp res allow-system settings)
-							    ;; if we have the sections list then force all settings into "" and delete it later?
-							    (if (or (not sections) 
-								    (member section-name sections))
-								section-name "") ;; stick everything into ""
-							    #f #f))
+	       (configf:section-rx ( x section-name ) (begin
+							;; call post-section-procs
+							(for-each 
+							 (lambda (dat)
+							   (let ((patt (car dat))
+								 (proc (cdr dat)))
+							     (if (string-match patt curr-section-name)
+								 (proc curr-section-name section-name ht path))))
+							 post-section-procs)
+							(loop (configf:read-line inp res allow-system settings)
+							      ;; if we have the sections list then force all settings into "" and delete it later?
+							      (if (or (not sections) 
+								      (member section-name sections))
+								  section-name "") ;; stick everything into ""
+							      #f #f)))
 	       (configf:key-sys-pr ( x key cmd      ) (if allow-system
 							  (let ((alist    (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
@@ -303,10 +314,15 @@
   (let* ((curr-dir   (current-directory))
          (configinfo (find-config fname toppath: given-toppath))
 	 (toppath    (car configinfo))
-	 (configfile (cadr configinfo)))
+	 (configfile (cadr configinfo))
+	 (set-fields (lambda (curr-section next-section ht path)
+		       (let ((field-names (keys:config-get-fields confdat))
+			     (target      (or (getenv "MT_TARGET")(args:get-arg "-reqtarg")(args:get-arg "-target"))))
+			 (keys:target-set-args keys target #f)))))
     (if toppath (change-directory toppath)) 
     (if (and toppath pathenvvar)(setenv pathenvvar toppath))
-    (let ((configdat  (if configfile (read-config configfile #f #t environ-patt: environ-patt) #f))) ;; (make-hash-table))))
+    (let ((configdat  (if configfile 
+			  (read-config configfile #f #t environ-patt: environ-patt (list (cons "^fields$" set-fields)) #f))))
       (if toppath (change-directory curr-dir))
       (list configdat toppath configfile fname))))
 

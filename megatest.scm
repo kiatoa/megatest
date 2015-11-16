@@ -319,6 +319,11 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	      ))
     (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
+;; immediately set MT_TARGET if -reqtarg or -target are available
+;;
+(let ((targ (or (args:get-arg "-reqtarg")(args:get-arg "-target"))))
+  (if targ (setenv "MT_TARGET" targ)))
+
 ;; The watchdog is to keep an eye on things like db sync etc.
 ;;
 (define *time-zero* (current-seconds))
