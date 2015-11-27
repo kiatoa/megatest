@@ -302,7 +302,8 @@
 ;; sync run to disk if touched
 ;;
 (define (db:sync-touched dbstruct run-id #!key (force-sync #f))
-  (let ((mtime  (dbr:dbstruct-get-mtime dbstruct))
+  (let ((local  (dbr:dbstruct-get-local dbstruct))
+	(mtime  (dbr:dbstruct-get-mtime dbstruct))
 	(stime  (dbr:dbstruct-get-stime dbstruct))
 	(rundb  (dbr:dbstruct-get-rundb dbstruct))
 	(inmem  (dbr:dbstruct-get-inmem dbstruct))
@@ -311,43 +312,47 @@
 	(olddb  (dbr:dbstruct-get-olddb dbstruct))
 	;; (runid  (dbr:dbstruct-get-run-id dbstruct))
 	)
-    (debug:print-info 4 "Syncing for run-id: " run-id)
-    ;; (mutex-lock! *http-mutex*)
-    (if (eq? run-id 0)
-	;; runid equal to 0 is main.db
-	(if maindb
-	    (if (or (not (number? mtime))
-		    (not (number? stime))
-		    (> mtime stime)
-		    force-sync)
-		(begin
-		  (db:delay-if-busy maindb)
-		  (db:delay-if-busy olddb)
-		  (let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+    (if (not local)
+	(begin
+	  (debug:print-info 4 "Syncing for run-id: " run-id)
+	  ;; (mutex-lock! *http-mutex*)
+	  (if (eq? run-id 0)
+	      ;; runid equal to 0 is main.db
+	      (if maindb
+		  (if (or (not (number? mtime))
+			  (not (number? stime))
+			  (> mtime stime)
+			  force-sync)
+		      (begin
+			(db:delay-if-busy maindb)
+			(db:delay-if-busy olddb)
+			(let ((num-synced (db:sync-tables (db:sync-main-list maindb) maindb olddb)))
+			  (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
+			  num-synced)
+			0))
+		  (begin
+		    ;; this can occur when using local access (i.e. not in a server)
+		    ;; need a flag to turn it off.
+		    ;;
+		    (debug:print 3 "WARNING: call to sync main.db to megatest.db but main not initialized")
+		    0))
+	      ;; any other runid is a run
+	      (if (or (not (number? mtime))
+		      (not (number? stime))
+		      (> mtime stime)
+		      force-sync)
+		  (begin
+		    (db:delay-if-busy rundb)
+		    (db:delay-if-busy olddb)
 		    (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-		    num-synced)
-		  0))
-	    (begin
-	      ;; this can occur when using local access (i.e. not in a server)
-	      ;; need a flag to turn it off.
-	      ;;
-	      (debug:print 3 "WARNING: call to sync main.db to megatest.db but main not initialized")
-	      0))
-	;; any other runid is a run
-	(if (or (not (number? mtime))
-		(not (number? stime))
-		(> mtime stime)
-		force-sync)
-	    (begin
-	      (db:delay-if-busy rundb)
-	      (db:delay-if-busy olddb)
-	      (dbr:dbstruct-set-stime! dbstruct (current-milliseconds))
-	      (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
-		;; (mutex-unlock! *http-mutex*)
-		num-synced)
-	      (begin
-		;; (mutex-unlock! *http-mutex*)
-		0))))))
+		    (let ((num-synced (db:sync-tables db:sync-tests-only inmem refdb rundb olddb)))
+		      ;; (mutex-unlock! *http-mutex*)
+		      num-synced)
+		    (begin
+		      ;; (mutex-unlock! *http-mutex*)
+		      0)))))
+	0 ;; not local, return 0 sync'd
+	)))
 
 (define (db:close-main dbstruct)
   (let ((maindb (dbr:dbstruct-get-main dbstruct)))
