@@ -109,6 +109,10 @@ Version: " megatest-fossil-hash)) ;; "
 ;; Create the sqlite db
 (define (spublish:db-do configdat proc) 
   (let ((path (configf:lookup configdat "database" "location")))
+    (if (not path)
+	(begin
+	  (print "[database]\nlocation /some/path\n\n Is missing from the config file!")
+	  (exit 1)))
     (if (and path
 	     (directory? path)
 	     (file-read-access? path))
@@ -449,7 +453,17 @@ Version: " megatest-fossil-hash)) ;; "
 (define (spublish:process-action configdat action . args)
   (let* ((target-dir    (configf:lookup configdat "settings" "target-dir"))
 	 (user          (current-user-name))
-	 (allowed-users (configf:lookup configdat "settings" "allowed-users")))
+	 (allowed-users (string-split
+			 (or (configf:lookup configdat "settings" "allowed-users")
+			     ""))))
+    (if (not target-dir)
+	(begin
+	  (print "[settings]\ntarget-dir /some/path\n\n Is MISSING from the config file!")
+	  (exit)))
+    (if (null? allowed-users)
+	(begin
+	  (print "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
+	  (exit)))
     (if (not (member user allowed-users))
 	(begin
 	  (print "User \"" (current-user-name) "\" does not have access. Exiting")
