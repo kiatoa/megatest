@@ -1312,7 +1312,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	   (let ((states   (or (configf:lookup *configdat* "validvalues" "cleanrerun-states")
 			       "KILLREQ,KILLED,UNKNOWN,INCOMPLETE,STUCK,NOT_STARTED"))
 		 (statuses (or (configf:lookup *configdat* "validvalues" "cleanrerun-statuses")
-			       "FAIL,INCOMPLETE,ABORT")))
+			       "FAIL,INCOMPLETE,ABORT,CHECK")))
 	     (hash-table-set! args:arg-hash "-preclean" #t)
 	     (runs:operate-on 'set-state-status
 			      target

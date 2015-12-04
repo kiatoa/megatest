@@ -124,9 +124,11 @@ Version: " megatest-fossil-hash)) ;; "
 	   (begin
 	     (debug:print 2 "ERROR: problem accessing db " dbpath
 			  ((condition-property-accessor 'exn 'message) exn))
-	     (exit))
+	     (exit 1))
 	   (call-with-database
+            dbpath
 	    (lambda (db)
+	      ;; (print "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(spublish:initialize-db db))
 	      (proc db)))))
@@ -134,28 +136,65 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; copy in file to dest, validation is done BEFORE calling this
 ;;
-(define (spublish:cp configdat submitter source-path target-dir comment)
-  (spublish:db-do
-   configdat
-   (lambda (db)
-     (spublish:register-action db "cp" submitter source-path comment)))
-  (let* (;; (target-path (configf:lookup "settings" "target-path"))
-	 (th1         (make-thread
-		       (lambda ()
-			 (let ((pid (process-run "cp" (list source-path target-dir))))
-			   (process-wait pid)))
-		       "copy thread"))
-	 (th2         (make-thread
-		       (lambda ()
-			 (let loop ()
-			   (thread-sleep! 15)
-			   (print ".")
-			   (loop)))
-		       "action is happening thread")))
-    (thread-start th1)
-    (thread-start th2)
-    (thread-join th1))			   
-  (cons #t "Successfully saved data"))
+(define (spublish:cp configdat submitter source-path target-dir targ-file comment)
+  (let ((targ-path (conc target-dir "/" targ-file)))
+    (if (file-exists? targ-path)
+	(begin
+	  (print "ERROR: target file already exists, remove it before re-publishing")
+	  (exit 1)))
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "cp" submitter source-path comment)))
+    (let* (;; (target-path (configf:lookup "settings" "target-path"))
+	   (th1         (make-thread
+			 (lambda ()
+			   (file-copy source-path targ-path #t))
+			 ;; (let ((pid (process-run "cp" (list source-path target-dir))))
+			 ;;   (process-wait pid)))
+			 "copy thread"))
+	   (th2         (make-thread
+			 (lambda ()
+			   (let loop ()
+			     (thread-sleep! 15)
+			     (display ".")
+			     (flush-output)
+			     (loop)))
+			 "action is happening thread")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1))
+    (cons #t "Successfully saved data")))
+
+;; remove copy of file in dest
+;;
+(define (spublish:rm configdat submitter target-dir targ-file comment)
+  (let ((targ-path (conc target-dir "/" targ-file)))
+    (if (not (file-exists? targ-path))
+	(begin
+	  (print "ERROR: target file " targ-path " not found, nothing to remove.")
+	  (exit 1)))
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "rm" submitter "" comment)))
+    (let* ((th1         (make-thread
+			 (lambda ()
+			   (delete-file targ-path)
+			   (print " ... file " targ-path " removed"))
+			 "rm thread"))
+	   (th2         (make-thread
+			 (lambda ()
+			   (let loop ()
+			     (thread-sleep! 15)
+			     (display ".")
+			     (flush-output)
+			     (loop)))
+			 "action is happening thread")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1))
+    (cons #t "Successfully saved data")))
 
 (define (spublish:backup-move path)
   (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
@@ -469,19 +508,44 @@ Version: " megatest-fossil-hash)) ;; "
 	  (print "User \"" (current-user-name) "\" does not have access. Exiting")
 	  (exit 1)))
     (case (string->symbol action)
-      ((cp)
+      ((cp publish)
        (if (< (length args) 1)
 	   (begin 
 	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1))
-	   (let* ((remargs     (args:get-args args '("-m") '() args:arg-hash 0))
-		  (src-path-in (car args))
-		  (src-path    (with-input-from-pipe
-				(conc "readlink -f " src-path-in)
-				(lambda ()
-				  (read-line))))
-		  (msg         (or (args:get-arg "-m") "")))
-	     (spublish:cp configdat user src-path target-dir msg))))
+	     (exit 1)))
+       (let* ((remargs     (args:get-args args '("-m") '() args:arg-hash 0))
+	      (src-path-in (car args))
+	      (src-path    (with-input-from-pipe
+			    (conc "readlink -f " src-path-in)
+			    (lambda ()
+			      (read-line))))
+	      (msg         (or (args:get-arg "-m") ""))
+	      (targ-file   (pathname-strip-directory src-path)))
+	 (if (not (file-read-access? src-path))
+	     (begin
+	       (print "ERROR: source file not readable: " src-path)
+	       (exit 1)))
+	 (if (directory? src-path)
+	     (begin
+	       (print "ERROR: source file is a directory, this is not supported yet.")
+	       (exit 1)))
+	 (print "publishing " src-path-in " to " target-dir)
+	 (spublish:cp configdat user src-path target-dir targ-file msg)))
+      ((rm)
+       (if (< (length args) 1)
+	   (begin 
+	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+       (let* (;; (remargs     (args:get-args args '("-m") '() args:arg-hash 0))
+	      (targ-file (car args))
+	      ;; (src-path    (with-input-from-pipe
+	      ;;   	    (conc "readlink -f " src-path-in)
+	      ;;   	    (lambda ()
+	      ;;   	      (read-line))))
+	      (msg         (or (args:get-arg "-m") "")))
+;;	      (targ-file   (pathname-strip-directory src-path)))
+	 (print "attempting to remove " targ-file " from " target-dir)
+	 (spublish:rm configdat user target-dir targ-file msg)))
       ((publish)
        (if (< (length args) 3)
 	   (begin 
@@ -521,9 +585,8 @@ Version: " megatest-fossil-hash)) ;; "
 			    (conc "\"" (time->string (seconds->local-time (vector-ref x 3))) "\"")
 			    (conc "\"" (vector-ref x 4) "\""))
 		    (print (vector-ref x 0))))
-	      versions)
-	 ;;(sqlite3:finalize! db)
-	 )))))
+	      versions)))
+      (else (print "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.spublishrc")))
