@@ -347,9 +347,9 @@ Version: " megatest-fossil-hash)) ;; "
       (else (print "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
-(let ((debugcontrolf (conc (get-environment-variable "HOME") "/.spublishrc")))
-  (if (file-exists? debugcontrolf)
-      (load debugcontrolf)))
+;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.spublishrc")))
+;;   (if (file-exists? debugcontrolf)
+;;       (load debugcontrolf)))
 
 (define (main)
   (let* ((args      (argv))
