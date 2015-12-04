@@ -211,6 +211,9 @@ sd : datashare-testing/sd
 xterm : sd
 	(export BASEPATH=/tmp/$(USER)/basepath ; export PATH="$(PWD)/datashare-testing:$(PATH)" ; xterm &)
 
+datashare-testing/spublish : spublish.scm $(OFILES)
+	csc spublish.scm $(OFILES) -o datashare-testing/spublish
+
 #  "(define (toplevel-command . a) #f)"
 readline-fix.scm :
 	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
