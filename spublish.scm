@@ -49,14 +49,16 @@
 (define *args-hash* (make-hash-table))
 (define spublish:help (conc "Usage: spublish [action [params ...]]
 
-  ls                 : list contents of target area
-  cp|publish <file>  : copy file to target area
-  rm <file>          : remove file <file> from target area
-  log                :
+  ls                     : list contents of target area
+  cp|publish <src file> <relative dest>      : copy file to target area
+  mkdir <dir name>       : maks directory in target area  
+  rm <file>              : remove file <file> from target area
+  ln <target> <link name> : creates a symlink
+  log                    :
 
   options:
 
-    -m \"message\"   : describe what was done
+    -m \"message\"        : describe what was done
 
 Part of the Megatest tool suite.
 Learn more at http://www.kiatoa.com/fossils/megatest
@@ -129,12 +131,18 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; copy in file to dest, validation is done BEFORE calling this
 ;;
-(define (spublish:cp configdat submitter source-path target-dir targ-file comment)
-  (let ((targ-path (conc target-dir "/" targ-file)))
+(define (spublish:cp configdat submitter source-path target-dir targ-file dest-dir comment)
+  (let ((dest-dir-path (conc target-dir "/" dest-dir))
+        (targ-path (conc target-dir "/" dest-dir "/" targ-file)))
     (if (file-exists? targ-path)
 	(begin
 	  (print "ERROR: target file already exists, remove it before re-publishing")
 	  (exit 1)))
+       (if (not(file-exists? dest-dir-path))
+	(begin
+	  (print "ERROR: target directory "  target-dir " does not exists." )
+	  (exit 1)))
+
     (spublish:db-do
      configdat
      (lambda (db)
@@ -143,6 +151,7 @@ Version: " megatest-fossil-hash)) ;; "
 	   (th1         (make-thread
 			 (lambda ()
 			   (file-copy source-path targ-path #t))
+                            (print " ... file " targ-path " copied to" targ-path)
 			 ;; (let ((pid (process-run "cp" (list source-path target-dir))))
 			 ;;   (process-wait pid)))
 			 "copy thread"))
@@ -158,6 +167,88 @@ Version: " megatest-fossil-hash)) ;; "
       (thread-start! th2)
       (thread-join! th1))
     (cons #t "Successfully saved data")))
+
+(define (spublish:validate target-dir targ-mk)
+  (let* ((normal-path (normalize-pathname targ-mk))
+        (targ-path (conc target-dir "/" normal-path)))
+    (if (string-contains   normal-path "..")
+    (begin
+      (print "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
+      (exit 1)))
+
+    (if (not (string-contains targ-path target-dir))
+    (begin
+      (print "ERROR: You cannot update data outside " target-dir ".")
+      (exit 1)))
+    (print "Path " targ-mk " is valid.")   
+ ))
+;; make directory in dest
+;;
+
+(define (spublish:mkdir configdat submitter target-dir targ-mk comment)
+  (let ((targ-path (conc target-dir "/" targ-mk)))
+    
+    (if (file-exists? targ-path)
+	(begin
+	  (print "ERROR: target Directory " targ-path " already exist!!")
+	  (exit 1)))
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "mkdir" submitter targ-mk comment)))
+    (let* ((th1         (make-thread
+			 (lambda ()
+			   (create-directory targ-path #t)
+			   (print " ... dir " targ-path " created"))
+			 "mkdir thread"))
+	   (th2         (make-thread
+			 (lambda ()
+			   (let loop ()
+			     (thread-sleep! 15)
+			     (display ".")
+			     (flush-output)
+			     (loop)))
+			 "action is happening thread")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1))
+    (cons #t "Successfully saved data")))
+
+;; create a symlink in dest
+;;
+(define (spublish:ln configdat submitter target-dir targ-link link-name comment)
+  (let ((targ-path (conc target-dir "/" link-name)))
+    (if (file-exists? targ-path)
+	(begin
+	  (print "ERROR: target file " targ-path " already exist!!")
+	  (exit 1)))
+     (if (not (file-exists? targ-link ))
+	(begin
+	  (print "ERROR: target file " targ-link " does not exist!!")
+	  (exit 1)))
+ 
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "ln" submitter link-name comment)))
+    (let* ((th1         (make-thread
+			 (lambda ()
+			   (create-symbolic-link targ-link targ-path  )
+			   (print " ... link " targ-path " created"))
+			 "symlink thread"))
+	   (th2         (make-thread
+			 (lambda ()
+			   (let loop ()
+			     (thread-sleep! 15)
+			     (display ".")
+			     (flush-output)
+			     (loop)))
+			 "action is happening thread")))
+      (thread-start! th1)
+      (thread-start! th2)
+      (thread-join! th1))
+    (cons #t "Successfully saved data")))
+
 
 ;; remove copy of file in dest
 ;;
@@ -267,12 +358,13 @@ Version: " megatest-fossil-hash)) ;; "
 	  (exit 1)))
     (case (string->symbol action)
       ((cp publish)
-       (if (< (length args) 1)
+       (if (< (length args) 2)
 	   (begin 
 	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
        (let* ((remargs     (args:get-args args '("-m") '() args:arg-hash 0))
-	      (src-path-in (car args))
+              (dest-dir (cadr args))
+              (src-path-in (car args))
 	      (src-path    (with-input-from-pipe
 			    (conc "readlink -f " src-path-in)
 			    (lambda ()
@@ -288,21 +380,48 @@ Version: " megatest-fossil-hash)) ;; "
 	       (print "ERROR: source file is a directory, this is not supported yet.")
 	       (exit 1)))
 	 (print "publishing " src-path-in " to " target-dir)
-	 (spublish:cp configdat user src-path target-dir targ-file msg)))
+         (spublish:validate     target-dir dest-dir)
+	 (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+      ((mkdir)
+        (if (< (length args) 1)
+          (begin 
+	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+        (let* ((targ-mk (car args))
+               (msg         (or (args:get-arg "-m") ""))) 
+               (print "attempting to create directory " targ-mk " in " target-dir)
+               (spublish:validate     target-dir targ-mk)
+               (spublish:mkdir configdat user target-dir targ-mk msg)))
+
+      ((ln) 
+        (if (< (length args) 2)
+          (begin 
+	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+        (let* ((targ-link (car args))
+               (link-name (cadr args))  
+               (sub-path (string-reverse (string-join (cdr (string-split (string-reverse link-name) "/")) "/"))) 
+               (msg         (or (args:get-arg "-m") "")))
+               (if(not (equal? sub-path link-name))
+                (begin 
+                  (print "attempting to create directory " sub-path " in " target-dir)
+                    (spublish:validate     target-dir sub-path)
+ 
+                  (spublish:mkdir configdat user target-dir sub-path msg)))
+
+               (print "attempting to create link " link-name " in " target-dir)
+               (spublish:ln configdat user target-dir targ-link link-name msg)))
+
       ((rm)
        (if (< (length args) 1)
 	   (begin 
 	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
-       (let* (;; (remargs     (args:get-args args '("-m") '() args:arg-hash 0))
-	      (targ-file (car args))
-	      ;; (src-path    (with-input-from-pipe
-	      ;;   	    (conc "readlink -f " src-path-in)
-	      ;;   	    (lambda ()
-	      ;;   	      (read-line))))
+       (let* ((targ-file (car args))
 	      (msg         (or (args:get-arg "-m") "")))
-;;	      (targ-file   (pathname-strip-directory src-path)))
 	 (print "attempting to remove " targ-file " from " target-dir)
+           (spublish:validate     target-dir targ-file)
+
 	 (spublish:rm configdat user target-dir targ-file msg)))
       ((publish)
        (if (< (length args) 3)
