@@ -1,9 +1,16 @@
 ;;;; rpc-demo.scm
 ;;;; Simple database server / client
 
+;;; start server thusly: ./rpctest server test.db
+;;; you will need to init test.db:
+;;; sqlite3 test.db "CREATE TABLE foo (id INTEGER PRIMARY KEY, var TEXT, val TEXT);"
+
 (require-extension (srfi 18) extras tcp rpc sqlite3)
 
 ;;; Common things
+
+(define total-queries 0)
+(define start-time (current-seconds))
 
 (define operation (string->symbol (car (command-line-arguments))))
 (define param (cadr (command-line-arguments)))
@@ -35,10 +42,13 @@
     (rpc:publish-procedure!
      'query
      (lambda (sql callback)
+       (set! total-queries (+ total-queries 1))
        (print "Executing query '" sql "' ...")
        (for-each-row
 	callback
-	db sql))))
+	db sql)
+       (print "Query rate: " (/ total-queries (/ (- (current-seconds) start-time) 60)) " per minute")
+       )))
   (thread-join! rpc:server))
 
 ;;; Client side
