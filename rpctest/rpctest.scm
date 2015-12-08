@@ -5,7 +5,7 @@
 ;;; you will need to init test.db:
 ;;; sqlite3 test.db "CREATE TABLE foo (id INTEGER PRIMARY KEY, var TEXT, val TEXT);"
 
-(require-extension (srfi 18) extras tcp rpc sqlite3)
+(require-extension (srfi 18) extras tcp rpc sql-de-lite)
 
 ;;; Common things
 
@@ -15,6 +15,31 @@
 (define operation (string->symbol (car (command-line-arguments))))
 (define param (cadr (command-line-arguments)))
 (print "Operation: " operation ", param: " param)
+
+;; have a pool of db's to pick from
+(define *dbpool* '())
+(define *pool-mutex* (make-mutex))
+
+(define (get-db)
+  (mutex-lock! *pool-mutex*)
+  (if (null? *dbpool*)
+      (begin
+	(mutex-unlock! *pool-mutex*)
+	(let ((db (open-database param)))
+	  (set-busy-handler! db (busy-timeout 10000))
+	  (exec (sql db "PRAGMA synchronous=0;"))
+	  db))
+      (let ((res (car *dbpool*)))
+	(set! *dbpool* (cdr *dbpool*))
+	(mutex-unlock! *pool-mutex*)
+	res)))
+
+(define (return-db db)
+  (mutex-lock! *pool-mutex*)
+  (set! *dbpool* (cons db *dbpool* ))
+  (let ((res (length *dbpool*)))
+    (mutex-unlock! *pool-mutex*)
+    res))
 
 (define rpc:listener
   (if (eq? operation 'server)
@@ -37,17 +62,19 @@
    (lambda (port)
      (rpc:default-server-port port))
    #f)
-  (let ((db (open-database param)))
-    (set-finalizer! db finalize!)
-    (rpc:publish-procedure!
-     'query
-     (lambda (sql callback)
-       (set! total-queries (+ total-queries 1))
-       (print "Executing query '" sql "' ...")
-       (for-each-row
-	callback
-	db sql)
+  ;;(let ((db  (get-db))(open-database param)))
+  ;; (set-finalizer! db finalize!)
+  (rpc:publish-procedure!
+   'query
+   (lambda (sqlstmt callback)
+     (set! total-queries (+ total-queries 1))
+     (print "Executing query '" sqlstmt "' ...")
+     (let ((db (get-db)))
+       (query (for-each-row
+	       callback)
+	      (sql db sqlstmt))
        (print "Query rate: " (/ total-queries (/ (- (current-seconds) start-time) 60)) " per minute")
+       (print "num dbs: " (return-db db))
        )))
   (thread-join! rpc:server))
 
@@ -71,7 +98,8 @@
   ((rpc:procedure 'query "localhost") param callback1)
   (rpc:publish-procedure! 'callback2 callback2)
   ((rpc:procedure 'query "localhost") param callback2)
-  (pp callback2-results))
+  (pp callback2-results)
+  (rpc:close-connection! "localhost" (rpc:default-server-port)))
 
 ;;; Run it
 
