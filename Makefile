@@ -205,6 +205,9 @@ deploytarg/dboard :  $(OFILES) $(GOFILES) dashboard.scm deploytarg/apropos.so
 datashare-testing/sd : datashare.scm $(OFILES)
 	csc datashare.scm $(OFILES) -o datashare-testing/sd
 
+datashare-testing/sdat: sharedat.scm $(OFILES)
+	csc sharedat.scm $(OFILES) -o datashare-testing/sdat
+
 sd : datashare-testing/sd
 	mkdir -p /tmp/$(USER)/datashare/disk1 /tmp/$(USER)/basepath
 
