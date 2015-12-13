@@ -45,20 +45,16 @@
 ;;
 ;; GLOBALS
 ;;
-(define *spublish:current-tab-number* 0)
+(define *sretrieve:current-tab-number* 0)
 (define *args-hash* (make-hash-table))
-(define spublish:help (conc "Usage: spublish [action [params ...]]
+(define sretrieve:help (conc "Usage: sretrieve [action [params ...]]
 
   ls                     : list contents of target area
-  cp|publish <src file> <relative dest>      : copy file to target area
-  mkdir <dir name>       : maks directory in target area  
-  rm <file>              : remove file <file> from target area
-  ln <target> <link name> : creates a symlink
-  log                    :
+  get <version>          : retrieve data for <version>
+    -i iteration_num       get specific iteration
+    -m \"message\"       : why retrieved?
 
-  options:
-
-    -m \"message\"        : describe what was done
+  log                    : get listing of recent downloads
 
 Part of the Megatest tool suite.
 Learn more at http://www.kiatoa.com/fossils/megatest
@@ -73,7 +69,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; DB
 ;;======================================================================
 
-(define (spublish:initialize-db db)
+(define (sretrieve:initialize-db db)
   (for-each
    (lambda (qry)
      (exec (sql db qry)))
@@ -81,14 +77,14 @@ Version: " megatest-fossil-hash)) ;; "
     "CREATE TABLE IF NOT EXISTS actions
          (id           INTEGER PRIMARY KEY,
           action       TEXT NOT NULL,
-          submitter    TEXT NOT NULL,
+          retriever    TEXT NOT NULL,
           datetime     TIMESTAMP DEFAULT (strftime('%s','now')),
           srcpath      TEXT NOT NULL,
           comment      TEXT DEFAULT '' NOT NULL,
           state        TEXT DEFAULT 'new');"
     )))
 
-(define (spublish:register-action db action submitter source-path comment)
+(define (sretrieve:register-action db action submitter source-path comment)
   (exec (sql db "INSERT INTO actions (action,submitter,srcpath,comment)
                  VALUES(?,?,?,?)")
 	action
@@ -102,7 +98,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;;   ...))
 
 ;; Create the sqlite db
-(define (spublish:db-do configdat proc) 
+(define (sretrieve:db-do configdat proc) 
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
@@ -111,7 +107,7 @@ Version: " megatest-fossil-hash)) ;; "
     (if (and path
 	     (directory? path)
 	     (file-read-access? path))
-	(let* ((dbpath    (conc path "/spublish.db"))
+	(let* ((dbpath    (conc path "/sretrieve.db"))
 	       (writeable (file-write-access? dbpath))
 	       (dbexists  (file-exists? dbpath)))
 	  (handle-exceptions
@@ -125,13 +121,13 @@ Version: " megatest-fossil-hash)) ;; "
 	    (lambda (db)
 	      ;; (print "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
-	      (if (not dbexists)(spublish:initialize-db db))
+	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
 	(print "ERROR: invalid path for storing database: " path))))
 
 ;; copy in file to dest, validation is done BEFORE calling this
 ;;
-(define (spublish:cp configdat submitter source-path target-dir targ-file dest-dir comment)
+(define (sretrieve:get configdat retriever version iteration comment)
   (let ((dest-dir-path (conc target-dir "/" dest-dir))
         (targ-path (conc target-dir "/" dest-dir "/" targ-file)))
     (if (file-exists? targ-path)
@@ -143,10 +139,10 @@ Version: " megatest-fossil-hash)) ;; "
 	  (print "ERROR: target directory "  target-dir " does not exists." )
 	  (exit 1)))
 
-    (spublish:db-do
+    (sretrieve:db-do
      configdat
      (lambda (db)
-       (spublish:register-action db "cp" submitter source-path comment)))
+       (sretrieve:register-action db "cp" submitter source-path comment)))
     (let* (;; (target-path (configf:lookup "settings" "target-path"))
 	   (th1         (make-thread
 			 (lambda ()
@@ -168,7 +164,7 @@ Version: " megatest-fossil-hash)) ;; "
       (thread-join! th1))
     (cons #t "Successfully saved data")))
 
-(define (spublish:validate target-dir targ-mk)
+(define (sretrieve:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
         (targ-path (conc target-dir "/" normal-path)))
     (if (string-contains   normal-path "..")
@@ -185,17 +181,17 @@ Version: " megatest-fossil-hash)) ;; "
 ;; make directory in dest
 ;;
 
-(define (spublish:mkdir configdat submitter target-dir targ-mk comment)
+(define (sretrieve:mkdir configdat submitter target-dir targ-mk comment)
   (let ((targ-path (conc target-dir "/" targ-mk)))
     
     (if (file-exists? targ-path)
 	(begin
 	  (print "ERROR: target Directory " targ-path " already exist!!")
 	  (exit 1)))
-    (spublish:db-do
+    (sretrieve:db-do
      configdat
      (lambda (db)
-       (spublish:register-action db "mkdir" submitter targ-mk comment)))
+       (sretrieve:register-action db "mkdir" submitter targ-mk comment)))
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-directory targ-path #t)
@@ -216,7 +212,7 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; create a symlink in dest
 ;;
-(define (spublish:ln configdat submitter target-dir targ-link link-name comment)
+(define (sretrieve:ln configdat submitter target-dir targ-link link-name comment)
   (let ((targ-path (conc target-dir "/" link-name)))
     (if (file-exists? targ-path)
 	(begin
@@ -227,10 +223,10 @@ Version: " megatest-fossil-hash)) ;; "
 	  (print "ERROR: target file " targ-link " does not exist!!")
 	  (exit 1)))
  
-    (spublish:db-do
+    (sretrieve:db-do
      configdat
      (lambda (db)
-       (spublish:register-action db "ln" submitter link-name comment)))
+       (sretrieve:register-action db "ln" submitter link-name comment)))
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-symbolic-link targ-link targ-path  )
@@ -252,16 +248,16 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; remove copy of file in dest
 ;;
-(define (spublish:rm configdat submitter target-dir targ-file comment)
+(define (sretrieve:rm configdat submitter target-dir targ-file comment)
   (let ((targ-path (conc target-dir "/" targ-file)))
     (if (not (file-exists? targ-path))
 	(begin
 	  (print "ERROR: target file " targ-path " not found, nothing to remove.")
 	  (exit 1)))
-    (spublish:db-do
+    (sretrieve:db-do
      configdat
      (lambda (db)
-       (spublish:register-action db "rm" submitter targ-file comment)))
+       (sretrieve:register-action db "rm" submitter targ-file comment)))
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (delete-file targ-path)
@@ -280,7 +276,7 @@ Version: " megatest-fossil-hash)) ;; "
       (thread-join! th1))
     (cons #t "Successfully saved data")))
 
-(define (spublish:backup-move path)
+(define (sretrieve:backup-move path)
   (let* ((trashdir  (conc (pathname-directory path) "/.trash"))
 	 (trashfile (conc trashdir "/" (current-seconds) "-" (pathname-file path))))
     (create-directory trashdir #t)
@@ -289,13 +285,13 @@ Version: " megatest-fossil-hash)) ;; "
 	(file-move path trash-file))))
 
 
-(define (spublish:lst->path pathlst)
+(define (sretrieve:lst->path pathlst)
   (conc "/" (string-intersperse (map conc pathlst) "/")))
 
-(define (spublish:path->lst path)
+(define (sretrieve:path->lst path)
   (string-split path "/"))
 
-(define (spublish:pathdat-apply-heuristics configdat path)
+(define (sretrieve:pathdat-apply-heuristics configdat path)
   (cond
    ((file-exists? path) "found")
    (else (conc path " not installed"))))
@@ -304,7 +300,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; MISC
 ;;======================================================================
 
-(define (spublish:do-as-calling-user proc)
+(define (sretrieve:do-as-calling-user proc)
   (let ((eid (current-effective-user-id))
         (cid (current-user-id)))
     (if (not (eq? eid cid)) ;; running suid
@@ -314,7 +310,7 @@ Version: " megatest-fossil-hash)) ;; "
     (if (not (eq? eid cid))
         (set! (current-effective-user-id) eid))))
 
-(define (spublish:find name paths)
+(define (sretrieve:find name paths)
   (if (null? paths)
       #f
       (let loop ((hed (car paths))
@@ -329,7 +325,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; MAIN
 ;;======================================================================
 
-(define (spublish:load-config exe-dir exe-name)
+(define (sretrieve:load-config exe-dir exe-name)
   (let* ((fname   (conc exe-dir "/." exe-name ".config")))
     (ini:property-separator-patt " *  *")
     (ini:property-separator #\space)
@@ -338,7 +334,7 @@ Version: " megatest-fossil-hash)) ;; "
 	(read-config fname #f #t)
 	(make-hash-table))))
 
-(define (spublish:process-action configdat action . args)
+(define (sretrieve:process-action configdat action . args)
   (let* ((target-dir    (configf:lookup configdat "settings" "target-dir"))
 	 (user          (current-user-name))
 	 (allowed-users (string-split
@@ -380,8 +376,8 @@ Version: " megatest-fossil-hash)) ;; "
 	       (print "ERROR: source file is a directory, this is not supported yet.")
 	       (exit 1)))
 	 (print "publishing " src-path-in " to " target-dir)
-         (spublish:validate     target-dir dest-dir)
-	 (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+         (sretrieve:validate     target-dir dest-dir)
+	 (sretrieve:cp configdat user src-path target-dir targ-file dest-dir msg)))
       ((mkdir)
         (if (< (length args) 1)
           (begin 
@@ -390,8 +386,8 @@ Version: " megatest-fossil-hash)) ;; "
         (let* ((targ-mk (car args))
                (msg         (or (args:get-arg "-m") ""))) 
                (print "attempting to create directory " targ-mk " in " target-dir)
-               (spublish:validate     target-dir targ-mk)
-               (spublish:mkdir configdat user target-dir targ-mk msg)))
+               (sretrieve:validate     target-dir targ-mk)
+               (sretrieve:mkdir configdat user target-dir targ-mk msg)))
 
       ((ln) 
         (if (< (length args) 2)
@@ -405,12 +401,12 @@ Version: " megatest-fossil-hash)) ;; "
                (if(not (equal? sub-path link-name))
                 (begin 
                   (print "attempting to create directory " sub-path " in " target-dir)
-                    (spublish:validate     target-dir sub-path)
+                    (sretrieve:validate     target-dir sub-path)
  
-                  (spublish:mkdir configdat user target-dir sub-path msg)))
+                  (sretrieve:mkdir configdat user target-dir sub-path msg)))
 
                (print "attempting to create link " link-name " in " target-dir)
-               (spublish:ln configdat user target-dir targ-link link-name msg)))
+               (sretrieve:ln configdat user target-dir targ-link link-name msg)))
 
       ((rm)
        (if (< (length args) 1)
@@ -420,9 +416,9 @@ Version: " megatest-fossil-hash)) ;; "
        (let* ((targ-file (car args))
 	      (msg         (or (args:get-arg "-m") "")))
 	 (print "attempting to remove " targ-file " from " target-dir)
-           (spublish:validate     target-dir targ-file)
+           (sretrieve:validate     target-dir targ-file)
 
-	 (spublish:rm configdat user target-dir targ-file msg)))
+	 (sretrieve:rm configdat user target-dir targ-file msg)))
       ((publish)
        (if (< (length args) 3)
 	   (begin 
@@ -441,7 +437,7 @@ Version: " megatest-fossil-hash)) ;; "
 		  (comment      (or (args:get-arg "-m") ""))
 		  (submitter    (current-user-name))
 		  (quality      (args:get-arg "-quality"))
-		  (publish-res  (spublish:publish configdat publish-type areaname version comment srcpath submitter quality)))
+		  (publish-res  (sretrieve:publish configdat publish-type areaname version comment srcpath submitter quality)))
 	     (if (not (car publish-res))
 		 (begin
 		   (print "ERROR: " (cdr publish-res))
@@ -449,8 +445,8 @@ Version: " megatest-fossil-hash)) ;; "
       ((list-versions)
        (let ((area-name (car args)) ;;      version patt   full print
 	     (remargs   (args:get-args args '("-vpatt") '("-full") args:arg-hash 0))
-	     (db        (spublish:open-db configdat))
-	     (versions  (spublish:get-versions-for-area db (car args) version-patt: (args:get-arg "-vpatt"))))
+	     (db        (sretrieve:open-db configdat))
+	     (versions  (sretrieve:get-versions-for-area db (car args) version-patt: (args:get-arg "-vpatt"))))
 	 ;; (print "area-name=" area-name " args=" args " *args-hash*=" (hash-table->alist *args-hash*))
 	 (map (lambda (x)
 		(if (args:get-arg "-full")
@@ -466,7 +462,7 @@ Version: " megatest-fossil-hash)) ;; "
       (else (print "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
-;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.spublishrc")))
+;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.sretrieverc")))
 ;;   (if (file-exists? debugcontrolf)
 ;;       (load debugcontrolf)))
 
@@ -476,33 +472,33 @@ Version: " megatest-fossil-hash)) ;; "
 	 (rema      (cdr args))
 	 (exe-name  (pathname-file (car (argv))))
 	 (exe-dir   (or (pathname-directory prog)
-			(spublish:find exe-name (string-split (get-environment-variable "PATH") ":"))))
-	 (configdat (spublish:load-config exe-dir exe-name)))
+			(sretrieve:find exe-name (string-split (get-environment-variable "PATH") ":"))))
+	 (configdat (sretrieve:load-config exe-dir exe-name)))
     (cond
      ;; one-word commands
      ((eq? (length rema) 1)
       (case (string->symbol (car rema))
 	((help -h -help --h --help)
-	 (print spublish:help))
+	 (print sretrieve:help))
 	((list-vars) ;; print out the ini file
-	 (map print (spublish:get-areas configdat)))
+	 (map print (sretrieve:get-areas configdat)))
 	((ls)
 	 (let ((target-dir (configf:lookup configdat "settings" "target-dir")))
 	   (print "Files in " target-dir)
 	   (system (conc "ls " target-dir))))
 	((log)
-	 (spublish:db-do configdat (lambda (db)
+	 (sretrieve:db-do configdat (lambda (db)
 				     (print "Listing actions")
 				     (query (for-each-row
 					     (lambda (row)
 					       (apply print (intersperse row " | "))))
 					    (sql db "SELECT * FROM actions")))))
 	(else
-	 (print "ERROR: Unrecognised command. Try \"spublish help\""))))
+	 (print "ERROR: Unrecognised command. Try \"sretrieve help\""))))
      ;; multi-word commands
-     ((null? rema)(print spublish:help))
+     ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
-      (apply spublish:process-action configdat (car rema)(cdr rema)))
-     (else (print "ERROR: Unrecognised command. Try \"spublish help\"")))))
+      (apply sretrieve:process-action configdat (car rema)(cdr rema)))
+     (else (print "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)
