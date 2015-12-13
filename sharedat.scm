@@ -49,12 +49,12 @@
 (define *args-hash* (make-hash-table))
 (define spublish:help (conc "Usage: spublish [action [params ...]]
 
-  ls                     : list contents of target area
+  ls                      : list contents of target area
   cp|publish <src file> <relative dest>      : copy file to target area
-  mkdir <dir name>       : maks directory in target area  
-  rm <file>              : remove file <file> from target area
+  mkdir <dir name>        : makes directory in target area  
+  rm <file>               : remove file <file> from target area
   ln <target> <link name> : creates a symlink
-  log                    :
+  log                     : 
 
   options:
 
