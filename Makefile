@@ -217,6 +217,9 @@ xterm : sd
 datashare-testing/spublish : spublish.scm $(OFILES)
 	csc spublish.scm $(OFILES) -o datashare-testing/spublish
 
+datashare-testing/sretrieve : sretrieve.scm $(OFILES)
+	csc sretrieve.scm $(OFILES) -o datashare-testing/sretrieve
+
 #  "(define (toplevel-command . a) #f)"
 readline-fix.scm :
 	if egrep 'version.*3.0' $(shell dirname $(shell dirname $(shell which csi)))/lib/chicken/7/readline.setup-info;then \
