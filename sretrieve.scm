@@ -82,6 +82,12 @@ Version: " megatest-fossil-hash)) ;; "
           srcpath      TEXT NOT NULL,
           comment      TEXT DEFAULT '' NOT NULL,
           state        TEXT DEFAULT 'new');"
+    "CREATE TABLE IF NOT EXISTS bundles
+         (id           INTEGER PRIMARY KEY,
+          bundle       TEXT NOT NULL,
+          release      TEXT NOT NULL,
+          status       TEXT NOT NULL,
+          event_date   TEXT NOT NULL);"
     )))
 
 (define (sretrieve:register-action db action submitter source-path comment)
@@ -333,6 +339,29 @@ Version: " megatest-fossil-hash)) ;; "
 	;; (ini:read-ini fname)
 	(read-config fname #f #t)
 	(make-hash-table))))
+
+(define (sretrieve:load-packages configdat exe-dir)
+  (push-directory exe-dir)
+  (let* ((packages-config   (configf:lookup configdat "settings" "packages-config"))
+	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
+	 (upstream-file     (configf:lookup configdat "settings" "upstream-file")))
+    (if (file-exists? upstream-file)
+	(if (or (not (file-exists? packages-config)) ;; if not created call the updater, otherwise call only if upstream newer
+		(> (file-modification-time upstream-file)(file-modification-time packages-config)))
+	    (handle-exceptions
+	     exn
+	     (print "ERROR: failed to run script " conversion-script " with params " upstream-file " " packages-config)
+	     (let ((pid (process-run conversion-script (list source-path target-dir))))
+	       (process-wait pid)))
+	    (print "Skipping update of " packages-config " from " upstream-file))
+	(print "Skipping update of " packages-config " as " upstream-file " not found"))
+    (ini:property-separator-patt " *  *")
+    (ini:property-separator #\space)
+    (let ((res (if (file-exists? fname)
+		   (read-config packages-config #f #t)
+		   (make-hash-table))))
+      (pop-directory)
+      res)))
 
 (define (sretrieve:process-action configdat action . args)
   (let* ((target-dir    (configf:lookup configdat "settings" "target-dir"))
