@@ -19,6 +19,7 @@
 ;; (use posix)
 ;; (use json)
 ;; (use csv)
+(use directory-utils)
 (use srfi-18)
 (use format)
 
@@ -91,12 +92,13 @@ Version: " megatest-fossil-hash)) ;; "
     )))
 
 (define (sretrieve:register-action db action submitter source-path comment)
-  (exec (sql db "INSERT INTO actions (action,submitter,srcpath,comment)
+  (print "(sretrieve:register-action db " db " action " action " submitter " submitter " source-path " source-path " comment " comment)
+  (exec (sql db "INSERT INTO actions (action,retriever,srcpath,comment)
                  VALUES(?,?,?,?)")
 	action
 	submitter
 	source-path
-	comment))
+	(or comment "")))
 
 ;; (call-with-database
 ;;  (lambda (db)
@@ -108,7 +110,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((path (configf:lookup configdat "database" "location")))
     (if (not path)
 	(begin
-	  (print "[database]\nlocation /some/path\n\n Is missing from the config file!")
+	  (debug:print 0 "[database]\nlocation /some/path\n\n Is missing from the config file!")
 	  (exit 1)))
     (if (and path
 	     (directory? path)
@@ -125,64 +127,51 @@ Version: " megatest-fossil-hash)) ;; "
 	   (call-with-database
             dbpath
 	    (lambda (db)
-	      ;; (print "calling proc " proc " on db " db)
+	      ;; (debug:print 0 "calling proc " proc " on db " db)
 	      (set-busy-handler! db (busy-timeout 10000)) ;; 10 sec timeout
 	      (if (not dbexists)(sretrieve:initialize-db db))
 	      (proc db)))))
-	(print "ERROR: invalid path for storing database: " path))))
+	(debug:print 0 "ERROR: invalid path for storing database: " path))))
 
 ;; copy in file to dest, validation is done BEFORE calling this
 ;;
-(define (sretrieve:get configdat retriever version iteration comment)
-  (let ((dest-dir-path (conc target-dir "/" dest-dir))
-        (targ-path (conc target-dir "/" dest-dir "/" targ-file)))
-    (if (file-exists? targ-path)
+(define (sretrieve:get configdat reldat retriever area version iter comment)
+  (let* ((iteration (or iter
+			(configf:lookup reldat version "iteration")))
+	 (base-dir  (configf:lookup configdat "settings" "base-dir"))
+	 (datadir   (conc base-dir "/" area "/" version "/" iteration)))
+    (if (or (not base-dir)
+	    (not (file-exists? base-dir)))
 	(begin
-	  (print "ERROR: target file already exists, remove it before re-publishing")
+	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
-       (if (not(file-exists? dest-dir-path))
+    (if (not (file-exists? datadir))
 	(begin
-	  (print "ERROR: target directory "  target-dir " does not exists." )
+	  (debug:print 0 "ERROR: Bad version (" version ") or iteration (" iteration "), no data found at " datadir "." )
 	  (exit 1)))
-
+    
     (sretrieve:db-do
      configdat
      (lambda (db)
-       (sretrieve:register-action db "cp" submitter source-path comment)))
-    (let* (;; (target-path (configf:lookup "settings" "target-path"))
-	   (th1         (make-thread
-			 (lambda ()
-			   (file-copy source-path targ-path #t))
-                            (print " ... file " targ-path " copied to" targ-path)
-			 ;; (let ((pid (process-run "cp" (list source-path target-dir))))
-			 ;;   (process-wait pid)))
-			 "copy thread"))
-	   (th2         (make-thread
-			 (lambda ()
-			   (let loop ()
-			     (thread-sleep! 15)
-			     (display ".")
-			     (flush-output)
-			     (loop)))
-			 "action is happening thread")))
-      (thread-start! th1)
-      (thread-start! th2)
-      (thread-join! th1))
-    (cons #t "Successfully saved data")))
+       (sretrieve:register-action db "get" retriever datadir comment)))
+    (change-directory datadir)
+    (process-execute "tar" (append (list "cfv" "-")(filter (lambda (x)
+							     (not (member x '("." ".."))))
+							   (glob "*" ".*"))))))
 
 (define (sretrieve:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
         (targ-path (conc target-dir "/" normal-path)))
     (if (string-contains   normal-path "..")
     (begin
-      (print "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
+      (debug:print 0 "ERROR: Path  " targ-mk " resolved outside target area "  target-dir )
       (exit 1)))
 
     (if (not (string-contains targ-path target-dir))
     (begin
-      (print "ERROR: You cannot update data outside " target-dir ".")
+      (debug:print 0 "ERROR: You cannot update data outside " target-dir ".")
       (exit 1)))
-    (print "Path " targ-mk " is valid.")   
+    (debug:print 0 "Path " targ-mk " is valid.")   
  ))
 ;; make directory in dest
 ;;
@@ -192,7 +181,7 @@ Version: " megatest-fossil-hash)) ;; "
     
     (if (file-exists? targ-path)
 	(begin
-	  (print "ERROR: target Directory " targ-path " already exist!!")
+	  (debug:print 0 "ERROR: target Directory " targ-path " already exist!!")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -201,7 +190,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-directory targ-path #t)
-			   (print " ... dir " targ-path " created"))
+			   (debug:print 0 " ... dir " targ-path " created"))
 			 "mkdir thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -222,11 +211,11 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" link-name)))
     (if (file-exists? targ-path)
 	(begin
-	  (print "ERROR: target file " targ-path " already exist!!")
+	  (debug:print 0 "ERROR: target file " targ-path " already exist!!")
 	  (exit 1)))
      (if (not (file-exists? targ-link ))
 	(begin
-	  (print "ERROR: target file " targ-link " does not exist!!")
+	  (debug:print 0 "ERROR: target file " targ-link " does not exist!!")
 	  (exit 1)))
  
     (sretrieve:db-do
@@ -236,7 +225,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (create-symbolic-link targ-link targ-path  )
-			   (print " ... link " targ-path " created"))
+			   (debug:print 0 " ... link " targ-path " created"))
 			 "symlink thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -258,7 +247,7 @@ Version: " megatest-fossil-hash)) ;; "
   (let ((targ-path (conc target-dir "/" targ-file)))
     (if (not (file-exists? targ-path))
 	(begin
-	  (print "ERROR: target file " targ-path " not found, nothing to remove.")
+	  (debug:print 0 "ERROR: target file " targ-path " not found, nothing to remove.")
 	  (exit 1)))
     (sretrieve:db-do
      configdat
@@ -267,7 +256,7 @@ Version: " megatest-fossil-hash)) ;; "
     (let* ((th1         (make-thread
 			 (lambda ()
 			   (delete-file targ-path)
-			   (print " ... file " targ-path " removed"))
+			   (debug:print 0 " ... file " targ-path " removed"))
 			 "rm thread"))
 	   (th2         (make-thread
 			 (lambda ()
@@ -311,7 +300,7 @@ Version: " megatest-fossil-hash)) ;; "
         (cid (current-user-id)))
     (if (not (eq? eid cid)) ;; running suid
             (set! (current-effective-user-id) cid))
-    ;; (print "running as " (current-effective-user-id))
+    ;; (debug:print 0 "running as " (current-effective-user-id))
     (proc)
     (if (not (eq? eid cid))
         (set! (current-effective-user-id) eid))))
@@ -327,6 +316,11 @@ Version: " megatest-fossil-hash)) ;; "
 		#f
 		(loop (car tal)(cdr tal)))))))
 
+(define (sretrieve:stderr-print . args)
+  (with-output-to-port (current-error-port)
+    (lambda ()
+      (apply print args))))
+
 ;;======================================================================
 ;; MAIN
 ;;======================================================================
@@ -340,155 +334,75 @@ Version: " megatest-fossil-hash)) ;; "
 	(read-config fname #f #t)
 	(make-hash-table))))
 
-(define (sretrieve:load-packages configdat exe-dir)
+;; package-type is "megatest", "builds", "kits" etc.
+;;
+(define (sretrieve:load-packages configdat exe-dir package-type)
   (push-directory exe-dir)
-  (let* ((packages-config   (configf:lookup configdat "settings" "packages-config"))
+  (let* ((packages-metadir  (or (configf:lookup configdat "settings" "packages-metadir")
+				".")) ;; exe-dir))
 	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
-	 (upstream-file     (configf:lookup configdat "settings" "upstream-file")))
+	 (upstream-file     (configf:lookup configdat "settings" "upstream-file"))
+	 (package-config    (conc packages-metadir "/" package-type ".config")))
+    ;; this section here does a timestamp based rebuild of the
+    ;;   <packages-metadir>/<package-type>.config file using
+    ;;   <upstream-file> as an input
     (if (file-exists? upstream-file)
-	(if (or (not (file-exists? packages-config)) ;; if not created call the updater, otherwise call only if upstream newer
-		(> (file-modification-time upstream-file)(file-modification-time packages-config)))
+	(if (or (not (file-exists? package-config)) ;; if not created call the updater, otherwise call only if upstream newer
+		(> (file-modification-time upstream-file)(file-modification-time package-config)))
 	    (handle-exceptions
 	     exn
-	     (print "ERROR: failed to run script " conversion-script " with params " upstream-file " " packages-config)
-	     (let ((pid (process-run conversion-script (list source-path target-dir))))
+	     (debug:print 0 "ERROR: failed to run script " conversion-script " with params " upstream-file " " package-config)
+	     (let ((pid (process-run conversion-script (list upstream-file package-config))))
 	       (process-wait pid)))
-	    (print "Skipping update of " packages-config " from " upstream-file))
-	(print "Skipping update of " packages-config " as " upstream-file " not found"))
+	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
+	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
     (ini:property-separator-patt " *  *")
     (ini:property-separator #\space)
-    (let ((res (if (file-exists? fname)
-		   (read-config packages-config #f #t)
+    (let ((res (if (file-exists? package-config)
+		   (begin
+		     (debug:print 0 "Reading package config " package-config)
+		     (read-config package-config #f #t))
 		   (make-hash-table))))
       (pop-directory)
       res)))
 
 (define (sretrieve:process-action configdat action . args)
-  (let* ((target-dir    (configf:lookup configdat "settings" "target-dir"))
+  (let* ((base-dir      (configf:lookup configdat "settings" "base-dir"))
 	 (user          (current-user-name))
 	 (allowed-users (string-split
 			 (or (configf:lookup configdat "settings" "allowed-users")
-			     ""))))
-    (if (not target-dir)
+			     "")))
+	 (default-area  (configf:lookup configdat "settings" "default-area"))) ;; otherwise known as the package
+    (if (not base-dir)
 	(begin
-	  (print "[settings]\ntarget-dir /some/path\n\n Is MISSING from the config file!")
+	  (debug:print 0 "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (null? allowed-users)
 	(begin
-	  (print "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
+	  (debug:print 0 "[setings]\nallowed-users user1 user2 ...\n\n Is MISSING from the config file!")
 	  (exit)))
     (if (not (member user allowed-users))
 	(begin
-	  (print "User \"" (current-user-name) "\" does not have access. Exiting")
+	  (debug:print 0 "User \"" (current-user-name) "\" does not have access. Exiting")
 	  (exit 1)))
     (case (string->symbol action)
-      ((cp publish)
-       (if (< (length args) 2)
-	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1)))
-       (let* ((remargs     (args:get-args args '("-m") '() args:arg-hash 0))
-              (dest-dir (cadr args))
-              (src-path-in (car args))
-	      (src-path    (with-input-from-pipe
-			    (conc "readlink -f " src-path-in)
-			    (lambda ()
-			      (read-line))))
-	      (msg         (or (args:get-arg "-m") ""))
-	      (targ-file   (pathname-strip-directory src-path)))
-	 (if (not (file-read-access? src-path))
-	     (begin
-	       (print "ERROR: source file not readable: " src-path)
-	       (exit 1)))
-	 (if (directory? src-path)
-	     (begin
-	       (print "ERROR: source file is a directory, this is not supported yet.")
-	       (exit 1)))
-	 (print "publishing " src-path-in " to " target-dir)
-         (sretrieve:validate     target-dir dest-dir)
-	 (sretrieve:cp configdat user src-path target-dir targ-file dest-dir msg)))
-      ((mkdir)
-        (if (< (length args) 1)
-          (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1)))
-        (let* ((targ-mk (car args))
-               (msg         (or (args:get-arg "-m") ""))) 
-               (print "attempting to create directory " targ-mk " in " target-dir)
-               (sretrieve:validate     target-dir targ-mk)
-               (sretrieve:mkdir configdat user target-dir targ-mk msg)))
-
-      ((ln) 
-        (if (< (length args) 2)
-          (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1)))
-        (let* ((targ-link (car args))
-               (link-name (cadr args))  
-               (sub-path (string-reverse (string-join (cdr (string-split (string-reverse link-name) "/")) "/"))) 
-               (msg         (or (args:get-arg "-m") "")))
-               (if(not (equal? sub-path link-name))
-                (begin 
-                  (print "attempting to create directory " sub-path " in " target-dir)
-                    (sretrieve:validate     target-dir sub-path)
- 
-                  (sretrieve:mkdir configdat user target-dir sub-path msg)))
-
-               (print "attempting to create link " link-name " in " target-dir)
-               (sretrieve:ln configdat user target-dir targ-link link-name msg)))
-
-      ((rm)
+      ((get)
        (if (< (length args) 1)
 	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (debug:print 0 "ERROR: Missing arguments; " (string-intersperse args ", "))
 	     (exit 1)))
-       (let* ((targ-file (car args))
-	      (msg         (or (args:get-arg "-m") "")))
-	 (print "attempting to remove " targ-file " from " target-dir)
-           (sretrieve:validate     target-dir targ-file)
+       (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
+              (version     (car args))
+	      (msg         (or (args:get-arg "-m") ""))
+	      (iteration   (args:get-arg "-i"))
+	      (package-type (or (args:get-arg "-package")
+				default-area))
+	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir"))
+	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
 
-	 (sretrieve:rm configdat user target-dir targ-file msg)))
-      ((publish)
-       (if (< (length args) 3)
-	   (begin 
-	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
-	     (exit 1))
-	   (let* ((srcpath  (list-ref args 0))
-		  (areaname (list-ref args 1))
-		  (version  (list-ref args 2))
-		  (remargs  (args:get-args (drop args 2)
-					   '("-type" ;; link or copy (default is copy)
-					     "-m")
-					   '()
-					   args:arg-hash
-					   0))
-		  (publish-type (if (equal? (args:get-arg "-type") "link") 'link 'copy))
-		  (comment      (or (args:get-arg "-m") ""))
-		  (submitter    (current-user-name))
-		  (quality      (args:get-arg "-quality"))
-		  (publish-res  (sretrieve:publish configdat publish-type areaname version comment srcpath submitter quality)))
-	     (if (not (car publish-res))
-		 (begin
-		   (print "ERROR: " (cdr publish-res))
-		   (exit 1))))))
-      ((list-versions)
-       (let ((area-name (car args)) ;;      version patt   full print
-	     (remargs   (args:get-args args '("-vpatt") '("-full") args:arg-hash 0))
-	     (db        (sretrieve:open-db configdat))
-	     (versions  (sretrieve:get-versions-for-area db (car args) version-patt: (args:get-arg "-vpatt"))))
-	 ;; (print "area-name=" area-name " args=" args " *args-hash*=" (hash-table->alist *args-hash*))
-	 (map (lambda (x)
-		(if (args:get-arg "-full")
-		    (format #t 
-			    "~10a~10a~4a~27a~30a\n"
-			    (vector-ref x 0)
-			    (vector-ref x 1) 
-			    (vector-ref x 2) 
-			    (conc "\"" (time->string (seconds->local-time (vector-ref x 3))) "\"")
-			    (conc "\"" (vector-ref x 4) "\""))
-		    (print (vector-ref x 0))))
-	      versions)))
-      (else (print "Unrecognised command " action)))))
+	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
+	 (sretrieve:get configdat relconfig user package-type version iteration msg)))
+      (else (debug:print 0 "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
 ;; (let ((debugcontrolf (conc (get-environment-variable "HOME") "/.sretrieverc")))
@@ -503,6 +417,9 @@ Version: " megatest-fossil-hash)) ;; "
 	 (exe-dir   (or (pathname-directory prog)
 			(sretrieve:find exe-name (string-split (get-environment-variable "PATH") ":"))))
 	 (configdat (sretrieve:load-config exe-dir exe-name)))
+    ;; preserve the exe data in the config file
+    (hash-table-set! configdat "exe-info" (list (list "exe-name" exe-name)
+						(list "exe-dir"  exe-dir)))
     (cond
      ;; one-word commands
      ((eq? (length rema) 1)
@@ -528,6 +445,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print sretrieve:help))
      ((>= (length rema) 2)
       (apply sretrieve:process-action configdat (car rema)(cdr rema)))
-     (else (print "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
+     (else (debug:print 0 "ERROR: Unrecognised command. Try \"sretrieve help\"")))))
 
 (main)
