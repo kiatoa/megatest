@@ -155,7 +155,7 @@ Version: " megatest-fossil-hash)) ;; "
      (lambda (db)
        (sretrieve:register-action db "get" retriever datadir comment)))
     (change-directory datadir)
-    (process-execute "tar" (append (list "cfv" "-")(filter (lambda (x)
+    (process-execute "tar" (append (list "chfv" "-")(filter (lambda (x)
 							     (not (member x '("." ".."))))
 							   (glob "*" ".*"))))))
 

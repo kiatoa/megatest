@@ -19,7 +19,7 @@
 ;; have a pool of db's to pick from
 (define *dbpool* '())
 (define *pool-mutex* (make-mutex))
-
+1
 (define (get-db)
   (mutex-lock! *pool-mutex*)
   (if (null? *dbpool*)
@@ -49,8 +49,15 @@
 ;; Start server thread
 (define rpc:server
   (make-thread
-   (cute (rpc:make-server rpc:listener) "rpc:server")
+   (cute (rpc:make-server rpc:listener) "rpc:server") ;; NOTE: see equivalent code below
    'rpc:server))
+
+;; This is what the code would look like without cute
+;; (define rpc:server
+;;   (make-thread
+;;    (lambda ()
+;;      ((rpc:make-server rpc:listener) "rpc:server"))
+;;    'rpc:server))
 
 (thread-start! rpc:server)
 
