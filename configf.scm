@@ -237,7 +237,7 @@
 							   (let ((patt (car dat))
 								 (proc (cdr dat)))
 							     (if (string-match patt curr-section-name)
-								 (proc curr-section-name section-name ht path))))
+								 (proc curr-section-name section-name res path))))
 							 post-section-procs)
 							(loop (configf:read-line inp res allow-system settings)
 							      ;; if we have the sections list then force all settings into "" and delete it later?
@@ -316,13 +316,14 @@
 	 (toppath    (car configinfo))
 	 (configfile (cadr configinfo))
 	 (set-fields (lambda (curr-section next-section ht path)
-		       (let ((field-names (keys:config-get-fields confdat))
+		       (let ((field-names (if ht (keys:config-get-fields ht) '()))
 			     (target      (or (getenv "MT_TARGET")(args:get-arg "-reqtarg")(args:get-arg "-target"))))
-			 (keys:target-set-args keys target #f)))))
+			 (debug:print-info 9 "set-fields with field-names=" field-names " target=" target " curr-section=" curr-section " next-section=" next-section " path=" path " ht=" ht)
+			 (if (not (null? field-names))(keys:target-set-args field-names target #f))))))
     (if toppath (change-directory toppath)) 
     (if (and toppath pathenvvar)(setenv pathenvvar toppath))
     (let ((configdat  (if configfile 
-			  (read-config configfile #f #t environ-patt: environ-patt (list (cons "^fields$" set-fields)) #f))))
+			  (read-config configfile #f #t environ-patt: environ-patt post-section-procs: (list (cons "^fields$" set-fields)) #f))))
       (if toppath (change-directory curr-dir))
       (list configdat toppath configfile fname))))
 

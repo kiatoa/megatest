@@ -37,15 +37,17 @@
 ;; The setting of :keyfield in args should be turned off ASAP
 ;;
 (define (keys:target-set-args keys target ht)
-  (let ((vals (string-split target "/")))
-    (if (eq? (length vals)(length keys))
-	(for-each (lambda (key val)
-		    (setenv key val)
-		    (hash-table-set! ht (conc ":" key) val))
-		  keys
-		  vals)
-	(debug:print 0 "ERROR: wrong number of values in " target ", should match " keys))
-    vals))
+  (if target
+      (let ((vals (string-split target "/")))
+	(if (eq? (length vals)(length keys))
+	    (for-each (lambda (key val)
+			(setenv key val)
+			(if ht (hash-table-set! ht (conc ":" key) val)))
+		      keys
+		      vals)
+	    (debug:print 0 "ERROR: wrong number of values in " target ", should match " keys))
+	vals)
+      (debug:print 4 "ERROR: keys:target-set-args called with no target.")))
 
 ;; given the keys (a list of vectors <key field> or a list of keys) and a target return a keyval list
 ;; keyval list ( (key1 val1) (key2 val2) ...)
