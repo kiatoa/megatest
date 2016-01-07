@@ -10,10 +10,6 @@
 ;; (include "common.scm")
 ;; (include "megatest-version.scm")
 
-(define (toplevel-command . a) #f)
-
-(define (toplevel-command . a) #f)
-
 ;; fake out readline usage of toplevel-command
 (define (toplevel-command . a) #f)
 
@@ -157,6 +153,7 @@ Misc
   -load file.scm          : load and run file.scm
   -mark-incompletes       : find and mark incomplete tests
   -ping run-id|host:port  : ping server, exit with 0 if found
+  -debug N|N,M,O...       : enable debug 0-N or N and M and O ...
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
