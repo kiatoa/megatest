@@ -13,7 +13,7 @@
 (declare (uses rmt))
 (declare (uses db))
 (declare (uses tasks))
-
+(declare (uses bb))
 ;; allow these queries through without starting a server
 ;;
 (define api:read-only-queries
@@ -57,6 +57,7 @@
 
 (define api:write-queries
   '(
+    bbtest
     ;; SERVERS
     start-server
     kill-server
@@ -120,7 +121,10 @@
 		    cmd
 		    (string->symbol cmd))
 
-	    ;;===============================================
+            ;; Brandon's test to extend API
+            ((bbtest) (apply bb:test params))
+
+            ;;===============================================
 	    ;; READ/WRITE QUERIES
 	    ;;===============================================
 

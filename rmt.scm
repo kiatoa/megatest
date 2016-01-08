@@ -586,6 +586,10 @@
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
       (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))))
 
+
+(define (rmt:bbtest )
+  (rmt:send-receive 'bbtest #f '()))
+
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S
 ;;======================================================================

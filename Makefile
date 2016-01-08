@@ -2,7 +2,7 @@
 PREFIX=$(PWD)
 CSCOPTS= 
 INSTALL=install
-SRCFILES = common.scm items.scm launch.scm \
+SRCFILES = common.scm bb.scm items.scm launch.scm \
            ods.scm runconfig.scm server.scm configf.scm \
            db.scm keys.scm margs.scm megatest-version.scm \
            process.scm runs.scm tasks.scm tests.scm genexample.scm \
