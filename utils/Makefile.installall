@@ -11,7 +11,7 @@
 # make PREFIX=/mfs/pkgs/chicken/chicken-core all
 
 help :
-	@echo You may need to do the following first:
+	@echo You may need to do the following setup first:
 	@echo
 	@echo sudo apt-get install libreadline-dev
 	@echo sudo apt-get install libwebkitgtk-dev libfreetype6-dev libx11-dev libxpm-dev libxmu-dev \
@@ -25,9 +25,9 @@ help :
 	@echo You are using PROXY="$(PROXY)"
 	@echo If needed set PROXY to host.dom:port
 	@echo   http_proxy=$(http_proxy)
-	@echo   PROX=$(PROX)
 	@echo 
 	@echo To make all do: make all
+	@echo   make minimal: make nogui
 	@echo 
 	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
 
@@ -45,7 +45,7 @@ PROXY=
 # http://code.call-cc.org/releases/4.10.0/chicken-4.10.0.tar.gz
 # Select version of chicken, sqlite3 etc
 CHICKEN_VERSION=4.10.0
-SQLITE3_VERSION=3081101
+SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
 # Override IUPBRANCH to use other than trunk
@@ -56,7 +56,8 @@ EGGS=matchable readline apropos base64 regex-literals format regex-case test coo
      dot-locking posix-utils posix-extras directory-utils hostinfo tcp-server rpc csv-xml fmt \
      json md5 awful http-client spiffy uri-common intarweb spiffy-request-vars \
      spiffy-directory-listing ssax sxml-serializer sxml-modifications sql-de-lite \
-     srfi-19 refdb ini-file sparse-vectors z3 call-with-environment-variables
+     srfi-19 refdb ini-file sparse-vectors z3 call-with-environment-variables hahn linenoise \
+     crypt
 
 #
 # Derived variables
@@ -96,7 +97,15 @@ CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
 CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
 # CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
 
-all : chkn eggs libiup logprobin $(PREFIX)/lib/sqlite3.so $(PREFIX)/bin/hs \
+nogui : base mutils
+
+all : nogui libiup $(PREFIX)/lib/sqlite3.so
+
+base : chkn eggs 
+
+# stuff needed for Kiatoa and Megatest from matts miscellaneous stash
+#   NOTE TO SELF: eggifying these would be great...
+mutils : base logprobin $(PREFIX)/bin/hs \
         $(PREFIX)/lib/chicken/7/mutils.so \
         $(PREFIX)/lib/chicken/7/dbi.so \
         $(PREFIX)/lib/chicken/7/stml.so \
@@ -135,7 +144,7 @@ $(PREFIX)/setup-chicken4x.csh : $(EGGFLAGS)
 	(echo "setenv LD_LIBRARY_PATH $(LD_LIBRARY_PATH)" >> $(PREFIX)/setup-chicken4x.csh)
 
 chicken-core/chicken.scm : chicken-$(CHICKEN_VERSION).tar.gz
-	tar xfz chicken-$(CHICKEN_VERSION).tar.gz
+	tar xf chicken-$(CHICKEN_VERSION).tar.gz
 	ln -sf chicken-$(CHICKEN_VERSION) chicken-core
 
 
@@ -161,12 +170,12 @@ $(CHICKEN_INSTALL) : chicken-core/chicken.scm $(PREFIX)/setup-chicken4x.sh $(PRE
 #======================================================================
 # S Q L I T E 3
 #======================================================================
-
+# https://www.sqlite.org/2015/sqlite-autoconf-3090200.tar.gz
 sqlite-autoconf-$(SQLITE3_VERSION).tar.gz :
-	wget  http://www.sqlite.org/2014/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	wget  http://www.sqlite.org/2015/sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
 
 sqlite-autoconf-$(SQLITE3_VERSION)/config.log : sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
-	tar xfz  sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
+	tar xf  sqlite-autoconf-$(SQLITE3_VERSION).tar.gz
 
 $(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
 	cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install
@@ -183,7 +192,7 @@ nanomsg-0.6-beta.tar.gz :
 	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
 
 nanomsg-0.6-beta/COPYING : nanomsg-0.6-beta.tar.gz
-	tar xfvz nanomsg-0.6-beta.tar.gz
+	tar xf nanomsg-0.6-beta.tar.gz
 
 $(PREFIX)/bin/nanocat : nanomsg-0.6-beta/COPYING
 	cd nanomsg-0.6-beta;./configure --prefix=$(PREFIX);make;make install
