@@ -131,6 +131,7 @@ Queries
   -var varName            : for config and runconfig lookup value for sectionName varName
   -since N                : get list of runs changed since time N (Unix seconds)
   -fields fieldspec       : fields to include in json dump; runs:id,runame+tests:testname+steps
+  -sort fieldname         : in -list-runs sort tests by this field
 
 Misc 
   -start-dir path         : switch to this directory before running megatest
@@ -251,6 +252,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-since"
 			"-fields"
 			"-recover-test" ;; run-id,test-id - used internally to recover a test stuck in RUNNING state
+			"-sort"
 			) 
 		 (list  "-h" "-help" "--help"
 			"-version"
@@ -1164,7 +1166,18 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 						 (tdb:step-get-status step)
 						 (tdb:step-get-event_time step)))
 				       steps)))))))))
-		      tests)))))
+		      (if (args:get-arg "-sort")
+			  (sort tests
+				(lambda (a-test b-test)
+				  (let* ((key    (args:get-arg "-sort"))
+					 (first  (get-value-by-fieldname a-test test-field-index key))
+					 (second (get-value-by-fieldname b-test test-field-index key)))
+				    ((cond 
+				      ((and (number? first)(number? second)) <)
+				      ((and (string? first)(string? second)) string<=?)
+				      (else equal?))
+				     first second))))
+			  tests))))))
 	   runs)
 	  (if (eq? dmode 'json)(json-write data))
 	  (let* ((metadat-fields (delete-duplicates
