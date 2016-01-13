@@ -14,7 +14,7 @@
 (define (toplevel-command . a) #f)
 
 (use sqlite3 srfi-1 posix regex regex-case srfi-69 base64 readline apropos json http-client directory-utils rpc ;; (srfi 18) extras)
-     http-client srfi-18 extras format) ;;  zmq extras)
+     http-client srfi-18 extras format defstruct) ;;  zmq extras)
 
 ;; Added for csv stuff - will be removed
 ;;
@@ -496,28 +496,31 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (sparse-vector-set! a x new-row)
 	  (sparse-vector-set! new-row y val)))))
 
+(defstruct refdb:csv svec rows cols maxrow maxcol)
+
 ;; csv processing record
-(define (make-refdb:csv)
-  (vector 
+(define (actual-make-refdb:csv)
+  (make-refdb:csv 
    (make-sparse-array)
    (make-hash-table)
    (make-hash-table)
    0
    0))
-(define-inline (refdb:csv-get-svec     vec)    (vector-ref  vec 0))
-(define-inline (refdb:csv-get-rows     vec)    (vector-ref  vec 1))
-(define-inline (refdb:csv-get-cols     vec)    (vector-ref  vec 2))
-(define-inline (refdb:csv-get-maxrow   vec)    (vector-ref  vec 3))
-(define-inline (refdb:csv-get-maxcol   vec)    (vector-ref  vec 4))
-(define-inline (refdb:csv-set-svec!    vec val)(vector-set! vec 0 val))
-(define-inline (refdb:csv-set-rows!    vec val)(vector-set! vec 1 val))
-(define-inline (refdb:csv-set-cols!    vec val)(vector-set! vec 2 val))
-(define-inline (refdb:csv-set-maxrow!  vec val)(vector-set! vec 3 val))
-(define-inline (refdb:csv-set-maxcol!  vec val)(vector-set! vec 4 val))
+
+;; (define-inline (refdb:csv-get-svec     vec)    (vector-ref  vec 0))
+;; (define-inline (refdb:csv-get-rows     vec)    (vector-ref  vec 1))
+;; (define-inline (refdb:csv-get-cols     vec)    (vector-ref  vec 2))
+;; (define-inline (refdb:csv-get-maxrow   vec)    (vector-ref  vec 3))
+;; (define-inline (refdb:csv-get-maxcol   vec)    (vector-ref  vec 4))
+;; (define-inline (refdb:csv-set-svec!    vec val)(vector-set! vec 0 val))
+;; (define-inline (refdb:csv-set-rows!    vec val)(vector-set! vec 1 val))
+;; (define-inline (refdb:csv-set-cols!    vec val)(vector-set! vec 2 val))
+;; (define-inline (refdb:csv-set-maxrow!  vec val)(vector-set! vec 3 val))
+;; (define-inline (refdb:csv-set-maxcol!  vec val)(vector-set! vec 4 val))
 
 (define (get-dat results sheetname)
   (or (hash-table-ref/default results sheetname #f)
-      (let ((tmp-vec  (make-refdb:csv)))
+      (let ((tmp-vec  (actual-make-refdb:csv)))
 	(hash-table-set! results sheetname tmp-vec)
 	tmp-vec)))
 
@@ -570,20 +573,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		    (lambda (sheetname sectionname varname val)
 		      ;; (print "sheetname: " sheetname ", sectionname: " sectionname ", varname: " varname ", val: " val)
 		      (let* ((dat      (get-dat results sheetname))
-			     (vec      (refdb:csv-get-svec dat))
-			     (rownames (refdb:csv-get-rows dat))
-			     (colnames (refdb:csv-get-cols dat))
+			     (vec      (refdb:csv-svec dat))
+			     (rownames (refdb:csv-rows dat))
+			     (colnames (refdb:csv-cols dat))
 			     (currrown (hash-table-ref/default rownames varname #f))
 			     (currcoln (hash-table-ref/default colnames sectionname #f))
 			     (rown     (or currrown 
-					   (let* ((lastn   (refdb:csv-get-maxrow dat))
+					   (let* ((lastn   (refdb:csv-maxrow dat))
 						  (newrown (+ lastn 1)))
-					     (refdb:csv-set-maxrow! dat newrown)
+					     (refdb:csv-maxrow-set! dat newrown)
 					     newrown)))
 			     (coln     (or currcoln 
-					   (let* ((lastn   (refdb:csv-get-maxcol dat))
+					   (let* ((lastn   (refdb:csv-maxcol dat))
 						  (newcoln (+ lastn 1)))
-					     (refdb:csv-set-maxcol! dat newcoln)
+					     (refdb:csv-maxcol-set! dat newcoln)
 					     newcoln))))
 			(if (not (sparse-array-ref vec 0 coln)) ;; (eq? rown 0)
 			    (begin
@@ -604,9 +607,9 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		   (for-each
 		    (lambda (sheetname)
 		      (let* ((sheetdat (get-dat results sheetname))
-			     (svec     (refdb:csv-get-svec sheetdat))
-			     (maxrow   (refdb:csv-get-maxrow sheetdat))
-			     (maxcol   (refdb:csv-get-maxcol sheetdat))
+			     (svec     (refdb:csv-svec sheetdat))
+			     (maxrow   (refdb:csv-maxrow sheetdat))
+			     (maxcol   (refdb:csv-maxcol sheetdat))
 			     (fname    (if out-file 
 					   (string-substitute "%s" sheetname out-file) ;; "/foo/bar/%s.csv")
 					   (conc sheetname ".csv"))))
