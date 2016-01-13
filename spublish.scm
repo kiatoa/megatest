@@ -140,7 +140,7 @@ Version: " megatest-fossil-hash)) ;; "
 	  (exit 1)))
        (if (not(file-exists? dest-dir-path))
 	(begin
-	  (print "ERROR: target directory "  target-dir " does not exists." )
+	  (print "ERROR: target directory " dest-dir-path " does not exists." )
 	  (exit 1)))
 
     (spublish:db-do
@@ -402,12 +402,15 @@ Version: " megatest-fossil-hash)) ;; "
                (link-name (cadr args))  
                (sub-path (string-reverse (string-join (cdr (string-split (string-reverse link-name) "/")) "/"))) 
                (msg         (or (args:get-arg "-m") "")))
-               (if(not (equal? sub-path link-name))
+               (if (> (string-length(string-trim sub-path)) 0)
                 (begin 
                   (print "attempting to create directory " sub-path " in " target-dir)
-                    (spublish:validate     target-dir sub-path)
- 
-                  (spublish:mkdir configdat user target-dir sub-path msg)))
+                  (spublish:validate     target-dir sub-path)
+                  (print (conc target-dir "/" sub-path ) )
+                  (print (directory-exists?(conc target-dir "/" sub-path )))
+                  (if (directory-exists?(conc target-dir "/" sub-path ))
+                   (print "Target Directory " (conc target-dir sub-path ) " exist!!")
+                  (spublish:mkdir configdat user target-dir sub-path msg))))
 
                (print "attempting to create link " link-name " in " target-dir)
                (spublish:ln configdat user target-dir targ-link link-name msg)))

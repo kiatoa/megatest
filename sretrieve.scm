@@ -145,6 +145,7 @@ Version: " megatest-fossil-hash)) ;; "
 	(begin
 	  (debug:print 0 "ERROR: Bad configuration! base-dir " base-dir " not found")
 	  (exit 1)))
+    (print datadir)
     (if (not (file-exists? datadir))
 	(begin
 	  (debug:print 0 "ERROR: Bad version (" version ") or iteration (" iteration "), no data found at " datadir "." )
@@ -373,6 +374,7 @@ Version: " megatest-fossil-hash)) ;; "
 			 (or (configf:lookup configdat "settings" "allowed-users")
 			     "")))
 	 (default-area  (configf:lookup configdat "settings" "default-area"))) ;; otherwise known as the package
+    
     (if (not base-dir)
 	(begin
 	  (debug:print 0 "[settings]\nbase-dir /some/path\n\n Is MISSING from the config file!")
