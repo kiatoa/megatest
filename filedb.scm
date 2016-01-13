@@ -15,16 +15,15 @@
 
 (include "fdb_records.scm")
 ;; (include "settings.scm")
-
 (define (filedb:open-db dbpath)
   (let* ((fdb      (make-filedb:fdb))
 	 (dbexists (file-exists? dbpath))
 	 (db (sqlite3:open-database dbpath)))
-    (filedb:fdb-set-db!        fdb db)
-    (filedb:fdb-set-dbpath!    fdb dbpath)
-    (filedb:fdb-set-pathcache! fdb (make-hash-table))
-    (filedb:fdb-set-idcache!   fdb (make-hash-table))
-    (filedb:fdb-set-partcache! fdb (make-hash-table))
+    (update-filedb:fdb fdb db: db)
+    (update-filedb:fdb fdb dbpath: dbpath)
+    (update-filedb:fdb fdb pathcache: (make-hash-table))
+    (update-filedb:fdb fdb idcache: (make-hash-table))
+    (update-filedb:fdb fdb partcache: (make-hash-table))
     (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))
     (if (not dbexists)
 	(begin
@@ -44,16 +43,16 @@
 	  (sqlite3:execute db "CREATE TABLE bases (id INTEGER PRIMARY KEY,base TEXT,                  updated TIMESTAMP);")))
     ;; close the sqlite3 db and open it as needed
     (filedb:finalize-db! fdb)
-    (filedb:fdb-set-db! fdb #f)
+    (update-filedb:fdb fdb db: #f)
     fdb))
 
 (define (filedb:reopen-db fdb)
-  (let ((db (sqlite3:open-database (filedb:fdb-get-dbpath fdb))))
-    (filedb:fdb-set-db! fdb db)
+  (let ((db (sqlite3:open-database (filedb:fdb-dbpath fdb))))
+    (update-filedb:fdb fdb db: db)
     (sqlite3:set-busy-handler!  db (make-busy-timeout 136000))))
   
 (define (filedb:finalize-db! fdb)
-  (sqlite3:finalize! (filedb:fdb-get-db fdb)))
+  (sqlite3:finalize! (filedb:fdb-db fdb)))
 
 (define (filedb:get-current-time-string)
   (string-chomp (time->string (seconds->local-time (current-seconds)))))
@@ -114,8 +113,8 @@
     (sqlite3:finalize! stmt)))
 
 (define (filedb:register-path fdb path #!key (save-stat #f))
-  (let* ((db        (filedb:fdb-get-db        fdb))
-	 (pathcache (filedb:fdb-get-pathcache fdb))
+  (let* ((db        (filedb:fdb-db        fdb))
+	 (pathcache (filedb:fdb-pathcache fdb))
 	 (stat      (if save-stat (file-stat path #t)))
 	 (id        (hash-table-ref/default pathcache path #f)))
     (if (not db)(filedb:reopen-db fdb))
@@ -156,7 +155,7 @@
 (define (filedb:update fdb path #!key (save-stat #f))
   ;; first get the realpath and add it to the bases table
   (let ((real-path path) ;; (filedb:get-real-path path))
-	(db        (filedb:fdb-get-db    fdb)))
+	(db        (filedb:fdb-db    fdb)))
     (filedb:add-base db real-path)
     (filedb:update-recursively fdb path save-stat: save-stat)))
 
@@ -174,7 +173,7 @@
   (print "Sorry, I don't do anything yet"))
 
 (define (filedb:find-all fdb pattern action)
-  (let* ((db     (filedb:fdb-get-db fdb))
+  (let* ((db     (filedb:fdb-db fdb))
 	 (stmt   (sqlite3:prepare db "SELECT id FROM paths WHERE path like ?;"))
 	 (result '()))
     (sqlite3:for-each-row 
@@ -185,8 +184,8 @@
     result))
 
 (define (filedb:get-path-record fdb id)
-  (let* ((db        (filedb:fdb-get-db        fdb))
-	 (partcache (filedb:fdb-get-partcache fdb))
+  (let* ((db        (filedb:fdb-db        fdb))
+	 (partcache (filedb:fdb-partcache fdb))
 	 (dat (hash-table-ref/default partcache id #f)))
     (if dat dat
 	(let ((stmt (sqlite3:prepare db "SELECT path,parent_id FROM paths WHERE id=?;"))
@@ -198,7 +197,7 @@
 	  result))))
 
 (define (filedb:get-children fdb parent-id)
-  (let* ((db        (filedb:fdb-get-db fdb))
+  (let* ((db        (filedb:fdb-db fdb))
 	 (res       '()))
     (sqlite3:for-each-row
      (lambda (id path parent-id)
@@ -210,7 +209,7 @@
 ;; retrieve all that have children and those without
 ;; children that match patt
 (define (filedb:get-children-patt fdb parent-id search-patt)
-  (let* ((db        (filedb:fdb-get-db fdb))
+  (let* ((db        (filedb:fdb-db fdb))
 	 (res       '()))
     ;; first get the children that have no children
     (sqlite3:for-each-row
@@ -222,8 +221,8 @@
     res))
 
 (define (filedb:get-path fdb id)
-  (let* ((db      (filedb:fdb-get-db      fdb))
-	 (idcache (filedb:fdb-get-idcache fdb))
+  (let* ((db      (filedb:fdb-db      fdb))
+	 (idcache (filedb:fdb-idcache fdb))
 	 (path    (hash-table-ref/default idcache id #f)))
     (if (not db)(filedb:reopen-db fdb))
     (if path path
