@@ -147,7 +147,6 @@ Misc
                                  overwritten by values set in config files.
   -server -|hostname      : start the server (reduces contention on megatest.db), use
                             - to automatically figure out hostname
-  -transport http|zmq     : use http or zmq for transport (default is http) 
   -daemonize              : fork into background and disconnect from stdin/out
   -log logfile            : send stdout and stderr to logfile
   -list-servers           : list the servers 
@@ -228,7 +227,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-start-dir"
 			"-server"
 			"-stop-server"
-			"-transport"
+			"-transport" ;; note: this is deprecated
 			"-kill-server"
 			"-port"
 			"-extract-ods"
@@ -709,6 +708,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
+
 
 (if (or (args:get-arg "-list-servers")
 	(args:get-arg "-stop-server"))

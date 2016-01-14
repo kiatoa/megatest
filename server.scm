@@ -50,7 +50,7 @@
 ;; start_server
 ;;
 (define (server:launch run-id)
-  (case *transport-type*
+  (case (server:get-transport)
     ((http)(http-transport:launch run-id))
     ((nmsg)(nmsg-transport:launch run-id))
     ((rpc)  (rpc-transport:launch run-id))

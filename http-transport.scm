@@ -359,10 +359,11 @@
       (let ((start-time (current-milliseconds))
             (sync-time  #f)
             (rem-time   #f)
-            (sync-retry #f))
+            (sync-retry #f)
+            (sync-touched (db:sync-touched *inmemdb* *run-id* force-sync: #t)))
         ;; inmemdb is a dbstruct
-        (condition-case
-         (db:sync-touched *inmemdb* *run-id* force-sync: #t)
+        (condition-case sync-touched
+         
          ((sync-failed)(cond
                         ((> bad-sync-count 10) ;; time to give up
                          (http-transport:server-shutdown server-id port))
@@ -374,7 +375,8 @@
           (tasks:server-delete-record (db:delay-if-busy tdbdat) server-id " http-transport:keep-running crashed")
           (exit)))
         (if sync-retry
-            #t ; return true - retry
+            (begin
+              #t) ; return true - retry
             (begin
               (set! sync-time  (- (current-milliseconds) start-time))
               (set! rem-time (quotient (- 4000 sync-time) 1000))
@@ -383,28 +385,28 @@
               (if (and (<= rem-time 4)
                        (> rem-time 0))
                   (thread-sleep! rem-time)
-                  (thread-sleep! 4)) ;; fallback for if the math is changed ...
-              
-              ;;
-              ;; no *inmemdb* yet, set running after our first pass through and start the db
-              ;;
-              (if (eq? server-state 'available)
-                  (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
-                    (if (equal? new-server-id server-id)
-                        (begin
-                          (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
-                          (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
-                          (set! *inmemdb*  (db:setup run-id))
-                          ;; force initialization
-                          ;; (db:get-db *inmemdb* #t)
-                          (db:get-db *inmemdb* run-id)
-                          (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
-                        (begin ;; gotta exit nicely
-                          (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
-                          (http-transport:server-shutdown server-id port)))))
-              #f))) ; return #f - don't retry
-      #f)) ; return #f - don't retry since there is no inmemdb
-
+                  (thread-sleep! 4))))
+        #f) ;; fallback for if the math is changed ...
+      
+      ;;
+      ;; no *inmemdb* yet, set running after our first pass through and start the db
+      ;;
+      (begin
+        (if (eq? server-state 'available)
+            (let ((new-server-id (tasks:server-am-i-the-server? (db:delay-if-busy tdbdat) run-id))) ;; try to ensure no double registering of servers
+              (if (equal? new-server-id server-id)
+                  (begin
+                    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "dbprep")
+                    (thread-sleep! 0.5) ;; give some margin for queries to complete before switching from file based access to server based access
+                    (set! *inmemdb*  (db:setup run-id))
+                    ;; force initialization
+                    ;; (db:get-db *inmemdb* #t)
+                    (db:get-db *inmemdb* run-id)
+                    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "running"))
+                  (begin ;; gotta exit nicely
+                    (tasks:server-set-state! (db:delay-if-busy tdbdat) server-id "collision")
+                    (http-transport:server-shutdown server-id port)))))))
+  #f)
 
 ;;; factored out of http-transport:keep-running
 (define (http-transport:get-server-info tdbdat server-start-time server-id run-id)
@@ -419,11 +421,11 @@
       (mutex-unlock! *heartbeat-mutex*)
       (if (and sdat
                (not changed)
-               (> (- (current-seconds) start-time) 2))
+               (> (- (current-seconds) start-time) (- (tasks:update-pause-seconds) 1) ))
           sdat
           (begin
-            (debug:print-info 0 "Still waiting, last-sdat=" last-sdat)
-            (sleep 4)
+            (debug:print-info 0 "Still waiting, sdat="sdat" last-sdat=" last-sdat)
+            (sleep (tasks:update-pause-seconds))
             (if (> (- (current-seconds) start-time) 120) ;; been waiting for two minutes
                 (begin
                   (debug:print 0 "ERROR: transport appears to have died, exiting server " server-id " for run " run-id)

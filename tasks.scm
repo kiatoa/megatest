@@ -200,6 +200,8 @@
    run-id
    ))
 
+(define (tasks:update-pause-seconds) 4)
+
 (define (tasks:num-in-available-state mdb run-id)
   (let ((res 0))
     (sqlite3:for-each-row

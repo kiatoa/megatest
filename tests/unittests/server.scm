@@ -55,6 +55,7 @@
 	(print "No server"))
     (test #f test-one-rec (rmt:get-test-info-by-id run-id test-one-id))
     (thread-sleep! 1)
+    (debug:print-info 0 "server-state="server-state " test-state="test-state)
     (case test-state
       ((start)
        (print "Trying to start server")

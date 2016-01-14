@@ -609,8 +609,12 @@
 				  pathenvvar: "MT_RUN_AREA_HOME"))))
 	(set! *configdat*  (if (car *configinfo*)(car *configinfo*) #f))
 	(set! *toppath*    (if (car *configinfo*)(cadr *configinfo*) #f))
-	(let* ((tmptransport (configf:lookup *configdat* "server" "transport"))
-	       (transport    (if tmptransport (string->symbol tmptransport) 'http)))
+	(let* ((cmdlinetransport (args:get-arg "-transport"))
+               (tmptransport (configf:lookup *configdat* "server" "transport"))
+	       (transport
+                (if cmdlinetransport
+                    (string->symbol cmdlinetransport)
+                    (if tmptransport (string->symbol tmptransport) 'http))))
 	  (if (member transport '(http rpc nmsg))
 	      (set! *transport-type* transport)
 	      (begin
