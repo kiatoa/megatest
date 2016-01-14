@@ -273,7 +273,8 @@
 		       (thread-join! th2)))))
       (set-signal-handler! signal/int sighand)
       (set-signal-handler! signal/term sighand)
-      (set-signal-handler! signal/stop sighand))
+      ;; (set-signal-handler! signal/stop sighand) ;; should not be handling sigstop
+      )
 
     (runs:set-megatest-env-vars run-id inkeys: keys inrunname: runname) ;; these may be needed by the launching process
     (set! runconf (if (file-exists? runconfigf)
