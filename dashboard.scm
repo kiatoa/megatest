@@ -1,5 +1,5 @@
 ;;======================================================================
-;; Copyright 2006-2012, Matthew Welland.
+;; Copyright 2006-2016, Matthew Welland.
 ;; 
 ;;  This program is made available under the GNU GPL version 2.0 or
 ;;  greater. See the accompanying file COPYING for details.
@@ -45,7 +45,7 @@
 (define help (conc 
 "Megatest Dashboard, documentation at http://www.kiatoa.com/fossils/megatest
   version " megatest-version "
-  license GPL, Copyright (C) Matt Welland 2012-2014
+  license GPL, Copyright (C) Matt Welland 2012-2016
 
 Usage: dashboard [options]
   -h                   : this help
