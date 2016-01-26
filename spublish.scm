@@ -168,6 +168,27 @@ Version: " megatest-fossil-hash)) ;; "
       (thread-join! th1))
     (cons #t "Successfully saved data")))
 
+;; copy directory to dest, validation is done BEFORE calling this
+;;
+
+(define (spublish:tar configdat submitter target-dir dest-dir comment)
+  (let ((dest-dir-path (conc target-dir "/" dest-dir)))
+       (if (not(file-exists? dest-dir-path))
+	(begin
+	  (print "ERROR: target directory " dest-dir-path " does not exists." )
+	  (exit 1)))
+    ;;(print dest-dir-path )
+    (spublish:db-do
+     configdat
+     (lambda (db)
+       (spublish:register-action db "tar" submitter dest-dir-path comment)))
+       (change-directory dest-dir-path)
+       (process-wait (process-run "/bin/tar" (list "xf" "-")))
+       (print "Data copied to " dest-dir-path) 
+
+        (cons #t "Successfully saved data")))
+
+
 (define (spublish:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
         (targ-path (conc target-dir "/" normal-path)))
@@ -377,11 +398,21 @@ Version: " megatest-fossil-hash)) ;; "
 	       (exit 1)))
 	 (if (directory? src-path)
 	     (begin
-	       (print "ERROR: source file is a directory, this is not supported yet.")
+              (print "ERROR: source file is a directory, this is not supported yet.")
 	       (exit 1)))
-	 (print "publishing " src-path-in " to " target-dir)
-         (spublish:validate     target-dir dest-dir)
-	 (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+	     (print "publishing " src-path-in " to " target-dir)
+             (spublish:validate     target-dir dest-dir)
+	     (spublish:cp configdat user src-path target-dir targ-file dest-dir msg)))
+      ((tar)
+        (if (< (length args) 1)
+          (begin 
+	     (print "ERROR: Missing arguments; " (string-intersperse args ", "))
+	     (exit 1)))
+        (let* ((dst-dir (car args))
+               (msg         (or (args:get-arg "-m") "")))
+               (spublish:validate     target-dir  dst-dir)
+               (spublish:tar configdat user target-dir dst-dir msg)))
+ 
       ((mkdir)
         (if (< (length args) 1)
           (begin 
@@ -506,6 +537,6 @@ Version: " megatest-fossil-hash)) ;; "
      ((null? rema)(print spublish:help))
      ((>= (length rema) 2)
       (apply spublish:process-action configdat (car rema)(cdr rema)))
-     (else (print "ERROR: Unrecognised command. Try \"spublish help\"")))))
+     (else (print "ERROR: Unrecognised command2. Try \"spublish help\"")))))
 
 (main)
