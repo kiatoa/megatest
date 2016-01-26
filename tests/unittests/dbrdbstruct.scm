@@ -6,12 +6,13 @@
 ;;
 ;;  (cd ..;make && make install) && ./rununittest.sh server 1;(cd simplerun;megatest -stop-server 0)
 
-(test #f #t                 (vector? (make-dbr:dbstruct "/tmp")))
+;; BB: 2016-01-20 suspect this file is dead code 
+(test #f #t                 (dbr:dbstruct? (make-dbr:dbstruct path: "/tmp")))
 
-(define dbstruct (make-dbr:dbstruct "/tmp"))
+(define dbstruct (make-dbr:dbstruct path: "/tmp"))
 
-(test #f #t                 (begin (dbr:dbstruct-set-main! dbstruct "blah") #t))
-(test #f "blah"             (dbr:dbstruct-get-main  dbstruct))
+(test #f #t                 (begin (dbr:dbstruct-main-set! dbstruct "blah") #t))
+(test #f "blah"             (dbr:dbstruct-main  dbstruct))
 (for-each 
  (lambda (run-id)
    (test #f #t                 (vector? (dbr:dbstruct-get-rundb-rec dbstruct run-id))))

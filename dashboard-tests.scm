@@ -69,31 +69,31 @@
     (apply iup:vbox  ; #:expand "YES"
 	   (list 
 	    (store-label "testname"
-			 (iup:label (db:test-get-testname  testdat) #:expand "HORIZONTAL")
-			 (lambda (testdat)(db:test-get-testname testdat)))
+			 (iup:label (db:test-testname  testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-testname testdat)))
 	    (store-label "item-path"
-			 (iup:label (db:test-get-item-path testdat) #:expand "HORIZONTAL")
-			 (lambda (testdat)(db:test-get-item-path testdat)))
+			 (iup:label (db:test-item-path testdat) #:expand "HORIZONTAL")
+			 (lambda (testdat)(db:test-item-path testdat)))
 	    (store-label "teststate" 
-			 (iup:label (db:test-get-state testdat) #:expand "HORIZONTAL")
+			 (iup:label (db:test-state testdat) #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (db:test-get-state testdat)))
-	    (let ((lbl   (iup:label (db:test-get-status testdat) #:expand "HORIZONTAL")))
+			   (db:test-state testdat)))
+	    (let ((lbl   (iup:label (db:test-status testdat) #:expand "HORIZONTAL")))
 	      (hash-table-set! widgets "teststatus"
 			       (lambda (testdat)
-				 (let ((newstatus (db:test-get-status testdat))
+				 (let ((newstatus (db:test-status testdat))
 				       (oldstatus (iup:attribute lbl "TITLE")))
 				   (if (not (equal? oldstatus newstatus))
 				       (begin
-					 (iup:attribute-set! lbl "FGCOLOR" (car (gutils:get-color-for-state-status (db:test-get-state testdat)
-														   (db:test-get-status testdat))))
-					 (iup:attribute-set! lbl "TITLE" (db:test-get-status testdat)))))))
+					 (iup:attribute-set! lbl "FGCOLOR" (car (gutils:get-color-for-state-status (db:test-state testdat)
+														   (db:test-status testdat))))
+					 (iup:attribute-set! lbl "TITLE" (db:test-status testdat)))))))
 	      lbl)
 	    (store-label "testcomment"
 			 (iup:label "TestComment                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (let ((newcomment (db:test-get-comment testdat)))
+			   (let ((newcomment (db:test-comment testdat)))
 			     (if *dashboard-comment-share-slot*
 				 (if (not (equal? (iup:attribute *dashboard-comment-share-slot* "VALUE")
 						  newcomment))
@@ -105,12 +105,12 @@
 			 (iup:label "TestId                             "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (db:test-get-id testdat)))
+			   (db:test-id testdat)))
 	    (store-label "testdate" 
 			 (iup:label "TestDate                           "
 				    #:expand "HORIZONTAL")
 			 (lambda (testdat)
-			   (seconds->work-week/day-time (db:test-get-event_time testdat))))
+			   (seconds->work-week/day-time (db:test-event_time testdat))))
 	    )))))
 
 ;;======================================================================
@@ -159,7 +159,7 @@
 ;; Run info panel
 ;;======================================================================
 (define (run-info-panel db keydat testdat runname)
-  (let* ((run-id     (db:test-get-run_id testdat))
+  (let* ((run-id     (db:test-run_id testdat))
 	 (rundat     (db:get-run-info db run-id))
 	 (header     (db:get-header rundat))
 	 (event_time (db:get-value-by-header (db:get-rows rundat)
@@ -208,28 +208,28 @@
 	    ;; NOTE: Yes, the host can change!
 	    (store-label "HostName"
 			 (iup:label ;; (sdb:qry 'getstr 
-			  (db:test-get-host testdat) ;; )
+			  (db:test-host testdat) ;; )
 			  #:expand "HORIZONTAL")
-			 (lambda (testdat)(db:test-get-host testdat)))
+			 (lambda (testdat)(db:test-host testdat)))
 	    (store-label "DiskFree"
-			 (iup:label (conc (db:test-get-diskfree testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-diskfree testdat))))
+			 (iup:label (conc (db:test-diskfree testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-diskfree testdat))))
 	    (store-label "CPULoad"
-			 (iup:label (conc (db:test-get-cpuload testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-cpuload testdat))))
+			 (iup:label (conc (db:test-cpuload testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-cpuload testdat))))
 	    (store-label "RunDuration"
-			 (iup:label (conc (seconds->hr-min-sec (db:test-get-run_duration testdat))) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (seconds->hr-min-sec (db:test-get-run_duration testdat)))))
+			 (iup:label (conc (seconds->hr-min-sec (db:test-run_duration testdat))) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (seconds->hr-min-sec (db:test-run_duration testdat)))))
 	    (store-label "LogFile"
-			 (iup:label (conc (db:test-get-final_logf testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-final_logf testdat))))
+			 (iup:label (conc (db:test-final_logf testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-final_logf testdat))))
 	    (store-label "ProcessId"
-			 (iup:label (conc (db:test-get-process_id testdat)) #:expand "HORIZONTAL")
-			 (lambda (testdat)(conc (db:test-get-process_id testdat))))
+			 (iup:label (conc (db:test-process_id testdat)) #:expand "HORIZONTAL")
+			 (lambda (testdat)(conc (db:test-process_id testdat))))
 	    (store-label "Uname"
 			 (iup:label "                                                   " #:expand "HORIZONTAL") ;;  #:wordwrap "YES")
 			 (lambda (testdat) ;; (sdb:qry 'getstr 
-			   (db:test-get-uname testdat))) ;; )
+			   (db:test-uname testdat))) ;; )
 	    )))))
 
 ;; if there is a submegatest create a button to launch dashboard in that area
@@ -251,8 +251,8 @@
 ;;                           state status teststeps
 (define *state-status* (vector #f #f #f))
 (define (update-state-status-buttons testdat)
-  (let* ((state  (db:test-get-state  testdat))
-	 (status (db:test-get-status testdat))
+  (let* ((state  (db:test-state  testdat))
+	 (status (db:test-status testdat))
 	 (color  (car (gutils:get-color-for-state-status state status))))
     ((vector-ref *state-status* 0) state color)
     ((vector-ref *state-status* 1) status color)))
@@ -277,7 +277,7 @@
 						      ;; IDEA: Just set a variable with the proc to call?
 						      (rmt:test-set-state-status-by-id run-id test-id #f #f b)
 						      (set! newcomment b))
-					   #:value (db:test-get-comment testdat)
+					   #:value (db:test-comment testdat)
 					   #:expand "HORIZONTAL")))
 		  (set! wtxtbox txtbox)
 		  txtbox))
@@ -289,7 +289,7 @@
 							 #:expand "HORIZONTAL" #:size "50x" #:font "Courier New, -10"
 							 #:action (lambda (x)
 								    (rmt:test-set-state-status-by-id run-id test-id state #f #f)
-								    (db:test-set-state! testdat state)))))
+								    (db:test-state-set! testdat state)))))
 				    btn))
 				(map cadr *common:std-states*)))) ;; (list "COMPLETED" "NOT_STARTED" "RUNNING" "REMOTEHOSTSTART" "LAUNCHED" "KILLED" "KILLREQ"))))
 	       (vector-set! *state-status* 0
@@ -322,7 +322,7 @@
 														  ))))
 									  (begin
 									    (rmt:test-set-state-status-by-id run-id test-id #f status #f)
-									    (db:test-set-status! testdat status))))))))
+									    (db:test-status-set! testdat status))))))))
 				    btn))
 				(map cadr *common:std-statuses*)))) ;; (list  "PASS" "WARN" "FAIL" "CHECK" "n/a" "WAIVED" "SKIP"))))
 	       (vector-set! *state-status* 1
@@ -380,17 +380,17 @@
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment matches " wpatt))
 						(iup:attribute-set! wmesg "TITLE" (conc "Comment does not match " wpatt))
 						)))
-			     #:value (if ovrdval ovrdval (db:test-get-comment testdat))
+			     #:value (if ovrdval ovrdval (db:test-comment testdat))
 			     #:expand "HORIZONTAL"))
 	 (dlog  #f))
     (set! dlog (iup:dialog ;; #:close_cb (lambda (a)(exit)) ; #:expand "YES"
 		#:title "SET WAIVER"
 		(iup:vbox ; #:expand "YES"
 		 (iup:label (conc "Enter justification for waiving test "
-				  (db:test-get-testname testdat)
-				  (if (equal? (db:test-get-item-path testdat) "") 
+				  (db:test-testname testdat)
+				  (if (equal? (db:test-item-path testdat) "") 
 				      ""
-				      (conc "/" (db:test-get-item-path testdat)))))
+				      (conc "/" (db:test-item-path testdat)))))
 		 wmesg ;; the informational msg on whether it matches
 		 comnt
 		 (iup:hbox
@@ -398,12 +398,12 @@
 			      #:expand "HORIZONTAL"
 			      #:action (lambda (obj)
 					 (let ((comment (iup:attribute comnt "VALUE"))
-					       (test-id (db:test-get-id testdat)))
+					       (test-id (db:test-id testdat)))
 					   (if (or (not wpatt)
 						   (string-match wregx comment))
 					       (begin
 						 (rmt:test-set-state-status-by-id run-id test-id #f "WAIVED" comment)
-						 (db:test-set-status! testdat "WAIVED")
+						 (db:test-status-set! testdat "WAIVED")
 						 (cmtcmd comment)
 						 (iup:destroy! dlog))))))
 		  (iup:button "Cancel"
@@ -427,7 +427,7 @@
 	(begin
 	  (debug:print 2 "ERROR: No test data found for test " test-id ", exiting")
 	  (exit 1))
-	(let* (;; (run-id        (if testdat (db:test-get-run_id testdat) #f))
+	(let* (;; (run-id        (if testdat (db:test-run_id testdat) #f))
 	       (test-registry (tests:get-all))
 	       (keydat        (if testdat (rmt:get-key-val-pairs run-id) #f))
 	       (rundat        (if testdat (rmt:get-run-info run-id) #f))
@@ -439,12 +439,12 @@
 	       ;; get filled in properly.
 	       (logfile       "/this/dir/better/not/exist")
 	       (rundir        (if testdat 
-				  (db:test-get-rundir testdat)
+				  (db:test-rundir testdat)
 				  logfile))
 	       ;; (testdat-path  (conc rundir "/testdat.db")) ;; this gets recalculated until found 
 	       (teststeps     (if testdat (tests:get-compressed-steps #f run-id test-id) '()))
-	       (testfullname  (if testdat (db:test-get-fullname testdat) "Gathering data ..."))
-	       (testname      (if testdat (db:test-get-testname testdat) "n/a"))
+	       (testfullname  (if testdat (db:test-fullname testdat) "Gathering data ..."))
+	       (testname      (if testdat (db:test-testname testdat) "n/a"))
 	       ;; (tests:get-testconfig testdat testname 'return-procs))
 	       (testmeta      (if testdat 
 				  (let ((tm (rmt:testmeta-get-record testname)))
@@ -457,7 +457,7 @@
 				   (cadr keyval))
 				 keydat)
 			    "/"))
-	       (item-path  (db:test-get-item-path testdat))
+	       (item-path  (db:test-item-path testdat))
 	       ;; this next block was added to fix a bug where variables were
                ;; needed. Revisit this.
 	       (runconfig  (let ((runconfigf (conc  *toppath* "/runconfigs.config")))
@@ -472,8 +472,8 @@
 				(runs:set-megatest-env-vars run-id inkeyvals: keydat inrunname: runname intarget: keystring testname: testname itempath: item-path) ;; these may be needed by the launching process
 				(handle-exceptions
 				 exn
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #f)
-				 (tests:get-testconfig (db:test-get-testname testdat) test-registry #t))))
+				 (tests:get-testconfig (db:test-testname testdat) test-registry #f)
+				 (tests:get-testconfig (db:test-testname testdat) test-registry #t))))
 	       (viewlog    (lambda (x)
 			     (if (file-exists? logfile)
 					;(system (conc "firefox " logfile "&"))
@@ -519,10 +519,10 @@
 				((and need-update newtestdat)
 				 (set! testdat newtestdat)
 				 (set! teststeps    (tests:get-compressed-steps #f run-id test-id))
-				 (set! logfile      (conc (db:test-get-rundir testdat) "/" (db:test-get-final_logf testdat)))
+				 (set! logfile      (conc (db:test-rundir testdat) "/" (db:test-final_logf testdat)))
 				 (set! rundir       ;; (filedb:get-path *fdb* 
-				       (db:test-get-rundir testdat)) ;; )
-				 (set! testfullname (db:test-get-fullname testdat))
+				       (db:test-rundir testdat)) ;; )
+				 (set! testfullname (db:test-fullname testdat))
 				 ;; (debug:print 0 "INFO: teststeps=" (intersperse teststeps "\n    "))
 				 
 				 ;; I don't see why this was implemented this way. Please comment it ...
@@ -536,7 +536,7 @@
 				 (set! request-update #f) ;; met the need ...
 				 )
 				(need-update ;; if this was true and yet there is no data ....
-				 (db:test-set-testname! testdat "DEAD OR DELETED TEST")))
+				 (db:test-testname-set! testdat "DEAD OR DELETED TEST")))
 			       (if need-update
 				   (begin
 				     ;; update the gui elements here

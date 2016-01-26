@@ -134,18 +134,18 @@
   (let* ((test-dat      (rmt:get-test-info-by-id run-id test-id)))
     (if test-dat
 	(let* ((test-rundir   ;; (rmt:sdb-qry 'getstr ;; (filedb:get-path *fdb*
-		(db:test-get-rundir test-dat)) ;; ) ;; )
-	       (test-name     (db:test-get-testname test-dat))
+		(db:test-rundir test-dat)) ;; ) ;; )
+	       (test-name     (db:test-testname test-dat))
 	       (tconfig       #f)
-	       (state         (if newstate  newstate  (db:test-get-state  test-dat)))
-	       (status        (if newstatus newstatus (db:test-get-status test-dat))))
+	       (state         (if newstate  newstate  (db:test-state  test-dat)))
+	       (status        (if newstatus newstatus (db:test-status test-dat))))
 	  (if (and test-rundir   ;; #f means no dir set yet
 		   (file-exists? test-rundir)
 		   (directory? test-rundir))
 	      (call-with-environment-variables
 	       (list (cons "MT_TEST_NAME" test-name)
 		     (cons "MT_TEST_RUN_DIR" test-rundir)
-		     (cons "MT_ITEMPATH"     (db:test-get-item-path test-dat)))
+		     (cons "MT_ITEMPATH"     (db:test-item-path test-dat)))
 	       (lambda ()
 		 (push-directory test-rundir)
 		 (set! tconfig (mt:lazy-read-test-config test-name))

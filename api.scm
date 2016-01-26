@@ -129,10 +129,10 @@
 	    ((kill-server)                     (set! *server-run* #f))
 
 	    ;; TESTS
-	    ((test-set-state-status-by-id)     (apply db:test-set-state-status-by-id dbstruct params))
+	    ((test-set-state-status-by-id)     (apply db:test-state-status-by-id-set! dbstruct params))
 	    ((delete-test-records)             (apply db:delete-test-records dbstruct params))
 	    ((delete-old-deleted-test-records) (apply db:delete-old-deleted-test-records dbstruct params))
-	    ((test-set-status-state)           (apply db:test-set-status-state dbstruct params))
+	    ((test-set-status-state)           (apply db:test-status-state-set! dbstruct params))
 	    ((test-set-top-process-pid)        (apply db:test-set-top-process-pid dbstruct params))
 	    ((roll-up-pass-fail-counts)        (apply db:roll-up-pass-fail-counts dbstruct params))
 	    ;; ((update-pass-fail-counts)         (apply db:general-call dbstruct 'update-pass-fail-counts params))
@@ -183,23 +183,23 @@
 	    ((get-targets)                     (db:get-targets  dbstruct))
 
 	    ;; ARCHIVES
-	    ((test-get-archive-block-info)     (apply db:test-get-archive-block-info dbstruct params))
+	    ((test-get-archive-block-info)     (apply db:test-archive-block-info dbstruct params))
 	    
 	    ;; TESTS
 	    ((test-toplevel-num-items)         (apply db:test-toplevel-num-items dbstruct params))
 	    ((get-test-info-by-id)	       (apply db:get-test-info-by-id dbstruct params))
-	    ((test-get-rundir-from-test-id)    (apply db:test-get-rundir-from-test-id dbstruct params))
+	    ((test-get-rundir-from-test-id)    (apply db:test-rundir-from-test-id dbstruct params))
 	    ((get-count-tests-running-for-testname) (apply db:get-count-tests-running-for-testname dbstruct params))
 	    ((get-count-tests-running)         (apply db:get-count-tests-running dbstruct params))
 	    ((get-count-tests-running-in-jobgroup) (apply db:get-count-tests-running-in-jobgroup dbstruct params))
 	    ;; ((delete-test-step-records)        (apply db:delete-test-step-records dbstruct params))
 	    ((get-previous-test-run-record)    (apply db:get-previous-test-run-record dbstruct params))
 	    ((get-matching-previous-test-run-records)(apply db:get-matching-previous-test-run-records dbstruct params))
-	    ((test-get-logfile-info)           (apply db:test-get-logfile-info dbstruct params))
-	    ((test-get-records-for-index-file)  (apply db:test-get-records-for-index-file dbstruct params))
+	    ((test-get-logfile-info)           (apply db:test-logfile-info dbstruct params))
+	    ((test-get-records-for-index-file)  (apply db:test-records-for-index-file dbstruct params))
 	    ((get-testinfo-state-status)       (apply db:get-testinfo-state-status dbstruct params))
-	    ((test-get-top-process-pid)        (apply db:test-get-top-process-pid dbstruct params))
-	    ((test-get-paths-matching-keynames-target-new) (apply db:test-get-paths-matching-keynames-target-new dbstruct params))
+	    ((test-get-top-process-pid)        (apply db:test-top-process-pid dbstruct params))
+	    ((test-get-paths-matching-keynames-target-new) (apply db:test-paths-matching-keynames-target-new dbstruct params))
 	    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
 	    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
 	    ((synchash-get)                    (apply synchash:server-get dbstruct params))

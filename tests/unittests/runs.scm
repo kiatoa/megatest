@@ -125,8 +125,8 @@
 
 (define (get-state-status run-id testname itempath)
   (let ((tdat (rmt:get-test-info-by-id 1 (rmt:get-test-id run-id testname itempath))))
-    (list (db:test-get-state  tdat)
-	  (db:test-get-status tdat))))
+    (list (db:test-state  tdat)
+	  (db:test-status tdat))))
 
 (test "Rollup PASS" '("COMPLETED" "PASS") (get-state-status 1 "rollup" ""))
 (let ((test-id (rmt:get-test-id 1 "rollup" "item/4"))
@@ -235,7 +235,7 @@
 	(rmt:teststep-set-status! 1 30002 "step1" "start" 0 "This is a comment" "mylogfile.html")
 	(sleep 2)
 	(rmt:teststep-set-status! 1 30002 "step1" "end" "pass" "This is a different comment" "finallogfile.html")
-	(set! test-id (db:test-get-id (car (mt:get-tests-for-run 1 "test1" '() '()))))
+	(set! test-id (db:test-id (car (mt:get-tests-for-run 1 "test1" '() '()))))
 	(number? test-id)))
 
 (test "Get rundir"       #t (let ((rundir (cdb:remote-run db:test-get-rundir-from-test-id #f test-id)))
@@ -322,7 +322,7 @@
   (print "Setting " (length tests) " to COMPLETED/PASS")
   (for-each
    (lambda (test)
-     (cdb:test-set-status-state *runremote* (db:test-get-id test) "COMPLETED" "PASS" "Forced pass"))
+     (cdb:test-set-status-state *runremote* (db:test-id test) "COMPLETED" "PASS" "Forced pass"))
    tests))
 
 ;; (process-wait server-pid)

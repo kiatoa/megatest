@@ -1045,7 +1045,7 @@
 ;; dneeded is minimum space needed, scan for existing archives that 
 ;; are on disks with adequate space and already have this test/itempath
 ;; archived
-;;
+;; BB: db:archive-get-allocations not used anywhere.
 (define (db:archive-get-allocations dbstruct testname itempath dneeded)
   (let* ((dbdat        (db:get-db dbstruct #f)) ;; archive tables are in main.db
 	 (db           (db:dbdat-get-db dbdat))
@@ -1142,7 +1142,7 @@
  
 ;; Look up the archive block info given a block-id
 ;;
-(define (db:test-get-archive-block-info dbstruct archive-block-id)
+(define (db:test-archive-block-info dbstruct archive-block-id)
   (db:with-db
    dbstruct
    #f
@@ -1222,8 +1222,8 @@
     ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
     ;;
     ;; HOWEVER: this code in run:test seems to work fine
-    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-    ;;                     (db:test-get-run_duration testdat)))
+    ;;              (> (- (current-seconds)(+ (db:test-event_time testdat)
+    ;;                     (db:test-run_duration testdat)))
     ;;                    600) 
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
@@ -1281,8 +1281,8 @@
     ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
     ;;
     ;; HOWEVER: this code in run:test seems to work fine
-    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-    ;;                     (db:test-get-run_duration testdat)))
+    ;;              (> (- (current-seconds)(+ (db:test-event_time testdat)
+    ;;                     (db:test-run_duration testdat)))
     ;;                    600) 
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
@@ -2070,6 +2070,9 @@
 		(conc "SELECT id FROM runs WHERE " qrystr " AND state != 'deleted' AND id != ?;") (append kvalues (list run-id)))))
       prev-run-ids)))
 
+
+
+
 ;;======================================================================
 ;;  T E S T S
 ;;======================================================================
@@ -2088,6 +2091,7 @@
 				((shortlist) "id,run_id,testname,item_path,state,status")
 				((#f)        db:test-record-qry-selector) ;; "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
 				(else        qryvals)))
+             (qryfields       (string-split qryvalstr ","))
 	     (res            '())
 	     ;; if states or statuses are null then assume match all when not-in is false
 	     (states-qry      (if (null? states) 
@@ -2138,32 +2142,55 @@
 		    (lambda (db)
 		      (sqlite3:for-each-row 
 		       (lambda (a . b) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment)
-			 (set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+			 ;; BB: vec->defstruct refactor replaces:
+                         ;;(set! res (cons (apply vector a b) res))) ;; id run-id testname state status event-time host cpuload diskfree uname rundir item-path run-duration final-logf comment) res)))
+                         (set! res
+                               (cons
+                                (alist->db:test (map cons qryfields (cons a b)))
+                                res)))
 		       db
 		       qry
 		       run-id
 		       )))
-	(case qryvals
-	  ((shortlist)(map db:test-short-record->norm res))
-	  ((#f)       res)
-	  (else       res)))))
+        ;; (case qryvals
+        ;;   ((shortlist)(map db:test-short-record->norm res))
+        ;;   ((#f)       res)
+        ;;   (else       res)))))
+        (if (eq? qryvals shortlist)
+            (for-each (lambda (inrec) (db:test-short-record->norm inrec)) res))
+        res)))
 
 (define (db:test-short-record->norm inrec)
   ;;  "id,run_id,testname,item_path,state,status"
-  ;;  "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-  (vector (vector-ref inrec 0) ;; id
-	  (vector-ref inrec 1) ;; run_id
-	  (vector-ref inrec 2) ;; testname
-	  (vector-ref inrec 4) ;; state
-	  (vector-ref inrec 5) ;; status
-	  -1 "" -1 -1 "" "-" 
-	  (vector-ref inrec 3) ;; item-path
-	  -1 "-" "-"))
+  ;;  "id,run_id,testname,state,status, event_time,host,cpuload,diskfree,uname,rundir, item_path, run_duration,final_logf,comment
+
+  (db-test-event_time-set! inrec -1)
+  (db-test-host-set!       inrec "")
+  (db-test-cpuload-set!    inrec -1)
+  (db-test-diskfree-set!   inrec -1)
+  (db-test-uname-set!      inrec "")
+  (db-test-rundir-set!     inrec "-")
+  (db-test-run_duration-set!     inrec "-")
+  (db-test-final_logf-set! inrec "-")
+  (db-test-comment-set!    inrec "-")
+  
+  ;; (vector (vector-ref inrec 0) ;; id
+  ;;         (vector-ref inrec 1) ;; run_id
+  ;;         (vector-ref inrec 2) ;; testname
+  ;;         (vector-ref inrec 4) ;; state
+  ;;         (vector-ref inrec 5) ;; status
+  ;;         -1 "" -1 -1 "" "-" 
+  ;;         (vector-ref inrec 3) ;; item-path
+  ;;         -1 "-" "-")
+
+  )
 
 (define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-	 (qry             (conc "SELECT id,testname,item_path,state,status FROM tests WHERE run_id=? " 
+         (qryfields '(id testname item_path state,status))
+         (qryfields-str (string-join (map ->string qryfields) "," ))
+	 (qry             (conc "SELECT " qryfields-str " FROM tests WHERE run_id=? " 
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))))
     (debug:print-info 8 "db:get-tests-for-run qry=" qry)
     (db:with-db dbstruct run-id #f
@@ -2171,23 +2198,37 @@
 		  (sqlite3:for-each-row
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
-		   db 
+                     (let ((1res make-db:test))
+                       (db:test-id-set! 1res id)
+                       (db:test-testname-set! 1res testname)
+                       (db:test-item_path-set! 1res item-path)
+                       (db:test-state-set! 1res state)
+                       (db:test-status-set! 1res status)
+                       (db:test-short-record->norm 1res)
+                       (set! res (cons 1res res))))
+                   ;;(set! res (cons (vector id run-id testname state status -1         ""     -1      -1       ""    "-"  item-path -1           "-"         "-") res)))
+                   db 
 		   qry
 		   run-id)))
     res))
 
 (define (db:get-testinfo-state-status dbstruct run-id test-id)
-  (let ((res            #f))
-    (db:with-db dbstruct run-id #f
-		(lambda (db)
-		  (sqlite3:for-each-row
-		   (lambda (run-id testname item-path state status)
-		     ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-		     (set! res (vector test-id run-id testname state status -1 "" -1 -1 "" "-" item-path -1 "-" "-")))
-		   db 
-		   "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
-		   test-id)))
+  (let* ((res            #f)
+         (qryfields '(id testname item_path state,status))
+         (qryfields-str (string-join (map ->string qryfields) "," )))
+    (db:with-db
+     dbstruct run-id #f
+     (lambda (db)
+       (sqlite3:for-each-row
+        (lambda (run-id testname item-path state status)
+          ;; id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
+          (set! res (make-db:test
+                     id: test-id run_id: run-id testname: testname state: state status: status
+                     event_time: -1 host: "" cpuload: -1 diskfree: -1 uname: "" rundir: "-" item_path: item-path
+                     run_duration: -1 final_logf: "-" comment: "-")))
+        db 
+        "SELECT run_id,testname,item_path,state,status FROM tests WHERE id=?;" 
+        test-id)))
     res))
 
 ;; get a useful subset of the tests data (used in dashboard
@@ -2417,7 +2458,7 @@
      (sqlite3:execute db "UPDATE tests SET attemptnum=? WHERE id=?;"
 		      pid test-id))))
 
-(define (db:test-get-top-process-pid dbstruct run-id test-id)
+(define (db:test-top-process-pid dbstruct run-id test-id)
   (db:with-db
    dbstruct
    run-id
@@ -2537,9 +2578,13 @@
    (lambda (db)
      (let ((res #f))
        (sqlite3:for-each-row ;; attemptnum added to hold pid of top process (not Megatest) controlling a test
-	(lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
+        ;; BB: replaced following vec construction with db:test defstruct 
+        ;;        (lambda (id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)
 	  ;;             0    1       2      3      4        5       6      7        8     9     10      11          12          13           14         15          16
-	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
+;;	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
+
+        (lambda (a . b)
+          (set! res (alist->db:test (map cons db:test-record-fields (cons a b)))))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
@@ -2558,7 +2603,8 @@
        (sqlite3:for-each-row
 	(lambda (a . b)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-	  (set! res (cons (apply vector a b) res)))
+          (set! res (cons (alist->db:test (map cons db:test-record-fields (cons a b))) res )))
+          ;;BB: replaced vec with defstruct above -- (set! res (cons (apply vector a b) res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
 	      (string-intersperse (map conc test-ids) ",") ");"))
@@ -2573,13 +2619,15 @@
      (let ((res #f))
        (sqlite3:for-each-row
 	(lambda (a . b)
-	  (set! res (apply vector a b)))
+          (set! res (alist->db:test (map cons db:test-record-fields (cons a b)))))
+        ;; BB: replaced following vec construction with db:test defstruct
+        ;;(set! res (apply vector a b)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE testname=? AND item_path=?;")
 	test-name item-path)
        res))))
 
-(define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
+(define (db:test-rundir-from-test-id dbstruct run-id test-id)
   (db:with-db
    dbstruct
    run-id
@@ -2759,7 +2807,7 @@
 		  " AND "))
 	 ;; (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
-    ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
+    ;; (debug:print 8 "db:test-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -2767,7 +2815,7 @@
     (sqlite3:finalize! runsqry)
     row-ids))
 
-(define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
+(define (db:test-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
   (let* ((testqry (tests:match->sqlqry testpatt))
 	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
     (db:with-db
@@ -2872,7 +2920,7 @@
 ;; 	  #f)
 ;; 	)))
 
-(define (db:test-get-logfile-info dbstruct run-id test-name)
+(define (db:test-logfile-info dbstruct run-id test-name)
   (db:with-db
    dbstruct
    run-id
@@ -3152,11 +3200,11 @@
 		  ;; Keep only the youngest of any test/item combination
 		  (for-each 
 		   (lambda (testdat)
-		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
+		     (let* ((full-testname (conc (db:test-testname testdat) "/" (db:test-item-path testdat)))
 			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
 		       (if (or (not stored-test)
 			       (and stored-test
-				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
+				    (> (db:test-event_time testdat)(db:test-event_time stored-test))))
 			   ;; this test is younger, store it in the hash
 			   (hash-table-set! tests-hash full-testname testdat))))
 		   results)
@@ -3203,7 +3251,7 @@
 	    db)
 	  "bogus result from db:delay-if-busy")))
 
-(define (db:test-get-records-for-index-file dbstruct run-id test-name)
+(define (db:test-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
     (db:with-db
      dbstruct
@@ -3346,10 +3394,10 @@
 		 (item-waiton-met   #f))
 	     (for-each 
 	      (lambda (test)
-		;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		(let* ((state             (db:test-get-state test))
-		       (status            (db:test-get-status test))
-		       (item-path         (db:test-get-item-path test))
+		;; (if (equal? waitontest-name (db:test-testname test)) ;; by defintion this had better be true ...
+		(let* ((state             (db:test-state test))
+		       (status            (db:test-status test))
+		       (item-path         (db:test-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))

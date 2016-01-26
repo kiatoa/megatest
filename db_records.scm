@@ -59,63 +59,72 @@
 
 ;; constructor for dbstruct
 ;;
-(define (actual-make-dbr:dbstruct #!key (path #f)(local #f))
-  (make-dbr:dbstruct path: path local: local locdbs: (make-hash-table)))
 
-(define (dbr:dbstruct-get-localdb v run-ids)
-  (hash-table-ref/default (dbr:dbstruct-locdbs v) run-id #f))
+;; BB: commenting out following 3 methods since they are unused
+;; (define (actual-make-dbr:dbstruct #!key (path #f)(local #f))
+;;   (make-dbr:dbstruct path: path local: local locdbs: (make-hash-table)))
 
-(define (dbr:dbstruct-set-localdb! v run-id db)
-  (hash-table-set! (dbr:dbstruct-locdbs v) run-id db))
+;; (define (dbr:dbstruct-get-localdb v run-ids)
+;;   (hash-table-ref/default (dbr:dbstruct-locdbs v) run-id #f))
 
+;; (define (dbr:dbstruct-set-localdb! v run-id db)
+;;   (hash-table-set! (dbr:dbstruct-locdbs v) run-id db))
 
-(define (make-db:test)(make-vector 20))
-(define-inline (db:test-get-id           vec) (vector-ref vec 0))
-(define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
-(define-inline (db:test-get-testname     vec) (vector-ref vec 2))
-(define-inline (db:test-get-state        vec) (vector-ref vec 3))
-(define-inline (db:test-get-status       vec) (vector-ref vec 4))
-(define-inline (db:test-get-event_time   vec) (vector-ref vec 5))
-(define-inline (db:test-get-host         vec) (vector-ref vec 6))
-(define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
-(define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
-(define-inline (db:test-get-uname        vec) (vector-ref vec 9))
-;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
-(define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
-(define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
-(define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
-(define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
-(define-inline (db:test-get-comment      vec) (vector-ref vec 14))
-(define-inline (db:test-get-process_id   vec) (vector-ref vec 16))
-(define-inline (db:test-get-archived     vec) (vector-ref vec 17))
+(defstruct db:test id run_id testname state status event_time host cpuload
+           diskfree uname rundir item-path run_duration final_logf
+           comment process_id pass_count fail_count archived )
+;; BB: 16ww4.3 begin comment out 
+;; (define (make-db:test)(make-vector 20))
+;; (define-inline (db:test-get-id           vec) (vector-ref vec 0))
+;; (define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
+;; (define-inline (db:test-get-testname     vec) (vector-ref vec 2))
+;; (define-inline (db:test-get-state        vec) (vector-ref vec 3))
+;; (define-inline (db:test-get-status       vec) (vector-ref vec 4))
+;; (define-inline (db:test-get-event_time   vec) (vector-ref vec 5))
+;; (define-inline (db:test-get-host         vec) (vector-ref vec 6))
+;; (define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
+;; (define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
+;; (define-inline (db:test-get-uname        vec) (vector-ref vec 9))
+
+;; ;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
+;; (define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
+;; (define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
+;; (define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
+;; (define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
+;; (define-inline (db:test-get-comment      vec) (vector-ref vec 14))
+;; (define-inline (db:test-get-process_id   vec) (vector-ref vec 16))
+;; (define-inline (db:test-get-archived     vec) (vector-ref vec 17))
+;; BB: 16ww4.3 end comment out 
 
 ;; (define-inline (db:test-get-pass_count   vec) (vector-ref vec 15))
 ;; (define-inline (db:test-get-fail_count   vec) (vector-ref vec 16))
-(define-inline (db:test-get-fullname     vec)
-  (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
+(define-inline (db:test-fullname     struct)
+  (conc (db:test-testname struct) "/" (db:test-item-path struct)))
 
 ;; replace runs:make-full-test-name with this routine
 (define (db:test-make-full-name testname itempath)
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
-(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+;; BB: commenting out following unused items:
+;(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
+;(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+;;(define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
+;;(define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
 
-(define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
-(define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
-(define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
-(define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
-(define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
-(define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
-(define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
+;; BB: commenting out methods replaced by defstruct
+;; (define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
+;; (define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
+;; (define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
+;; (define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
+;; (define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
 
 ;; Test record utility functions
 
 ;; Is a test a toplevel?
 ;;
-(define (db:test-get-is-toplevel vec)
-  (and (equal? (db:test-get-item-path vec) "")      ;; test is not an item
-       (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
+(define (db:test-get-is-toplevel struct)
+  (and (equal? (db:test-item-path struct) "")      ;; test is not an item
+       (equal? (db:test-uname struct)     "n/a"))) ;; test has never been run
 
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
 ;;

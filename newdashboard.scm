@@ -466,7 +466,7 @@ Misc
   (if testdat
       (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
-	     (run-id       (db:test-get-run_id test-data))
+	     (run-id       (db:test-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
 						   run-id
 						   '()))
@@ -495,7 +495,7 @@ Misc
 	       (list 
 		(list run-info-matrix
 		      (if test-id
-			  (list (db:test-get-run_id test-data)
+			  (list (db:test-run_id test-data)
 				target
 				runname
 				"n/a")
@@ -503,20 +503,20 @@ Misc
 		(list test-info-matrix
 		      (if test-id
 			  (list test-id
-				(db:test-get-testname test-data)
-				(db:test-get-item-path test-data)
-				(db:test-get-state    test-data)
-				(db:test-get-status   test-data)
-				(seconds->string (db:test-get-event_time test-data))
-				(db:test-get-comment  test-data))
+				(db:test-testname test-data)
+				(db:test-item-path test-data)
+				(db:test-state    test-data)
+				(db:test-status   test-data)
+				(seconds->string (db:test-event_time test-data))
+				(db:test-comment  test-data))
 			  (make-list 7 "")))
 		(list test-run-matrix
 		      (if test-id
-			  (list (db:test-get-host     test-data)
-				(db:test-get-uname    test-data)
-				(db:test-get-diskfree test-data)
-				(db:test-get-cpuload  test-data)
-				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
+			  (list (db:test-host     test-data)
+				(db:test-uname    test-data)
+				(db:test-diskfree test-data)
+				(db:test-cpuload  test-data)
+				(seconds->hr-min-sec (db:test-run_duration test-data)))
 			  (make-list 5 "")))
 		))
 	      (dcommon:populate-steps steps-dat steps-matrix))))))

@@ -273,13 +273,13 @@
 	  ;;
 	  (let ((test-info (rmt:get-testinfo-state-status run-id test-id)))
 	    (cond
-	     ((member (db:test-get-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
+	     ((member (db:test-state test-info) '("INCOMPLETE" "KILLED" "UNKNOWN" "KILLREQ" "STUCK")) ;; prior run of this test didn't complete, go ahead and try to rerun
 	      (debug:print 0 "INFO: test is INCOMPLETE or KILLED, treat this execute call as a rerun request")
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a")) ;; prime it for running
-	     ((not (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
+	     ((not (member (db:test-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ")))
 	      (tests:test-force-state-status! run-id test-id "REMOTEHOSTSTART" "n/a"))
-	     (else ;; (member (db:test-get-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
-	      (debug:print 0 "ERROR: test state is " (db:test-get-state test-info) ", cannot proceed")
+	     (else ;; (member (db:test-state test-info) '("REMOVING" "REMOTEHOSTSTART" "RUNNING" "KILLREQ"))
+	      (debug:print 0 "ERROR: test state is " (db:test-state test-info) ", cannot proceed")
 	      (exit))))
 	  
 	  (debug:print 2 "Exectuing " test-name " (id: " test-id ") on " (get-host-name))
@@ -547,22 +547,22 @@
 		   ;; only state and status needed - use lazy routine
 		   (testinfo  (rmt:get-testinfo-state-status run-id test-id)))
 	      ;; Am I completed?
-	      (if (member (db:test-get-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
+	      (if (member (db:test-state testinfo) '("REMOTEHOSTSTART" "RUNNING")) ;; NOTE: It should *not* be REMOTEHOSTSTART but for reasons I don't yet understand it sometimes gets stuck in that state ;; (not (equal? (db:test-state testinfo) "COMPLETED"))
 		  (let ((new-state  (if kill-job? "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
 				                                        ;; "COMPLETED"
-							                ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
+							                ;; (db:test-state testinfo)))   ;; else preseve the state as set within the test
 				    )
 			(new-status (cond
 				     ((not (launch:einf-exit-status exit-info)) "FAIL") ;; job failed to run ... (vector-ref exit-info 1)
 				     ((eq? (launch:einf-rollup-status exit-info) 0)     ;; (vector-ref exit-info 3)
 				      ;; if the current status is AUTO then defer to the calculated value (i.e. leave this AUTO)
-				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
+				      (if (equal? (db:test-status testinfo) "AUTO") "AUTO" "PASS"))
 				     ((eq? (launch:einf-rollup-status exit-info) 1) "FAIL")  ;; (vector-ref exit-info 3)
 				     ((eq? (launch:einf-rollup-status exit-info) 2)	     ;;	(vector-ref exit-info 3)
 				      ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
-				      (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				     (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		    (debug:print-info 1 "Test exited in state=" (db:test-get-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
+				      (if (equal? (db:test-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
+				     (else "FAIL")))) ;; (db:test-status testinfo)))
+		    (debug:print-info 1 "Test exited in state=" (db:test-state testinfo) ", setting state/status based on exit code of " (launch:einf-exit-status exit-info) " and rollup-status of " (launch:einf-rollup-status exit-info))
 		    (tests:test-set-status! run-id 
 					    test-id 
 					    new-state
@@ -803,7 +803,7 @@
 	       (curr-test-path (if testinfo ;; (filedb:get-path *fdb*
 							     ;; (db:get-path dbstruct
 				   ;; (rmt:sdb-qry 'getstr 
-				   (db:test-get-rundir testinfo) ;; ) ;; )
+				   (db:test-rundir testinfo) ;; ) ;; )
 				   #f)))
 	  (hash-table-set! *toptest-paths* testname curr-test-path)
 	  ;; NB// Was this for the test or for the parent in an iterated test?
@@ -945,9 +945,9 @@
     (if launcher (set! launcher (string-split launcher)))
     ;; set up the run work area for this test
     (if (and (args:get-arg "-preclean") ;; user has requested to preclean for this run
-	     (not (member (db:test-get-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
+	     (not (member (db:test-rundir testinfo)(list "n/a" "/tmp/badname")))) ;; n/a is a placeholder and thus not a read dir
 	(begin
-	  (debug:print-info 0 "attempting to preclean directory " (db:test-get-rundir testinfo) " for test " test-name "/" item-path)
+	  (debug:print-info 0 "attempting to preclean directory " (db:test-rundir testinfo) " for test " test-name "/" item-path)
 	  (runs:remove-test-directory testinfo 'remove-data-only))) ;; remove data only, do not perturb the record
 
     ;; prevent overlapping actions - set to LAUNCHED as early as possible
