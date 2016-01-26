@@ -51,8 +51,7 @@
 (define sretrieve:help (conc "Usage: sretrieve [action [params ...]]
 
   ls                     : list contents of target area
-  get <version>          : retrieve data for <version>
-    -i iteration_num       get specific iteration
+  get <relversion>       : retrieve data for release <version>
     -m \"message\"       : why retrieved?
 
   log                    : get listing of recent downloads
@@ -135,11 +134,9 @@ Version: " megatest-fossil-hash)) ;; "
 
 ;; copy in file to dest, validation is done BEFORE calling this
 ;;
-(define (sretrieve:get configdat reldat retriever area version iter comment)
-  (let* ((iteration (or iter
-			(configf:lookup reldat version "iteration")))
-	 (base-dir  (configf:lookup configdat "settings" "base-dir"))
-	 (datadir   (conc base-dir "/" area "/" version "/" iteration)))
+(define (sretrieve:get configdat retriever version comment)
+  (let* ((base-dir  (configf:lookup configdat "settings" "base-dir"))
+	 (datadir   (conc base-dir "/" version)))
     (if (or (not base-dir)
 	    (not (file-exists? base-dir)))
 	(begin
@@ -148,7 +145,7 @@ Version: " megatest-fossil-hash)) ;; "
     (print datadir)
     (if (not (file-exists? datadir))
 	(begin
-	  (debug:print 0 "ERROR: Bad version (" version ") or iteration (" iteration "), no data found at " datadir "." )
+	  (debug:print 0 "ERROR: Bad version (" version "), no data found at " datadir "." )
 	  (exit 1)))
     
     (sretrieve:db-do
@@ -339,8 +336,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;;
 (define (sretrieve:load-packages configdat exe-dir package-type)
   (push-directory exe-dir)
-  (let* ((packages-metadir  (or (configf:lookup configdat "settings" "packages-metadir")
-				".")) ;; exe-dir))
+  (let* ((packages-metadir  (configf:lookup configdat "settings" "packages-metadir"))
 	 (conversion-script (configf:lookup configdat "settings" "conversion-script"))
 	 (upstream-file     (configf:lookup configdat "settings" "upstream-file"))
 	 (package-config    (conc packages-metadir "/" package-type ".config")))
@@ -396,14 +392,13 @@ Version: " megatest-fossil-hash)) ;; "
        (let* ((remargs     (args:get-args args '("-m" "-i" "-package") '() args:arg-hash 0))
               (version     (car args))
 	      (msg         (or (args:get-arg "-m") ""))
-	      (iteration   (args:get-arg "-i"))
 	      (package-type (or (args:get-arg "-package")
 				default-area))
-	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir"))
-	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
+	      (exe-dir     (configf:lookup configdat "exe-info" "exe-dir")))
+;;	      (relconfig   (sretrieve:load-packages configdat exe-dir package-type)))
 
 	 (debug:print 0 "retrieving " version " of " package-type " as tar data on stdout")
-	 (sretrieve:get configdat relconfig user package-type version iteration msg)))
+	 (sretrieve:get configdat user version msg)))
       (else (debug:print 0 "Unrecognised command " action)))))
   
 ;; ease debugging by loading ~/.dashboardrc - REMOVE FROM PRODUCTION!
@@ -431,9 +426,12 @@ Version: " megatest-fossil-hash)) ;; "
 	((list-vars) ;; print out the ini file
 	 (map print (sretrieve:get-areas configdat)))
 	((ls)
-	 (let ((target-dir (configf:lookup configdat "settings" "target-dir")))
-	   (print "Files in " target-dir)
-	   (system (conc "ls " target-dir))))
+	 (let* ((base-dir (configf:lookup configdat "settings" "base-dir")))
+	   (if base-dir
+	       (begin
+		 (print "Files in " base-dir)
+		 (system (conc "ls " base-dir)))
+	       (print "ERROR: No base dir specified!"))))
 	((log)
 	 (sretrieve:db-do configdat (lambda (db)
 				     (print "Listing actions")
