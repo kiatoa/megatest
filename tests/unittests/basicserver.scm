@@ -100,8 +100,7 @@
 (define test-one-rec #f)
 (test #f "test-one" (let ((test-rec (rmt:get-test-info-by-id run-id test-one-id)))
 		      (set! test-one-rec test-rec)
-		      (vector-ref test-rec 2)))
-
+		      (db:test-testname test-rec)))
 ;; With data in db
 ;;
 (print "Using runame=" runname)
