@@ -2474,6 +2474,8 @@
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
                                 "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"))
 
+(define db:test-record-fields-symbols (map string->symbol db:test-record-fields))
+
 ;; fields *must* be a non-empty list
 ;;
 (define (db:field->number fieldname fields)
@@ -2584,7 +2586,7 @@
 ;;	  (set! res (vector id run-id testname state status event-time host cpuload diskfree uname rundir-id item-path run_duration final-logf-id comment short-dir-id attemptnum archived)))
 
         (lambda (a . b)
-          (set! res (alist->db:test (map cons db:test-record-fields (cons a b)))))
+          (set! res (alist->db:test (map cons db:test-record-fields-symbols (cons a b)))))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id=?;")
 	test-id)
@@ -2603,7 +2605,7 @@
        (sqlite3:for-each-row
 	(lambda (a . b)
 	  ;;                 0    1       2      3      4        5       6      7        8     9     10      11          12          13       14
-          (set! res (cons (alist->db:test (map cons db:test-record-fields (cons a b))) res )))
+          (set! res (cons (alist->db:test (map cons db:test-record-fields-symbols (cons a b))) res )))
           ;;BB: replaced vec with defstruct above -- (set! res (cons (apply vector a b) res)))
 	db
 	(conc "SELECT " db:test-record-qry-selector " FROM tests WHERE id in ("
@@ -2619,7 +2621,7 @@
      (let ((res #f))
        (sqlite3:for-each-row
 	(lambda (a . b)
-          (set! res (alist->db:test (map cons db:test-record-fields (cons a b)))))
+          (set! res (alist->db:test (map cons db:test-record-fields-symbols (cons a b)))))
         ;; BB: replaced following vec construction with db:test defstruct
         ;;(set! res (apply vector a b)))
 	db
