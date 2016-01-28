@@ -7,9 +7,9 @@
 ;;  (cd ..;make && make install) && ./rununittest.sh server 1;(cd simplerun;megatest -stop-server 0)
 
 ;; BB: 2016-01-20 suspect this file is dead code 
-(test #f #t                 (dbr:dbstruct? (make-dbr:dbstruct path: "/tmp")))
+(test #f #t                 (dbr:dbstruct? (make-dbr:dbstruct-wrapper path: "/tmp")))
 
-(define dbstruct (make-dbr:dbstruct path: "/tmp"))
+(define dbstruct (make-dbr:dbstruct-wrapper path: "/tmp"))
 
 (test #f #t                 (begin (dbr:dbstruct-main-set! dbstruct "blah") #t))
 (test #f "blah"             (dbr:dbstruct-main  dbstruct))

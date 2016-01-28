@@ -238,7 +238,7 @@
   (let* ((dbstruct-local (if *dbstruct-db*
 			     *dbstruct-db*
 			     (let* ((dbdir (db:dbfile-path #f)) ;;  (conc    (configf:lookup *configdat* "setup" "linktree") "/.db"))
-				    (db (make-dbr:dbstruct path:  dbdir local: #t)))
+				    (db (make-dbr:dbstruct-wrapper path:  dbdir local: #t)))
 			       (set! *dbstruct-db* db)
 			       db)))
 	 (db-file-path   (db:dbfile-path 0))

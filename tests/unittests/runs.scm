@@ -12,7 +12,7 @@
 
 (test #f #t             (rmt:register-test 1 "nada" ""))
 (test #f 30001          (rmt:get-test-id 1 "nada" ""))
-(test #f "NOT_STARTED"  (vector-ref (rmt:get-test-info-by-id 1 30001) 3)) ;; "nada" "") 3))
+(test #f "NOT_STARTED"  (db:test-state (rmt:get-test-info-by-id 1 30001))) ;; "nada" "") 3))
 
 (test #f "FOO LIKE 'abc%def'" (db:patt->like "FOO" "abc%def"))
 (test #f "key2" (vector-ref (car (vector-ref (mt:get-runs-by-patt '("SYSTEM" "RELEASE") "%" "key1/key2") 1)) 1))

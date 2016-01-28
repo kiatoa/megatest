@@ -108,7 +108,14 @@
    exn
    (let ((call-chain (get-call-chain)))
      (print-call-chain (current-error-port))
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))       
+     (debug:print 0 " api:execute-requests/message: "
+                  ((condition-property-accessor 'exn 'message "exn message null") exn)
+                  " arguments: "
+                  ((condition-property-accessor 'exn 'arguments "exn arguments null") exn)
+                  " location: "
+                  ((condition-property-accessor 'exn 'location "exn location null") exn)
+
+                  )       
      (vector #f (vector exn call-chain dat))) ;; return some stuff for debug if an exception happens
    (if (not (vector? dat))                    ;; it is an error to not receive a vector
        (vector #f #f "remote must be called with a vector")       

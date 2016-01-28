@@ -44,11 +44,11 @@
   (handle-exceptions
    exn
    (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
-     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
+     ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message "exn message null") exn)
      (if (eq? err-status 'done)
 	 default
 	 (begin
-	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+	   (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message "exn message null") exn))
 	   (print-call-chain (current-error-port))
 	   default)))
    (apply sqlite3:first-result db stmt params)))
@@ -107,7 +107,7 @@
     (handle-exceptions
      exn
      (begin
-       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message) exn))
+       (debug:print 0 "ERROR: sqlite3 issue in db:with-db, dbstruct=" dbstruct ", run-id=" run-id ", proc=" proc ", params=" params " error: " ((condition-property-accessor 'exn 'message "exn message null") exn))
        (print-call-chain (current-error-port)))
      (let ((res (apply proc db params)))
        (if (vector? dbstruct)(db:done-with dbstruct run-id r/w))
@@ -193,7 +193,7 @@
 (define (db:open-rundb dbstruct run-id #!key (attemptnum 0)(do-not-open #f)) ;;  (conc *toppath* "/megatest.db") (car *configinfo*)))
   (let* ((local  (dbr:dbstruct-local dbstruct))
 	 (rdb    (if local
-		     (dbr:dbstruct-localdb-set! dbstruct run-id)
+		     (dbr:dbstruct-localdb dbstruct run-id)
 		     (dbr:dbstruct-inmem dbstruct)))) ;; (dbr:dbstruct-get-runrec dbstruct run-id 'inmem)))
     (if (or rdb
 	    do-not-open)
@@ -283,7 +283,7 @@
 ;;
 (define (db:setup run-id #!key (local #f))
   (let* ((dbdir    (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-	 (dbstruct (make-dbr:dbstruct path: dbdir local: local)))
+	 (dbstruct (make-dbr:dbstruct-wrapper path: dbdir local: local)))
     dbstruct))
 
 ;; Open the classic megatest.db file in toppath
@@ -578,7 +578,7 @@
      (mutex-unlock! *db-sync-mutex*)
      (debug:print 0 "EXCEPTION: database probably overloaded or unreadable in db:sync-tables.")
      (print-call-chain (current-error-port))
-     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+     (debug:print 0 " message: " ((condition-property-accessor 'exn 'message "exn message null") exn))
      (print "exn=" (condition->list exn))
      (debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
      (debug:print 0 " src db:  " (db:dbdat-get-path fromdb))
@@ -725,7 +725,7 @@
 ;;
 (define (db:multi-db-sync run-ids . options)
   (let* ((toppath  (launch:setup-for-run))
-	 (dbstruct (if toppath (make-dbr:dbstruct path: toppath) #f))
+	 (dbstruct (if toppath (make-dbr:dbstruct-wrapper path: toppath) #f))
 	 (mtdb     (if toppath (db:open-megatest-db)))
 	 (allow-cleanup (if run-ids #f #t))
 	 (run-ids  (if run-ids 
@@ -767,7 +767,7 @@
 	   (lambda (run-id)
 	     (db:delay-if-busy mtdb)
 	     (let ((testrecs (db:get-all-tests-info-by-run-id mtdb run-id))
-		   (dbstruct (if toppath (make-dbr:dbstruct path: toppath local: #t) #f)))
+		   (dbstruct (if toppath (make-dbr:dbstruct-wrapper path: toppath local: #t) #f)))
 	       (debug:print 0 "INFO: Propagating " (length testrecs) " records for run-id=" run-id " to run specific db")
 	       (db:replace-test-records dbstruct run-id testrecs)
 	       (sqlite3:finalize! (db:dbdat-get-db (dbr:dbstruct-get-rundb dbstruct)))))
@@ -777,7 +777,7 @@
     ;; do not use the run-ids list passed in to the function
     ;;
     (if (member 'new2old options)
-	(let* ((maindb      (make-dbr:dbstruct path: toppath local: #t))
+	(let* ((maindb      (make-dbr:dbstruct-wrapper path: toppath local: #t))
 	       (src-run-ids (if run-ids run-ids (db:get-all-run-ids (db:dbdat-get-db (db:get-db maindb 0)))))
 	       (all-run-ids (sort (delete-duplicates (cons 0 src-run-ids)) <))
 	       (count       1)
@@ -787,7 +787,7 @@
 	   (lambda (run-id)
 	     (debug:print 0 "Processing run " (if (eq? run-id 0) " main.db " run-id) ", " count " of " total)
 	     (set! count (+ count 1))
-	     (let* ((fromdb (if toppath (make-dbr:dbstruct path: toppath local: #t) #f))
+	     (let* ((fromdb (if toppath (make-dbr:dbstruct-wrapper path: toppath local: #t) #f))
 		    (frundb (db:dbdat-get-db (db:get-db fromdb run-id))))
 	       ;; (db:delay-if-busy frundb)
 	       ;; (db:delay-if-busy mtdb)
@@ -843,7 +843,7 @@
 	(thread-sleep! sleep-time))
        (else
 	(debug:print 0 "EXCEPTION: database probably overloaded or unreadable.")
-	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message) exn))
+	(debug:print 0 " message: " ((condition-property-accessor 'exn 'message "exn message null") exn))
 	(print "exn=" (condition->list exn))
 	(debug:print 0 " status:  " ((condition-property-accessor 'sqlite3 'status) exn))
 	(print-call-chain (current-error-port))
@@ -3083,9 +3083,9 @@
 	'(delete-test-step-records "UPDATE test_steps SET status='DELETED' WHERE test_id=?;")
 	'(delete-test-data-records "UPDATE test_data  SET status='DELETED' WHERE test_id=?;") ;; using status since no state field
 	))
-
+;;BB: db:lookup-query - called by db:general-call
 (define (db:lookup-query qry-name)
-  (let ((q (alist-ref qry-name db:queries)))
+  (let ((q (alist-ref (if (string? qry-name) (string->symbol qry-name) qry-name) db:queries)))
     (if q (car q) #f)))
 
 ;; do not run these as part of the transaction
@@ -3112,11 +3112,12 @@
     '(#t "successful login"))))
 
 (define (db:general-call dbdat stmtname params)
-  (let ((query (let ((q (alist-ref (if (string? stmtname)
-				       (string->symbol stmtname)
-				       stmtname)
-				   db:queries)))
- 		 (if q (car q) #f))))
+  ;; (let ((query (let ((q (alist-ref (if (string? stmtname)
+  ;;       			       (string->symbol stmtname)
+  ;;       			       stmtname)
+  ;;       			   db:queries)))
+  ;;       	 (if q (car q) #f))))
+  (let ((query (db:lookup-query stmtname)))
     (db:delay-if-busy dbdat)
     (apply sqlite3:execute (db:dbdat-get-db dbdat) query params)
     #t))

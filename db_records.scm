@@ -18,6 +18,16 @@
 (use defstruct)
 
 (defstruct dbr:dbstruct main strdb path local rundb inmem mtime rtime stime inuse refdb locdbs olddb rundb-path)
+
+;; constructor for dbstruct
+;;
+(define (make-dbr:dbstruct-wrapper #!key (path #f)(local #f))
+  (let ((res (make-dbr:dbstruct)))
+    (dbr:dbstruct-path-set! res path)
+    (dbr:dbstruct-local-set! res local)
+    (dbr:dbstruct-locdbs-set! res (make-hash-table))
+    res)) 
+
 ;;; (define d1 (make-dbr:dbstruct))
 ;;; (dbr:dbstruct-main d1)             ==> retrive value
 ;;; (dbr:dbstruct-main-set! d1 'def)   ==> set value
@@ -64,11 +74,11 @@
 ;; (define (actual-make-dbr:dbstruct #!key (path #f)(local #f))
 ;;   (make-dbr:dbstruct path: path local: local locdbs: (make-hash-table)))
 
-;; (define (dbr:dbstruct-get-localdb v run-ids)
-;;   (hash-table-ref/default (dbr:dbstruct-locdbs v) run-id #f))
+(define (dbr:dbstruct-localdb v run-id)
+   (hash-table-ref/default (dbr:dbstruct-locdbs v) run-id #f))
 
-;; (define (dbr:dbstruct-set-localdb! v run-id db)
-;;   (hash-table-set! (dbr:dbstruct-locdbs v) run-id db))
+(define (dbr:dbstruct-localdb-set! v run-id db)
+  (hash-table-set! (dbr:dbstruct-locdbs v) run-id db))
 
 (defstruct db:test id run_id testname state status event_time host cpuload
            diskfree uname rundir item-path run_duration final_logf

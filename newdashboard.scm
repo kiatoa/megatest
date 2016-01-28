@@ -86,7 +86,7 @@ Misc
       (load debugcontrolf)))
 
 (define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
-(define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
+(define *dbstruct-local*  (make-dbr:dbstruct-wrapper path:  *dbdir*
 					     local: #t))
 (define *db-file-path* (db:dbfile-path 0))
 
