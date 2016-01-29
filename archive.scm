@@ -127,10 +127,10 @@
     ;;
     (for-each
      (lambda (test-dat)
-       (let* ((item-path         (db:test-item-path test-dat))
-	      (test-name         (db:test-testname  test-dat))
-	      (test-id           (db:test-id        test-dat))
-	      (run-id            (db:test-run_id    test-dat))
+       (let* ((item-path         (dbr:test-item-path test-dat))
+	      (test-name         (dbr:test-testname  test-dat))
+	      (test-id           (dbr:test-id        test-dat))
+	      (run-id            (dbr:test-run_id    test-dat))
 	      (target            (string-intersperse (map cadr (rmt:get-key-val-pairs run-id)) "/"))
 	      
 	      (toplevel/children (and (db:test-is-toplevel test-dat)
@@ -200,8 +200,8 @@
 	 ;; (mutex-unlock! bup-mutex)
 	 (for-each
 	  (lambda (test-dat)
-	    (let ((test-id           (db:test-id        test-dat))
-		  (run-id            (db:test-run_id    test-dat)))
+	    (let ((test-id           (dbr:test-id        test-dat))
+		  (run-id            (dbr:test-run_id    test-dat)))
 	      (rmt:test-set-archive-block-id run-id test-id archive-id)
 	      (if (member archive-command '("save-remove"))
 		  (runs:remove-test-directory test-dat 'archive-remove))))
@@ -221,10 +221,10 @@
      (lambda (test-dat)
        ;; When restoring test-dat will initially contain an old and invalid path to the test
        (let* ((best-disk         (get-best-disk *configdat* #f)) ;; BUG: get the testconfig and use it here. Otherwise data pulled out of archive could end up on the wrong kind of disk.
-	      (item-path         (db:test-item-path test-dat))
-	      (test-name         (db:test-testname  test-dat))
-	      (test-id           (db:test-id        test-dat))
-	      (run-id            (db:test-run_id    test-dat))
+	      (item-path         (dbr:test-item-path test-dat))
+	      (test-name         (dbr:test-testname  test-dat))
+	      (test-id           (dbr:test-id        test-dat))
+	      (run-id            (dbr:test-run_id    test-dat))
 	      (keyvals           (rmt:get-key-val-pairs run-id))
 	      (target            (string-intersperse (map cadr keyvals) "/"))
 	      
@@ -241,7 +241,7 @@
 					   #f))
 	      (mutex-unlock! rp-mutex)
 	      (new-test-physical-path  (conc best-disk "/" test-partial-path))
-	      (archive-block-id        (db:test-archived test-dat))
+	      (archive-block-id        (dbr:test-archived test-dat))
 	      (archive-block-info      (rmt:test-get-archive-block-info archive-block-id))
 	      (archive-path            (if (vector? archive-block-info)
 					   (vector-ref archive-block-info 2) ;; look in db.scm for test-get-archive-block-info for the vector record info
@@ -276,7 +276,7 @@
 	       ;; DO BUP RESTORE
 	       (let* ((new-test-dat        (rmt:get-test-info-by-id run-id test-id))
 		      (new-test-path       (if (vector? new-test-dat )
-					       (db:test-rundir new-test-dat)
+					       (dbr:test-rundir new-test-dat)
 					       (begin
 						 (debug:print 0 "ERROR: unable to get data for run-id=" run-id ", test-id=" test-id)
 						 (exit 1))))

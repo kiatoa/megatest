@@ -180,7 +180,7 @@
 ;; (debug:print 0 "test-ids " test-ids ", tests-detail-changes " tests-detail-changes)
     
 	 ;; tests related stuff
-	 ;; (all-testnames (delete-duplicates (map db:test-testname test-changes))))
+	 ;; (all-testnames (delete-duplicates (map dbr:test-testname test-changes))))
 
     ;; Given a run-id and testname/item_path calculate a cell R:C
 

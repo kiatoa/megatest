@@ -262,11 +262,11 @@
 ;;
 (define (tests:check-waiver-eligibility testdat prev-testdat)
   (let* ((test-registry (make-hash-table))
-	 (testconfig  (tests:get-testconfig (db:test-testname testdat) test-registry #f))
+	 (testconfig  (tests:get-testconfig (dbr:test-testname testdat) test-registry #f))
 	 (test-rundir ;; (sdb:qry 'passstr 
-	  (db:test-rundir testdat)) ;; )
+	  (dbr:test-rundir testdat)) ;; )
 	 (prev-rundir ;; (sdb:qry 'passstr 
-	  (db:test-rundir prev-testdat)) ;; )
+	  (dbr:test-rundir prev-testdat)) ;; )
 	 (waivers     (if testconfig (configf:section-vars testconfig "waivers") '()))
 	 (waiver-rx   (regexp "^(\\S+)\\s+(.*)$"))
 	 (diff-rule   "diff %file1% %file2%")
@@ -331,8 +331,8 @@
   (let* ((real-status status)
 	 (otherdat    (if dat dat (make-hash-table)))
 	 (testdat     (rmt:get-test-info-by-id run-id test-id))
-	 (test-name   (db:test-testname  testdat))
-	 (item-path   (db:test-item-path testdat))
+	 (test-name   (dbr:test-testname  testdat))
+	 (item-path   (dbr:test-item-path testdat))
 	 ;; before proceeding we must find out if the previous test (where all keys matched except runname)
 	 ;; was WAIVED if this test is FAIL
 
@@ -345,9 +345,9 @@
 			  #f))
 	 (waived   (if prev-test
 		       (if prev-test ;; true if we found a previous test in this run series
-			   (let ((prev-status  (db:test-status  prev-test))
-				 (prev-state   (db:test-state   prev-test))
-				 (prev-comment (db:test-comment prev-test)))
+			   (let ((prev-status  (dbr:test-status  prev-test))
+				 (prev-state   (dbr:test-state   prev-test))
+				 (prev-comment (dbr:test-comment prev-test)))
 			     (debug:print 4 "prev-status " prev-status ", prev-state " prev-state ", prev-comment " prev-comment)
 			     (if (and (equal? prev-state  "COMPLETED")
 				      (equal? prev-status "WAIVED"))
@@ -633,13 +633,13 @@
 (define (tests:summarize-test run-id test-id)
   (let* ((test-dat  (rmt:get-test-info-by-id run-id test-id))
 	 (steps-dat (rmt:get-steps-for-test run-id test-id))
-	 (test-name (db:test-testname test-dat))
-	 (item-path (db:test-item-path test-dat))
+	 (test-name (dbr:test-testname test-dat))
+	 (item-path (dbr:test-item-path test-dat))
 	 (full-name (db:test-make-full-name test-name item-path))
-	 (oup       (open-output-file (conc (db:test-rundir test-dat) "/test-summary.html")))
-	 (status    (db:test-status   test-dat))
+	 (oup       (open-output-file (conc (dbr:test-rundir test-dat) "/test-summary.html")))
+	 (status    (dbr:test-status   test-dat))
 	 (color     (common:get-color-from-status status))
-	 (logf      (db:test-final_logf test-dat))
+	 (logf      (dbr:test-final_logf test-dat))
 	 (steps-dat (tests:get-compressed-steps #f run-id test-id)))
     ;; (dcommon:get-compressed-steps #f 1 30045)
     ;; (#("wasting_time" "23:36:13" "23:36:21" "0" "8.0s" "wasting_time.log"))
@@ -651,15 +651,15 @@
       (s:body 
        (s:h2 "Summary for " full-name)
        (s:table 'cellspacing "0" 'border "1"
-	(s:tr (s:td "run id")   (s:td (db:test-run_id   test-dat))
-	      (s:td "test id")  (s:td (db:test-id       test-dat)))
+	(s:tr (s:td "run id")   (s:td (dbr:test-run_id   test-dat))
+	      (s:td "test id")  (s:td (dbr:test-id       test-dat)))
 	(s:tr (s:td "testname") (s:td test-name)
 	      (s:td "itempath") (s:td item-path))
-	(s:tr (s:td "state")    (s:td (db:test-state    test-dat))
+	(s:tr (s:td "state")    (s:td (dbr:test-state    test-dat))
 	      (s:td "status")   (s:td (s:a 'href logf (s:font 'color color status))))
 	(s:tr (s:td "TestDate") (s:td (seconds->work-week/day-time 
-				       (db:test-event_time test-dat)))
-	      (s:td "Duration") (s:td (seconds->hr-min-sec (db:test-run_duration test-dat)))))
+				       (dbr:test-event_time test-dat)))
+	      (s:td "Duration") (s:td (seconds->hr-min-sec (dbr:test-run_duration test-dat)))))
        (s:h3 "Log files")
        (s:table
 	'cellspacing "0" 'border "1"
@@ -942,10 +942,10 @@
 	 (if tdat
 	     (begin
 	       ;; Look at the test state and status
-	       (if (or (and (member (db:test-status tdat) 
+	       (if (or (and (member (dbr:test-status tdat) 
 				    '("PASS" "WARN" "WAIVED" "CHECK" "SKIP"))
-			    (equal? (db:test-state tdat) "COMPLETED"))
-		       (member (db:test-state tdat)
+			    (equal? (dbr:test-state tdat) "COMPLETED"))
+		       (member (dbr:test-state tdat)
 				    '("INCOMPLETE" "KILLED")))
 		   (set! keep-test #f))
 
@@ -956,13 +956,13 @@
 			       ;; for now we are waiting only on the parent test
 			       (let* ((parent-test-id (rmt:get-test-id run-id waiton ""))
 				      (wtdat          (rmt:get-testinfo-state-status run-id test-id))) ;; (cdb:get-test-info-by-id *runremote* test-id)))
-				 (if (or (and (equal? (db:test-state wtdat) "COMPLETED")
-					      (member (db:test-status wtdat) '("FAIL" "ABORT")))
-					 (member (db:test-status wtdat)  '("KILLED"))
-					 (member (db:test-state wtdat)   '("INCOMPETE")))
-				 ;; (if (or (member (db:test-status wtdat)
+				 (if (or (and (equal? (dbr:test-state wtdat) "COMPLETED")
+					      (member (dbr:test-status wtdat) '("FAIL" "ABORT")))
+					 (member (dbr:test-status wtdat)  '("KILLED"))
+					 (member (dbr:test-state wtdat)   '("INCOMPETE")))
+				 ;; (if (or (member (dbr:test-status wtdat)
 				 ;;        	 '("FAIL" "KILLED"))
-				 ;;         (member (db:test-state wtdat)
+				 ;;         (member (dbr:test-state wtdat)
 				 ;;        	 '("INCOMPETE")))
 				     (set! keep-test #f)))) ;; no point in running this one again
 			     waitons))))

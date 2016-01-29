@@ -466,7 +466,7 @@ Misc
   (if testdat
       (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
-	     (run-id       (db:test-run_id test-data))
+	     (run-id       (dbr:test-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
 						   run-id
 						   '()))
@@ -495,7 +495,7 @@ Misc
 	       (list 
 		(list run-info-matrix
 		      (if test-id
-			  (list (db:test-run_id test-data)
+			  (list (dbr:test-run_id test-data)
 				target
 				runname
 				"n/a")
@@ -503,20 +503,20 @@ Misc
 		(list test-info-matrix
 		      (if test-id
 			  (list test-id
-				(db:test-testname test-data)
-				(db:test-item-path test-data)
-				(db:test-state    test-data)
-				(db:test-status   test-data)
-				(seconds->string (db:test-event_time test-data))
-				(db:test-comment  test-data))
+				(dbr:test-testname test-data)
+				(dbr:test-item-path test-data)
+				(dbr:test-state    test-data)
+				(dbr:test-status   test-data)
+				(seconds->string (dbr:test-event_time test-data))
+				(dbr:test-comment  test-data))
 			  (make-list 7 "")))
 		(list test-run-matrix
 		      (if test-id
-			  (list (db:test-host     test-data)
-				(db:test-uname    test-data)
-				(db:test-diskfree test-data)
-				(db:test-cpuload  test-data)
-				(seconds->hr-min-sec (db:test-run_duration test-data)))
+			  (list (dbr:test-host     test-data)
+				(dbr:test-uname    test-data)
+				(dbr:test-diskfree test-data)
+				(dbr:test-cpuload  test-data)
+				(seconds->hr-min-sec (dbr:test-run_duration test-data)))
 			  (make-list 5 "")))
 		))
 	      (dcommon:populate-steps steps-dat steps-matrix))))))
@@ -525,22 +525,22 @@ Misc
 		;;	  (list (
 
   
-;; db:test-id           
-;; db:test-run_id       
-;; db:test-testname     
-;; db:test-state        
-;; db:test-status       
-;; db:test-event_time   
-;; db:test-host         
-;; db:test-cpuload      
-;; db:test-diskfree     
-;; db:test-uname        
-;; db:test-rundir       
-;; db:test-item-path    
-;; db:test-run_duration 
-;; db:test-final_logf   
-;; db:test-comment      
-;; db:test-fullname     	  
+;; dbr:test-id           
+;; dbr:test-run_id       
+;; dbr:test-testname     
+;; dbr:test-state        
+;; dbr:test-status       
+;; dbr:test-event_time   
+;; dbr:test-host         
+;; dbr:test-cpuload      
+;; dbr:test-diskfree     
+;; dbr:test-uname        
+;; dbr:test-rundir       
+;; dbr:test-item-path    
+;; dbr:test-run_duration 
+;; dbr:test-final_logf   
+;; dbr:test-comment      
+;; dbr:test-fullname     	  
 
 
 ;;======================================================================

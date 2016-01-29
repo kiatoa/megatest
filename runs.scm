@@ -31,8 +31,8 @@
 (include "test_records.scm")
 
 (define (runs:test-get-full-path test)
-  (let* ((testname (db:test-testname   test))
-	 (itempath (db:test-item-path test)))
+  (let* ((testname (dbr:test-testname   test))
+	 (itempath (dbr:test-item-path test)))
     (conc testname (if (equal? itempath "") "" (conc "(" itempath ")")))))
 
 ;; This is the *new* methodology. One record to inform them and in the chaos, organise them.
@@ -613,10 +613,10 @@
      ((and (null? fails)
 	   (null? prereq-fails)
 	   (not (null? non-completed)))
-      (let* ((allinqueue (map (lambda (x)(if (string? x) x (db:test-testname x)))
+      (let* ((allinqueue (map (lambda (x)(if (string? x) x (dbr:test-testname x)))
         		      (append newtal reruns)))
 	     ;; prereqstrs is a list of test names as strings that are prereqs for hed
-             (prereqstrs (delete-duplicates (map (lambda (x)(if (string? x) x (db:test-testname x)))
+             (prereqstrs (delete-duplicates (map (lambda (x)(if (string? x) x (dbr:test-testname x)))
 						 prereqs-not-met)))
 	     ;; a prereq that is not found in allinqueue will be put in the notinqueue list
 	     ;; 
@@ -678,7 +678,7 @@
 	   (not (null? prereq-fails)))
        (member 'normal testmode))
       (debug:print-info 1 "test "  hed " (mode=" testmode ") has failed prerequisite(s); "
-			(string-intersperse (map (lambda (t)(conc (db:test-testname t) ":" (db:test-state t)"/"(db:test-status t))) fails) ", ")
+			(string-intersperse (map (lambda (t)(conc (dbr:test-testname t) ":" (dbr:test-state t)"/"(dbr:test-status t))) fails) ", ")
 			", removing it from to-do list")
       (let ((test-id (rmt:get-test-id run-id hed "")))
 	(if test-id
@@ -713,10 +713,10 @@
       (map (lambda (t)
 	     (cond
 	      ((vector? t)
-	       (let ((test-name (db:test-testname t))
-		     (item-path (db:test-item-path t))
-		     (test-state (db:test-state t))
-		     (test-status (db:test-status t)))
+	       (let ((test-name (dbr:test-testname t))
+		     (item-path (dbr:test-item-path t))
+		     (test-state (dbr:test-state t))
+		     (test-status (dbr:test-status t)))
 		 (conc test-name (if (equal? item-path "") "" "/") item-path ":" test-state "/" test-status)))
 	      ((string? t)
 	       t)
@@ -746,7 +746,7 @@
 		      (string-intersperse 
 		       (map (lambda (t)
 			      (if (vector? t)
-				  (conc (db:test-state t) "/" (db:test-status t))
+				  (conc (dbr:test-state t) "/" (dbr:test-status t))
 				  (conc " WARNING: t is not a vector=" t )))
 			    prereqs-not-met)
 		       ", ") ") fails: " fails
@@ -897,7 +897,7 @@
 			  ))
 		  (let ((nth-try (hash-table-ref/default test-registry hed 0)))
 		    (cond
-		     ((member "RUNNING" (map db:test-state prereqs-not-met))
+		     ((member "RUNNING" (map dbr:test-state prereqs-not-met))
 		      (if (runs:lownoise (conc "possible RUNNING prerequistes " hed) 60)
 			  (debug:print 0 "WARNING: test " hed " has possible RUNNING prerequisites, don't give up on it yet."))
 		      (thread-sleep! 4)
@@ -962,8 +962,8 @@
   (filter (lambda (t)
 	    (if (not (vector? t))
 		t
-		(let ((state  (db:test-state t))
-		      (status (db:test-status t)))
+		(let ((state  (dbr:test-state t))
+		      (status (dbr:test-status t)))
 		  (case (string->symbol state)
 		    ((COMPLETED INCOMPLETE) #f)
 		    ((NOT_STARTED)
@@ -1008,10 +1008,10 @@
     ;; Initialize the test-registery hash with tests that already have a record
     ;; convert state to symbol and use that as the hash value
     (for-each (lambda (trec)
-		(let ((id (db:test-id        trec))
-		      (tn (db:test-testname  trec))
-		      (ip (db:test-item-path trec))
-		      (st (db:test-state     trec)))
+		(let ((id (dbr:test-id        trec))
+		      (tn (dbr:test-testname  trec))
+		      (ip (dbr:test-item-path trec))
+		      (st (dbr:test-state     trec)))
 		  (if (not (equal? st "DELETED"))
 		      (hash-table-set! test-registry (db:test-make-full-name tn ip) (string->symbol st)))))
 	      tests-info)
@@ -1245,16 +1245,16 @@
 (define (runs:calc-fails prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (member (db:test-state test) '("INCOMPLETE" "COMPLETED"))
-		 (not (member (db:test-status test)
+		 (member (dbr:test-state test) '("INCOMPLETE" "COMPLETED"))
+		 (not (member (dbr:test-status test)
 			      '("PASS" "WARN" "CHECK" "WAIVED" "SKIP")))))
 	  prereqs-not-met))
 
 (define (runs:calc-prereq-fail prereqs-not-met)
   (filter (lambda (test)
 	    (and (vector? test) ;; not (string? test))
-		 (equal? (db:test-state test) "NOT_STARTED")
-		 (not (member (db:test-status test)
+		 (equal? (dbr:test-state test) "NOT_STARTED")
+		 (not (member (dbr:test-status test)
 			      '("n/a" "KEEP_TRYING")))))
 	  prereqs-not-met))
 
@@ -1262,22 +1262,22 @@
   (filter
    (lambda (t)
      (or (not (vector? t))
-	 (not (member (db:test-state t) '("INCOMPLETE" "COMPLETED")))))
+	 (not (member (dbr:test-state t) '("INCOMPLETE" "COMPLETED")))))
    prereqs-not-met))
 
 ;; (define (runs:calc-not-completed prereqs-not-met)
 ;;   (filter
 ;;    (lambda (t)
 ;;      (or (not (vector? t))
-;; 	 (not (equal? "COMPLETED" (db:test-state t)))))
+;; 	 (not (equal? "COMPLETED" (dbr:test-state t)))))
 ;;    prereqs-not-met))
 
 (define (runs:calc-runnable prereqs-not-met)
   (filter 
    (lambda (t)
      (or (not (vector? t))
-	 (and (equal? "NOT_STARTED" (db:test-state t))
-	      (member (db:test-status t)
+	 (and (equal? "NOT_STARTED" (dbr:test-state t))
+	      (member (dbr:test-status t)
 			      '("n/a" "KEEP_TRYING")))))
    prereqs-not-met))
 
@@ -1285,7 +1285,7 @@
   (map (lambda (t)
 	 (if (not (vector? t))
 	     (conc t)
-	     (conc (db:test-testname t) ":" (db:test-state t) "/" (db:test-status t))))
+	     (conc (dbr:test-testname t) ":" (dbr:test-state t) "/" (dbr:test-status t))))
        lst))
 
 ;; parent-test is there as a placeholder for when parent-tests can be run as a setup step
@@ -1361,7 +1361,7 @@
 		  (loop)))))
       (if (not testdat) ;; should NOT happen
 	  (debug:print 0 "ERROR: failed to get test record for test-id " test-id))
-      (set! test-id (db:test-id testdat))
+      (set! test-id (dbr:test-id testdat))
       (if (file-exists? test-path)
 	  (change-directory test-path)
 	  (begin
@@ -1459,8 +1459,8 @@
 	 (hash-table-set! test-registry (db:test-make-full-name test-name test-path) 'DONOTRUN)) ;; KILLED))
 	((LAUNCHED REMOTEHOSTSTART RUNNING)  
 	 (debug:print 2 "NOTE: " test-name " is already running"))
-	;; (if (> (- (current-seconds)(+ (db:test-event_time testdat)
-	;; 			       (db:test-run_duration testdat)))
+	;; (if (> (- (current-seconds)(+ (dbr:test-event_time testdat)
+	;; 			       (dbr:test-run_duration testdat)))
 	;; 	(or incomplete-timeout
 	;; 	    6000)) ;; i.e. no update for more than 6000 seconds
 	;;      (begin
@@ -1598,9 +1598,9 @@
 		 (let ((sorted-tests     (filter 
 					  vector?
 					  (sort tests (lambda (a b)(let ((dira ;; (rmt:sdb-qry 'getstr 
-									  (db:test-rundir a)) ;; )  ;; (filedb:get-path *fdb* (db:test-rundir a)))
+									  (dbr:test-rundir a)) ;; )  ;; (filedb:get-path *fdb* (dbr:test-rundir a)))
 									 (dirb ;; (rmt:sdb-qry 'getstr 
-									  (db:test-rundir b))) ;; ) ;; ((filedb:get-path *fdb* (db:test-rundir b))))
+									  (dbr:test-rundir b))) ;; ) ;; ((filedb:get-path *fdb* (dbr:test-rundir b))))
 								     (if (and (string? dira)(string? dirb))
 									 (> (string-length dira)(string-length dirb))
 									 #f))))))
@@ -1609,21 +1609,21 @@
 		       (allow-run-time   10)) ;; seconds to allow for killing tests before just brutally killing 'em
 		   (let loop ((test (car sorted-tests))
 			      (tal  (cdr sorted-tests)))
-		     (let* ((test-id       (db:test-id test))
+		     (let* ((test-id       (dbr:test-id test))
 			    (new-test-dat  (rmt:get-test-info-by-id run-id test-id)))
 		       (if (not new-test-dat)
 			   (begin
 			     (debug:print 0 "ERROR: We have a test-id of " test-id " but no record was found. NOTE: No locking of records is done between processes, do not simultaneously remove the same run from two processes!")
 			     (if (not (null? tal))
 				 (loop (car tal)(cdr tal))))
-			   (let* ((item-path     (db:test-item-path new-test-dat))
-				  (test-name     (db:test-testname new-test-dat))
+			   (let* ((item-path     (dbr:test-item-path new-test-dat))
+				  (test-name     (dbr:test-testname new-test-dat))
 				  (run-dir       ;;(filedb:get-path *fdb*
 				   ;; (rmt:sdb-qry 'getid 
-				   (db:test-rundir new-test-dat)) ;; )    ;; run dir is from the link tree
-				  (test-state    (db:test-state new-test-dat))
-				  (test-fulln    (db:test-fullname new-test-dat))
-				  (uname         (db:test-uname    new-test-dat))
+				   (dbr:test-rundir new-test-dat)) ;; )    ;; run dir is from the link tree
+				  (test-state    (dbr:test-state new-test-dat))
+				  (test-fulln    (dbr:test-fullname new-test-dat))
+				  (uname         (dbr:test-uname    new-test-dat))
 				  (toplevel-with-children (and (db:test-is-toplevel test)
 							       (> (rmt:test-toplevel-num-items run-id test-name) 0))))
 			     (case action
@@ -1652,10 +1652,10 @@
 						;; up and blow it away.
 						(begin
 						  (debug:print 0 "WARNING: could not gracefully remove test " test-fulln ", tried to kill it to no avail. Forcing state to FAILEDKILL and continuing")
-					    (mt:test-set-state-status-by-id run-id (db:test-id test) "FAILEDKILL" "n/a" #f)
+					    (mt:test-set-state-status-by-id run-id (dbr:test-id test) "FAILEDKILL" "n/a" #f)
 						  (thread-sleep! 1))
 						(begin
-					    (mt:test-set-state-status-by-id run-id (db:test-id test) "KILLREQ" "n/a" #f)
+					    (mt:test-set-state-status-by-id run-id (dbr:test-id test) "KILLREQ" "n/a" #f)
 						  (thread-sleep! 1)))
 					    ;; NOTE: This is suboptimal as the testdata will be used later and the state/status may have changed ...
 					    (if (null? tal)
@@ -1667,7 +1667,7 @@
 						(loop (car tal)(cdr tal))))))))
 			       ((set-state-status)
 				(debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
-				(mt:test-set-state-status-by-id run-id (db:test-id test) (car state-status)(cadr state-status) #f)
+				(mt:test-set-state-status-by-id run-id (dbr:test-id test) (car state-status)(cadr state-status) #f)
 				(if (not (null? tal))
 				    (loop (car tal)(cdr tal))))
 			       ((run-wait)
@@ -1714,14 +1714,14 @@
   #t)
 
 (define (runs:remove-test-directory test mode) ;; remove-data-only)
-  (let* ((run-dir       (db:test-rundir test))    ;; run dir is from the link tree
+  (let* ((run-dir       (dbr:test-rundir test))    ;; run dir is from the link tree
 	 (real-dir      (if (file-exists? run-dir)
 			    (resolve-pathname run-dir)
 			    #f)))
     (case mode
-      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-run_id test)(db:test-id test) "CLEANING" "LOCKED" #f))
-      ((remove-all)      (mt:test-set-state-status-by-id (db:test-run_id test)(db:test-id test) "REMOVING" "LOCKED" #f))
-      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-run_id test)(db:test-id test) "ARCHIVE_REMOVING" #f #f)))
+      ((remove-data-only)(mt:test-set-state-status-by-id (dbr:test-run_id test)(dbr:test-id test) "CLEANING" "LOCKED" #f))
+      ((remove-all)      (mt:test-set-state-status-by-id (dbr:test-run_id test)(dbr:test-id test) "REMOVING" "LOCKED" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (dbr:test-run_id test)(dbr:test-id test) "ARCHIVE_REMOVING" #f #f)))
     (debug:print-info 1 "Attempting to remove " (if real-dir (conc " dir " real-dir " and ") "") " link " run-dir)
     (if (and real-dir 
 	     (> (string-length real-dir) 5)
@@ -1755,9 +1755,9 @@
 	    ))
     ;; Only delete the records *after* removing the directory. If things fail we have a record 
     (case mode
-      ((remove-data-only)(mt:test-set-state-status-by-id (db:test-run_id test)(db:test-id test) "NOT_STARTED" "n/a" #f))
-      ((archive-remove)  (mt:test-set-state-status-by-id (db:test-run_id test)(db:test-id test) "ARCHIVED" #f #f))
-      (else (rmt:delete-test-records (db:test-run_id test) (db:test-id test))))))
+      ((remove-data-only)(mt:test-set-state-status-by-id (dbr:test-run_id test)(dbr:test-id test) "NOT_STARTED" "n/a" #f))
+      ((archive-remove)  (mt:test-set-state-status-by-id (dbr:test-run_id test)(dbr:test-id test) "ARCHIVED" #f #f))
+      (else (rmt:delete-test-records (dbr:test-run_id test) (dbr:test-id test))))))
 
 ;;======================================================================
 ;; Routines for manipulating runs
@@ -1875,8 +1875,8 @@
     ;; index the already saved tests by testname and itemdat in curr-tests-hash
     (for-each
      (lambda (testdat)
-       (let* ((testname  (db:test-testname testdat))
-	      (item-path (db:test-item-path testdat))
+       (let* ((testname  (dbr:test-testname testdat))
+	      (item-path (dbr:test-item-path testdat))
 	      (full-name (conc testname "/" item-path)))
 	 (hash-table-set! curr-tests-hash full-name testdat)))
      curr-tests)
@@ -1885,11 +1885,11 @@
     ;;   2. replace the rollup test with the new *always*
     (for-each 
      (lambda (testdat)
-       (let* ((testname  (db:test-testname testdat))
-	      (item-path (db:test-item-path testdat))
+       (let* ((testname  (dbr:test-testname testdat))
+	      (item-path (dbr:test-item-path testdat))
 	      (full-name (conc testname "/" item-path))
 	      (prev-test-dat (hash-table-ref/default curr-tests-hash full-name #f))
-	      (test-steps    (rmt:get-steps-for-test (db:test-id testdat)))
+	      (test-steps    (rmt:get-steps-for-test (dbr:test-id testdat)))
 	      (new-test-record #f))
 	 ;; replace these with insert ... select
 	 (apply sqlite3:execute 
@@ -1900,21 +1900,21 @@
 	 (set! new-testdat (car (mt:get-tests-for-run new-run-id (conc testname "/" item-path) '() '())))
 	 (hash-table-set! curr-tests-hash full-name new-testdat) ;; this could be confusing, which record should go into the lookup table?
 	 ;; Now duplicate the test steps
-	 (debug:print 4 "Copying records in test_steps from test_id=" (db:test-id testdat) " to " (db:test-id new-testdat))
+	 (debug:print 4 "Copying records in test_steps from test_id=" (dbr:test-id testdat) " to " (dbr:test-id new-testdat))
 	 (cdb:remote-run ;; to be replaced, note: this routine is not used currently
 	  (lambda ()
 	    (sqlite3:execute 
 	     db 
 	     (conc "INSERT OR REPLACE INTO test_steps (test_id,stepname,state,status,event_time,comment) "
-		   "SELECT " (db:test-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
-	     (db:test-id testdat))
+		   "SELECT " (dbr:test-id new-testdat) ",stepname,state,status,event_time,comment FROM test_steps WHERE test_id=?;")
+	     (dbr:test-id testdat))
 	    ;; Now duplicate the test data
-	    (debug:print 4 "Copying records in test_data from test_id=" (db:test-id testdat) " to " (db:test-id new-testdat))
+	    (debug:print 4 "Copying records in test_data from test_id=" (dbr:test-id testdat) " to " (dbr:test-id new-testdat))
 	    (sqlite3:execute 
 	     db 
 	     (conc "INSERT OR REPLACE INTO test_data (test_id,category,variable,value,expected,tol,units,comment) "
-		   "SELECT " (db:test-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
-	     (db:test-id testdat))))
+		   "SELECT " (dbr:test-id new-testdat) ",category,variable,value,expected,tol,units,comment FROM test_data WHERE test_id=?;")
+	     (dbr:test-id testdat))))
 	 ))
      prev-tests)))
 	 

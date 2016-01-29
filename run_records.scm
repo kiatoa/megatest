@@ -32,8 +32,8 @@
 (define-inline (test:get-item-path vec)(vector-ref vec 5))
 
 (define-inline (test:test-get-fullname test)
-   (conc (db:test-testname test)
-	 (if (equal? (db:test-item-path test) "")
+   (conc (dbr:test-testname test)
+	 (if (equal? (dbr:test-item-path test) "")
 	     ""
-	     (conc "(" (db:test-item-path test) ")"))))
+	     (conc "(" (dbr:test-item-path test) ")"))))
 
