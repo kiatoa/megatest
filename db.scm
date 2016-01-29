@@ -1221,8 +1221,8 @@
     ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
     ;;
     ;; HOWEVER: this code in run:test seems to work fine
-    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-    ;;                     (db:test-get-run_duration testdat)))
+    ;;              (> (- (current-seconds)(+ (db:test-event_time testdat)
+    ;;                     (db:test-run_duration testdat)))
     ;;                    600) 
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
@@ -1280,8 +1280,8 @@
     ;; in RUNNING or REMOTEHOSTSTART for more than 10 minutes
     ;;
     ;; HOWEVER: this code in run:test seems to work fine
-    ;;              (> (- (current-seconds)(+ (db:test-get-event_time testdat)
-    ;;                     (db:test-get-run_duration testdat)))
+    ;;              (> (- (current-seconds)(+ (db:test-event_time testdat)
+    ;;                     (db:test-run_duration testdat)))
     ;;                    600) 
     (db:delay-if-busy dbdat)
     (sqlite3:for-each-row 
@@ -3151,11 +3151,11 @@
 		  ;; Keep only the youngest of any test/item combination
 		  (for-each 
 		   (lambda (testdat)
-		     (let* ((full-testname (conc (db:test-get-testname testdat) "/" (db:test-get-item-path testdat)))
+		     (let* ((full-testname (conc (db:test-testname testdat) "/" (db:test-item-path testdat)))
 			    (stored-test   (hash-table-ref/default tests-hash full-testname #f)))
 		       (if (or (not stored-test)
 			       (and stored-test
-				    (> (db:test-get-event_time testdat)(db:test-get-event_time stored-test))))
+				    (> (db:test-event_time testdat)(db:test-event_time stored-test))))
 			   ;; this test is younger, store it in the hash
 			   (hash-table-set! tests-hash full-testname testdat))))
 		   results)
@@ -3345,10 +3345,10 @@
 		 (item-waiton-met   #f))
 	     (for-each 
 	      (lambda (test)
-		;; (if (equal? waitontest-name (db:test-get-testname test)) ;; by defintion this had better be true ...
-		(let* ((state             (db:test-get-state test))
-		       (status            (db:test-get-status test))
-		       (item-path         (db:test-get-item-path test))
+		;; (if (equal? waitontest-name (db:test-testname test)) ;; by defintion this had better be true ...
+		(let* ((state             (db:test-state test))
+		       (status            (db:test-status test))
+		       (item-path         (db:test-item-path test))
 		       (is-completed      (equal? state "COMPLETED"))
 		       (is-running        (equal? state "RUNNING"))
 		       (is-killed         (equal? state "KILLED"))

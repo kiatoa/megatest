@@ -28,15 +28,15 @@
 
 (define (ezsteps:run-from testdat start-step-name run-one)
   (let* ((test-run-dir  ;; (filedb:get-path *fdb* 
-	  (db:test-get-rundir testdat)) ;; )
+	  (db:test-rundir testdat)) ;; )
 	 (testconfig    (read-config (conc test-run-dir "/testconfig") #f #t environ-patt: "pre-launch-env-vars"))
 	 (ezstepslst    (hash-table-ref/default testconfig "ezsteps" '()))
 	 (run-mutex     (make-mutex))
 	 (rollup-status 0)
 	 (exit-info     (vector #t #t #t))
-	 (test-id       (db:test-get-id testdat))
-	 (run-id        (db:test-get-run_id testdat))
-	 (test-name     (db:test-get-testname testdat))
+	 (test-id       (db:test-id testdat))
+	 (run-id        (db:test-run_id testdat))
+	 (test-name     (db:test-testname testdat))
 	 (kill-job      #f)) ;; for future use (on re-factoring with launch.scm code
     (let loop ((count 5))
       (if (file-exists? test-run-dir)
@@ -141,25 +141,25 @@
 	  
 	  ;; Once done with step/steps update the test record
 	  ;;
-	  (let* ((item-path (db:test-get-item-path testdat)) ;; (item-list->path itemdat))
+	  (let* ((item-path (db:test-item-path testdat)) ;; (item-list->path itemdat))
 		 (testinfo  (rmt:get-testinfo-by-id run-id test-id))) ;; refresh the testdat, call it iteminfo in case need prev/curr
 	    ;; Am I completed?
-	    (if (equal? (db:test-get-state testinfo) "RUNNING") ;; (not (equal? (db:test-get-state testinfo) "COMPLETED"))
+	    (if (equal? (db:test-state testinfo) "RUNNING") ;; (not (equal? (db:test-state testinfo) "COMPLETED"))
 		(let ((new-state  (if kill-job "KILLED" "COMPLETED") ;; (if (eq? (vector-ref exit-info 2) 0) ;; exited with "good" status
 				  ;; "COMPLETED"
-				  ;; (db:test-get-state testinfo)))   ;; else preseve the state as set within the test
+				  ;; (db:test-state testinfo)))   ;; else preseve the state as set within the test
 				  )
 		      (new-status (cond
 				   ((not (vector-ref exit-info 1)) "FAIL") ;; job failed to run
 				   ((eq? rollup-status 0)
 				    ;; if the current status is AUTO the defer to the calculated value (i.e. leave this AUTO)
-				    (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO" "PASS"))
+				    (if (equal? (db:test-status testinfo) "AUTO") "AUTO" "PASS"))
 				   ((eq? rollup-status 1) "FAIL")
 				   ((eq? rollup-status 2)
 				    ;; if the current status is AUTO the defer to the calculated value but qualify (i.e. make this AUTO-WARN)
-				    (if (equal? (db:test-get-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
-				   (else "FAIL")))) ;; (db:test-get-status testinfo)))
-		  (debug:print-info 2 "Test NOT logged as COMPLETED, (state=" (db:test-get-state testinfo) "), updating result, rollup-status is " rollup-status)
+				    (if (equal? (db:test-status testinfo) "AUTO") "AUTO-WARN" "WARN"))
+				   (else "FAIL")))) ;; (db:test-status testinfo)))
+		  (debug:print-info 2 "Test NOT logged as COMPLETED, (state=" (db:test-state testinfo) "), updating result, rollup-status is " rollup-status)
 		  (tests:test-set-status! test-id 
 					  new-state
 					  new-status

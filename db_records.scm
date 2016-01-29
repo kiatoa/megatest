@@ -67,52 +67,52 @@
 
 
 (define (make-db:test)(make-vector 20))
-(define-inline (db:test-get-id           vec) (vector-ref vec 0))
-(define-inline (db:test-get-run_id       vec) (vector-ref vec 1))
-(define-inline (db:test-get-testname     vec) (vector-ref vec 2))
-(define-inline (db:test-get-state        vec) (vector-ref vec 3))
-(define-inline (db:test-get-status       vec) (vector-ref vec 4))
-(define-inline (db:test-get-event_time   vec) (vector-ref vec 5))
-(define-inline (db:test-get-host         vec) (vector-ref vec 6))
-(define-inline (db:test-get-cpuload      vec) (vector-ref vec 7))
-(define-inline (db:test-get-diskfree     vec) (vector-ref vec 8))
-(define-inline (db:test-get-uname        vec) (vector-ref vec 9))
-;; (define-inline (db:test-get-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
-(define-inline (db:test-get-rundir       vec) (vector-ref vec 10))
-(define-inline (db:test-get-item-path    vec) (vector-ref vec 11))
-(define-inline (db:test-get-run_duration vec) (vector-ref vec 12))
-(define-inline (db:test-get-final_logf   vec) (vector-ref vec 13))
-(define-inline (db:test-get-comment      vec) (vector-ref vec 14))
-(define-inline (db:test-get-process_id   vec) (vector-ref vec 16))
-(define-inline (db:test-get-archived     vec) (vector-ref vec 17))
+(define-inline (db:test-id           vec) (vector-ref vec 0))
+(define-inline (db:test-run_id       vec) (vector-ref vec 1))
+(define-inline (db:test-testname     vec) (vector-ref vec 2))
+(define-inline (db:test-state        vec) (vector-ref vec 3))
+(define-inline (db:test-status       vec) (vector-ref vec 4))
+(define-inline (db:test-event_time   vec) (vector-ref vec 5))
+(define-inline (db:test-host         vec) (vector-ref vec 6))
+(define-inline (db:test-cpuload      vec) (vector-ref vec 7))
+(define-inline (db:test-diskfree     vec) (vector-ref vec 8))
+(define-inline (db:test-uname        vec) (vector-ref vec 9))
+;; (define-inline (db:test-rundir       vec) (sdb:qry 'getstr (vector-ref vec 10)))
+(define-inline (db:test-rundir       vec) (vector-ref vec 10))
+(define-inline (db:test-item-path    vec) (vector-ref vec 11))
+(define-inline (db:test-run_duration vec) (vector-ref vec 12))
+(define-inline (db:test-final_logf   vec) (vector-ref vec 13))
+(define-inline (db:test-comment      vec) (vector-ref vec 14))
+(define-inline (db:test-process_id   vec) (vector-ref vec 16))
+(define-inline (db:test-archived     vec) (vector-ref vec 17))
 
-;; (define-inline (db:test-get-pass_count   vec) (vector-ref vec 15))
-;; (define-inline (db:test-get-fail_count   vec) (vector-ref vec 16))
-(define-inline (db:test-get-fullname     vec)
-  (conc (db:test-get-testname vec) "/" (db:test-get-item-path vec)))
+;; (define-inline (db:test-pass_count   vec) (vector-ref vec 15))
+;; (define-inline (db:test-fail_count   vec) (vector-ref vec 16))
+(define-inline (db:test-fullname     vec)
+  (conc (db:test-testname vec) "/" (db:test-item-path vec)))
 
 ;; replace runs:make-full-test-name with this routine
 (define (db:test-make-full-name testname itempath)
   (if (equal? itempath "") testname (conc testname "/" itempath)))
 
-(define-inline (db:test-get-first_err    vec) (printable (vector-ref vec 15)))
-(define-inline (db:test-get-first_warn   vec) (printable (vector-ref vec 16)))
+(define-inline (db:test-first_err    vec) (printable (vector-ref vec 15)))
+(define-inline (db:test-first_warn   vec) (printable (vector-ref vec 16)))
 
-(define-inline (db:test-set-cpuload!  vec val)(vector-set! vec 7 val))
-(define-inline (db:test-set-diskfree! vec val)(vector-set! vec 8 val))
-(define-inline (db:test-set-testname! vec val)(vector-set! vec 2 val))
-(define-inline (db:test-set-state!    vec val)(vector-set! vec 3 val))
-(define-inline (db:test-set-status!   vec val)(vector-set! vec 4 val))
-(define-inline (db:test-set-run_duration! vec val)(vector-set! vec 12 val))
-(define-inline (db:test-set-final_logf! vec val)(vector-set! vec 13 val))
+(define-inline (db:test-cpuload-set!  vec val)(vector-set! vec 7 val))
+(define-inline (db:test-diskfree-set! vec val)(vector-set! vec 8 val))
+(define-inline (db:test-testname-set! vec val)(vector-set! vec 2 val))
+(define-inline (db:test-state-set!    vec val)(vector-set! vec 3 val))
+(define-inline (db:test-status-set!   vec val)(vector-set! vec 4 val))
+(define-inline (db:test-run_duration-set! vec val)(vector-set! vec 12 val))
+(define-inline (db:test-final_logf-set! vec val)(vector-set! vec 13 val))
 
 ;; Test record utility functions
 
 ;; Is a test a toplevel?
 ;;
-(define (db:test-get-is-toplevel vec)
-  (and (equal? (db:test-get-item-path vec) "")      ;; test is not an item
-       (equal? (db:test-get-uname vec)     "n/a"))) ;; test has never been run
+(define (db:test-is-toplevel vec)
+  (and (equal? (db:test-item-path vec) "")      ;; test is not an item
+       (equal? (db:test-uname vec)     "n/a"))) ;; test has never been run
 
 ;; make-vector-record "" db mintest id run_id testname state status event_time item_path
 ;;

@@ -466,7 +466,7 @@ Misc
   (if testdat
       (let* ((test-id      (hash-table-ref/default (dboard:data-get-curr-test-ids *data*) window-id #f))
 	     (test-data    (hash-table-ref/default testdat test-id #f))
-	     (run-id       (db:test-get-run_id test-data))
+	     (run-id       (db:test-run_id test-data))
 	     (targ/runname (hash-table-ref/default (dboard:data-get-run-keys *data*) 
 						   run-id
 						   '()))
@@ -495,7 +495,7 @@ Misc
 	       (list 
 		(list run-info-matrix
 		      (if test-id
-			  (list (db:test-get-run_id test-data)
+			  (list (db:test-run_id test-data)
 				target
 				runname
 				"n/a")
@@ -503,20 +503,20 @@ Misc
 		(list test-info-matrix
 		      (if test-id
 			  (list test-id
-				(db:test-get-testname test-data)
-				(db:test-get-item-path test-data)
-				(db:test-get-state    test-data)
-				(db:test-get-status   test-data)
-				(seconds->string (db:test-get-event_time test-data))
-				(db:test-get-comment  test-data))
+				(db:test-testname test-data)
+				(db:test-item-path test-data)
+				(db:test-state    test-data)
+				(db:test-status   test-data)
+				(seconds->string (db:test-event_time test-data))
+				(db:test-comment  test-data))
 			  (make-list 7 "")))
 		(list test-run-matrix
 		      (if test-id
-			  (list (db:test-get-host     test-data)
-				(db:test-get-uname    test-data)
-				(db:test-get-diskfree test-data)
-				(db:test-get-cpuload  test-data)
-				(seconds->hr-min-sec (db:test-get-run_duration test-data)))
+			  (list (db:test-host     test-data)
+				(db:test-uname    test-data)
+				(db:test-diskfree test-data)
+				(db:test-cpuload  test-data)
+				(seconds->hr-min-sec (db:test-run_duration test-data)))
 			  (make-list 5 "")))
 		))
 	      (dcommon:populate-steps steps-dat steps-matrix))))))
@@ -525,22 +525,22 @@ Misc
 		;;	  (list (
 
   
-;; db:test-get-id           
-;; db:test-get-run_id       
-;; db:test-get-testname     
-;; db:test-get-state        
-;; db:test-get-status       
-;; db:test-get-event_time   
-;; db:test-get-host         
-;; db:test-get-cpuload      
-;; db:test-get-diskfree     
-;; db:test-get-uname        
-;; db:test-get-rundir       
-;; db:test-get-item-path    
-;; db:test-get-run_duration 
-;; db:test-get-final_logf   
-;; db:test-get-comment      
-;; db:test-get-fullname     	  
+;; db:test-id           
+;; db:test-run_id       
+;; db:test-testname     
+;; db:test-state        
+;; db:test-status       
+;; db:test-event_time   
+;; db:test-host         
+;; db:test-cpuload      
+;; db:test-diskfree     
+;; db:test-uname        
+;; db:test-rundir       
+;; db:test-item-path    
+;; db:test-run_duration 
+;; db:test-final_logf   
+;; db:test-comment      
+;; db:test-fullname     	  
 
 
 ;;======================================================================
