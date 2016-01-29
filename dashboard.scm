@@ -218,11 +218,11 @@ Misc
     (null? (filter (lambda (x)(> x 3)) delta))))
 
 (define (compare-tests test1 test2)
-  (let* ((test-name1  (db:test-testname  test1))
-	 (item-path1  (db:test-item-path test1))
+  (let* ((test-name1  (or (db:test-testname  test1) ""))
+	 (item-path1  (or (db:test-item-path test1) ""))
 	 (eventtime1  (db:test-event_time test1))
-	 (test-name2  (db:test-testname  test2))
-	 (item-path2  (db:test-item-path test2))
+	 (test-name2  (or (db:test-testname  test2) ""))
+	 (item-path2  (or (db:test-item-path test2) ""))
 	 (eventtime2  (db:test-event_time test2))
 	 (same-name   (equal? test-name1 test-name2))
 	 (test1-top   (equal? item-path1 ""))
@@ -390,8 +390,8 @@ Misc
 (define (get-itemized-tests test-dats)
   (let ((tnames '()))
     (for-each (lambda (tdat)
-		(let ((tname (db:test-testname tdat))  ;; (db:test-get-testname tdat))
-		      (ipath (db:test-item-path tdat) ) ) ;; (db:test-get-item-path tdat)))
+		(let ((tname (vector-ref tdat 0))  ;; (db:test-testname tdat))  ;; (db:test-get-testname tdat))
+		      (ipath (vector-ref tdat 1))) ;; (db:test-item-path tdat) ) ) ;; (db:test-get-item-path tdat)))
 		  (if (not (equal? ipath ""))
 		      (if (and (list? tnames)
 			       (string? tname)
@@ -412,8 +412,8 @@ Misc
 	       (itemized (get-itemized-tests test-dats)))
 	  (for-each 
 	   (lambda (testdat)
-             (let* ((tname (db:test-testname tdat))  ;; (db:test-get-testname tdat))
-                    (ipath (db:test-item-path tdat))) ;; (db:test-get-item-path tdat)))
+             (let* ((tname (vector-ref testdat 0))  ;; (db:test-testname tdat))  ;; (db:test-get-testname tdat))
+                    (ipath (vector-ref testdat 1))) ;; (db:test-item-path tdat))) ;; (db:test-get-item-path tdat)))
 	       ;;   (seen  (hash-table-ref/default tests tname #f)))
 	       (if (not (member tname tnames))
 		   (if (or (and (eq? priority 'itempath)
@@ -510,7 +510,21 @@ Misc
 							(lambda (x)(equal? (test:test-get-fullname x) testname))
 							testsdat)))
 					 (if (null? matching)
-					     (vector -1 -1 "" "" "" 0 "" "" 0 "" "" "" 0 "" "")
+					     (make-db:test id: -1
+							   run_id: -1
+							   testname: ""
+							   state: ""
+							   status: ""
+							   event_time: 0
+							   host: ""
+							   cpuload: ""
+							   diskfree: 0
+							   uname: ""
+							   rundir: ""
+							   item-path: ""
+							   run_duration: 0
+							   final_logf: ""
+							   comment: "")
 					     (car matching))))
 			   (testname   (db:test-testname  test))
 			   (itempath   (db:test-item-path test))

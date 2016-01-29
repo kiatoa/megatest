@@ -121,6 +121,10 @@
       (tests:test-set-status! 1 test-id "COMPLETED" "PASS" comment #f))) ;;  #!key (work-area #f))
  '("item/1" "item/2" "item/3" "item/4" "item/5"))
  
+
+(exit)
+
+
 (test #f #t (number? (rmt:get-test-id 1 "rollup" "item/4")))
 
 (define (get-state-status run-id testname itempath)

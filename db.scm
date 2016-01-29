@@ -1142,7 +1142,7 @@
  
 ;; Look up the archive block info given a block-id
 ;;
-(define (db:test-archive-block-info dbstruct archive-block-id)
+(define (db:test-get-archive-block-info dbstruct archive-block-id)
   (db:with-db
    dbstruct
    #f
@@ -2156,7 +2156,7 @@
         ;;   ((shortlist)(map db:test-short-record->norm res))
         ;;   ((#f)       res)
         ;;   (else       res)))))
-        (if (eq? qryvals shortlist)
+        (if (eq? qryvals 'shortlist)
             (for-each (lambda (inrec) (db:test-short-record->norm inrec)) res))
         res)))
 
@@ -2164,15 +2164,15 @@
   ;;  "id,run_id,testname,item_path,state,status"
   ;;  "id,run_id,testname,state,status, event_time,host,cpuload,diskfree,uname,rundir, item_path, run_duration,final_logf,comment
 
-  (db-test-event_time-set! inrec -1)
-  (db-test-host-set!       inrec "")
-  (db-test-cpuload-set!    inrec -1)
-  (db-test-diskfree-set!   inrec -1)
-  (db-test-uname-set!      inrec "")
-  (db-test-rundir-set!     inrec "-")
-  (db-test-run_duration-set!     inrec "-")
-  (db-test-final_logf-set! inrec "-")
-  (db-test-comment-set!    inrec "-")
+  (db:test-event_time-set! inrec -1)
+  (db:test-host-set!       inrec "")
+  (db:test-cpuload-set!    inrec -1)
+  (db:test-diskfree-set!   inrec -1)
+  (db:test-uname-set!      inrec "")
+  (db:test-rundir-set!     inrec "-")
+  (db:test-run_duration-set!     inrec "-")
+  (db:test-final_logf-set! inrec "-")
+  (db:test-comment-set!    inrec "-")
   
   ;; (vector (vector-ref inrec 0) ;; id
   ;;         (vector-ref inrec 1) ;; run_id
@@ -2188,7 +2188,7 @@
 (define (db:get-tests-for-run-state-status dbstruct run-id testpatt)
   (let* ((res            '())
 	 (tests-match-qry (tests:match->sqlqry testpatt))
-         (qryfields '(id testname item_path state,status))
+         (qryfields '(id testname item_path state status))
          (qryfields-str (string-join (map ->string qryfields) "," ))
 	 (qry             (conc "SELECT " qryfields-str " FROM tests WHERE run_id=? " 
 				(if tests-match-qry (conc " AND (" tests-match-qry ") ") ""))))
@@ -2198,10 +2198,10 @@
 		  (sqlite3:for-each-row
 		   (lambda (id testname item-path state status)
 		     ;;                      id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment
-                     (let ((1res make-db:test))
+                     (let ((1res (make-db:test)))
                        (db:test-id-set! 1res id)
                        (db:test-testname-set! 1res testname)
-                       (db:test-item_path-set! 1res item-path)
+                       (db:test-item-path-set! 1res item-path)
                        (db:test-state-set! 1res state)
                        (db:test-status-set! 1res status)
                        (db:test-short-record->norm 1res)
@@ -2629,7 +2629,7 @@
 	test-name item-path)
        res))))
 
-(define (db:test-rundir-from-test-id dbstruct run-id test-id)
+(define (db:test-get-rundir-from-test-id dbstruct run-id test-id)
   (db:with-db
    dbstruct
    run-id
@@ -2809,7 +2809,7 @@
 		  " AND "))
 	 ;; (testqry (tests:match->sqlqry testpatt))
 	 (runsqry (sqlite3:prepare db (conc "SELECT id FROM runs WHERE " keystr " AND runname LIKE '" runname "';"))))
-    ;; (debug:print 8 "db:test-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
+    ;; (debug:print 8 "db:test-get-paths-matching-keynames-target-new\n  runsqry=" runsqry "\n  tstsqry=" testqry)
     (sqlite3:for-each-row
      (lambda (rid)
        (set! row-ids (cons rid row-ids)))
@@ -2817,7 +2817,7 @@
     (sqlite3:finalize! runsqry)
     row-ids))
 
-(define (db:test-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
+(define (db:test-get-paths-matching-keynames-target-new dbstruct run-id keynames target res testpatt statepatt statuspatt runname)
   (let* ((testqry (tests:match->sqlqry testpatt))
 	 (tstsqry (conc "SELECT rundir FROM tests WHERE " testqry " AND state LIKE '" statepatt "' AND status LIKE '" statuspatt "' ORDER BY event_time ASC;")))
     (db:with-db
@@ -2922,7 +2922,7 @@
 ;; 	  #f)
 ;; 	)))
 
-(define (db:test-logfile-info dbstruct run-id test-name)
+(define (db:test-get-logfile-info dbstruct run-id test-name)
   (db:with-db
    dbstruct
    run-id
@@ -3254,7 +3254,7 @@
 	    db)
 	  "bogus result from db:delay-if-busy")))
 
-(define (db:test-records-for-index-file dbstruct run-id test-name)
+(define (db:test-get-records-for-index-file dbstruct run-id test-name)
   (let ((res '()))
     (db:with-db
      dbstruct

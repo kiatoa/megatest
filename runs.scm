@@ -1014,7 +1014,7 @@
 		      (ip (db:test-item-path trec))
 		      (st (db:test-state     trec)))
 		  (if (not (equal? st "DELETED"))
-		      (hash-table-set! test-registry (db:test-make-full-name tn ip) (string->symbol st)))))
+		      (hash-table-set! test-registry (db:test-make-full-name tn ip) (string->symbol (or st "#F=>BAD DATA"))))))
 	      tests-info)
     (set! max-retries (if (and max-retries (string->number max-retries))(string->number max-retries) 100))
 
@@ -1157,11 +1157,10 @@
 				  items)))
 	  (for-each
 	   (lambda (my-itemdat)
-	     (let* ((new-test-record (let ((newrec (make-tests:testqueue)))
-				       (vector-copy! test-record newrec)
-				       newrec))
-		    (my-item-path (item-list->path my-itemdat)))
-	       (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
+	     (let* ((new-test-record (make-tests:testqueue))
+				     ;;  (update-tests:testqueue test-record)))
+		    (my-item-path    (item-list->path my-itemdat)))
+	     (if (tests:match test-patts hed my-item-path required: required-tests) ;; (patt-list-match my-item-path item-patts)           ;; yes, we want to process this item, NOTE: Should not need this check here!
 		   (let ((newtestname (db:test-make-full-name hed my-item-path)))    ;; test names are unique on testname/item-path
 		     (tests:testqueue-set-items!     new-test-record #f)
 		     (tests:testqueue-set-itemdat!   new-test-record my-itemdat)
