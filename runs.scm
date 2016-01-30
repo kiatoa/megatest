@@ -1439,7 +1439,7 @@
 		   (let* ((numseconds      (common:hms-string->seconds (configf:lookup test-conf "skip" "rundelay")))
 			  (running-tests   (rmt:get-tests-for-runs-mindata #f full-test-name '("RUNNING" "REMOTEHOSTSTART" "LAUNCHED") '() #f))
 			  (completed-tests (rmt:get-tests-for-runs-mindata #f full-test-name '("COMPLETED" "INCOMPLETE") '("PASS" "FAIL" "ABORT") #f)) ;; ironically INCOMPLETE is same as COMPLETED in this contex
-			  (last-run-times  (map db:mintest-get-event_time completed-tests))
+			  (last-run-times  (map dbr:mintest-event_time completed-tests))
 			  (time-since-last (- (current-seconds) (if (null? last-run-times) 0 (apply max last-run-times)))))
 		     (if (or (not (null? running-tests)) ;; have to skip if test is running
 			     (> numseconds time-since-last))
