@@ -424,6 +424,14 @@
 ;;                    R U N N A M E    A N D   T E S T P A T T
 ;;======================================================================
 
+;; Lookup a value in runconfigs based on -reqtarg or -target
+(define (runconfigs-get config var)
+  (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
+    (if targ
+	(or (configf:lookup config targ var)
+	    (configf:lookup config "default" var))
+	(configf:lookup config "default" var))))
+
 (define (common:args-get-state)
   (or (args:get-arg "-state")(args:get-arg ":state")))
 

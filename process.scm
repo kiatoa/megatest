@@ -17,13 +17,13 @@
 (declare (unit process))
 (declare (uses common))
 
-(define (conservative-read port)
+(define (process:conservative-read port)
   (let loop ((res ""))
     (if (not (eof-object? (peek-char port)))
 	(loop (conc res (read-char port)))
 	res)))
-    
-(define (cmd-run-with-stderr->list cmd . params)
+
+(define (process:cmd-run-with-stderr->list cmd . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
 ;;  (handle-exceptions
 ;;   exn
@@ -36,7 +36,7 @@
 				      (process* cmd params))))
        (let loop ((curr (read-line fh))
 		  (result  '()))
-	 (let ((errstr (conservative-read fhe)))
+	 (let ((errstr (process:conservative-read fhe)))
 	   (if (not (string=? errstr ""))
 	       (set! result (append result (list errstr)))))
        (if (not (eof-object? curr))

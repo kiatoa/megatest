@@ -1024,7 +1024,7 @@
 	   ;; Launchwait defaults to true, must override it to turn off wait
 	   (launchwait     (if (equal? (configf:lookup *configdat* "setup" "launchwait") "no") #f #t))
 	   (launch-results (apply (if launchwait
-				      cmd-run-with-stderr->list
+				      process:cmd-run-with-stderr->list
 				      process-run)
 				  (if useshell
 				      (let ((cmdstr (string-intersperse fullcmd " ")))
