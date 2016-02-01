@@ -19,12 +19,12 @@
 ;; (use posix)
 ;; (use json)
 ;; (use csv)
-(use directory-utils)
+;; (use directory-utils)
 (use srfi-18)
 (use format)
 
-(require-library ini-file)
-(import (prefix ini-file ini:))
+;; (require-library ini-file)
+;; (import (prefix ini-file ini:))
 
 (use sql-de-lite srfi-1 posix regex regex-case srfi-69)
 ;; (import (prefix sqlite3 sqlite3:))
@@ -46,6 +46,9 @@
 ;;
 ;; GLOBALS
 ;;
+(define *verbosity* 1)
+(define *logging* #f)
+
 (define *sretrieve:current-tab-number* 0)
 (define *args-hash* (make-hash-table))
 (define sretrieve:help (conc "Usage: sretrieve [action [params ...]]
@@ -325,8 +328,8 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (sretrieve:load-config exe-dir exe-name)
   (let* ((fname   (conc exe-dir "/." exe-name ".config")))
-    (ini:property-separator-patt " *  *")
-    (ini:property-separator #\space)
+    ;; (ini:property-separator-patt " *  *")
+    ;; (ini:property-separator #\space)
     (if (file-exists? fname)
 	;; (ini:read-ini fname)
 	(read-config fname #f #t)
@@ -353,8 +356,8 @@ Version: " megatest-fossil-hash)) ;; "
 	       (process-wait pid)))
 	    (debug:print 0 "Skipping update of " package-config " from " upstream-file))
 	(debug:print 0 "Skipping update of " package-config " as " upstream-file " not found"))
-    (ini:property-separator-patt " *  *")
-    (ini:property-separator #\space)
+    ;; (ini:property-separator-patt " *  *")
+    ;; (ini:property-separator #\space)
     (let ((res (if (file-exists? package-config)
 		   (begin
 		     (debug:print 0 "Reading package config " package-config)

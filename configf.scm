@@ -13,10 +13,9 @@
 ;; Config file handling
 ;;======================================================================
 
-(use regex regex-case directory-utils)
+(use regex regex-case) ;;  directory-utils)
 (declare (unit configf))
-(declare (uses common))
-(declare (uses process))
+;; (declare (uses process))
 
 (include "common_records.scm")
 
@@ -135,14 +134,6 @@
 	    (lambda ()
 	      (print "ERROR: " cmd " returned bad exit code " status)))
 	  ""))))
-
-;; Lookup a value in runconfigs based on -reqtarg or -target
-(define (runconfigs-get config var)
-  (let ((targ (common:args-get-target))) ;; (or (args:get-arg "-reqtarg")(args:get-arg "-target")(getenv "MT_TARGET"))))
-    (if targ
-	(or (configf:lookup config targ var)
-	    (configf:lookup config "default" var))
-	(configf:lookup config "default" var))))
 
 ;; this was inline but I'm pretty sure that is a hold over from when it was *very* simple ...
 ;;

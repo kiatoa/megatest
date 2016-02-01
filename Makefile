@@ -217,8 +217,16 @@ xterm : sd
 datashare-testing/spublish : spublish.scm $(OFILES)
 	csc spublish.scm $(OFILES) -o datashare-testing/spublish
 
-datashare-testing/sretrieve : sretrieve.scm $(OFILES)
-	csc sretrieve.scm $(OFILES) -o datashare-testing/sretrieve
+datashare-testing/sretrieve : sretrieve.scm common.o megatest-version.o margs.o configf.o
+	csc sretrieve.scm common.o megatest-version.o margs.o configf.o -o datashare-testing/sretrieve
+
+sretrieve/sretrieve : datashare-testing/sretrieve
+	csc -deploy sretrieve.scm megatest-version.o margs.o configf.o
+	chicken-install -deploy -prefix sretrieve defstruct srfi-18 format sql-de-lite \
+             srfi-1 posix regex regex-case srfi-69
+
+# base64 dot-locking \
+#             csv-xml z3
 
 #  "(define (toplevel-command . a) #f)"
 readline-fix.scm :

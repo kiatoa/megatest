@@ -22,8 +22,8 @@
 (use srfi-18)
 (use format)
 
-(require-library ini-file)
-(import (prefix ini-file ini:))
+;; (require-library ini-file)
+;; (import (prefix ini-file ini:))
 
 (use sql-de-lite srfi-1 posix regex regex-case srfi-69)
 ;; (import (prefix sqlite3 sqlite3:))
@@ -352,8 +352,8 @@ Version: " megatest-fossil-hash)) ;; "
 
 (define (spublish:load-config exe-dir exe-name)
   (let* ((fname   (conc exe-dir "/." exe-name ".config")))
-    (ini:property-separator-patt " *  *")
-    (ini:property-separator #\space)
+    ;; (ini:property-separator-patt " *  *")
+    ;; (ini:property-separator #\space)
     (if (file-exists? fname)
 	;; (ini:read-ini fname)
 	(read-config fname #f #t)
