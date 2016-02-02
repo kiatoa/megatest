@@ -570,7 +570,7 @@
 
 (define (get-cpu-load)
   (car (common:get-cpu-load)))
-;;   (let* ((load-res (cmd-run->list "uptime"))
+;;   (let* ((load-res (process:cmd-run->list "uptime"))
 ;; 	 (load-rx  (regexp "load average:\\s+(\\d+)"))
 ;; 	 (cpu-load #f))
 ;;     (for-each (lambda (l)
@@ -625,7 +625,7 @@
     (common:wait-for-cpuload maxload num-cpus 15 msg: msg)))
 
 (define (get-uname . params)
-  (let* ((uname-res (cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
+  (let* ((uname-res (process:cmd-run->list (conc "uname " (if (null? params) "-a" (car params)))))
 	 (uname #f))
     (if (null? (car uname-res))
 	"unknown"
@@ -635,7 +635,7 @@
 ;; must be protected by mutexes
 ;;
 (define (common:real-path inpath)
-  ;; (cmd-run-with-stderr->list "readlink" "-f" inpath)) ;; cmd . params)
+  ;; (process:cmd-run-with-stderr->list "readlink" "-f" inpath)) ;; cmd . params)
   ;; (let-values 
   ;;  (((inp oup pid) (process "readlink" (list "-f" inpath))))
   ;;  (with-input-from-port inp
@@ -659,7 +659,7 @@
   (with-input-from-pipe (conc "/usr/bin/du -s " fpath) read))
 
 (define (get-df path)
-  (let* ((df-results (cmd-run->list (conc "df " path)))
+  (let* ((df-results (process:cmd-run->list (conc "df " path)))
 	 (space-rx   (regexp "([0-9]+)\\s+([0-9]+)%"))
 	 (freespc    #f))
     ;; (write df-results)

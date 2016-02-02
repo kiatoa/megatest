@@ -48,7 +48,7 @@
 	     (close-output-port fho)
 	     result))))) ;; )
 
-(define (cmd-run-proc-each-line cmd proc . params)
+(define (process:cmd-run-proc-each-line cmd proc . params)
   ;; (print "Called with cmd=" cmd ", proc=" proc ", params=" params)
   (handle-exceptions
    exn
@@ -71,13 +71,13 @@
 	     (close-output-port fho)
 	     result))))))
 
-(define (cmd-run-proc-each-line-alt cmd proc)
+(define (process:cmd-run-proc-each-line-alt cmd proc)
   (let* ((fh (open-input-pipe cmd))
          (res (port-proc->list fh proc))
          (status (close-input-pipe fh)))
     (if (eq? status 0) res #f)))
 
-(define (cmd-run->list cmd)
+(define (process:cmd-run->list cmd)
   (let* ((fh (open-input-pipe cmd))
          (res (port->list fh))
          (status (close-input-pipe fh)))

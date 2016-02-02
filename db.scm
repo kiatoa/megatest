@@ -2084,7 +2084,7 @@
 	;; (print-call-chain (current-error-port))
 	'())
       (let* ((qryvalstr       (case qryvals
-				((shortlist) "id,run_id,testname,state,status,item_path")
+				((shortlist) "id,run_id,testname,item_path,state,status")
 				((#f)        db:test-record-qry-selector) ;; "id,run_id,testname,state,status,event_time,host,cpuload,diskfree,uname,rundir,item_path,run_duration,final_logf,comment")
 				(else        qryvals)))
 	     (res            '())
@@ -2428,7 +2428,7 @@
       #f
       test-id))))
 
-(define db:test-record-fields '("id"           "run_id"        "testname"  "item_path" "state"      "status"      "event_time"
+(define db:test-record-fields '("id"           "run_id"        "testname"  "state"      "status"      "event_time"
 				"host"         "cpuload"       "diskfree"  "uname"      "rundir"      "item_path"
                                 "run_duration" "final_logf"    "comment"   "shortdir"   "attemptnum"  "archived"))
 
