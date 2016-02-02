@@ -72,6 +72,7 @@ Version: " megatest-fossil-hash)) ;; "
 ;; DB
 ;;======================================================================
 
+;; replace (strftime('%s','now')), with datetime('now'))
 (define (sretrieve:initialize-db db)
   (for-each
    (lambda (qry)
@@ -81,7 +82,7 @@ Version: " megatest-fossil-hash)) ;; "
          (id           INTEGER PRIMARY KEY,
           action       TEXT NOT NULL,
           retriever    TEXT NOT NULL,
-          datetime     TIMESTAMP DEFAULT (strftime('%s','now')),
+          datetime     TIMESTAMP DEFAULT (datetime('now','localtime')),
           srcpath      TEXT NOT NULL,
           comment      TEXT DEFAULT '' NOT NULL,
           state        TEXT DEFAULT 'new');"
@@ -155,10 +156,18 @@ Version: " megatest-fossil-hash)) ;; "
      configdat
      (lambda (db)
        (sretrieve:register-action db "get" retriever datadir comment)))
-    (change-directory datadir)
-    (process-execute "tar" (append (list "chfv" "-")(filter (lambda (x)
-							     (not (member x '("." ".."))))
-							   (glob "*" ".*"))))))
+      (sretrieve:do-as-calling-user
+       (lambda ()
+	 (change-directory datadir)
+	 (let ((files (filter (lambda (x)
+				(not (member x '("." ".."))))
+			      (glob "*" ".*"))))
+	   (print "files: " files)
+	   (process-execute "/bin/tar" (append (list "chfv" "-") files)))))))
+
+;;(filter (lambda (x)
+;;							     (not (member x '("." ".."))))
+;;							   (glob "*" ".*"))))))))
 
 (define (sretrieve:validate target-dir targ-mk)
   (let* ((normal-path (normalize-pathname targ-mk))
@@ -433,7 +442,9 @@ Version: " megatest-fossil-hash)) ;; "
 	   (if base-dir
 	       (begin
 		 (print "Files in " base-dir)
-		 (system (conc "ls " base-dir)))
+                 (sretrieve:do-as-calling-user
+                    (lambda ()
+		 (process-execute "/bin/ls" (list base-dir)))))
 	       (print "ERROR: No base dir specified!"))))
 	((log)
 	 (sretrieve:db-do configdat (lambda (db)
