@@ -15,7 +15,7 @@
 
 (use regex regex-case) ;;  directory-utils)
 (declare (unit configf))
-;; (declare (uses process))
+(declare (uses process))
 
 (include "common_records.scm")
 
@@ -49,7 +49,7 @@
    (begin
      (debug:print 0 "ERROR: problem evaluating \"" str "\" in the shell environment")
      #f)
-   (let ((cmdres (cmd-run->list (conc "echo " str))))
+   (let ((cmdres (process:cmd-run->list (conc "echo " str))))
      (if (null? cmdres) ""
 	 (caar cmdres)))))
 
@@ -120,7 +120,7 @@
 
 ;; Run a shell command and return the output as a string
 (define (shell cmd)
-  (let* ((output (cmd-run->list cmd))
+  (let* ((output (process:cmd-run->list cmd))
 	 (res    (car output))
 	 (status (cadr output)))
     (if (equal? status 0)
@@ -240,7 +240,7 @@
 							  (let ((alist    (hash-table-ref/default res curr-section-name '()))
 								(val-proc (lambda ()
 									    (let* ((start-time (current-seconds))
-										   (cmdres     (cmd-run->list cmd))
+										   (cmdres     (process:cmd-run->list cmd))
 										   (delta      (- (current-seconds) start-time))
 										   (status     (cadr cmdres))
 										   (res        (car  cmdres)))
