@@ -217,8 +217,8 @@ xterm : sd
 datashare-testing/spublish : spublish.scm $(OFILES)
 	csc spublish.scm $(OFILES) -o datashare-testing/spublish
 
-datashare-testing/sretrieve : sretrieve.scm common.o megatest-version.o margs.o configf.o
-	csc sretrieve.scm common.o megatest-version.o margs.o configf.o -o datashare-testing/sretrieve
+datashare-testing/sretrieve : sretrieve.scm megatest-version.o margs.o configf.o process.o 
+	csc sretrieve.scm megatest-version.o margs.o configf.o process.o -o datashare-testing/sretrieve
 
 sretrieve/sretrieve : datashare-testing/sretrieve
 	csc -deploy -deployed sretrieve.scm megatest-version.o margs.o configf.o
