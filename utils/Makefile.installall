@@ -8,8 +8,6 @@
 #  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE.
 
-# make PREFIX=/mfs/pkgs/chicken/chicken-core all
-
 help :
 	@echo You may need to do the following setup first:
 	@echo
@@ -20,7 +18,11 @@ help :
 	@echo   -- nb// adding monodevelop gets more packages of which some might be needed...
 	@echo sudo apt-get install libmotif3
 	@echo
+	@echo Set up your PATH, setting it in the Makefile does not work as expected
+	@echo export PATH=$(PREFIX)/bin:\$$PATH
+	@echo
 	@echo For IUP set IUPBRANCH, currently $(IUPBRANCH)
+	@echo         set IUPCONFIG, currently $(IUPCONFIG) - look in https://www.kiatoa.com/fossils/iuplib for .inc files
 	@echo You are using PREFIX=$(PREFIX)
 	@echo You are using PROXY="$(PROXY)"
 	@echo If needed set PROXY to host.dom:port
@@ -29,7 +31,7 @@ help :
 	@echo To make all do: make all
 	@echo   make minimal: make nogui
 	@echo 
-	@echo Note: might need to do CSC_OPTIONS='-C "-fPIC"' make
+	@echo Note: If compiling on amd64 do CSC_OPTIONS=\'-C "-fPIC"\' make all IUPCONFIG=
 
 FPIC=-C "-fPIC"
 
@@ -49,7 +51,9 @@ SQLITE3_VERSION=3090200
 # http://www.sqlite.org/2014/sqlite-autoconf-3080500.tar.gz
 # http://www.sqlite.org/2015/sqlite-autoconf-3081101.tar.gz
 # Override IUPBRANCH to use other than trunk
-IUPBRANCH=iup-3.15
+IUPBRANCH=trunk
+IUPCONFIG=ubuntu-15.04.inc
+# iup-3.15
 
 # Eggs to install (straightforward ones)
 EGGS=matchable readline apropos base64 regex-literals format regex-case test coops trace csv \
@@ -75,7 +79,7 @@ PATH:=$(PREFIX)/bin:$(PATH)
 LIBPATH=$(PREFIX)/lib$(ADDITIONAL_LIBPATH)
 LD_LIBRARY_PATH=$(LIBPATH)
 CHICKEN_INSTALL=$(PREFIX)/bin/chicken-install
-CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/6
+CHICKEN_EGG_DIR=$(PREFIX)/lib/chicken/7
 
 VPATH=$(CHICKEN_EGG_DIR):$(PWD)/eggflags
 
@@ -94,8 +98,8 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
-CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
-# CSC_OPTIONS=-I$(PREFIX)/include -L$(CSCLIBS)
+# CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
+# CSC_OPTIONS=-I $(PREFIX)/include -L $(CSCLIBS)
 
 nogui : base mutils
 
@@ -180,7 +184,7 @@ sqlite-autoconf-$(SQLITE3_VERSION)/config.log : sqlite-autoconf-$(SQLITE3_VERSIO
 $(PREFIX)/bin/sqlite3 : sqlite-autoconf-$(SQLITE3_VERSION)/config.log
 	cd sqlite-autoconf-$(SQLITE3_VERSION);./configure --prefix=$(PREFIX);make;make install
 
-$(PREFIX)/lib/sqlite3.so : $(PREFIX)/bin/sqlite3
+$(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 	CSC_OPTIONS="-I$(PREFIX)/include -L$(PREFIX)/lib" $(CHICKEN_INSTALL) $(PROX) sqlite3
 
 #======================================================================
@@ -224,7 +228,7 @@ $(PREFIX)/lib/chicken/7/dbi.so : opensrc/dbi/dbi.scm
 $(PREFIX)/lib/chicken/7/margs.so : opensrc/margs/margs.scm
 	cd opensrc/margs;chicken-install
 
-opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(PREFIX)/lib/sqlite3.so 
+opensrc/histstore/hs : opensrc/histstore/histstore.scm chkn eggs $(CHICKEN_EGG_DIR)/sqlite3.so 
 	cd opensrc/histstore;$(PREFIX)/bin/csc histstore.scm -o hs
 
 $(PREFIX)/bin/hs : opensrc/histstore/hs 
@@ -247,7 +251,7 @@ $(PREFIX)/lib/chicken/7/stml.so : stml/requirements.scm
 	cd stml;make
 
 #======================================================================
-# I U P 
+# F F C A L L (Used by IUP)
 #======================================================================
 
 ffcall.fossil :
@@ -262,15 +266,19 @@ ffcall/README : ffcall.fossil
 $(PREFIX)/lib/libavcall.a : ffcall/README
 	cd ffcall;./configure --prefix=$(PREFIX) --enable-shared && make CC="gcc -fPIC" && make install
 
+#======================================================================
+# I U P 
+#======================================================================
+
 iuplib.fossil :
 	fossil clone http://www.kiatoa.com/fossils/iuplib iuplib.fossil
 
 iup/installall.sh : iuplib.fossil
 	mkdir -p iup
-	cd iup && if [ -e installall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
+	cd iup && if [ -e makeall.sh ];then fossil update $(IUPBRANCH); else fossil open ../iuplib.fossil;fossil update $(IUPBRANCH); fi
 
-iup/alldone : iup/installall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
-	cd iup && ./makeall.sh
+iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
+	cd iup && ./makeall.sh $(IUPCONFIG)
 
 $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
 	cd iup && ./installall.sh
