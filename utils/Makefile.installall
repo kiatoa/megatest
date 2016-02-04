@@ -98,7 +98,7 @@ ARCHSIZE=64_
 endif
 
 CSCLIBS=$(shell echo $(LD_LIBRARY_PATH) | sed 's/:/ -L/g')
-# CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
+CSC_OPTIONS="-I$(PREFIX)/include -L$(CSCLIBS) -C \"-fPIC\""
 # CSC_OPTIONS=-I $(PREFIX)/include -L $(CSCLIBS)
 
 nogui : base mutils
@@ -192,6 +192,8 @@ $(CHICKEN_EGG_DIR)/sqlite3.so : $(PREFIX)/bin/sqlite3
 #======================================================================
 
 # https://github.com/nanomsg/nanomsg/releases/download/0.6-beta/nanomsg-0.6-beta.tar.gz
+# https://github.com/nanomsg/nanomsg/releases/download/0.8-beta/nanomsg-0.8-beta.tar.gz
+
 nanomsg-0.6-beta.tar.gz :
 	wget http://download.nanomsg.org/nanomsg-0.6-beta.tar.gz
 
@@ -281,7 +283,7 @@ iup/alldone : iup/makeall.sh $(PREFIX)/include/iup.h $(PREFIX)/lib/libiup.so
 	cd iup && ./makeall.sh $(IUPCONFIG)
 
 $(PREFIX)/lib/libiup.so $(PREFIX)/include/iup.h : iup/installall.sh iup/alldone
-	cd iup && ./installall.sh
+	cd iup && ./makeall.sh $(IUPCONFIG)
 
 # $(PREFIX)/lib/libiup.so : iup/iup/alldone
 #	touch -c $(PREFIX)/lib/libiup.so
