@@ -39,16 +39,6 @@
 ;;  S U P P O R T   F U N C T I O N S
 ;;======================================================================
 
-;; NOT USED?
-;;
-;; (define (rmt:call-transport run-id connection-info cmd jparams)
-;;   (case (server:get-transport)
-;;     ((rpc)  ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((http) (http-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((fs)   ( fs-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     ((zmq)  (zmq-transport:client-api-send-receive run-id connection-info cmd jparams))
-;;     (else   ( rpc-transport:client-api-send-receive run-id connection-info cmd jparams))))
-
 ;;
 (define (rmt:write-frequency-over-limit? cmd run-id)
   (and (not (member cmd api:read-only-queries))
