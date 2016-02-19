@@ -38,6 +38,13 @@
 ;; SQLITE3 HELPERS
 ;;======================================================================
 
+(define (db:general-sqlite-error-dump exn stmt run-id params)
+  (let ((err-status ((condition-property-accessor 'sqlite3 'status #f) exn)))
+    ;; check for (exn sqlite3) ((condition-property-accessor 'exn 'message) exn)
+    (print "err-status: " err-status)
+    (debug:print 0 "ERROR:  query " stmt " failed, params: " params ", error: " ((condition-property-accessor 'exn 'message) exn))
+    (print-call-chain (current-error-port))))
+
 ;; convert to -inline
 (define (db:first-result-default db stmt default . params)
   (handle-exceptions
@@ -792,13 +799,50 @@
 	       ;; (db:delay-if-busy mtdb)
 	       ;; (db:clean-up frundb)
 	       (if (eq? run-id 0)
-		   (begin
+		   (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
 		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
-		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f))))
+		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f)))
+		     ;; Feb 18, 2016: add field last_update to tests
+		     ;; remove this some time after september
+		     (handle-exceptions
+		      exn
+		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+			  (debug:print 0 "Column last_update already added to runs table")
+			  (db:general-sqlite-error-dump exn "alter table runs ..." run-id "none"))
+		      (sqlite3:execute
+		       maindb
+		       "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+		     (sqlite3:execute
+		      maindb
+		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE runs SET last_update=(strftime('%','now'))
+                                   WHERE id=old.id;
+                               END;")
+		     )
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
 		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
+		     
+		     ;; Feb 18, 2016: add field last_update to tests
+		     ;; remove this some time after september
+		     (handle-exceptions
+		      exn
+		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
+			  (debug:print 0 "Column last_update already added to tests table")
+			  (db:general-sqlite-error-dump exn "alter table tests ..." #f "none"))
+		      (sqlite3:execute
+		       frundb
+		       "ALTER TABLE tests ADD COLUMN last_update INTEGER DEFAULT 0"))
+		     (sqlite3:execute
+		      frundb
+		       "CREATE TRIGGER IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE tests SET last_update=(strftime('%s','now'));
+                               END;")
 		     ))))
 	   all-run-ids)
 	  ;; removed deleted runs
@@ -810,6 +854,7 @@
 				(debug:print 0 "Removing database file for deleted run " fullname)
 				(delete-file fullname)))))
 		      dead-runs))))
+
     ;; (db:close-all dbstruct)
     ;; (sqlite3:finalize! mdb)
     ))
@@ -891,7 +936,13 @@
 			 comment    TEXT DEFAULT '',
 			 fail_count INTEGER DEFAULT 0,
 			 pass_count INTEGER DEFAULT 0,
+                         last_update INTEGER DEFAULT (strftime('%s','now')),
 			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
+       (sqlite3:execute db "CREATE TRIGGER update_runs_trigger AFTER UPDATE ON runs
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE runs SET last_update=strftime('%','now')
+                                   WHERE id=old.id;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
                                      id          INTEGER PRIMARY KEY,
                                      testname    TEXT DEFAULT '',
@@ -984,8 +1035,14 @@
                      fail_count   INTEGER   DEFAULT 0,
                      pass_count   INTEGER   DEFAULT 0,
                      archived     INTEGER   DEFAULT 0, -- 0=no, > 1=archive block id where test data can be found
+                     last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
      (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
+     (sqlite3:execute db "CREATE TRIGGER update_tests_trigger AFTER UPDATE ON tests
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE tests SET last_update=strftime('%','now')
+                                   WHERE id=old.id;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 
                               (id INTEGER PRIMARY KEY,
                                test_id INTEGER, 
