@@ -48,10 +48,10 @@
 ;;
 (define *verbosity* 1)
 (define *logging* #f)
-
+(define *exe-name* (pathname-file (car (argv))))
 (define *sretrieve:current-tab-number* 0)
 (define *args-hash* (make-hash-table))
-(define sretrieve:help (conc "Usage: sretrieve [action [params ...]]
+(define sretrieve:help (conc "Usage: " *exe-name* " [action [params ...]]
 
   ls                     : list contents of target area
   get <relversion>       : retrieve data for release <version>
@@ -118,7 +118,7 @@ Version: " megatest-fossil-hash)) ;; "
     (if (and path
 	     (directory? path)
 	     (file-read-access? path))
-	(let* ((dbpath    (conc path "/sretrieve.db"))
+	(let* ((dbpath    (conc path "/" *exe-name* ".db"))
 	       (writeable (file-write-access? dbpath))
 	       (dbexists  (file-exists? dbpath)))
 	  (handle-exceptions
@@ -448,7 +448,7 @@ Version: " megatest-fossil-hash)) ;; "
 	       (print "ERROR: No base dir specified!"))))
 	((log)
 	 (sretrieve:db-do configdat (lambda (db)
-				     (print "Listing actions")
+				     (print "Logs : ")
 				     (query (for-each-row
 					     (lambda (row)
 					       (apply print (intersperse row " | "))))
