@@ -602,8 +602,11 @@
 	  (if (list? items-list)
 	      (begin
 		(if (null? items-list)
-		    (let ((test-id (rmt:get-test-id run-id test-name "")))
-		      (if test-id (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites"))))
+		    (let ((test-id   (rmt:get-test-id run-id test-name ""))
+			  (num-items (rmt:test-toplevel-num-items run-id test-name)))
+		      (if (and test-id
+			       (not (> num-items 0)))
+			  (mt:test-set-state-status-by-id run-id test-id "NOT_STARTED" "ZERO_ITEMS" "Failed to run due to failed prerequisites"))))
 		(tests:testqueue-set-items! test-record items-list)
 		(list hed tal reg reruns))
 	      (begin
