@@ -88,8 +88,12 @@ Misc
       (print "Failed to find megatest.config, exiting") 
       (exit 1)))
 
-(define *useserver* (or(not (args:get-arg "-use-local"))
-			(configf:lookup *configdat* "dashboard" "use-server")))
+(define *useserver* (cond
+		     ((args:get-arg "-use-local") #f)
+		     ((configf:lookup *configdat* "dashboard" "use-server")
+		      (let ((ans (config:lookup *configdat* "dashboard" "use-server")))
+			(if (equal? ans "yes") #t #f)))
+		     (else #t)))
 
 (define *dbdir* (db:dbfile-path #f)) ;; (conc (configf:lookup *configdat* "setup" "linktree") "/.db"))
 (define *dbstruct-local*  (make-dbr:dbstruct path:  *dbdir*
