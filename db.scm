@@ -817,7 +817,7 @@
 		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE runs SET last_update=(strftime('%','now'))
+                                 UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
 		     )
@@ -941,7 +941,7 @@
        (sqlite3:execute db "CREATE TRIGGER update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE runs SET last_update=(strftime('%','now'))
+                                 UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
@@ -1042,7 +1042,7 @@
      (sqlite3:execute db "CREATE TRIGGER update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
-                                 UPDATE tests SET last_update=(strftime('%','now'))
+                                 UPDATE tests SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
      (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_steps 

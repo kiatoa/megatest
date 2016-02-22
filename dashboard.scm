@@ -306,7 +306,7 @@ Misc
 		      (set! maxtests (length tests)))
 		  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
 			  (not (null? tests)))
-		      (let ((dstruct (vector run tests key-vals last-update)))
+		      (let ((dstruct (vector run tests key-vals (- (current-seconds) 10))))
 			;;
 			;; compare the tests with the tests in *allruns-by-id* same run-id 
 			;; if different then increment value in *runchangerate*
