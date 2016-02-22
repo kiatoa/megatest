@@ -264,8 +264,8 @@ Misc
 		       (key-vals    (if *useserver* 
 					(rmt:get-key-vals run-id)
 					(db:get-key-vals *dbstruct-local* run-id)))
-		       (prev-dat    (let ((rec (hash-table-ref/default *allruns-by-id* run-id -1)))
-				      (if rec rec (vector run '() key-vals (- (current-seconds) 10)))))
+		       (prev-dat    (let ((rec (hash-table-ref/default *allruns-by-id* run-id #f)))
+				      (if rec rec (vector run '() key-vals -100)))) ;; -100 is before time began
 		       (prev-tests  (vector-ref prev-dat 1))
 		       (last-update (vector-ref prev-dat 3))
 		       (tmptests    (if *useserver*
@@ -283,9 +283,12 @@ Misc
 							      sort-order
 							      'shortlist
 							      last-update)))
-		       (tests       (let ((newdat (delete-duplicates (append tmptests prev-tests)
-								     (lambda (a b)
-								       (eq? (db:test-get-id a)(db:test-get-id b))))))
+		       (tests       (let ((newdat (filter
+						   (lambda (x)
+						     (not (equal? (db:test-get-state x) "DELETED"))) ;; remove deleted tests but do it after merging
+						   (delete-duplicates (append tmptests prev-tests)
+								      (lambda (a b)
+									(eq? (db:test-get-id a)(db:test-get-id b)))))))
 				      (if (eq? *tests-sort-reverse* 3) ;; +event_time
 					(sort newdat compare-tests)
 					newdat))))
