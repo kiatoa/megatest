@@ -2136,7 +2136,7 @@
 ;; i.e. these lists define what to NOT show.
 ;; states and statuses are required to be lists, empty is ok
 ;; not-in #t = above behaviour, #f = must match
-(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals)
+(define (db:get-tests-for-run dbstruct run-id testpatt states statuses offset limit not-in sort-by sort-order qryvals last-update)
   (if (not (number? run-id))
       (begin ;; no need to treat this as an error by default
 	(debug:print 4 "WARNING: call to db:get-tests-for-run with bad run-id=" run-id)
@@ -2175,9 +2175,11 @@
 	       (else "")))
 	     (tests-match-qry (tests:match->sqlqry testpatt))
 	     (qry             (conc "SELECT " qryvalstr
-				    " FROM tests WHERE run_id=? AND state != 'DELETED' "
+				    " FROM tests WHERE run_id=? "
+				    (if last-update " " " AND state != 'DELETED' ") ;; if using last-update we want deleted tests?
 				    states-statuses-qry
 				    (if tests-match-qry (conc " AND (" tests-match-qry ") ") "")
+				    (if last-update (conc " AND last_update > " last-update " ") "")
 				    (case sort-by
 				      ((rundir)      " ORDER BY length(rundir) ")
 				      ((testname)    (conc " ORDER BY testname " (if sort-order (conc sort-order ",") "") " item_path "))
@@ -2259,7 +2261,7 @@
 ;; get a useful subset of the tests data (used in dashboard
 ;;
 (define (db:get-tests-for-run-mindata dbstruct run-id testpatt states statuses not-in)
-  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path"))
+  (db:get-tests-for-run dbstruct run-id testpatt states statuses #f #f not-in #f #f "id,run_id,testname,state,status,event_time,item_path" #f))
 
 ;; do not use.
 ;;
@@ -3204,7 +3206,7 @@
 	  (if (null? prev-run-ids) '()  ;; no previous runs? return null
 	      (let loop ((hed (car prev-run-ids))
 			 (tal (cdr prev-run-ids)))
-		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f)))
+		(let ((results (db:get-tests-for-run dbstruct hed (conc test-name "/" item-path) '() '() #f #f #f #f #f #f #f)))
 		  (debug:print 4 "Got tests for run-id " run-id ", test-name " test-name 
 			       ", item-path " item-path " results: " (intersperse results "\n"))
 		  ;; Keep only the youngest of any test/item combination

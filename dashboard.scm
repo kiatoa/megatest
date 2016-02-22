@@ -261,27 +261,36 @@ Misc
     ;; 
     (for-each (lambda (run)
 		(let* ((run-id      (db:get-value-by-header run header "id"))
+		       (key-vals    (if *useserver* 
+					(rmt:get-key-vals run-id)
+					(db:get-key-vals *dbstruct-local* run-id)))
+		       (prev-dat    (let ((rec (hash-table-ref/default *allruns-by-id* run-id -1)))
+				      (if rec rec (vector run '() key-vals (- (current-seconds) 10)))))
+		       (prev-tests  (vector-ref prev-dat 1))
+		       (last-update (vector-ref prev-dat 3))
 		       (tmptests    (if *useserver*
 					(rmt:get-tests-for-run run-id testnamepatt states statuses
 							       #f #f
 							       *hide-not-hide*
 							       sort-by
 							       sort-order
-							       'shortlist)
+							       'shortlist
+							       last-update)
 					(db:get-tests-for-run *dbstruct-local* run-id testnamepatt states statuses
 							      #f #f
 							      *hide-not-hide*
 							      sort-by
 							      sort-order
-							      'shortlist)))
-		       (tests       (if (eq? *tests-sort-reverse* 3) ;; +event_time
-					(sort tmptests compare-tests)
-					tmptests))
-		       ;; NOTE: bubble-up also sets the global *all-item-test-names*
-		       ;; (tests       (bubble-up tmptests priority: bubble-type))
-		       (key-vals    (if *useserver* 
-					(rmt:get-key-vals run-id)
-					(db:get-key-vals *dbstruct-local* run-id))))
+							      'shortlist
+							      last-update)))
+		       (tests       (let ((newdat (delete-duplicates (append tmptests prev-tests)
+								     (lambda (a b)
+								       (eq? (db:test-get-id a)(db:test-get-id b))))))
+				      (if (eq? *tests-sort-reverse* 3) ;; +event_time
+					(sort newdat compare-tests)
+					newdat))))
+		  ;; NOTE: bubble-up also sets the global *all-item-test-names*
+		  ;; (tests       (bubble-up tmptests priority: bubble-type))
 		  ;; NOTE: 11/01/2013 This routine is *NOT* getting called excessively.
 		  ;; (debug:print 0 "Getting data for run " run-id " with key-vals=" key-vals)
 		  ;; Not sure this is needed?
@@ -290,7 +299,7 @@ Misc
 		      (set! maxtests (length tests)))
 		  (if (or (not *hide-empty-runs*) ;; this reduces the data burden when set
 			  (not (null? tests)))
-		      (let ((dstruct (vector run tests key-vals)))
+		      (let ((dstruct (vector run tests key-vals last-update)))
 			;;
 			;; compare the tests with the tests in *allruns-by-id* same run-id 
 			;; if different then increment value in *runchangerate*
