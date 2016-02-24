@@ -470,11 +470,11 @@
 		      (loop (common:simple-file-lock lockf))))))))))
 
 (define (tests:generate-html-summary-for-iterated-test run-id test-id test-name outputfilename)
-  (let ((counts (make-hash-table))
-	(statecounts (make-hash-table))
-	(outtxt "")
-	(tot    0)
-	(testdat (rmt:test-get-records-for-index-file run-id test-name)))
+  (let ((counts              (make-hash-table))
+	(statecounts         (make-hash-table))
+	(outtxt              "")
+	(tot                 0)
+	(testdat             (rmt:test-get-records-for-index-file run-id test-name)))
     (with-output-to-file outputfilename
       (lambda ()
 	(set! outtxt (conc outtxt "<html><title>Summary: " test-name 
@@ -531,6 +531,12 @@
 	       "<tr><td>Item</td><td>State</td><td>Status</td><td>Comment</td>"
 	       outtxt "</table></body></html>")
 	;; (release-dot-lock outputfilename)
+	;;(rmt:update-run-stats 
+	;; run-id
+	;; (hash-table-map
+	;;  state-status-counts
+	;;  (lambda (key val)
+	;;	(append key (list val)))))
 	))))
 
 ;; CHECK - WAS THIS ADDED OR REMOVED? MANUAL MERGE WITH API STUFF!!!

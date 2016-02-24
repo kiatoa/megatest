@@ -1667,7 +1667,8 @@
 					  (begin
 					    (runs:remove-test-directory new-test-dat mode) ;; 'remove-all)
 					    (if (not (null? tal))
-						(loop (car tal)(cdr tal))))))))
+						(loop (car tal)(cdr tal)))))))
+				(rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 			       ((set-state-status)
 				(debug:print-info 2 "new state " (car state-status) ", new status " (cadr state-status))
 				(mt:test-set-state-status-by-id run-id (db:test-get-id test) (car state-status)(cadr state-status) #f)
