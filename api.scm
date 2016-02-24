@@ -145,6 +145,7 @@
 	    ((delete-run)                   (apply db:delete-run dbstruct params))
 	    ((lock/unlock-run)              (apply db:lock/unlock-run dbstruct params))
 	    ((update-run-event_time)        (apply db:update-run-event_time dbstruct params))
+	    ((update-run-stats)             (apply db:update-run-stats dbstruct params))
 
 	    ;; STEPS
 	    ((teststep-set-status!)         (apply db:teststep-set-status! dbstruct params))
@@ -203,6 +204,7 @@
 	    ((get-prereqs-not-met)             (apply db:get-prereqs-not-met dbstruct params))
 	    ((get-count-tests-running-for-run-id) (apply db:get-count-tests-running-for-run-id dbstruct params))
 	    ((synchash-get)                    (apply synchash:server-get dbstruct params))
+	    ((get-raw-run-stats)               (apply db:get-raw-run-stats dbstruct params))
 
 	    ;; RUNS
 	    ((get-run-info)                 (apply db:get-run-info dbstruct params))
@@ -218,6 +220,7 @@
 	    ((get-run-ids-matching-target)  (apply db:get-run-ids-matching-target dbstruct params))
 	    ((get-runs-by-patt)             (apply db:get-runs-by-patt dbstruct params))
 	    ((get-run-name-from-id)         (apply db:get-run-name-from-id dbstruct params))
+	    ((get-main-run-stats)           (apply db:get-main-run-stats dbstruct params))
 
 	    ;; STEPS
 	    ((get-steps-data)               (apply db:get-steps-data dbstruct params))

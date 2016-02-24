@@ -256,14 +256,16 @@ Misc
   (let* ((runs   (or (areadat-runs areadat) (make-hash-table)))
 	 (keys   (areadat-run-keys areadat))
 	 (maindb (areadb:open areadat 0)))
-    (query (for-each-row (lambda (row)
-			   (let ((id  (list-ref row 0))
-				 (dat (apply make-rundat (append row (list #f #f))))) ;; add placeholders for tests and db
-			     (print row)
-			     (hash-table-set! runs id dat))))
-	   (sql maindb (conc "SELECT id,"
-			     (string-intersperse keys "||'/'||")
-			     ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
+    (if maindb
+	(query (for-each-row (lambda (row)
+			       (let ((id  (list-ref row 0))
+				     (dat (apply make-rundat (append row (list #f #f))))) ;; add placeholders for tests and db
+				 (print row)
+				 (hash-table-set! runs id dat))))
+	       (sql maindb (conc "SELECT id,"
+				 (string-intersperse keys "||'/'||")
+				 ",runname,state,status,event_time FROM runs WHERE state != 'deleted';")))
+	(debug:print 0 "ERROR: no main.db found at "  (areadb:dbfile-path areadat 0)))
     areadat))
 
 ;; given an areadat and target/runname patt fill up runs data
@@ -485,7 +487,7 @@ Misc
 	 (view-type (dboard:get-view-type keys current-path))
 	 (changed   #f)
 	 (state-statuses  (list "PASS" "FAIL" "WARN" "CHECK" "SKIP" "RUNNING" "LAUNCHED")))
-    (debug:print 0 "current-matrix=" current-matrix)
+    ;; (debug:print 0 "current-matrix=" current-matrix)
     (case view-type
       ((areas) ;; find row for this area, if not found, create new entry
        (let* ((curr-rownum (hash-table-ref/default rows area-name #f))

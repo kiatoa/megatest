@@ -524,6 +524,9 @@
 (define (rmt:top-test-set-per-pf-counts run-id test-name)
   (rmt:send-receive 'top-test-set-per-pf-counts run-id (list run-id test-name)))
 
+(define (rmt:get-raw-run-stats run-id)
+  (rmt:send-receive 'get-raw-run-stats run-id (list run-id)))
+
 ;;======================================================================
 ;;  R U N S
 ;;======================================================================
@@ -543,6 +546,9 @@
 
 (define (rmt:delete-run run-id)
   (rmt:send-receive 'delete-run run-id (list run-id)))
+
+(define (rmt:update-run-stats run-id stats)
+  (rmt:send-receive 'update-run-stats #f (list run-id stats)))
 
 (define (rmt:delete-old-deleted-test-records)
   (rmt:send-receive 'delete-old-deleted-test-records #f '()))
@@ -575,6 +581,9 @@
 (define (rmt:find-and-mark-incomplete run-id ovr-deadtime)
   (if (rmt:send-receive 'have-incompletes? run-id (list run-id ovr-deadtime))
       (rmt:send-receive 'mark-incomplete run-id (list run-id ovr-deadtime))))
+
+(define (rmt:get-main-run-stats run-id)
+  (rmt:send-receive 'get-main-run-stats #f (list run-id)))
 
 ;;======================================================================
 ;; M U L T I R U N   Q U E R I E S

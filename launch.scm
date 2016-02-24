@@ -575,7 +575,7 @@
 	      (if (not (equal? item-path ""))
 		  (tests:summarize-items run-id test-id test-name #f))
 	      (tests:summarize-test run-id test-id)  ;; don't force - just update if no
-	      )
+	      (rmt:update-run-stats run-id (rmt:get-raw-run-stats run-id)))
 	    (mutex-unlock! m)
 	    (debug:print 2 "Output from running " fullrunscript ", pid " (launch:einf-pid exit-info) " in work area " 
 			 work-area ":\n====\n exit code " (launch:einf-exit-code exit-info) "\n" "====\n")

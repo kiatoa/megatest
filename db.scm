@@ -802,8 +802,11 @@
 		   (let ((maindb  (db:dbdat-get-db (db:get-db fromdb #f))))
 		     (db:sync-tables (db:sync-main-list dbstruct) (db:get-db fromdb #f) mtdb)
 		     (set! dead-runs (db:clean-up-maindb (db:get-db fromdb #f)))
-		     ;; Feb 18, 2016: add field last_update to tests
-		     ;; remove this some time after september
+		     ;; 
+		     ;; Feb 18, 2016: add field last_update to runs table
+		     ;;
+		     ;; remove all these some time after september 2016 (added in v1.6031
+		     ;;
 		     (handle-exceptions
 		      exn
 		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
@@ -812,6 +815,7 @@
 		      (sqlite3:execute
 		       maindb
 		       "ALTER TABLE runs ADD COLUMN last_update INTEGER DEFAULT 0"))
+		     ;; these schema changes don't need exception handling
 		     (sqlite3:execute
 		      maindb
 		      "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
@@ -820,14 +824,29 @@
                                  UPDATE runs SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
+		     (sqlite3:execute maindb "CREATE TABLE IF NOT EXISTS run_stats (
+                              id     INTEGER PRIMARY KEY,
+                              run_id INTEGER,
+                              state  TEXT,
+                              status TEXT,
+                              count  INTEGER,
+                              last_update INTEGER DEFAULT (strftime('%s','now')))")
+		     (sqlite3:execute maindb "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
 		     )
 		   (begin
 		     ;; NB// must sync first to ensure deleted tests get marked as such in megatest.db
 		     (db:sync-tables db:sync-tests-only (db:get-db fromdb run-id) mtdb)
 		     (db:clean-up-rundb (db:get-db fromdb run-id))
-		     
+		     ;;
 		     ;; Feb 18, 2016: add field last_update to tests
-		     ;; remove this some time after september
+		     ;;
+		     ;; remove this some time after September 2016 (added in version v1.6031
+		     ;;
 		     (handle-exceptions
 		      exn
 		      (if (string-match ".*duplicate.*" ((condition-property-accessor 'exn 'message) exn))
@@ -938,10 +957,23 @@
 			 pass_count INTEGER DEFAULT 0,
                          last_update INTEGER DEFAULT (strftime('%s','now')),
 			 CONSTRAINT runsconstraint UNIQUE (runname" (if havekeys "," "") keystr "));"))
-       (sqlite3:execute db "CREATE TRIGGER update_runs_trigger AFTER UPDATE ON runs
+       (sqlite3:execute db "CREATE TRIGGER IF NOT EXISTS update_runs_trigger AFTER UPDATE ON runs
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE runs SET last_update=(strftime('%s','now'))
+                                   WHERE id=old.id;
+                               END;")
+       (sqlite3:execute db "CREATE TABLE IF NOT EXISTS run_stats (
+                              id     INTEGER PRIMARY KEY,
+                              run_id INTEGER,
+                              state  TEXT,
+                              status TEXT,
+                              count  INTEGER,
+                              last_update INTEGER DEFAULT (strftime('%s','now')))")
+       (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_run_stats_trigger AFTER UPDATE ON run_stats
+                             FOR EACH ROW
+                               BEGIN 
+                                 UPDATE run_stats SET last_update=(strftime('%s','now'))
                                    WHERE id=old.id;
                                END;")
        (sqlite3:execute db "CREATE TABLE IF NOT EXISTS test_meta (
@@ -1039,7 +1071,7 @@
                      last_update  INTEGER DEFAULT (strftime('%s','now')),
                         CONSTRAINT testsconstraint UNIQUE (run_id, testname, item_path));")
      (sqlite3:execute db "CREATE INDEX IF NOT EXISTS tests_index ON tests (run_id, testname, item_path);")
-     (sqlite3:execute db "CREATE TRIGGER update_tests_trigger AFTER UPDATE ON tests
+     (sqlite3:execute db "CREATE TRIGGER  IF NOT EXISTS update_tests_trigger AFTER UPDATE ON tests
                              FOR EACH ROW
                                BEGIN 
                                  UPDATE tests SET last_update=(strftime('%s','now'))
@@ -1761,6 +1793,8 @@
     (debug:print-info 11 "db:get-runs END qrystr: " qrystr " keypatts: " keypatts " offset: " offset " limit: " count)
     (vector header res)))
 
+;; TODO: Switch this to use max(update_time) from each run db? Then if using a server there is no disk traffic (using inmem db)
+;;
 (define (db:get-changed-run-ids since-time)
   (let* ((dbdir      (db:dbfile-path #f)) ;; (configf:lookup *configdat* "setup" "dbdir"))
 	 (alldbs     (glob (conc dbdir "/[0-9]*.db")))
@@ -1864,6 +1898,61 @@
 	"SELECT COUNT(id) FROM runs WHERE runname LIKE ? AND state != 'deleted';" runpatt)
        (debug:print-info 11 "db:get-num-runs END " runpatt)
        numruns))))
+
+;; (sqlite3#fold-row proc3670 init3671 db-or-stmt3672 . params3673)>
+;; 
+(define (db:get-raw-run-stats dbstruct run-id)
+  (db:with-db
+   dbstruct
+   run-id
+   #f
+   (lambda (db)
+     (sqlite3:fold-row
+	(lambda (res state status count)
+	  (cons (list state status count) res))
+	'()
+	db
+	"SELECT state,status,count(id) AS count FROM tests WHERE run_id=? AND NOT(uname='n/a' AND item_path='') GROUP BY state,status;;"
+	run-id))))
+
+;; Update run_stats for given run_id
+;; input data is a list (state status count)
+;;
+(define (db:update-run-stats dbstruct run-id stats)
+  (db:with-db
+   dbstruct
+   #f
+   #f
+   (lambda (db)
+     ;; remove previous data
+     (let* ((stmt1 (sqlite3:prepare db "DELETE FROM run_stats WHERE run_id=? AND state=? AND status=?;"))
+	    (stmt2 (sqlite3:prepare db "INSERT INTO run_stats (run_id,state,status,count) VALUES (?,?,?,?);"))
+	    (res
+	     (sqlite3:with-transaction
+	      db
+	      (lambda ()
+		(for-each
+		 (lambda (dat)
+		   (sqlite3:execute stmt1 run-id (car dat)(cadr dat))
+		   (apply sqlite3:execute stmt2 run-id dat))
+		 stats)))))
+       (sqlite3:finalize! stmt1)
+       (sqlite3:finalize! stmt2)
+       res))))
+
+(define (db:get-main-run-stats dbstruct run-id)
+  (db:with-db
+   dbstruct
+   #f ;; this data comes from main
+   #f
+   (lambda (db)
+     (sqlite3:fold-row
+	(lambda (res state status count)
+	  (cons (list state status count) res))
+	'()
+	db
+	"SELECT state,status,count FROM run_stats WHERE run_id=? AND run_id IN (SELECT id FROM runs WHERE state NOT IN ('DELETED','deleted'));"
+	run-id))))
 
 (define (db:get-all-run-ids dbstruct)
   (db:with-db
@@ -3284,7 +3373,7 @@
 
 ;; read the record given a testname
 (define (db:testmeta-get-record dbstruct testname)
-  (let ((res #f))
+  (let ((res   #f))
     (db:with-db
      dbstruct
      #f
