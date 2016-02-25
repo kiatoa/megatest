@@ -43,6 +43,7 @@
 (declare (uses mt))
 (declare (uses api))
 (declare (uses tasks)) ;; only used for debugging.
+(declare (uses env))
 
 (define *db* #f) ;; this is only for the repl, do not use in general!!!!
 
@@ -158,6 +159,7 @@ Misc
 
 Utilities
   -env2file fname         : write the environment to fname.csh and fname.sh
+  -envcap fname=context   : save current variables labeled as context in file fname
   -refdb2dat refdb        : convert refdb to sexp or to format specified by -dumpmode
                             formats: perl, ruby, sqlite3, csv (for csv the -o param
                             will substitute %s for the sheet name in generating 
@@ -232,6 +234,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-extract-ods"
 			"-pathmod"
 			"-env2file"
+			"-envcap"
 			"-setvars"
 			"-set-state-status"
 			"-set-run-status"
@@ -678,33 +681,33 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (server:launch run-id)
 	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
+	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id"))))
 
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
-    (if (null? (lset-intersection 
-		     equal?
-		     (hash-table-keys args:arg-hash)
-		     '("-list-servers"
-		       "-stop-server"
-		       "-show-cmdinfo"
-		       "-list-runs"
-		       "-ping")))
-	(if (launch:setup-for-run)
-	    (let ((run-id    (and (args:get-arg "-run-id")
-				  (string->number (args:get-arg "-run-id")))))
-	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-	      ;; if not list or kill then start a client (if appropriate)
-	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
-		      (eq? (length (hash-table-keys args:arg-hash)) 0))
-		  (debug:print-info 1 "Server connection not needed")
-		  (begin
-		    ;; (if run-id 
-		    ;;     (client:launch run-id) 
-		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-		    #t
-		    ))))))
+    ;; (if (null? (lset-intersection 
+    ;;     	     equal?
+    ;;     	     (hash-table-keys args:arg-hash)
+    ;;     	     '("-list-servers"
+    ;;     	       "-stop-server"
+    ;;     	       "-show-cmdinfo"
+    ;;     	       "-list-runs"
+    ;;     	       "-ping")))
+    ;;     (if (launch:setup-for-run)
+    ;;         (let ((run-id    (and (args:get-arg "-run-id")
+    ;;     			  (string->number (args:get-arg "-run-id")))))
+    ;;           ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+    ;;           ;; if not list or kill then start a client (if appropriate)
+    ;;           (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+    ;;     	      (eq? (length (hash-table-keys args:arg-hash)) 0))
+    ;;     	  (debug:print-info 1 "Server connection not needed")
+    ;;     	  (begin
+    ;;     	    ;; (if run-id 
+    ;;     	    ;;     (client:launch run-id) 
+    ;;     	    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+    ;;     	    #t
+    ;;     	    ))))))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
@@ -1877,6 +1880,24 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'new2old
        )
       (set! *didsomething* #t)))
+
+;;======================================================================
+;; Capture, save and manipulate environments
+;;======================================================================
+
+(let ((envcap (args:get-arg "-envcap")))
+  (if envcap
+      (if (substring-index "=" envcap)
+	  (let* ((parts   (string-split envcap "="))
+		 (fname   (car parts))
+		 (context (cadr parts))
+		 (db      (env:open-db fname)))
+	    (env:save-env-vars db context)
+	    (env:close-database db)
+	    (set! *didsomething* #t))
+	  (begin
+	    (debug:print 0 "ERROR: Parameter to -envcap should be <filename>=<context>. E.G. envdat=original, got: " envcap)
+	    (set! *didsomething* #t)))))
 
 ;;======================================================================
 ;; Exit and clean up
