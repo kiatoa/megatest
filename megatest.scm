@@ -1899,6 +1899,20 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	    (debug:print 0 "ERROR: Parameter to -envcap should be <filename>=<context>. E.G. envdat=original, got: " envcap)
 	    (set! *didsomething* #t)))))
 
+;; delta "language" will eventually be res=a+b-c but for now it is just res=a-b 
+;;
+(let ((envdelta (args:get-arg "-envdelta")))
+  (if envdelta
+      (let ((match (string-match "([a-z]+)=([a-z\-,]+)" envdelta)))
+	(if match
+	    (let* ((resctx    (cadr match))
+		   (equn      (caddr match))
+		   (parts     (string-split equn "-"))
+		   (minuend   (car parts))
+		   (subtraend (cadr parts))
+		   (
+	    
+
 ;;======================================================================
 ;; Exit and clean up
 ;;======================================================================
