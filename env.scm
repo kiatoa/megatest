@@ -29,7 +29,7 @@
 
 ;; save vars in given context, this is NOT incremental by default
 ;;
-(define (env:save-env-vars db context #!key (incremental #f))
+(define (env:save-env-vars db context #!key (incremental #f)(vardat #f))
   (with-transaction
    db
    (lambda ()
@@ -41,7 +41,9 @@
 	      (val (cdr varval)))
 	  (if incremental (exec (sql db "DELETE FROM envvars WHERE context=? AND var=?") context var))
 	  (exec (sql db "INSERT INTO envvars (context,var,val) VALUES (?,?,?)") context var val)))
-	(get-environment-variables)))))
+	(if vardat
+	    (hash-table->alist vardat)
+	    (get-environment-variables))))))
 
 ;; merge contexts in the order given
 ;;  - each context is applied in the given order
@@ -78,7 +80,7 @@
       (lambda (row)
 	(let ((var  (car row))
 	      (val  (cadr row)))
-	  (hash-table-set! result var valb))))
+	  (hash-table-set! result var val))))
      (sql db "SELECT var,val FROM envvars WHERE context=? AND var NOT IN (SELECT var FROM envvars WHERE context=?)")
      contexta contextb)
     result))
@@ -92,7 +94,7 @@
       (lambda (row)
 	(let ((var  (car row))
 	      (val  (cadr row)))
-	  (hash-table-set! result var valb))))
+	  (hash-table-set! result var val))))
      (sql db "SELECT var,val FROM envvars WHERE context=? AND var NOT IN (SELECT var FROM envvars WHERE context=?)")
      contextb contexta)
     result))
@@ -107,9 +109,9 @@
 	(let ((var  (car row))
 	      (val  (cadr row)))
 	  (hash-table-set! result var val))))
-     (sql db "SELECT var,val FROM envvars WHERE context=? AND val != (SELECT val FROM envvars WHERE var=? AND context=?)")
-     contexta contextb))
-  result)
+     (sql db "SELECT var,val FROM envvars AS a WHERE context=? AND val != (SELECT val FROM envvars WHERE var=a.var AND context=?)")
+     contexta contextb)
+    result))
 
 ;;
 (define (env:blind-merge l1 l2)
@@ -141,3 +143,69 @@
 ;; this is so the calling block does not need to import sql-de-lite
 (define (env:close-database db)
   (close-database db))
+
+(define (env:lazy-hash-table->alist indat)
+  (if (hash-table? indat)
+      (let ((dat (hash-table->alist indat)))
+	(if (null? dat)
+	    #f 
+	    dat))
+      #f))
+
+(define (env:print added removed changed)
+  (let ((a  (env:lazy-hash-table->alist added))
+	(r  (env:lazy-hash-table->alist removed))
+	(c  (env:lazy-hash-table->alist changed)))
+    (case (if (args:get-arg "-dumpmode")
+	      (string->symbol (args:get-arg "-dumpmode"))
+	      'bash)
+      ((bash)
+       (if a
+	   (begin
+	     (print "# Added vars")
+	     (map (lambda (dat)(print "export " (car dat) "=" (cdr dat)))
+		  (hash-table->alist added))))
+       (if r
+	   (begin
+	     (print "# Removed vars")
+	     (map (lambda (dat)(print "unset " (car dat)))
+		  (hash-table->alist removed))))
+       (if c
+	   (begin
+	     (print "# Changed vars")
+	     (map (lambda (dat)(print "export " (car dat) "=" (cdr dat)))
+		  (hash-table->alist changed)))))
+      ((csh)
+       (if a
+	   (begin
+	     (print "# Added vars")
+	     (map (lambda (dat)(print "setenv " (car dat) " " (cdr dat)))
+		  (hash-table->alist added))))
+       (if r
+	   (begin
+	     (print "# Removed vars")
+	     (map (lambda (dat)(print "unsetenv " (car dat)))
+		  (hash-table->alist removed))))
+       (if c
+	   (begin
+	     (print "# Changed vars")
+	     (map (lambda (dat)(print "setenv " (car dat) " " (cdr dat)))
+		  (hash-table->alist changed)))))
+      ((config ini)
+       (if a
+	   (begin
+	     (print "# Added vars")
+	     (map (lambda (dat)(print (car dat) " " (cdr dat)))
+		  (hash-table->alist added))))
+       (if r
+	   (begin
+	     (print "# Removed vars")
+	     (map (lambda (dat)(print "#{scheme (unsetenv \"" (car dat) "\")}"))
+		  (hash-table->alist removed))))
+       (if c
+	   (begin
+	     (print "# Changed vars")
+	     (map (lambda (dat)(print (car dat) " " (cdr dat)))
+		  (hash-table->alist changed)))))
+      (else
+       (debug:print 0 "ERROR: No dumpmode specified, use -dumpmode [bash|csh|config]")))))
