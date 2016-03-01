@@ -315,13 +315,14 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 		 args:arg-hash
 		 0))
 
+;; Add args that use remargs here
+;;
 (if (and (not (null? remargs))
 	 (not (or
 	       (args:get-arg "-runstep")
 	       (args:get-arg "-envcap")
 	       (args:get-arg "-envdelta")
 	       )
-	      ;; add more args that use remargs here
 	      ))
     (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
 
@@ -670,6 +671,49 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 ;; 		  (else  (debug:print 0 "ERROR: No transport set")(exit)))))
 
 ;;======================================================================
+;; Capture, save and manipulate environments
+;;======================================================================
+
+;; NOTE: Keep these above the section where the server or client code is setup
+
+(let ((envcap (args:get-arg "-envcap")))
+  (if envcap
+      (let* ((db      (env:open-db (if (null? remargs) "envdat.db" (car remargs)))))
+	(env:save-env-vars db envcap)
+	(env:close-database db)
+	(set! *didsomething* #t))))
+
+;; delta "language" will eventually be res=a+b-c but for now it is just res=a-b 
+;;
+(let ((envdelta (args:get-arg "-envdelta")))
+  (if envdelta
+      (let ((match (string-split envdelta "-")));; (string-match "([a-z0-9_]+)=([a-z0-9_\\-,]+)" envdelta)))
+	(if (not (null? match))
+	    (let* ((db        (env:open-db (if (null? remargs) "envdat.db" (car remargs))))
+		   ;; (resctx    (cadr match))
+		   ;; (equn      (caddr match))
+		   (parts     match) ;; (string-split equn "-"))
+		   (minuend   (car parts))
+		   (subtraend (cadr parts))
+		   (added     (env:get-added   db minuend subtraend))
+		   (removed   (env:get-removed db minuend subtraend))
+		   (changed   (env:get-changed db minuend subtraend)))
+	      ;; (pp (hash-table->alist added))
+	      ;; (pp (hash-table->alist removed))
+	      ;; (pp (hash-table->alist changed))
+	      (if (args:get-arg "-o")
+		  (with-output-to-file
+		      (args:get-arg "-o")
+		    (lambda ()
+		      (env:print added removed changed)))
+		  (env:print added removed changed))
+	      (env:close-database db)
+	      (set! *didsomething* #t))
+	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
+
+
+
+;;======================================================================
 ;; Start the server - can be done in conjunction with -runall or -runtests (one day...)
 ;;   we start the server if not running else start the client thread
 ;;======================================================================
@@ -685,33 +729,33 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	  (begin
 	    (server:launch run-id)
 	    (set! *didsomething* #t))
-	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id"))))
+	  (debug:print 0 "ERROR: server requires run-id be specified with -run-id")))
 
     ;; Not a server? This section will decide how to communicate
     ;;
     ;;  Setup client for all expect listed here
-    ;; (if (null? (lset-intersection 
-    ;;     	     equal?
-    ;;     	     (hash-table-keys args:arg-hash)
-    ;;     	     '("-list-servers"
-    ;;     	       "-stop-server"
-    ;;     	       "-show-cmdinfo"
-    ;;     	       "-list-runs"
-    ;;     	       "-ping")))
-    ;;     (if (launch:setup-for-run)
-    ;;         (let ((run-id    (and (args:get-arg "-run-id")
-    ;;     			  (string->number (args:get-arg "-run-id")))))
-    ;;           ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
-    ;;           ;; if not list or kill then start a client (if appropriate)
-    ;;           (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
-    ;;     	      (eq? (length (hash-table-keys args:arg-hash)) 0))
-    ;;     	  (debug:print-info 1 "Server connection not needed")
-    ;;     	  (begin
-    ;;     	    ;; (if run-id 
-    ;;     	    ;;     (client:launch run-id) 
-    ;;     	    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
-    ;;     	    #t
-    ;;     	    ))))))
+    (if (null? (lset-intersection 
+		equal?
+		(hash-table-keys args:arg-hash)
+		'("-list-servers"
+		  "-stop-server"
+		  "-show-cmdinfo"
+		  "-list-runs"
+		  "-ping")))
+	(if (launch:setup-for-run)
+	    (let ((run-id    (and (args:get-arg "-run-id")
+				  (string->number (args:get-arg "-run-id")))))
+	      ;; (set! *fdb*   (filedb:open-db (conc *toppath* "/db/paths.db")))
+	      ;; if not list or kill then start a client (if appropriate)
+	      (if (or (args-defined? "-h" "-version" "-gen-megatest-area" "-gen-megatest-test")
+		      (eq? (length (hash-table-keys args:arg-hash)) 0))
+		  (debug:print-info 1 "Server connection not needed")
+		  (begin
+		    ;; (if run-id 
+		    ;;     (client:launch run-id) 
+		    ;;     (client:launch 0)      ;; without run-id we'll start a server for "0"
+		    #t
+		    ))))))
 
 ;; MAY STILL NEED THIS
 ;;		       (set! *megatest-db* (make-dbr:dbstruct path: *toppath* local: #t))))))))))
@@ -785,20 +829,37 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 	 (debug:print 0 "ERROR: dump output format " (args:get-arg "-dumpmode") " not supported for -list-targets")))
       (set! *didsomething* #t)))
 
+;; cache the runconfigs in $MT_LINKTREE/$MT_TARGET/$MT_RUNNAME/.runconfig
+;;
 (define (full-runconfigs-read)
-  (let* ((keys   (rmt:get-keys))
-	 (target (common:args-get-target))
-	 (key-vals (if target (keys:target->keyval keys target) #f))
-	 (sections (if target (list "default" target) #f))
-	 (data     (begin
-		     (setenv "MT_RUN_AREA_HOME" *toppath*)
-		     (if key-vals
-			 (for-each (lambda (kt)
-				     (setenv (car kt) (cadr kt)))
-				   key-vals))
-		     (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
-    data))
-
+  (let* ((rundir (if (and (getenv "MT_LINKTREE")(getenv "MT_TARGET")(getenv "MT_RUNNAME"))
+		     (conc (getenv "MT_LINKTREE") "/" (getenv "MT_TARGET") "/" (getenv "MT_RUNNAME"))
+		     #f))
+	 (cfgf   (if rundir (conc rundir "/.runconfig." megatest-version "-" megatest-fossil-hash) #f)))
+    (if (and cfgf
+	     (file-exists? cfgf)
+	     (file-write-access? cfgf))
+	(configf:read-alist cfgf)
+	(let* ((keys   (rmt:get-keys))
+	       (target (common:args-get-target))
+	       (key-vals (if target (keys:target->keyval keys target) #f))
+	       (sections (if target (list "default" target) #f))
+	       (data     (begin
+			   (setenv "MT_RUN_AREA_HOME" *toppath*)
+			   (if key-vals
+			       (for-each (lambda (kt)
+					   (setenv (car kt) (cadr kt)))
+					 key-vals))
+			   (read-config (conc *toppath* "/runconfigs.config") #f #t sections: sections))))
+	  (if (and rundir ;; have all needed variabless
+		   (directory-exists? rundir)
+		   (file-write-access? rundir))
+	      (begin
+		(configf:write-alist data cfgf)
+		;; force re-read of megatest.config - this resolves circular references between megatest.config
+		(launch:setup-for-run force: #t)
+		(launch:cache-config))) ;; we can safely cache megatest.config since we have a valid runconfig
+	  data))))
 
 (if (args:get-arg "-show-runconfig")
     (let ((tl (launch:setup-for-run)))
@@ -1884,45 +1945,6 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
        'new2old
        )
       (set! *didsomething* #t)))
-
-;;======================================================================
-;; Capture, save and manipulate environments
-;;======================================================================
-
-(let ((envcap (args:get-arg "-envcap")))
-  (if envcap
-      (let* ((db      (env:open-db (if (null? remargs) "envdat.db" (car remargs)))))
-	(env:save-env-vars db envcap)
-	(env:close-database db)
-	(set! *didsomething* #t))))
-
-;; delta "language" will eventually be res=a+b-c but for now it is just res=a-b 
-;;
-(let ((envdelta (args:get-arg "-envdelta")))
-  (if envdelta
-      (let ((match (string-split envdelta "-")));; (string-match "([a-z0-9_]+)=([a-z0-9_\\-,]+)" envdelta)))
-	(if (not (null? match))
-	    (let* ((db        (env:open-db (if (null? remargs) "envdat.db" (car remargs))))
-		   ;; (resctx    (cadr match))
-		   ;; (equn      (caddr match))
-		   (parts     match) ;; (string-split equn "-"))
-		   (minuend   (car parts))
-		   (subtraend (cadr parts))
-		   (added     (env:get-added   db minuend subtraend))
-		   (removed   (env:get-removed db minuend subtraend))
-		   (changed   (env:get-changed db minuend subtraend)))
-	      ;; (pp (hash-table->alist added))
-	      ;; (pp (hash-table->alist removed))
-	      ;; (pp (hash-table->alist changed))
-	      (if (args:get-arg "-o")
-		  (with-output-to-file
-		      (args:get-arg "-o")
-		    (lambda ()
-		      (env:print added removed changed)))
-		  (env:print added removed changed))
-	      (env:close-database db)
-	      (set! *didsomething* #t))
-	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
 
 ;;======================================================================
 ;; Exit and clean up
