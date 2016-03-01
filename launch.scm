@@ -247,7 +247,7 @@
 	  (let ((sighand (lambda (signum)
 			   ;; (signal-mask! signum) ;; to mask or not? seems to cause issues in exiting
 			   (if (eq? signum signal/stop)
-			 (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
+			       (debug:print 0 "ERROR: attempt to STOP process. Exiting."))
 			   (set! *time-to-exit* #t)
 			   (print "Received signal " signum ", cleaning up before exit. Please wait...")
 			   (let ((th1 (make-thread (lambda ()
@@ -297,7 +297,7 @@
 	  ;; NOTE: Current order is to process runconfigs *before* setting the MT_ vars. This 
 	  ;;       seems non-ideal but could well break stuff
 	  ;;    BUG? BUG? BUG?
-
+	  
 	  (let ((rconfig (full-runconfigs-read))) ;; (read-config (conc  *toppath* "/runconfigs.config") #f #t sections: (list "default" target))))
 	    ;; (setup-env-defaults (conc *toppath* "/runconfigs.config") run-id (make-hash-table) keyvals target)
 	    ;; (set-run-config-vars run-id keyvals target) ;; (db:get-target db run-id))
@@ -433,8 +433,24 @@
 					     ;; NOTE: it is tempting to turn off force-create of testconfig but dynamic
 					     ;;       ezstep names need a full re-eval here.
 					     (tests:get-testconfig test-name tconfigreg #t force-create: #t)) ;; 'return-procs)))
-					    (ezstepslst (hash-table-ref/default testconfig "ezsteps" '())))
-				       (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
+					    (ezstepslst (if (hash-table? testconfig)
+							    (hash-table-ref/default testconfig "ezsteps" '())
+							    #f)))
+				       (if testconfig
+					   (hash-table-set! *testconfigs* test-name testconfig) ;; cached for lazy reads later ...
+					   (begin
+					     ;; got here but there are race condiitions - re-do all setup and try one more time
+					     (if (launch:setup-for-run)
+						 (begin
+						   (launch:cache-config)
+						   (set! testconfig (full-runconfigs-read))) ;; redunantly redundant, but does it resolve the race?
+					     (debug:print 0 "WARNING: no testconfig found for " test-name " in search path:\n  "
+							  (string-intersperse (tests:get-tests-search-path *configdat*) "\n  ")))))
+				       ;; after all that, still no testconfig? Time to abort
+				       (if (not testconfig)
+					   (begin
+					     (debug:print 0 "ERROR: Failed to resolve megatest.config, runconfigs.config and testconfig issues. Giving up now")
+					     (exit 1)))s
 				       (if (not (file-exists? ".ezsteps"))(create-directory ".ezsteps"))
 				       ;; if ezsteps was defined then we are sure to have at least one step but check anyway
 				       (if (not (> (length ezstepslst) 0))
@@ -656,11 +672,13 @@
   ;; to megatest-(current-seconds).cfg and symlink it to megatest.cfg
   (if (and *configdat* 
 	   (or (args:get-arg "-run")
-	       (args:get-arg "-runtests")))
+	       (args:get-arg "-runtests")
+	       (args:get-arg "-execute")))
       (let* ((linktree (get-environment-variable "MT_LINKTREE"))
 	     (target   (common:args-get-target))
 	     (runname  (or (args:get-arg "-runname")
-			   (args:get-arg ":runname")))
+			   (args:get-arg ":runname")
+			   (getenv "MT_RUNNAME")))
 	     (fulldir  (conc linktree "/"
 			     target "/"
 			     runname)))
@@ -673,10 +691,13 @@
 		       runname
 		       (file-exists? fulldir))
 		  (let ((tmpfile  (conc fulldir "/.megatest.cfg." (current-seconds)))
-			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
-		    (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
-		    (configf:write-alist *configdat* tmpfile)
-		    (system (conc "ln -sf " tmpfile " " targfile))
+			(targfile (conc fulldir "/.megatest.cfg-"  megatest-version "-" megatest-fossil-hash))
+			(rconfig  (conc fulldir "/.runconfig." megatest-version "-" megatest-fossil-hash)))
+		    (if (file-exists? rconfig) ;; only cache megatest.config AFTER runconfigs has been cached
+			(begin
+			  (debug:print-info 0 "Caching megatest.config in " fulldir "/.megatest.cfg")
+			  (configf:write-alist *configdat* tmpfile)
+			  (system (conc "ln -sf " tmpfile " " targfile))))
 		    )))))))
 
 (define (get-best-disk confdat testconfig)

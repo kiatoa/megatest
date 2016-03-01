@@ -1783,7 +1783,9 @@
       (let (;; (db   #f)
 	    (keys #f))
 	(if (launch:setup-for-run)
-	    (launch:cache-config)
+	    (begin
+	      (full-runconfigs-read) ;; cache the run config
+	      (launch:cache-config)) ;; do not cache here - need to be sure runconfigs is processed
 	    (begin 
 	      (debug:print 0 "Failed to setup, exiting")
 	      (exit 1)))
