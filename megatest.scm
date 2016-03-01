@@ -235,6 +235,7 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 			"-pathmod"
 			"-env2file"
 			"-envcap"
+			"-envdelta"
 			"-setvars"
 			"-set-state-status"
 			"-set-run-status"
@@ -316,7 +317,10 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (if (and (not (null? remargs))
 	 (not (or
-	       (args:get-arg "-runstep"))
+	       (args:get-arg "-runstep")
+	       (args:get-arg "-envcap")
+	       (args:get-arg "-envdelta")
+	       )
 	      ;; add more args that use remargs here
 	      ))
     (debug:print 0 "ERROR: Unrecognised arguments: " (string-intersperse (if (list? remargs) remargs (argv))  " ")))
@@ -1887,31 +1891,38 @@ Version " megatest-version ", built from " megatest-fossil-hash ))
 
 (let ((envcap (args:get-arg "-envcap")))
   (if envcap
-      (if (substring-index "=" envcap)
-	  (let* ((parts   (string-split envcap "="))
-		 (fname   (car parts))
-		 (context (cadr parts))
-		 (db      (env:open-db fname)))
-	    (env:save-env-vars db context)
-	    (env:close-database db)
-	    (set! *didsomething* #t))
-	  (begin
-	    (debug:print 0 "ERROR: Parameter to -envcap should be <filename>=<context>. E.G. envdat=original, got: " envcap)
-	    (set! *didsomething* #t)))))
+      (let* ((db      (env:open-db (if (null? remargs) "envdat.db" (car remargs)))))
+	(env:save-env-vars db envcap)
+	(env:close-database db)
+	(set! *didsomething* #t))))
 
 ;; delta "language" will eventually be res=a+b-c but for now it is just res=a-b 
 ;;
 (let ((envdelta (args:get-arg "-envdelta")))
   (if envdelta
-      (let ((match (string-match "([a-z]+)=([a-z\-,]+)" envdelta)))
-	(if match
-	    (let* ((resctx    (cadr match))
-		   (equn      (caddr match))
-		   (parts     (string-split equn "-"))
+      (let ((match (string-split envdelta "-")));; (string-match "([a-z0-9_]+)=([a-z0-9_\\-,]+)" envdelta)))
+	(if (not (null? match))
+	    (let* ((db        (env:open-db (if (null? remargs) "envdat.db" (car remargs))))
+		   ;; (resctx    (cadr match))
+		   ;; (equn      (caddr match))
+		   (parts     match) ;; (string-split equn "-"))
 		   (minuend   (car parts))
 		   (subtraend (cadr parts))
-		   (
-	    
+		   (added     (env:get-added   db minuend subtraend))
+		   (removed   (env:get-removed db minuend subtraend))
+		   (changed   (env:get-changed db minuend subtraend)))
+	      ;; (pp (hash-table->alist added))
+	      ;; (pp (hash-table->alist removed))
+	      ;; (pp (hash-table->alist changed))
+	      (if (args:get-arg "-o")
+		  (with-output-to-file
+		      (args:get-arg "-o")
+		    (lambda ()
+		      (env:print added removed changed)))
+		  (env:print added removed changed))
+	      (env:close-database db)
+	      (set! *didsomething* #t))
+	    (debug:print 0 "ERROR: Parameter to -envdelta should be new=star-end")))))
 
 ;;======================================================================
 ;; Exit and clean up
