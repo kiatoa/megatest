@@ -700,6 +700,25 @@
 			  (system (conc "ln -sf " tmpfile " " targfile))))
 		    )))))))
 
+;; gather available information, if legit read configs in this order:
+;;
+;;   if have cache;
+;;      read it a return it
+;;   else
+;;     megatest.config     (do not cache)
+;;     runconfigs.config   (cache if all vars avail)
+;;     megatest.config     (cache if all vars avail)
+;;
+(define (launch:setup #!key (force #f))
+  (let* ((runname  (common:args-get-runname))
+	 (target   (common:args-get-target))
+	 (linktree (or (getenv "MT_LINKTREE")
+		       (if *configdat* (configf:lookup *configdat* "setup" "linktree") #f)))
+	 (rundir   (if (and runname target linktree)(conc linktree "/" target "/" runname) #f))
+	 (mtcachef (and rundir (conc rundir "/" ".megatest.cfg-"  megatest-version "-" megatest-fossil-hash)))
+	 (rccachef (and rundir (conc rundir "/" ".runconfigs.cfg-"  megatest-version "-" megatest-fossil-hash))))
+    #f))
+
 (define (get-best-disk confdat testconfig)
   (let* ((disks   (or (and testconfig (hash-table-ref/default testconfig "disks" #f))
 		      (hash-table-ref/default confdat "disks" #f)))

@@ -451,7 +451,8 @@
 
 (define (common:args-get-runname)
   (or (args:get-arg "-runname")
-      (args:get-arg ":runname")))
+      (args:get-arg ":runname")
+      (getenv "MT_RUNNAME")))
 
 (define (common:args-get-target #!key (split #f))
   (let* ((keys    (keys:config-get-fields *configdat*))
